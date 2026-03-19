@@ -1,0 +1,42 @@
+```txt
+src/
+    app/
+        router/
+            index.tsx
+        providers/
+        styles/
+            globals.css
+            App.tsx
+
+pages/
+    review-list/
+        index.tsx
+    review-detail/
+        index.tsx
+    review-new/
+        index.tsx
+    review-edit/
+        index.tsx
+    signup/
+        index.tsx
+    signin/
+        index.tsx
+    signout/
+        index.tsx
+    user-detail/
+        index.tsx
+    user-update/
+        index.tsx
+
+shared/
+    ui/
+        Button.tsx
+        Input.tsx
+        Textarea.tsx
+        RatingSelect.tsx
+    lib/
+        api.ts
+        date.ts
+        types/
+            review.ts   
+```

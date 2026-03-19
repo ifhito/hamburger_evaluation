@@ -1,0 +1,40 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-primary: #e05c00;
+  --color-primary-hover: #c75400;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-secondary-bg: #f3f4f6;
+  --color-secondary-hover: #e5e7eb;
+  --color-border: #d1d5db;
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-error: #dc2626;
+  --color-success: #16a34a;
+  --radius: 6px;
+  --font-sans: system-ui, -apple-system, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: #fafafa;
+  line-height: 1.6;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+h1, h2, h3 {
+  line-height: 1.3;
+}

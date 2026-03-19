@@ -1,0 +1,154 @@
+# 取得(GET)
+/reviews:
+  get:
+    summary: レビュー一覧の取得
+    description: レビューのリストを取得します。
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Review'
+      '400':
+        description: 不正なリクエスト
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '500':
+        description: サーバーエラー
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+# 取得(GET)
+/reviews/{reviewId}:
+  get:
+    summary: レビューの取得
+    description: 指定したIDのレビューを取得します。
+    parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Review'
+      '400':
+        description: 不正なリクエスト
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '404':
+        description: レビューが見つかりません
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '500':
+        description: サーバーエラー
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+# 作成(POST)
+/reviews:
+  post:
+    summary: レビューの作成
+    description: 新しいレビューを作成します。
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReviewInput'
+    responses:
+      '201':
+        description: 作成成功
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Review'
+      '400':
+        description: 不正なリクエスト
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '500':
+        description: サーバーエラー
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+# 更新(PUT)
+/reviews/{reviewId}:
+  put:
+    summary: レビューの更新
+    description: 指定したIDのレビューを更新します。
+    parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReviewInput'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Review'
+      '400':
+        description: 不正なリクエスト
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '500':
+        description: サーバーエラー
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+# 削除(DELETE)
+/reviews/{reviewId}:
+  delete:
+    summary: レビューの削除
+    description: 指定したIDのレビューを削除します。
+    parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '204':
+        description: 削除成功
+      '400':
+        description: 不正なリクエスト
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '500':
+        description: サーバーエラー
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'

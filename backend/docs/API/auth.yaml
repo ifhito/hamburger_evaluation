@@ -1,0 +1,158 @@
+# サインアップAPI
+/signup:
+  post:
+    summary: サインアップ
+    description: ユーザーが新しいアカウントを作成するためのAPIエンドポイントです。
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              username:
+                type: string
+                example: "newuser"
+              email:
+                type: string
+                format: email
+                example: "newuser@example.com"
+              password:
+                type: string
+                format: password
+                example: "password123"
+    responses:
+      '201':
+        description: アカウントが正常に作成されました。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  example: "12345"
+                username:
+                  type: string
+                  example: "newuser"
+                email:
+                  type: string
+                  format: email
+                  example: "newuser@example.com"
+      '400':
+        description: 不正なリクエスト。入力データが不完全または無効な場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string
+                  example: "Invalid input data"
+      '500':
+        description: サーバーエラー。予期しないエラーが発生した場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string
+                  example: "Internal server error"
+# ログインAPI
+/login:
+  post:
+    summary: ログイン
+    description: ユーザーが既存のアカウントにログインするためのAPIエンドポイントです。
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              email:
+                type: string
+                format: email
+                example: "user@example.com"
+              password:
+                type: string
+                format: password
+                example: "password123"
+    responses:
+      '200':
+        description: ログイン成功。ユーザーの認証情報が正しい場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      '400':
+        description: 不正なリクエスト。入力データが不完全または無効な場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string
+                  example: "Invalid input data"
+      '401':
+        description: 認証失敗。メールアドレスまたはパスワードが正しくない場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string
+                  example: "Invalid email or password"
+      '500':
+        description: サーバーエラー。予期しないエラーが発生した場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string
+                  example: "Internal server error"
+# ログアウトAPI
+/logout:
+  post:
+    summary: ログアウト
+    description: ユーザーが現在のセッションを終了するためのAPIエンドポイントです。
+    responses:
+      '200':
+        description: ログアウト成功。ユーザーのセッションが正常に終了した場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Logged out successfully"
+      '401':
+        description: 認証失敗。ユーザーがログインしていない場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string
+                  example: "Unauthorized"
+      '500':
+        description: サーバーエラー。予期しないエラーが発生した場合に返されます。
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                error:
+                  type: string
+                  example: "Internal server error"

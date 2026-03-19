@@ -1,0 +1,70 @@
+# 取得(GET)
+/users:
+  get:
+    summary: ユーザーの取得
+    description: ユーザーのリストを取得します。
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/User'
+# 作成(POST)
+/users:
+  post:
+    summary: ユーザーの作成
+    description: 新しいユーザーを作成します。
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UserInput'
+    responses:
+      '201':
+        description: 作成成功
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+# 更新(PUT)
+/users/{Id}:
+  put:
+    summary: ユーザーの更新
+    description: 指定したIDのユーザーを更新します。
+    parameters:
+      - name: Id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UserInput'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+# 削除(DELETE)
+/users/{Id}:
+  delete:
+    summary: ユーザーの削除
+    description: 指定したIDのユーザーを削除します。
+    parameters:
+      - name: Id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '204':
+        description: 削除成功
