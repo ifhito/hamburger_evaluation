@@ -8,13 +8,12 @@ A hamburger review/evaluation web app. Users can register, post reviews of burge
 
 ## Architecture
 
-Three separate sub-projects, each run via Docker:
+Two separate sub-projects, each run via Docker:
 
 | Directory | Stack | Role |
 |-----------|-------|------|
 | `backend/` | Ruby on Rails (API mode) | REST API server |
 | `frontend/` | React (TypeScript) | SPA client |
-| `database/` | PostgreSQL | Persistent storage |
 
 ## Development
 
@@ -22,7 +21,7 @@ All services are run via Docker. Start each component from its respective direct
 
 ```bash
 # Each service is started from its directory
-docker compose up   # (from backend/, frontend/, or database/)
+docker compose up   # (from backend/ or frontend/)
 ```
 
 API documentation is served via Swagger (configured in the Rails backend).
