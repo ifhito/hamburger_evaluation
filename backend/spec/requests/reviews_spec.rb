@@ -129,12 +129,12 @@ RSpec.describe "Reviews", type: :request do
     end
 
     context "updating another user's review" do
-      it "returns 404" do
+      it "returns 403" do
         other_user = create(:user)
         put "/reviews/#{review.id}",
             params: { review: { comment: "Hacked" } }.to_json,
             headers: auth_headers(other_user)
-        expect(response).to have_http_status(:not_found)
+        expect(response).to have_http_status(:forbidden)
       end
     end
   end
@@ -146,6 +146,15 @@ RSpec.describe "Reviews", type: :request do
         delete "/reviews/#{review.id}", headers: auth_headers(user)
         expect(response).to have_http_status(:no_content)
         expect(review.reload.discarded_at).not_to be_nil
+      end
+    end
+
+    context "deleting another user's review" do
+      it "returns 403" do
+        review = create(:review, user: user, burger: burger)
+        other_user = create(:user)
+        delete "/reviews/#{review.id}", headers: auth_headers(other_user)
+        expect(response).to have_http_status(:forbidden)
       end
     end
 
