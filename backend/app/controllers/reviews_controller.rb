@@ -30,7 +30,8 @@ class ReviewsController < ApplicationController
   end
 
   def update
-    review = current_user.reviews.kept.find(params[:id])
+    review = Review.kept.find(params[:id])
+    authorize review
     if review.update(review_params)
       render json: ReviewSerializer.new(review).as_json
     else
@@ -41,7 +42,8 @@ class ReviewsController < ApplicationController
   end
 
   def destroy
-    review = current_user.reviews.kept.find(params[:id])
+    review = Review.kept.find(params[:id])
+    authorize review
     review.discard
     head :no_content
   rescue ActiveRecord::RecordNotFound
