@@ -28,5 +28,10 @@ module App
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+
+    config.autoload_paths << Rails.root.join("app/domain/values")
+    config.autoload_paths << Rails.root.join("app/domain/services")
+    config.eager_load_paths << Rails.root.join("app/domain/values")
+    config.eager_load_paths << Rails.root.join("app/domain/services")
   end
 end
