@@ -45,6 +45,20 @@ RSpec.describe "Reviews", type: :request do
       end
     end
 
+    context "with malformed rating param" do
+      it "returns 422" do
+        get "/reviews?rating=abc"
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+
+    context "with malformed shop_id param" do
+      it "returns 422" do
+        get "/reviews?shop_id=abc"
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+
     context "JSON shape (Serializer)" do
       it "includes user.username in each review" do
         create(:review, user: user, burger: burger)
@@ -113,6 +127,27 @@ RSpec.describe "Reviews", type: :request do
         expect(response).to have_http_status(:unauthorized)
       end
     end
+
+    context "with malformed rating param" do
+      it "returns 422" do
+        post "/reviews",
+             params: { review: { rating: "abc", comment: "test", shop_id: shop.id, burger_name: "Test" } }.to_json,
+             headers: auth_headers(user)
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+
+    context "when review validation fails after burger creation" do
+      it "rolls back burger and shop association and returns 422" do
+        expect {
+          post "/reviews",
+               params: { review: { rating: 6, comment: "test", shop_id: shop.id, burger_name: "Rollback Burger" } }.to_json,
+               headers: auth_headers(user)
+        }.not_to change(Burger, :count)
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(ShopsAndBurger.where(shop: shop).count).to eq(0)
+      end
+    end
   end
 
   describe "PUT /reviews/:id" do
@@ -128,13 +163,43 @@ RSpec.describe "Reviews", type: :request do
       end
     end
 
+    context "with malformed rating param" do
+      it "returns 422" do
+        put "/reviews/#{review.id}",
+            params: { review: { comment: "Updated", rating: "abc" } }.to_json,
+            headers: auth_headers(user)
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+
+    context "with explicit null rating (should be rejected)" do
+      it "returns 422" do
+        put "/reviews/#{review.id}",
+            params: '{"review":{"rating":null,"comment":"text"}}',
+            headers: auth_headers(user).merge("Content-Type" => "application/json")
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+
+    context "with only comment provided (partial update)" do
+      it "updates comment without changing rating" do
+        original_rating = review.rating
+        put "/reviews/#{review.id}",
+            params: { review: { comment: "Partial update" } }.to_json,
+            headers: auth_headers(user)
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["comment"]).to eq("Partial update")
+        expect(review.reload.rating).to eq(original_rating)
+      end
+    end
+
     context "updating another user's review" do
-      it "returns 404" do
+      it "returns 403" do
         other_user = create(:user)
         put "/reviews/#{review.id}",
-            params: { review: { comment: "Hacked" } }.to_json,
+            params: { review: { comment: "Hacked", rating: 1 } }.to_json,
             headers: auth_headers(other_user)
-        expect(response).to have_http_status(:not_found)
+        expect(response).to have_http_status(:forbidden)
       end
     end
   end

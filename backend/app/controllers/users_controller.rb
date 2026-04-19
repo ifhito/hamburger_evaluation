@@ -9,16 +9,23 @@ class UsersController < ApplicationController
   end
 
   def update
-    if current_user.update(user_params)
-      render json: UserSerializer.new(current_user).as_json
-    else
-      render json: { errors: current_user.errors.full_messages }, status: :unprocessable_entity
-    end
+    user = User.kept.find(params[:id])
+    authorize user
+    Users::UpdateUserService.new(user: user, params: user_params).invoke
+    render json: UserSerializer.new(user).as_json
+  rescue ActiveRecord::RecordNotFound
+    render json: { error: "User not found" }, status: :not_found
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
   end
 
   def destroy
-    current_user.discard
+    user = User.kept.find(params[:id])
+    authorize user
+    Users::DeleteUserService.new(user: user).invoke
     head :no_content
+  rescue ActiveRecord::RecordNotFound
+    render json: { error: "User not found" }, status: :not_found
   end
 
   private

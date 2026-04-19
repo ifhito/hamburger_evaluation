@@ -52,10 +52,10 @@ RSpec.describe Review, type: :model do
         expect(Review.keyword_search("crispy")).to contain_exactly(matched)
       end
 
-      it "is case-sensitive (LIKE behavior)" do
-        create(:review, comment: "CRISPY texture")
-        matched = create(:review, comment: "crispy texture")
-        expect(Review.keyword_search("crispy")).to contain_exactly(matched)
+      it "is case-insensitive (ILIKE behavior)" do
+        upper = create(:review, comment: "CRISPY texture")
+        lower = create(:review, comment: "crispy texture")
+        expect(Review.keyword_search("crispy")).to contain_exactly(upper, lower)
       end
     end
 
@@ -77,6 +77,22 @@ RSpec.describe Review, type: :model do
         expect {
           create(:review, burger: burger)
         }.to have_enqueued_job(BurgerStatUpdateJob).with(burger.id)
+      end
+    end
+
+    describe "after_update_commit" do
+      it "enqueues BurgerStatUpdateJob when rating changes" do
+        review = create(:review, rating: 3)
+        expect {
+          review.update!(rating: 5)
+        }.to have_enqueued_job(BurgerStatUpdateJob).with(review.burger_id)
+      end
+
+      it "does not enqueue BurgerStatUpdateJob when only comment changes" do
+        review = create(:review, rating: 3, comment: "original")
+        expect {
+          review.update!(comment: "updated")
+        }.not_to have_enqueued_job(BurgerStatUpdateJob)
       end
     end
 

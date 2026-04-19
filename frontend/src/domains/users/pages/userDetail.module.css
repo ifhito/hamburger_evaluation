@@ -1,0 +1,66 @@
+.muted {
+  color: var(--color-text-muted);
+}
+
+.profile {
+  margin-bottom: 2rem;
+}
+
+.profileCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  background: #fff;
+  margin-bottom: 1rem;
+}
+
+.username {
+  margin-bottom: 0.5rem;
+}
+
+.email {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.editLink {
+  font-size: 0.875rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--color-secondary-bg);
+  border-radius: var(--radius);
+  font-weight: 500;
+}
+
+.reviewsHeading {
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.reviewList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.reviewCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: #fff;
+}
+
+.reviewHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.reviewDate {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.reviewComment {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}

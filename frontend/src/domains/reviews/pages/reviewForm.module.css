@@ -1,0 +1,22 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 31.25rem;
+}
+
+.shopInfo {
+  padding: 0.5rem 0.75rem;
+  background: #f5f5f5;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}

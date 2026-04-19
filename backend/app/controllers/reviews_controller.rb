@@ -4,7 +4,12 @@ class ReviewsController < ApplicationController
   skip_before_action :authenticate_user!, only: [ :index, :show ]
 
   def index
-    reviews = ReviewQuery.call(params)
+    search_param = Reviews::SearchParameter.new(
+      rating:  params[:rating],
+      keyword: params[:keyword],
+      shop_id: params[:shop_id]
+    )
+    reviews = Reviews::ReviewFinder.new(search_param).search
     render json: reviews.map { |r| ReviewSerializer.new(r).as_json }
   end
 
@@ -16,33 +21,37 @@ class ReviewsController < ApplicationController
   end
 
   def create
-    shop = Shop.find(params[:review][:shop_id])
-    burger = find_or_create_burger(shop, params[:review][:burger_name])
-    review = current_user.reviews.build(rating: review_params[:rating], comment: review_params[:comment], burger: burger)
-    if review.save
-      review.burger.reload
-      render json: ReviewSerializer.new(review).as_json, status: :created
-    else
-      render json: { errors: review.errors.full_messages }, status: :unprocessable_entity
-    end
-  rescue ActiveRecord::RecordNotFound
-    render json: { error: "Shop not found" }, status: :not_found
+    authorize Review, :create?
+    param = Reviews::CreateParameter.new(
+      rating:      review_params[:rating],
+      comment:     review_params[:comment],
+      shop_id:     review_params[:shop_id],
+      burger_name: review_params[:burger_name]
+    )
+    review = Reviews::CreateReviewService.new(user: current_user, params: param).invoke
+    render json: ReviewSerializer.new(review).as_json, status: :created
+  rescue ActiveRecord::RecordNotFound => e
+    render json: { error: e.message }, status: :not_found
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
   end
 
   def update
-    review = current_user.reviews.kept.find(params[:id])
-    if review.update(review_params)
-      render json: ReviewSerializer.new(review).as_json
-    else
-      render json: { errors: review.errors.full_messages }, status: :unprocessable_entity
-    end
+    review = Review.kept.find(params[:id])
+    authorize review
+    param  = Reviews::UpdateParameter.new(review_params.to_h.slice("rating", "comment").symbolize_keys)
+    review = Reviews::UpdateReviewService.new(review: review, params: param).invoke
+    render json: ReviewSerializer.new(review).as_json
   rescue ActiveRecord::RecordNotFound
     render json: { error: "Review not found" }, status: :not_found
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
   end
 
   def destroy
-    review = current_user.reviews.kept.find(params[:id])
-    review.discard
+    review = Review.kept.find(params[:id])
+    authorize review
+    Reviews::DeleteReviewService.new(review: review).invoke
     head :no_content
   rescue ActiveRecord::RecordNotFound
     render json: { error: "Review not found" }, status: :not_found
@@ -50,16 +59,7 @@ class ReviewsController < ApplicationController
 
   private
 
-  def find_or_create_burger(shop, burger_name)
-    burger = shop.burgers.find_by(name: burger_name)
-    unless burger
-      burger = Burger.create!(name: burger_name)
-      ShopsAndBurger.create!(shop: shop, burger: burger)
-    end
-    burger
-  end
-
   def review_params
-    params.require(:review).permit(:rating, :comment)
+    params.require(:review).permit(:rating, :comment, :shop_id, :burger_name)
   end
 end

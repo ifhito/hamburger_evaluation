@@ -29,9 +29,10 @@ module App
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
 
-    config.autoload_paths << Rails.root.join("app/domain/values")
-    config.autoload_paths << Rails.root.join("app/domain/services")
-    config.eager_load_paths << Rails.root.join("app/domain/values")
-    config.eager_load_paths << Rails.root.join("app/domain/services")
+    config.paths.add "app/domain",       eager_load: true
+    config.paths.add "app/services",     eager_load: true
+    config.paths.add "app/repositories", eager_load: true
+    config.paths.add "app/parameters",   eager_load: true
+    config.paths.add "app/policies",     eager_load: true
   end
 end
