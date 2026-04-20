@@ -6,6 +6,9 @@ import type { User, UserUpdateInput } from "../api/types";
 export function useUsers() {
   return useSWR<User[]>("/users", async (url: string) => {
     const res = await userApiClient.get<User[]>(url);
+    if (!Array.isArray(res.data)) {
+      throw new Error("Invalid response: expected array");
+    }
     return res.data;
   });
 }

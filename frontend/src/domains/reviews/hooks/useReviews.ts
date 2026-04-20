@@ -15,6 +15,9 @@ function buildKey(params?: ReviewSearchParams): string {
 export function useReviews(params?: ReviewSearchParams) {
   return useSWR<Review[]>(buildKey(params), async (url: string) => {
     const res = await reviewApiClient.get<Review[]>(url);
+    if (!Array.isArray(res.data)) {
+      throw new Error("Invalid response: expected array");
+    }
     return res.data;
   });
 }

@@ -37,6 +37,14 @@ export function buildApiClient(getToken?: () => string | null) {
           response.data as Record<string, unknown>,
           { deep: true }
         );
+      } else if (
+        typeof response.data === "string" &&
+        response.data.trimStart().startsWith("<")
+      ) {
+        // HTML fallback page received instead of JSON (proxy/backend unreachable)
+        return Promise.reject(
+          new ApiError(["Backend service unavailable"], 503)
+        );
       }
       return response;
     },

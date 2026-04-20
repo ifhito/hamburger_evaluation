@@ -9,6 +9,9 @@ export function useShops(params?: { keyword?: string }) {
 
   return useSWR<Shop[]>(key, async (url: string) => {
     const res = await shopApiClient.get<Shop[]>(url);
+    if (!Array.isArray(res.data)) {
+      throw new Error("Invalid response: expected array");
+    }
     return res.data;
   });
 }
