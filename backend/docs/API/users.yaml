@@ -1,70 +1,159 @@
-# 取得(GET)
-/users:
-  get:
-    summary: ユーザーの取得
-    description: ユーザーのリストを取得します。
-    responses:
-      '200':
-        description: 成功
+paths:
+  # 取得(GET) - 一覧
+  /users:
+    get:
+      summary: ユーザーの取得
+      description: ユーザーのリストを取得します。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # 更新(PUT) / 削除(DELETE)
+  /users/{userId}:
+    put:
+      summary: ユーザーの更新
+      description: 指定したIDのユーザー情報を更新します。認証必須・本人のみ可能。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: array
-              items:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
                 $ref: '#/components/schemas/User'
-# 作成(POST)
-/users:
-  post:
-    summary: ユーザーの作成
-    description: 新しいユーザーを作成します。
-    requestBody:
-      required: true
-      content:
-        application/json:
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 権限エラー（他人のアカウントは更新不可）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: ユーザーが見つかりません
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: ユーザーの削除
+      description: 指定したIDのユーザーを削除します（ソフトデリート）。認証必須・本人のみ可能。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
           schema:
-            $ref: '#/components/schemas/UserInput'
-    responses:
-      '201':
-        description: 作成成功
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/User'
-# 更新(PUT)
-/users/{Id}:
-  put:
-    summary: ユーザーの更新
-    description: 指定したIDのユーザーを更新します。
-    parameters:
-      - name: Id
-        in: path
-        required: true
-        schema:
+            type: integer
+      responses:
+        '204':
+          description: 削除成功
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 権限エラー（他人のアカウントは削除不可）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: ユーザーが見つかりません
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
           type: string
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/UserInput'
-    responses:
-      '200':
-        description: 更新成功
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/User'
-# 削除(DELETE)
-/users/{Id}:
-  delete:
-    summary: ユーザーの削除
-    description: 指定したIDのユーザーを削除します。
-    parameters:
-      - name: Id
-        in: path
-        required: true
-        schema:
+          example: "burger_lover"
+        email:
           type: string
-    responses:
-      '204':
-        description: 削除成功
+          format: email
+          example: "burger@example.com"
+
+    UserInput:
+      type: object
+      properties:
+        username:
+          type: string
+          example: "new_username"
+        email:
+          type: string
+          format: email
+          example: "new@example.com"
+        password:
+          type: string
+          format: password
+          example: "newpassword123"
+        password_confirmation:
+          type: string
+          format: password
+          example: "newpassword123"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Forbidden"

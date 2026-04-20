@@ -7,7 +7,7 @@ class ShopsController < ApplicationController
 
   def show
     shop = Shop.find(params[:id])
-    reviews = ReviewQuery.call({ shop_id: shop.id })
+    reviews = Reviews::ReviewFinder.new({ shop_id: shop.id }).search
     render json: {
       id:      shop.id,
       name:    shop.name,

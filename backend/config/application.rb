@@ -28,5 +28,11 @@ module App
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+
+    config.paths.add "app/domain",       eager_load: true
+    config.paths.add "app/services",     eager_load: true
+    config.paths.add "app/repositories", eager_load: true
+    config.paths.add "app/parameters",   eager_load: true
+    config.paths.add "app/policies",     eager_load: true
   end
 end
