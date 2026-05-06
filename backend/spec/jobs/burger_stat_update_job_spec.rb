@@ -2,9 +2,13 @@ require "rails_helper"
 
 RSpec.describe BurgerStatUpdateJob, type: :job do
   describe "#perform" do
-    it "calls BurgerStat.recalculate_for with the burger" do
+    it "recalculates the burger stat through the application service" do
       burger = create(:burger)
-      expect(BurgerStat).to receive(:recalculate_for).with(burger)
+      service = instance_double(BurgerStats::RecalculateBurgerStatService)
+
+      expect(BurgerStats::RecalculateBurgerStatService).to receive(:new).with(burger).and_return(service)
+      expect(service).to receive(:invoke)
+
       described_class.new.perform(burger.id)
     end
   end

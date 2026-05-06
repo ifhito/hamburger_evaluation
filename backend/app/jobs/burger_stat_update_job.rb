@@ -3,6 +3,6 @@ class BurgerStatUpdateJob < ApplicationJob
 
   def perform(burger_id)
     burger = Burger.find(burger_id)
-    BurgerStat.recalculate_for(burger)
+    BurgerStats::RecalculateBurgerStatService.new(burger).invoke
   end
 end

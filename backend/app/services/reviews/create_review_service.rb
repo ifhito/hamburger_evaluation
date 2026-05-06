@@ -7,20 +7,18 @@ module Reviews
     end
 
     def invoke
-      ApplicationRecord.transaction do
-        shop   = Shop.find(@params.shop_id)
-        burger = shop.with_lock do
-          Reviews::BurgerFinder.new.find_for_shop(shop, @params.burger_name) ||
-            @repository.create_burger_for_shop(shop, @params.burger_name)
+      @repository.transaction do
+        shop = @repository.find_shop!(@params.shop_id)
+        burger = @repository.with_shop_lock(shop) do
+          @repository.find_burger_for_shop(shop: shop, burger_name: @params.burger_name) ||
+            @repository.create_burger_for_shop(shop: shop, burger_name: @params.burger_name)
         end
-        review = @repository.save!(
+        @repository.create_review!(
           user:    @user,
           burger:  burger,
           rating:  @params.rating,
           comment: @params.comment
         )
-        review.burger.reload
-        review
       end
     end
   end

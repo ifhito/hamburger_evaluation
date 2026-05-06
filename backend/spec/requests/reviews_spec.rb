@@ -86,7 +86,6 @@ RSpec.describe "Reviews", type: :request do
         body = response.parsed_body
         expect(body.first.keys).not_to include("updated_at")
       end
-
     end
   end
 
@@ -98,7 +97,6 @@ RSpec.describe "Reviews", type: :request do
         expect(response).to have_http_status(:ok)
         expect(response.parsed_body["id"]).to eq(review.id)
       end
-
     end
 
     context "with a non-existent id" do

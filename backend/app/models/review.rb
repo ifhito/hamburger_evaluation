@@ -11,7 +11,7 @@ class Review < ApplicationRecord
   scope :by_rating,       ->(rating) { where(rating: rating) }
   scope :keyword_search,  ->(kw)     { where("comment ILIKE ?", "%#{sanitize_sql_like(kw)}%") }
 
-  after_create        { BurgerStatUpdateJob.perform_later(burger_id) }
-  after_update_commit { BurgerStatUpdateJob.perform_later(burger_id) if saved_change_to_rating? }
-  after_discard       { BurgerStatUpdateJob.perform_later(burger_id) }
+  after_create        { Reviews::ReviewEvents.review_changed_for_burger(burger_id) }
+  after_update_commit { Reviews::ReviewEvents.review_changed_for_burger(burger_id) if saved_change_to_rating? }
+  after_discard       { Reviews::ReviewEvents.review_changed_for_burger(burger_id) }
 end

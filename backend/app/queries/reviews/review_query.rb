@@ -1,5 +1,5 @@
 module Reviews
-  class ReviewFinder
+  class ReviewQuery
     def initialize(params)
       @params = params
     end

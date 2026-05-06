@@ -1,27 +1,37 @@
 module BurgerStats
   class RecalculateBurgerStatService
-    def initialize(burger)
+    def initialize(burger, repository: BurgerStats::BurgerStatRepository.new)
       @burger = burger
+      @repository = repository
     end
 
     def invoke
-      score  = Reviews::BurgerScoreCalculator.new.call(@burger)
-      active = @burger.reviews.kept
-      now    = Time.current
+      active_reviews = @repository.active_reviews_for(@burger)
+      facts = active_reviews.map { |review| review_fact_for(review) }
+      score = Reviews::BurgerScoreCalculator.new.call(facts)
 
-      BurgerStat.upsert(
-        {
-          burger_id:      @burger.id,
-          review_count:   active.count,
-          average_rating: active.average(:rating).to_f.round(2),
-          weighted_score: score.weighted_average,
-          confidence:     score.confidence,
-          created_at:     now,
-          updated_at:     now
-        },
-        unique_by: :burger_id,
-        update_only: %i[review_count average_rating weighted_score confidence updated_at]
+      @repository.upsert_projection!(
+        burger_id:      @burger.id,
+        review_count:   active_reviews.size,
+        average_rating: @repository.average_rating_for(active_reviews),
+        weighted_score: score.weighted_average,
+        confidence:     score.confidence,
+        calculated_at:  Time.current
       )
+    end
+
+    private
+
+    def review_fact_for(review)
+      Reviews::ReviewFact.new(
+        rating: review.rating,
+        created_at: review.created_at,
+        reviewer_history: reviewer_history_for(review.user)
+      )
+    end
+
+    def reviewer_history_for(user)
+      Reviews::ReviewerHistory.new(ratings: @repository.reviewer_ratings_for(user))
     end
   end
 end

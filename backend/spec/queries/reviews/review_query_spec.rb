@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe Reviews::ReviewFinder do
+RSpec.describe Reviews::ReviewQuery do
   let(:burger) { create(:burger) }
 
   describe "#search" do
@@ -70,10 +70,10 @@ RSpec.describe Reviews::ReviewFinder do
     context "with shop_id param" do
       it "returns only reviews for burgers at the given shop" do
         shop = create(:shop)
-        sab  = create(:shops_and_burger, shop: shop, burger: burger)
-        review_in_shop  = create(:review, burger: burger)
-        other_burger    = create(:burger)
-        review_other    = create(:review, burger: other_burger)
+        create(:shops_and_burger, shop: shop, burger: burger)
+        review_in_shop = create(:review, burger: burger)
+        other_burger = create(:burger)
+        create(:review, burger: other_burger)
         expect(described_class.new({ shop_id: shop.id }).search).to contain_exactly(review_in_shop)
       end
     end

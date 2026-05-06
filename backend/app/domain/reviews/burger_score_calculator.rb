@@ -6,26 +6,26 @@ module Reviews
       @trust_evaluator = trust_evaluator
     end
 
-    def call(burger)
-      reviews = burger.reviews.kept.includes(:user)
-      return Reviews::BurgerScore.empty if reviews.empty?
+    def call(review_facts)
+      facts = review_facts.to_a
+      return Reviews::BurgerScore.empty if facts.empty?
 
-      weighted     = reviews.map { |r| [r.rating.to_f, weight_for(r)] }
+      weighted = facts.map { |fact| [ fact.rating, weight_for(fact) ] }
       total_weight = weighted.sum(&:last)
-      weighted_avg = weighted.sum { |rating, w| rating * w } / total_weight
-      confidence   = calculate_confidence(reviews.count, total_weight)
+      weighted_average = weighted.sum { |rating, weight| rating * weight } / total_weight
+      confidence = calculate_confidence(facts.size, total_weight)
 
       Reviews::BurgerScore.new(
-        weighted_average: weighted_avg,
+        weighted_average: weighted_average,
         confidence:       confidence,
-        sample_size:      reviews.count
+        sample_size:      facts.size
       )
     end
 
     private
 
-    def weight_for(review)
-      @trust_evaluator.call(review.user).to_f * recency_factor(review.created_at)
+    def weight_for(fact)
+      @trust_evaluator.call(fact.reviewer_history).to_f * recency_factor(fact.created_at)
     end
 
     def recency_factor(created_at)
@@ -34,8 +34,8 @@ module Reviews
     end
 
     def calculate_confidence(count, total_weight)
-      review_factor = [count / 10.0, 1.0].min
-      weight_factor = [total_weight / count.to_f, 1.0].min
+      review_factor = [ count / 10.0, 1.0 ].min
+      weight_factor = [ total_weight / count.to_f, 1.0 ].min
       (review_factor * 0.6 + weight_factor * 0.4).clamp(0.0, 1.0)
     end
   end

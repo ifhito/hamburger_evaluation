@@ -9,7 +9,7 @@ class ReviewsController < ApplicationController
       keyword: params[:keyword],
       shop_id: params[:shop_id]
     )
-    reviews = Reviews::ReviewFinder.new(search_param).search
+    reviews = Reviews::ReviewQuery.new(search_param).search
     render json: reviews.map { |r| ReviewSerializer.new(r).as_json }
   end
 

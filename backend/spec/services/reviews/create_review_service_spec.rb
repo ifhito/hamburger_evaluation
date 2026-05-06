@@ -15,6 +15,26 @@ RSpec.describe Reviews::CreateReviewService do
   subject(:service) { described_class.new(user: user, params: params) }
 
   describe "#invoke" do
+    context "永続化依存を注入した場合" do
+      it "repositoryに店舗取得・ロック・バーガー解決・レビュー作成を委譲すること" do
+        fake_shop = instance_double(Shop)
+        fake_burger = instance_double(Burger)
+        fake_review = instance_double(Review)
+        repository = instance_double(Reviews::CreatingReviewRepository)
+
+        allow(repository).to receive(:transaction).and_yield
+        allow(repository).to receive(:find_shop!).with(shop.id).and_return(fake_shop)
+        allow(repository).to receive(:with_shop_lock).with(fake_shop).and_yield
+        allow(repository).to receive(:find_burger_for_shop).with(shop: fake_shop, burger_name: "Classic Burger").and_return(nil)
+        allow(repository).to receive(:create_burger_for_shop).with(shop: fake_shop, burger_name: "Classic Burger").and_return(fake_burger)
+        allow(repository).to receive(:create_review!).with(user: user, burger: fake_burger, rating: 4, comment: "Juicy and crispy").and_return(fake_review)
+
+        result = described_class.new(user: user, params: params, repository: repository).invoke
+
+        expect(result).to eq(fake_review)
+      end
+    end
+
     context "バーガーが存在しない場合" do
       it "レビューを作成すること" do
         expect { service.invoke }.to change(Review, :count).by(1)
