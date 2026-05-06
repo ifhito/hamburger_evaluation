@@ -14,7 +14,7 @@ class ReviewsController < ApplicationController
   end
 
   def show
-    review = Review.kept.includes(:user, :burger, burger: :burger_stat).find(params[:id])
+    review = Reviews::ReviewQuery.new.find_kept!(params[:id])
     render json: ReviewSerializer.new(review).as_json
   rescue ActiveRecord::RecordNotFound
     render json: { error: "Review not found" }, status: :not_found
@@ -37,7 +37,7 @@ class ReviewsController < ApplicationController
   end
 
   def update
-    review = Review.kept.find(params[:id])
+    review = Reviews::ReviewRepository.new.find_kept!(params[:id])
     authorize review
     param  = Reviews::UpdateParameter.new(review_params.to_h.slice("rating", "comment").symbolize_keys)
     review = Reviews::UpdateReviewService.new(review: review, params: param).invoke
@@ -49,7 +49,7 @@ class ReviewsController < ApplicationController
   end
 
   def destroy
-    review = Review.kept.find(params[:id])
+    review = Reviews::ReviewRepository.new.find_kept!(params[:id])
     authorize review
     Reviews::DeleteReviewService.new(review: review).invoke
     head :no_content

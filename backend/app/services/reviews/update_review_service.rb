@@ -1,13 +1,14 @@
 module Reviews
   class UpdateReviewService
-    def initialize(review:, params:)
+    def initialize(review:, params:, repository: Reviews::ReviewRepository.new)
       @review = review
       @params = params
+      @repository = repository
     end
 
     def invoke
       attrs = { rating: @params.rating, comment: @params.comment }.compact
-      @review.update!(attrs) unless attrs.empty?
+      @repository.update!(@review, **attrs) unless attrs.empty?
       @review
     end
   end

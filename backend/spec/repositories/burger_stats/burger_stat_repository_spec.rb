@@ -3,6 +3,14 @@ require "rails_helper"
 RSpec.describe BurgerStats::BurgerStatRepository do
   subject(:repository) { described_class.new }
 
+  describe "#find_burger!" do
+    it "returns the burger" do
+      burger = create(:burger)
+
+      expect(repository.find_burger!(burger.id)).to eq(burger)
+    end
+  end
+
   describe "#active_reviews_for" do
     it "loads kept reviews with users" do
       burger = create(:burger)

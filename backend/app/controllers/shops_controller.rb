@@ -1,12 +1,11 @@
 class ShopsController < ApplicationController
   def index
-    shops = Shop.all
-    shops = shops.where("name ILIKE ?", "%#{params[:keyword]}%") if params[:keyword].present?
-    render json: shops.order(:name).map { |s| { id: s.id, name: s.name } }
+    shops = Shops::ShopQuery.new.search(keyword: params[:keyword])
+    render json: shops.map { |s| { id: s.id, name: s.name } }
   end
 
   def show
-    shop = Shop.find(params[:id])
+    shop = Shops::ShopQuery.new.find!(params[:id])
     reviews = Reviews::ReviewQuery.new({ shop_id: shop.id }).search
     render json: {
       id:      shop.id,

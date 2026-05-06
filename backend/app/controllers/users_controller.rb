@@ -4,12 +4,12 @@ class UsersController < ApplicationController
   skip_before_action :authenticate_user!, only: [ :index ]
 
   def index
-    users = User.kept
+    users = user_repository.kept
     render json: users.map { |u| UserSerializer.new(u).as_json }
   end
 
   def update
-    user = User.kept.find(params[:id])
+    user = user_repository.find_kept!(params[:id])
     authorize user
     Users::UpdateUserService.new(user: user, params: user_params).invoke
     render json: UserSerializer.new(user).as_json
@@ -20,7 +20,7 @@ class UsersController < ApplicationController
   end
 
   def destroy
-    user = User.kept.find(params[:id])
+    user = user_repository.find_kept!(params[:id])
     authorize user
     Users::DeleteUserService.new(user: user).invoke
     head :no_content
@@ -32,5 +32,9 @@ class UsersController < ApplicationController
 
   def user_params
     params.require(:user).permit(:username, :email, :password, :password_confirmation)
+  end
+
+  def user_repository
+    Users::UserRepository.new
   end
 end

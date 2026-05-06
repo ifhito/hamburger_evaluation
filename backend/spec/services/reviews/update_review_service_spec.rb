@@ -4,6 +4,20 @@ RSpec.describe Reviews::UpdateReviewService do
   let(:review) { create(:review, rating: 3, comment: "Original comment") }
 
   describe "#invoke" do
+    context "永続化依存を注入した場合" do
+      let(:params) { Reviews::UpdateParameter.new(rating: 5, comment: "Updated comment") }
+
+      it "repositoryにレビュー更新を委譲すること" do
+        repository = instance_double(Reviews::ReviewRepository)
+        allow(repository).to receive(:update!).with(review, rating: 5, comment: "Updated comment").and_return(review)
+
+        result = described_class.new(review: review, params: params, repository: repository).invoke
+
+        expect(result).to eq(review)
+        expect(repository).to have_received(:update!).with(review, rating: 5, comment: "Updated comment")
+      end
+    end
+
     context "ratingとcommentを両方更新する場合" do
       let(:params) { Reviews::UpdateParameter.new(rating: 5, comment: "Updated comment") }
 

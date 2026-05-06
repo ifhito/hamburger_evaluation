@@ -1,12 +1,13 @@
 module Users
   class UpdateUserService
-    def initialize(user:, params:)
-      @user   = user
+    def initialize(user:, params:, repository: Users::UserRepository.new)
+      @user = user
       @params = params
+      @repository = repository
     end
 
     def invoke
-      @user.update!(@params)
+      @repository.update!(@user, **@params.to_h.symbolize_keys)
       @user
     end
   end

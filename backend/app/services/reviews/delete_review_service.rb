@@ -1,11 +1,12 @@
 module Reviews
   class DeleteReviewService
-    def initialize(review:)
+    def initialize(review:, repository: Reviews::ReviewRepository.new)
       @review = review
+      @repository = repository
     end
 
     def invoke
-      @review.discard
+      @repository.discard!(@review)
     end
   end
 end

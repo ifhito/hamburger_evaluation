@@ -1,7 +1,11 @@
 module Reviews
   class ReviewQuery
-    def initialize(params)
+    def initialize(params = {})
       @params = params
+    end
+
+    def find_kept!(id)
+      Review.kept.includes(:user, :burger, burger: :burger_stat).find(id)
     end
 
     def search

@@ -1,5 +1,9 @@
 module BurgerStats
   class BurgerStatRepository
+    def find_burger!(burger_id)
+      Burger.find(burger_id)
+    end
+
     def active_reviews_for(burger)
       burger.reviews.kept.includes(:user).to_a
     end

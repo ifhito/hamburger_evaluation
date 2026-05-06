@@ -3,6 +3,21 @@ require "rails_helper"
 RSpec.describe Reviews::ReviewQuery do
   let(:burger) { create(:burger) }
 
+  describe "#find_kept!" do
+    it "returns a kept review with serializer associations preloaded" do
+      review = create(:review, burger: burger)
+
+      expect(described_class.new.find_kept!(review.id)).to eq(review)
+    end
+
+    it "raises ActiveRecord::RecordNotFound for a discarded review" do
+      review = create(:review, burger: burger)
+      review.discard
+
+      expect { described_class.new.find_kept!(review.id) }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+  end
+
   describe "#search" do
     subject(:result) { described_class.new(params).search }
 
