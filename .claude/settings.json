@@ -1,15 +1,68 @@
 {
-    "enabledPlugins": {
-        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": true
-    },
-    "plansDirectory": "./plans",
-    "permissions": {
-        "allow": [
-            "WebSearch",
-            "mcp__plugin_serena_serena__list_dir",
-            "Bash(find:*)",
-            "Bash(ls:*)",
-            "Bash(cat:*)"
+  "enabledPlugins": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": true
+  },
+  "plansDirectory": "./plans",
+  "permissions": {
+    "allow": [
+      "Read",
+      "WebSearch",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git fetch*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr list*)",
+      "Bash(python3 .claude/hooks/stop-sensors.py*)",
+      "Bash(docker compose run --rm -e RAILS_ENV=test api bundle exec rspec*)",
+      "Bash(docker compose run --rm api bin/rubocop*)",
+      "Bash(docker compose run --rm api bin/brakeman*)",
+      "Bash(pnpm run type-check*)",
+      "Bash(pnpm run lint*)",
+      "Bash(pnpm run test*)",
+      "Bash(pnpm run build*)"
+    ],
+    "ask": [
+      "Edit",
+      "Write",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(gh pr edit*)",
+      "Bash(gh pr close*)",
+      "Bash(docker compose up*)",
+      "Bash(pnpm install*)",
+      "Bash(bundle install*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(backend/.env)",
+      "Read(backend/.env.*)",
+      "Read(frontend/.env)",
+      "Read(frontend/.env.*)",
+      "Read(secrets/**)",
+      "Read(**/secrets/**)",
+      "Read(backend/.kamal/secrets)",
+      "Read(backend/.kamal/secrets/**)",
+      "Read(backend/config/master.key)",
+      "Bash(rm -rf*)",
+      "Bash(git push --force*)",
+      "Bash(git rebase*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/stop-sensors.py"
+          }
         ]
-    }
+      }
+    ]
+  }
 }
