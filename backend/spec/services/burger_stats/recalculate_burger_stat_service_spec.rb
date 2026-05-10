@@ -2,15 +2,23 @@ require "rails_helper"
 
 RSpec.describe BurgerStats::RecalculateBurgerStatService do
   describe "#invoke" do
-    it "uses a repository for review loading and projection persistence" do
+    it "uses a repository projection input instead of reading review records directly" do
       burger = instance_double(Burger, id: 123)
-      reviewer = instance_double(User)
-      review = instance_double(Review, rating: 4, created_at: Time.current, user: reviewer)
+      facts = [
+        Reviews::ReviewFact.new(
+          rating: 4,
+          created_at: Time.current,
+          reviewer_history: Reviews::ReviewerHistory.new(ratings: [ 4, 5, 3 ])
+        )
+      ]
+      projection_input = BurgerStats::ReviewProjectionInput.new(
+        review_facts: facts,
+        review_count: 1,
+        average_rating: 4.0
+      )
       repository = instance_double(BurgerStats::BurgerStatRepository)
 
-      allow(repository).to receive(:active_reviews_for).with(burger).and_return([ review ])
-      allow(repository).to receive(:reviewer_ratings_for).with(reviewer).and_return([ 4, 5, 3 ])
-      allow(repository).to receive(:average_rating_for).with([ review ]).and_return(4.0)
+      allow(repository).to receive(:projection_input_for).with(burger).and_return(projection_input)
       allow(repository).to receive(:upsert_projection!)
 
       described_class.new(burger, repository: repository).invoke
