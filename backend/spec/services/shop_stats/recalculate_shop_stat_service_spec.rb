@@ -4,9 +4,9 @@ RSpec.describe ShopStats::RecalculateShopStatService do
   describe "#invoke" do
     it "stores a shop score calculated from burger stats weighted by review count" do
       shop = create(:shop)
-      first_burger = create(:burger, shop: shop)
-      second_burger = create(:burger, shop: shop)
-      create(:burger, shop: shop)
+      first_burger = create(:burger, shop: shop, name: "Classic Burger")
+      second_burger = create(:burger, shop: shop, name: "Cheese Burger")
+      create(:burger, shop: shop, name: "Unreviewed Burger")
 
       create(
         :burger_stat,
