@@ -2,15 +2,18 @@ require "rails_helper"
 
 RSpec.describe BurgerStatUpdateJob, type: :job do
   describe "#perform" do
-    it "recalculates the burger stat through the application service" do
+    it "recalculates the burger stat and then the parent shop stat" do
       burger = create(:burger)
       repository = instance_double(BurgerStats::BurgerStatRepository)
-      service = instance_double(BurgerStats::RecalculateBurgerStatService)
+      burger_service = instance_double(BurgerStats::RecalculateBurgerStatService)
+      shop_service = instance_double(ShopStats::RecalculateShopStatService)
 
       expect(BurgerStats::BurgerStatRepository).to receive(:new).and_return(repository)
       expect(repository).to receive(:find_burger!).with(burger.id).and_return(burger)
-      expect(BurgerStats::RecalculateBurgerStatService).to receive(:new).with(burger).and_return(service)
-      expect(service).to receive(:invoke)
+      expect(BurgerStats::RecalculateBurgerStatService).to receive(:new).with(burger).and_return(burger_service)
+      expect(burger_service).to receive(:invoke)
+      expect(ShopStats::RecalculateShopStatService).to receive(:new).with(burger.shop).and_return(shop_service)
+      expect(shop_service).to receive(:invoke)
 
       described_class.new.perform(burger.id)
     end

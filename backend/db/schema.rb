@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_05_10_121100) do
+ActiveRecord::Schema[8.0].define(version: 2026_05_10_122500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -47,6 +47,18 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_10_121100) do
     t.index ["user_id"], name: "index_reviews_on_user_id"
   end
 
+  create_table "shop_stats", force: :cascade do |t|
+    t.bigint "shop_id", null: false
+    t.float "average_rating", default: 0.0, null: false
+    t.integer "burger_count", default: 0, null: false
+    t.integer "review_count", default: 0, null: false
+    t.float "weighted_score", default: 0.0, null: false
+    t.float "confidence", default: 0.0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["shop_id"], name: "index_shop_stats_on_shop_id", unique: true
+  end
+
   create_table "shops", force: :cascade do |t|
     t.string "name", null: false
     t.datetime "created_at", null: false
@@ -68,4 +80,5 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_10_121100) do
   add_foreign_key "burgers", "shops"
   add_foreign_key "reviews", "burgers"
   add_foreign_key "reviews", "users"
+  add_foreign_key "shop_stats", "shops"
 end
