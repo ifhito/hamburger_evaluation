@@ -38,18 +38,17 @@ end
 puts "  #{created_shops.size} shops created"
 
 # ----------------------------------------
-# Burgers & ShopsAndBurgers（各店に2つのバーガーを紐付け）
+# Burgers（各店に2つの店舗内バーガーを作成）
 # ----------------------------------------
 burger_count = 0
 created_shops.each do |shop|
-  2.times do
-    burger = Burger.create!
-    ShopsAndBurger.find_or_create_by!(shop: shop, burger: burger)
+  2.times do |i|
+    shop.burgers.find_or_create_by!(name: "#{shop.name} Burger #{i + 1}")
     burger_count += 1
   end
 end
 
-puts "  #{burger_count} burgers created"
+puts "  #{burger_count} burgers available"
 
 # ----------------------------------------
 # Reviews
@@ -67,15 +66,12 @@ comments = [
 review_count = 0
 created_users.each_with_index do |user, user_idx|
   all_burgers.sample(3).each_with_index do |burger, i|
-    Review.create!(
-      user: user,
-      burger: burger,
-      rating: [ 3, 4, 4, 5, 5 ].sample,
-      comment: comments[(user_idx * 3 + i) % comments.size]
-    )
+    Review.find_or_create_by!(user: user, burger: burger, comment: comments[(user_idx * 3 + i) % comments.size]) do |review|
+      review.rating = [ 3, 4, 4, 5, 5 ].sample
+    end
     review_count += 1
   end
 end
 
-puts "  #{review_count} reviews created"
+puts "  #{review_count} reviews available"
 puts "Done!"

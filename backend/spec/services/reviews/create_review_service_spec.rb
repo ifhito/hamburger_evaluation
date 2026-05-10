@@ -40,9 +40,9 @@ RSpec.describe Reviews::CreateReviewService do
         expect { service.invoke }.to change(Review, :count).by(1)
       end
 
-      it "バーガーと店舗の紐付けを作成すること" do
+      it "バーガーを店舗内に作成すること" do
         expect { service.invoke }.to change(Burger, :count).by(1)
-          .and change(ShopsAndBurger, :count).by(1)
+        expect(Burger.last.shop).to eq(shop)
       end
 
       it "作成したレビューを返すこと" do
@@ -54,14 +54,12 @@ RSpec.describe Reviews::CreateReviewService do
 
     context "同名バーガーが既に存在する場合" do
       before do
-        burger = Burger.create!(name: "Classic Burger")
-        ShopsAndBurger.create!(shop: shop, burger: burger)
+        Burger.create!(shop: shop, name: "Classic Burger")
       end
 
       it "既存バーガーを再利用してレビューを作成すること" do
         expect { service.invoke }.to change(Review, :count).by(1)
         expect(Burger.count).to eq(1)
-        expect(ShopsAndBurger.count).to eq(1)
       end
     end
 
@@ -84,9 +82,8 @@ RSpec.describe Reviews::CreateReviewService do
         )
       end
 
-      it "バーガーと紐付けをロールバックすること" do
+      it "バーガー作成をロールバックすること" do
         expect { service.invoke rescue nil }.not_to change(Burger, :count)
-        expect(ShopsAndBurger.where(shop: shop).count).to eq(0)
       end
     end
   end

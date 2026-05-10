@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe "Shops", type: :request do
   let(:shop)   { create(:shop) }
-  let(:burger) { create(:burger).tap { |b| ShopsAndBurger.create!(shop: shop, burger: b) } }
+  let(:burger) { create(:burger, shop: shop) }
 
   describe "GET /shops" do
     it "returns all shops with id and name" do
@@ -68,7 +68,7 @@ RSpec.describe "Shops", type: :request do
 
       it "does not include reviews from other shops" do
         other_shop   = create(:shop)
-        other_burger = create(:burger).tap { |b| ShopsAndBurger.create!(shop: other_shop, burger: b) }
+        other_burger = create(:burger, shop: other_shop)
         create(:review, burger: burger)
         other_review = create(:review, burger: other_burger)
 
