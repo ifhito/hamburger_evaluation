@@ -85,8 +85,8 @@ RSpec.describe Reviews::ReviewQuery do
     context "with shop_id param" do
       it "returns only reviews for burgers at the given shop" do
         shop = create(:shop)
-        create(:shops_and_burger, shop: shop, burger: burger)
-        review_in_shop = create(:review, burger: burger)
+        burger_in_shop = create(:burger, shop: shop)
+        review_in_shop = create(:review, burger: burger_in_shop)
         other_burger = create(:burger)
         create(:review, burger: other_burger)
         expect(described_class.new({ shop_id: shop.id }).search).to contain_exactly(review_in_shop)

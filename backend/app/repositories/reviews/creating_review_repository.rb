@@ -17,9 +17,7 @@ module Reviews
     end
 
     def create_burger_for_shop(shop:, burger_name:)
-      burger = Burger.create!(name: burger_name)
-      ShopsAndBurger.create!(shop: shop, burger: burger)
-      burger
+      Burger.create!(shop: shop, name: burger_name)
     end
 
     def create_review!(user:, burger:, rating:, comment:)

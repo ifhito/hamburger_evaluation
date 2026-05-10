@@ -1,12 +1,16 @@
 require "rails_helper"
 
-RSpec.describe BurgerStat, type: :model do
+RSpec.describe Burger, type: :model do
   describe "associations" do
-    it "belongs to a burger" do
-      burger = create(:burger)
-      stat = described_class.create!(burger: burger)
+    it { is_expected.to belong_to(:shop) }
+    it { is_expected.to have_many(:reviews).dependent(:destroy) }
+    it { is_expected.to have_one(:burger_stat) }
+  end
 
-      expect(stat.burger).to eq(burger)
-    end
+  describe "validations" do
+    subject(:burger) { build(:burger) }
+
+    it { is_expected.to validate_presence_of(:name) }
+    it { is_expected.to validate_uniqueness_of(:name).scoped_to(:shop_id) }
   end
 end

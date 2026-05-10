@@ -1,4 +1,5 @@
 class Shop < ApplicationRecord
-  has_many :shops_and_burgers, dependent: :destroy
-  has_many :burgers, through: :shops_and_burgers
+  has_many :burgers, dependent: :destroy
+
+  validates :name, presence: true
 end

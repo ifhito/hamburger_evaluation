@@ -3,7 +3,7 @@ require "rails_helper"
 RSpec.describe "Reviews", type: :request do
   let(:user)   { create(:user) }
   let(:shop)   { create(:shop) }
-  let(:burger) { create(:burger).tap { |b| ShopsAndBurger.create!(shop: shop, burger: b) } }
+  let(:burger) { create(:burger, shop: shop) }
 
   describe "GET /reviews" do
     it "returns all kept reviews" do
@@ -143,7 +143,7 @@ RSpec.describe "Reviews", type: :request do
                headers: auth_headers(user)
         }.not_to change(Burger, :count)
         expect(response).to have_http_status(:unprocessable_entity)
-        expect(ShopsAndBurger.where(shop: shop).count).to eq(0)
+        expect(Burger.where(shop: shop).count).to eq(0)
       end
     end
   end
