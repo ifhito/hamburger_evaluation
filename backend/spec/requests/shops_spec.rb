@@ -45,8 +45,17 @@ RSpec.describe "Shops", type: :request do
 
   describe "GET /shops/:id" do
     context "with a valid id" do
-      it "returns the shop with id and name" do
+      it "returns the shop with id, name, and managed score" do
         create(:review, burger: burger)
+        create(
+          :shop_stat,
+          shop: shop,
+          average_rating: 4.1,
+          weighted_score: 4.2,
+          burger_count: 2,
+          review_count: 7,
+          confidence: 0.8
+        )
 
         get "/shops/#{shop.id}"
 
@@ -54,6 +63,13 @@ RSpec.describe "Shops", type: :request do
         body = response.parsed_body
         expect(body["id"]).to eq(shop.id)
         expect(body["name"]).to eq(shop.name)
+        expect(body["stat"]).to include(
+          "average_rating" => 4.1,
+          "weighted_score" => 4.2,
+          "burger_count" => 2,
+          "review_count" => 7,
+          "confidence" => 0.8
+        )
       end
 
       it "returns reviews for that shop" do

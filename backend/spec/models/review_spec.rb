@@ -71,8 +71,8 @@ RSpec.describe Review, type: :model do
   end
 
   describe "callbacks" do
-    describe "after_create" do
-      it "publishes a review-changed event with the burger_id" do
+    describe "after_create_commit" do
+      it "publishes a review-changed event with the burger_id after commit" do
         burger = create(:burger)
 
         expect(Reviews::ReviewEvents).to receive(:review_changed_for_burger).with(burger.id)

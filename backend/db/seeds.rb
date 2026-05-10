@@ -74,4 +74,14 @@ created_users.each_with_index do |user, user_idx|
 end
 
 puts "  #{review_count} reviews available"
+
+Burger.find_each do |burger|
+  BurgerStats::RecalculateBurgerStatService.new(burger).invoke
+end
+Shop.find_each do |shop|
+  ShopStats::RecalculateShopStatService.new(shop).invoke
+end
+
+puts "  #{BurgerStat.count} burger stats available"
+puts "  #{ShopStat.count} shop stats available"
 puts "Done!"
