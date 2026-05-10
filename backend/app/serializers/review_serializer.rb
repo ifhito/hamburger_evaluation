@@ -27,8 +27,10 @@ class ReviewSerializer
     {
       id:             @review.burger.id,
       name:           @review.burger.name,
-      average_rating: stat&.average_rating || 0.0,
-      review_count:   stat&.review_count   || 0
+      average_rating: stat&.average_rating  || 0.0,
+      review_count:   stat&.review_count    || 0,
+      weighted_score: stat&.weighted_score  || 0.0,
+      confidence:     stat&.confidence      || 0.0
     }
   end
 end

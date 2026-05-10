@@ -10,7 +10,7 @@ module Authenticatable
   def authenticate_user!
     token = request.headers["Authorization"]&.split(" ")&.last
     payload = JWT.decode(token, SECRET_KEY, true, algorithm: "HS256").first
-    @current_user = User.kept.find(payload["user_id"])
+    @current_user = Users::UserRepository.new.find_kept!(payload["user_id"])
   rescue JWT::DecodeError, ActiveRecord::RecordNotFound
     render json: { error: "Unauthorized" }, status: :unauthorized
   end

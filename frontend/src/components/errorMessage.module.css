@@ -1,0 +1,13 @@
+.container {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  color: var(--color-error);
+  font-size: 0.875rem;
+}
+
+.list {
+  padding-left: 1.25rem;
+  margin: 0;
+}

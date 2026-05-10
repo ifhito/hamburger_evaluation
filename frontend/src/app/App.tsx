@@ -1,23 +1,14 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Provider as JotaiProvider } from 'jotai'
 import { RouterProvider } from 'react-router-dom'
-import { AuthProvider } from './providers/AuthProvider'
+import { AuthProvider } from '../domains/auth/AuthProvider'
 import { router } from './router'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60, // 1 minute
-      retry: 1,
-    },
-  },
-})
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <JotaiProvider>
       <AuthProvider>
         <RouterProvider router={router} />
       </AuthProvider>
-    </QueryClientProvider>
+    </JotaiProvider>
   )
 }

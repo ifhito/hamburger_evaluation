@@ -2,8 +2,8 @@ class AuthController < ApplicationController
   SECRET_KEY = Rails.application.secret_key_base
 
   def signup
-    user = User.new(signup_params)
-    if user.save
+    user = user_repository.build(signup_params)
+    if user_repository.save(user)
       token = encode_token(user.id)
       render json: { id: user.id, username: user.username, email: user.email, token: token }, status: :created
     else
@@ -12,7 +12,7 @@ class AuthController < ApplicationController
   end
 
   def login
-    user = User.kept.find_by(email: params[:email])
+    user = user_repository.find_kept_by_email(params[:email])
     if user&.authenticate(params[:password])
       token = encode_token(user.id)
       render json: { token: token }, status: :ok
@@ -34,5 +34,9 @@ class AuthController < ApplicationController
   def encode_token(user_id)
     payload = { user_id: user_id, exp: 24.hours.from_now.to_i }
     JWT.encode(payload, SECRET_KEY, "HS256")
+  end
+
+  def user_repository
+    Users::UserRepository.new
   end
 end

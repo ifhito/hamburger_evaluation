@@ -1,0 +1,60 @@
+.muted {
+  color: var(--color-text-muted);
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  background: #fff;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.rating {
+  font-size: 1.5rem;
+}
+
+.date {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.comment {
+  margin-bottom: 1rem;
+  line-height: 1.7;
+}
+
+.burgerInfo {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.userInfo {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.editLink {
+  padding: 0.5rem 1rem;
+  background: var(--color-secondary-bg);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.backLink {
+  display: block;
+  margin-top: 1rem;
+}

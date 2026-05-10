@@ -37,6 +37,18 @@ RSpec.describe "Users", type: :request do
         expect(response).to have_http_status(:unauthorized)
       end
     end
+
+    context "when authenticated as a different user" do
+      it "returns 403 and does not modify the target user" do
+        other_user = create(:user)
+        original_username = other_user.username
+        put "/users/#{other_user.id}",
+            params: { user: { username: "hacked" } }.to_json,
+            headers: auth_headers(user)
+        expect(response).to have_http_status(:forbidden)
+        expect(other_user.reload.username).to eq(original_username)
+      end
+    end
   end
 
   describe "DELETE /users/:id" do
@@ -45,6 +57,15 @@ RSpec.describe "Users", type: :request do
         delete "/users/#{user.id}", headers: auth_headers(user)
         expect(response).to have_http_status(:no_content)
         expect(user.reload.discarded_at).not_to be_nil
+      end
+    end
+
+    context "when authenticated as a different user" do
+      it "returns 403 and does not delete the target user" do
+        other_user = create(:user)
+        delete "/users/#{other_user.id}", headers: auth_headers(user)
+        expect(response).to have_http_status(:forbidden)
+        expect(other_user.reload.discarded_at).to be_nil
       end
     end
   end

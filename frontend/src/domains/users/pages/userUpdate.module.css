@@ -1,0 +1,22 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 25rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.divider {
+  margin: 2rem 0;
+  border-color: var(--color-border);
+}
+
+.dangerZone {
+  margin-bottom: 0.75rem;
+  color: var(--color-danger);
+  font-size: 1rem;
+}
