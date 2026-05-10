@@ -11,38 +11,32 @@ RSpec.describe BurgerStats::BurgerStatRepository do
     end
   end
 
-  describe "#active_reviews_for" do
-    it "loads kept reviews with users" do
-      burger = create(:burger)
-      kept_review = create(:review, burger: burger)
-      discarded_review = create(:review, burger: burger)
-      discarded_review.discard
-
-      expect(repository.active_reviews_for(burger)).to contain_exactly(kept_review)
-    end
-  end
-
-  describe "#reviewer_ratings_for" do
-    it "returns kept review ratings for the reviewer" do
+  describe "#projection_input_for" do
+    it "returns review facts, kept review count, and average rating for the burger" do
       user = create(:user)
       burger = create(:burger)
       create(:review, user: user, burger: burger, rating: 5)
+      create(:review, user: user, burger: burger, rating: 3)
       discarded_review = create(:review, user: user, burger: burger, rating: 1)
       discarded_review.discard
 
-      expect(repository.reviewer_ratings_for(user)).to eq([ 5 ])
-    end
-  end
+      input = repository.projection_input_for(burger)
 
-  describe "#average_rating_for" do
-    it "returns a rounded average rating" do
-      reviews = [ instance_double(Review, rating: 4), instance_double(Review, rating: 5) ]
-
-      expect(repository.average_rating_for(reviews)).to eq(4.5)
+      expect(input).to be_a(BurgerStats::ReviewProjectionInput)
+      expect(input.review_facts.map(&:rating)).to contain_exactly(5.0, 3.0)
+      expect(input.review_count).to eq(2)
+      expect(input.average_rating).to eq(4.0)
+      expect(input.review_facts.map(&:reviewer_history).map(&:ratings)).to all(eq([ 5.0, 3.0 ]))
     end
 
-    it "returns 0.0 when there are no reviews" do
-      expect(repository.average_rating_for([])).to eq(0.0)
+    it "returns zero summary values when there are no active reviews" do
+      burger = create(:burger)
+
+      input = repository.projection_input_for(burger)
+
+      expect(input.review_facts).to eq([])
+      expect(input.review_count).to eq(0)
+      expect(input.average_rating).to eq(0.0)
     end
   end
 
