@@ -57,18 +57,23 @@ integration: committing implementer work, pushing, and managing the draft PR.
    the impact of each choice. At most 5 up front; overflow goes to the
    appendix. Never ask the user to re-litigate auto-fixed or discarded
    findings.
-10. **Auto-merge (fast-forward) or hold** —
-    - **No P1/P2 decisions pending** (P3-only or none): finish the branch
-      yourself — `gh pr ready`, then fast-forward main with
-      `git push origin feat/<slug>:main` (a plain push: it is refused unless
-      main can fast-forward; never force, never squash, never rebase).
-      GitHub marks the PR merged when the commits land on main. Then
+10. **Auto-merge (fast-forward), ready-only, or hold** —
+    - **Size gate first**: measure the PR with `git diff main --shortstat`
+      excluding generated/lock files (`sqlcgen/`, `go.sum`, lockfiles).
+      **Small** = roughly ≤400 changed lines (insertions+deletions).
+    - **Small + no P1/P2 pending** (P3-only or none): finish the branch —
+      `gh pr ready`, then fast-forward main with
+      `git push origin feat/<slug>:main` (a plain push: refused unless main
+      can fast-forward; never force, never squash, never rebase). Then
       `git worktree remove` and delete the local branch. If the ff push is
       refused (main moved), do NOT resolve it yourself — stop and escalate.
       P3 items are reported as deferrable follow-ups, not blockers.
-    - **P1 or P2 pending**: leave the PR as draft and stop; merging before
-      those decisions would preempt the user. Keep the worktree until the
-      decisions land.
+    - **Large + no P1/P2 pending**: `gh pr ready`, do NOT merge. Report the
+      PR as ready-for-human-review with the size numbers and a suggested
+      review order. Keep the worktree until the user merges or asks you to.
+    - **P1 or P2 pending** (any size): leave the PR as draft and stop;
+      merging before those decisions would preempt the user. Keep the
+      worktree until the decisions land.
 11. **Report** — PR URL and merge status; what changed; validation evidence;
     per-round verdicts from all three review passes and the verifier;
     auto-fixed list; discarded list with evidence; the decision list from
