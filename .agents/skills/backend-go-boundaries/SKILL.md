@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [go, backend, clean-architecture, sqlc, testing]
-    related_skills: [backend-go-change-validation, pr-hygiene]
+    related_skills: [backend-go-change-validation, db-design, pr-hygiene]
 ---
 
 # Backend Go Boundaries
@@ -39,6 +39,20 @@ backend-go/
 ```
 
 Dependencies point inward only: `handler → usecase → domain`.
+
+## Domain–DB Separation
+
+**Domain design and DB design are separate activities and must not mirror
+each other.** The schema serves data integrity and query shape; the domain
+serves behavior and invariants; `adapter/repository` owns the mapping
+between them.
+
+- Domain types never copy table row shapes; they are designed from behavior
+  (value objects, state transitions), not from columns.
+- sqlc row structs and `pgtype`/`sql` types never leave `adapter/`.
+- A schema change must not mechanically force a domain change, nor vice
+  versa — divergence between the two shapes is expected and healthy.
+- Schema work follows the `db-design` skill.
 
 - `domain` imports stdlib only. No `net/http`, no `database/sql`, no `pgx`,
   no imports from `usecase`/`adapter`.
