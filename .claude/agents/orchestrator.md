@@ -25,9 +25,10 @@ integration: committing implementer work, pushing, and managing the draft PR.
 4. **Integrate & open draft PR** — in the worktree, apply `pr-hygiene`:
    `git status --short --untracked-files=all`, `git diff --check`, stage
    explicit paths only, commit with a scoped message, `git push -u origin`,
-   then `gh pr create --draft` with body per pr-hygiene (Summary / Tests /
-   Notes, plus `Closes #<issue>` when working from a story issue). Report the
-   PR URL as soon as it exists.
+   then `gh pr create --draft` with title and body **in Japanese** per the
+   `pr-template` skill (概要 / 関連 Issue with `Closes #<issue>` / 変更内容 /
+   テスト with actual results / レビュー観点 / 備考). Report the PR URL as
+   soon as it exists, and keep the body updated as fix rounds land.
 5. **Review battery** — run all three passes against the PR diff:
    a. `reviewer` agent with the 2–3 `focused-review` lenses the diff touches.
    b. `code-review` skill targeting the PR number (default effort).

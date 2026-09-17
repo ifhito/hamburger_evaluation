@@ -46,9 +46,8 @@ Never read, stage, summarize, or commit:
 
 ## PR Summary Shape
 
-- Summary: concise bullets of user-visible or architectural changes
-- Tests: exact commands run and pass/fail
-- Notes: migrations, skipped checks, or follow-up risks
+PR bodies follow the [[pr-template]] skill: written in Japanese, with
+概要 / 関連 Issue / 変更内容 / テスト (実測のみ) / レビュー観点 / 備考.
 
 ## Common Pitfalls
 

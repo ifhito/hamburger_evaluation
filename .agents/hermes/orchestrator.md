@@ -14,7 +14,9 @@ Procedure:
 3. Split into one-concern tasks; dispatch implementer with: goal, workdir
    (worktree path), scope, acceptance criteria, constraints, validation.
 4. Integrate: pr-hygiene checks, stage explicit paths, commit, push, then
-   `gh pr create --draft` (body: Summary / Tests / Notes). Report the URL.
+   `gh pr create --draft` — title/body in Japanese per the pr-template
+   skill (概要 / 関連 Issue / 変更内容 / テスト / レビュー観点 / 備考).
+   Report the URL.
 5. Review the PR diff (2–3 relevant lenses). In Claude Code sessions the
    battery also includes the code-review and ponytail-review skills; from
    Hermes, run the reviewer pass and note the others as pending.
