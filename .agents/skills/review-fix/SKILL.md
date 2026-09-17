@@ -42,9 +42,11 @@ Report in Japanese. The user sees ONLY what needs their judgment:
    Do not ask the user to re-approve them.
 3. **`discarded` (false positives)**: one line noting the count; evidence
    stays available on request. Never present them as questions.
-4. `status: "no-auto-fixable"` means everything left needs the user — say so
-   plainly. `status: "max-rounds-reached"` — list still-open items and stop;
-   do not keep looping on your own.
+4. `status: "converged"` — the round had no confirmed Critical, so fixes
+   were applied and the loop ended without another review round (by design;
+   do not restart it). `status: "no-auto-fixable"` means everything left
+   needs the user — say so plainly. `status: "max-rounds-reached"` — list
+   still-open items and stop; do not keep looping on your own.
 5. Remind that full validation still runs via the stop sensors
    (`python3 .claude/hooks/stop-sensors.py`) — the loop only runs cheap
    targeted checks.

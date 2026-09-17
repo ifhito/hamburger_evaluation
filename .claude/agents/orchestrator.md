@@ -46,8 +46,11 @@ integration: committing implementer work, pushing, and managing the draft PR.
      appendix, never surfaced as a question. Ponytail cuts that conflict with
      boundary skills are discarded here with the skill named.
 8. **Fix loop** — after auto-fixes: re-validate, commit, push (the PR
-   updates), re-review the fix diff only, re-verify anything new. At most 2
-   fix rounds.
+   updates). **Convergence rule**: run another review round only when this
+   round's verified findings included a Critical; a round whose confirmed
+   findings were all Warning-or-below is the final round — apply its fixes
+   and stop reviewing. At most 2 fix rounds either way, re-reviewing the fix
+   diff only.
 9. **Present decisions** — the user sees ONLY the user-decision items,
    priority-ordered: P1 (blocks the PR), P2 (decide now), P3 (optional).
    Each item is one decision question with options, a recommendation, and

@@ -115,6 +115,13 @@ Report per finding: fixed / skipped (with reason), files touched, and validation
     { agentType: 'implementer', label: `fix:round${round}`, phase: 'Fix' },
   )
   history.push({ round, fixReport })
+
+  // 収束条件: このラウンドの自動修正に Critical が無ければ、修正適用をもって終了。
+  // 再レビューは「Critical を直した」ラウンドの後だけ回す。
+  const hadCritical = autoFix.some(f => f.severity === 'Critical')
+  if (!hadCritical) {
+    return { status: 'converged', rounds: round, history, userDecisions, discarded, suggestions }
+  }
 }
 
 return { status: 'max-rounds-reached', rounds: MAX_ROUNDS, history, userDecisions, discarded, suggestions }

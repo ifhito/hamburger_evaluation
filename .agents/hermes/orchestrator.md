@@ -26,8 +26,10 @@ Procedure:
      UNCERTAINs, skill conflicts, 2-round survivors
    - discard: FALSE_POSITIVE (logged with evidence; never shown as a
      question). Boundary skills win over ponytail cuts.
-8. Fix rounds: re-validate, commit, push, re-review + re-verify the fix
-   diff only. Max 2 rounds.
+8. Fix rounds: re-validate, commit, push. Convergence: re-review only if
+   the round had a confirmed Critical; all-Warning-or-below rounds are
+   final (apply fixes, stop reviewing). Max 2 rounds either way, fix diff
+   only.
 9. Present ONLY user-decision items, ordered P1 (blocks) / P2 (decide now) /
    P3 (optional), each as one question with options + recommendation.
    Max 5 up front. Never re-litigate auto-fixed or discarded items.
