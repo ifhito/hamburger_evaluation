@@ -14,9 +14,8 @@ metadata:
 
 ## Overview
 
-Use this skill for changes under `backend-go/`. The Go API is a clean
-architecture rewrite of the Rails API (`backend/`), developed in parallel and
-API-compatible with the existing React frontend. Stack: Go 1.22+ standard
+Use this skill for changes under `backend-go/`. The Go API serves the React
+SPA in `frontend/` and follows clean architecture. Stack: Go 1.22+ standard
 `net/http` routing + `sqlc` + PostgreSQL 16. No web framework, no ORM.
 
 ## Layout and Dependency Rule
@@ -33,7 +32,7 @@ backend-go/
 │       │   └── sqlcgen/   # sqlc-generated code — NEVER edit by hand
 │       └── infra/         # DB pool, JWT, password hashing, config
 ├── db/
-│   ├── migrations/        # SQL migrations (shared schema with Rails during parallel dev)
+│   ├── migrations/        # SQL migrations
 │   └── queries/           # sqlc query sources (*.sql)
 ├── sqlc.yaml
 └── go.mod
@@ -51,14 +50,14 @@ Dependencies point inward only: `handler → usecase → domain`.
 - `adapter/repository` is the only layer that touches sqlc/pgx. Queries live
   in `db/queries/*.sql`; regenerate with `sqlc generate`, commit the result.
 
-## API Compatibility Rules
+## API Contract Rules
 
 - JSON is snake_case; the frontend converts casing at its HTTP boundary.
-  Response shapes must match the Rails serializers field-for-field.
-- Auth is the same custom JWT Bearer scheme (`Authorization: Bearer <token>`),
-  same claims and secret source, so tokens work across both backends.
-- Errors follow the Rails shape: `{"error": "..."}` or `{"errors": [...]}`
-  with the same status codes (401/403/404/422).
+  The TypeScript types under `frontend/src/domains/*/api/types.ts` are the
+  source of truth for response shapes — keep them in sync field-for-field.
+- Auth is a custom JWT Bearer scheme (`Authorization: Bearer <token>`).
+- Errors use `{"error": "..."}` (single) or `{"errors": [...]}` (validation)
+  with conventional status codes (401/403/404/422).
 - Authorization rules live in `domain`/`usecase` (e.g. review editable only by
   its author, shop moderation admin-only), not in handlers.
 
@@ -77,12 +76,12 @@ Dependencies point inward only: `handler → usecase → domain`.
 2. Leaking `pgx`/`sql` types or sqlc row structs above the repository layer —
    map them to domain types at the repository boundary.
 3. Business rules drifting into handlers because "it's just one if".
-4. Response field names diverging from the Rails serializers (breaks the SPA).
+4. Response field names diverging from the frontend API types (breaks the SPA).
 5. Introducing a router/DI framework — stdlib is a decision, not an accident.
 
 ## Verification Checklist
 
 - [ ] `domain` and `usecase` have no outward imports (adapter/infra/pgx/net-http).
 - [ ] sqlc output regenerated and committed if `db/queries/` changed.
-- [ ] Response JSON verified against the Rails equivalent for changed endpoints.
+- [ ] Response JSON verified against the frontend API types for changed endpoints.
 - [ ] Checks in [[backend-go-change-validation]] pass.

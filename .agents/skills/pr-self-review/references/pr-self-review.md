@@ -16,11 +16,11 @@ close, or rewrite a PR.
    - tests/checks/docs supporting that implementation,
    - unrelated or pre-existing local files.
 6. Report missing validation based on changed area:
-   - backend: RSpec, RuboCop, Brakeman,
+   - backend: gofmt, go vet, go build, go test,
    - frontend: type-check, lint, test,
    - build/API boundary: frontend build.
 
 ## Secret Paths
 
 Never read or include contents from `.env*`, `secrets/**`,
-`backend/.kamal/secrets`, or `backend/config/master.key`.
+`**/.kamal/**`, or `**/master.key`.

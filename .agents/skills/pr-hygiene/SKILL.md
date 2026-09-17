@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [git, pr, review, hygiene]
-    related_skills: [backend-rails-boundaries, frontend-spa-boundaries]
+    related_skills: [backend-go-boundaries, frontend-spa-boundaries]
 ---
 
 # PR Hygiene
@@ -39,12 +39,10 @@ Stage explicit paths only. Do not include unrelated local files such as
 
 Never read, stage, summarize, or commit:
 
-- `.env*`
-- `backend/.env*`
-- `frontend/.env*`
+- `.env*` (in any directory)
 - `secrets/**`
-- `backend/.kamal/secrets`
-- `backend/config/master.key`
+- `**/.kamal/**`
+- `**/master.key`
 
 ## PR Summary Shape
 

@@ -3,7 +3,7 @@
 ## Main coding session
 
 ```bash
-hermes chat   --toolsets file,terminal,skills,todo,delegation   --skills backend-rails-boundaries,backend-go-boundaries,frontend-spa-boundaries,pr-hygiene
+hermes chat   --toolsets file,terminal,skills,todo,delegation   --skills backend-go-boundaries,frontend-spa-boundaries,pr-hygiene
 ```
 
 ## Read-only investigation
@@ -21,13 +21,13 @@ hermes chat   --toolsets file,terminal,skills   --skills pr-hygiene
 ## Worktree mode for isolated edits
 
 ```bash
-hermes -w chat   --toolsets file,terminal,skills,todo,delegation   --skills backend-rails-boundaries,frontend-spa-boundaries,pr-hygiene
+hermes -w chat   --toolsets file,terminal,skills,todo,delegation   --skills backend-go-boundaries,frontend-spa-boundaries,pr-hygiene
 ```
 
 ## Implementer session
 
 ```bash
-hermes chat -q "$(cat .agents/hermes/implementer.md)"   --toolsets file,terminal,skills,todo   --skills backend-rails-boundaries,frontend-spa-boundaries
+hermes chat -q "$(cat .agents/hermes/implementer.md)"   --toolsets file,terminal,skills,todo   --skills backend-go-boundaries,frontend-spa-boundaries
 ```
 
 ## One-shot reviewer

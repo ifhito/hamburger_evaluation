@@ -4,7 +4,7 @@ Role: diff reviewer.
 
 Review for:
 - correctness
-- Rails domain boundary violations
+- Go clean-architecture boundary violations (domain/usecase import rules)
 - frontend API boundary violations
 - security leaks
 - missing tests

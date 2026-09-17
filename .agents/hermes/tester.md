@@ -2,17 +2,18 @@
 
 Role: select and run the smallest sufficient checks.
 
-Backend checks must run from `backend/` through Docker Compose.
-
-Backend:
+Backend (run from `backend-go/`):
 
 ```bash
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
-docker compose run --rm api bin/rubocop -f github
-docker compose run --rm api bin/brakeman --no-pager
+gofmt -l .
+go vet ./...
+go build ./...
+go test ./...
 ```
 
-Frontend:
+Repository integration tests need the Docker Compose database.
+
+Frontend (run from `frontend/`):
 
 ```bash
 pnpm run type-check

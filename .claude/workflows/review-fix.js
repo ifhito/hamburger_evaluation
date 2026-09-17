@@ -38,7 +38,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   const review = await agent(
     `Review ALL uncommitted changes in this repository (staged, unstaged, and untracked source files — inspect via git status / git diff / git diff --cached and Read).
 Apply your review priorities (correctness, backend DDD boundary violations, frontend boundary violations, security, missing tests, out-of-scope files).
-Only report real issues; do not pad. Style nits that RuboCop/ESLint would catch are out of scope.${focus}
+Only report real issues; do not pad. Style nits that gofmt/go vet/ESLint would catch are out of scope.${focus}
 Return findings via the structured output schema. Set clean=true when there are no Critical or Warning findings (Suggestions alone still count as clean).`,
     { agentType: 'reviewer', label: `review:round${round}`, phase: 'Review', schema: FINDINGS_SCHEMA },
   )

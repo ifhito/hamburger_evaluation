@@ -8,7 +8,7 @@ license: MIT
 metadata:
   hermes:
     tags: [pr, review, git]
-    related_skills: [backend-change-validation, frontend-change-validation]
+    related_skills: [backend-go-change-validation, frontend-change-validation]
 ---
 
 # PR Self Review

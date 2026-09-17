@@ -17,17 +17,14 @@ hermes chat --toolsets file,terminal,skills
 Load project skills when useful:
 
 ```bash
-hermes chat --skills backend-rails-boundaries,frontend-spa-boundaries,pr-hygiene
+hermes chat --skills backend-go-boundaries,frontend-spa-boundaries,pr-hygiene
 ```
 
 Do not read:
 
-- `.env`
-- `.env.*`
-- `backend/.env*`
-- `frontend/.env*`
+- `.env` / `.env.*` (in any directory)
 - `secrets/**`
-- `backend/.kamal/secrets`
-- `backend/config/master.key`
+- `**/.kamal/**`
+- `**/master.key`
 
 Use `AGENTS.md` as the primary project instruction and `.agents/skills/*` as reusable project workflows.

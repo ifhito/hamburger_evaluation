@@ -17,9 +17,8 @@ metadata:
 
 Use this skill when Go code under `backend-go/` changes. The job is to verify
 the clean-architecture boundaries from [[backend-go-boundaries]] and run the
-Go checks. The Go toolchain runs on the host (a single static toolchain — no
-version drift risk like Ruby); only repository integration tests need the
-Docker Compose database.
+Go checks. The Go toolchain runs on the host (a single static toolchain);
+only repository integration tests need the Docker Compose database.
 
 ## Checks
 
