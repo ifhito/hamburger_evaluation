@@ -33,13 +33,19 @@ single source of truth for round limits and finding schema.
 
 ## After the Workflow Returns
 
-1. Report per round: findings found, fixed, skipped (with the implementer's
-   reasons). Report in Japanese.
-2. `status: "clean"` — summarize remaining Suggestions (not auto-fixed by
-   design) and let the user decide on them.
-3. `status: "max-rounds-reached"` — list the still-open findings and ask the
-   user how to proceed. Do not keep looping on your own.
-4. Remind that full validation still runs via the stop sensors
+Report in Japanese. The user sees ONLY what needs their judgment:
+
+1. **Present `userDecisions` first**, ordered P1 → P2 → P3, each as one
+   decision question with options, a recommendation, and impact. At most 5
+   up front; overflow in an appendix. P1 items block the work.
+2. **Auto-fixed findings**: one summary line per round (count + what kind).
+   Do not ask the user to re-approve them.
+3. **`discarded` (false positives)**: one line noting the count; evidence
+   stays available on request. Never present them as questions.
+4. `status: "no-auto-fixable"` means everything left needs the user — say so
+   plainly. `status: "max-rounds-reached"` — list still-open items and stop;
+   do not keep looping on your own.
+5. Remind that full validation still runs via the stop sensors
    (`python3 .claude/hooks/stop-sensors.py`) — the loop only runs cheap
    targeted checks.
 

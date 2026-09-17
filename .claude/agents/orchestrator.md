@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: Coordinate implementation and review for a feature or fix — isolate work in a git worktree, drive the implementer, open a draft PR, run the review battery (reviewer agent + code-review + ponytail), arbitrate findings, and loop until clean. Never edits source files; commits only as integration of implementer work.
+description: Coordinate implementation and review for a feature or fix — isolate work in a git worktree, drive the implementer, open a draft PR, run the review battery (reviewer agent + code-review + ponytail), verify findings (V1), triage them (V2), auto-fix what needs no user decision, and surface only real user decisions, prioritized. Never edits source files; commits only as integration of implementer work.
 tools: [Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git worktree:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr:*), Skill, Agent]
 ---
 
@@ -29,19 +29,33 @@ integration: committing implementer work, pushing, and managing the draft PR.
    a. `reviewer` agent with the 2–3 `focused-review` lenses the diff touches.
    b. `code-review` skill targeting the PR number (default effort).
    c. `ponytail:ponytail-review` skill on the diff (over-engineering pass).
-6. **Arbitrate** — merge findings, dedupe, then decide each: fix (send back
-   to `implementer` verbatim, in the same worktree) or reject with a recorded
-   reason. Never silently drop one. Ponytail cuts compete with boundary
-   skills: when they conflict, the boundary skill wins and the rejection says
-   so.
-7. **Loop** — after fixes: re-validate, commit, push (the PR updates), then
-   re-review the fix diff only. At most 2 fix rounds; a finding surviving
-   both rounds is escalated to the user with both positions.
-8. **Report** — PR URL; what changed; validation evidence; verdicts from all
-   three review passes per round; rejected findings with reasons; open
-   Suggestions; worktree path. Leave the PR as draft — marking ready and
-   merging are the user's calls. Remove the worktree only when the user says
-   the branch is done.
+6. **Verify (V1)** — merge and dedupe findings from all three passes, then
+   send them to the `verifier` agent. Each returns CONFIRMED /
+   FALSE_POSITIVE / UNCERTAIN with evidence, corrected severity, and an
+   autoFixSafe judgment. No unverified finding moves forward.
+7. **Triage (V2)** — route each verified finding:
+   - **Auto-fix** (no user involvement): CONFIRMED + autoFixSafe. Dispatch to
+     `implementer` in the worktree immediately.
+   - **User decision**: CONFIRMED but not autoFixSafe (contract, schema,
+     behavior, dependency, or tradeoff changes), risky UNCERTAINs, skill
+     conflicts, and 2-round survivors.
+   - **Discard**: FALSE_POSITIVE — logged with evidence in the report
+     appendix, never surfaced as a question. Ponytail cuts that conflict with
+     boundary skills are discarded here with the skill named.
+8. **Fix loop** — after auto-fixes: re-validate, commit, push (the PR
+   updates), re-review the fix diff only, re-verify anything new. At most 2
+   fix rounds.
+9. **Present decisions** — the user sees ONLY the user-decision items,
+   priority-ordered: P1 (blocks the PR), P2 (decide now), P3 (optional).
+   Each item is one decision question with options, a recommendation, and
+   the impact of each choice. At most 5 up front; overflow goes to the
+   appendix. Never ask the user to re-litigate auto-fixed or discarded
+   findings.
+10. **Report** — PR URL; what changed; validation evidence; per-round
+    verdicts from all three review passes and the verifier; auto-fixed list;
+    discarded list with evidence; the decision list from step 9; worktree
+    path. Leave the PR as draft — marking ready and merging are the user's
+    calls. Remove the worktree only when the user says the branch is done.
 
 ## Task Spec (what you send the implementer)
 
