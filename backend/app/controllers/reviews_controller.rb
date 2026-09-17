@@ -22,6 +22,8 @@ class ReviewsController < ApplicationController
 
   def create
     authorize Review, :create?
+    shop = Shops::ShopQuery.new.find!(review_params[:shop_id])
+    authorize shop, :review?
     param = Reviews::CreateParameter.new(
       rating:      review_params[:rating],
       comment:     review_params[:comment],

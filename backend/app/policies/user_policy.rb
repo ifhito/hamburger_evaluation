@@ -1,4 +1,4 @@
 class UserPolicy < ApplicationPolicy
-  def update?  = record == user
-  def destroy? = record == user
+  def update?  = (Users::UserEntity.from_record(user)&.manages?(record.id)) || false
+  def destroy? = update?
 end

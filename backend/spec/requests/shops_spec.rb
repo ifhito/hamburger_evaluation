@@ -95,5 +95,91 @@ RSpec.describe "Shops", type: :request do
         expect(response).to have_http_status(:not_found)
       end
     end
+
+    context "with a pending shop" do
+      let(:owner) { create(:user) }
+      let(:pending_shop) { create(:shop, :pending, creator: owner) }
+
+      it "returns 404 for anonymous viewers" do
+        get "/shops/#{pending_shop.id}"
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "returns 404 for a different user" do
+        get "/shops/#{pending_shop.id}", headers: auth_headers(create(:user))
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "returns the shop for its creator" do
+        get "/shops/#{pending_shop.id}", headers: auth_headers(owner)
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["status"]).to eq("pending")
+      end
+
+      it "returns the shop for an admin" do
+        get "/shops/#{pending_shop.id}", headers: auth_headers(create(:user, :admin))
+        expect(response).to have_http_status(:ok)
+      end
+    end
+  end
+
+  describe "GET /shops visibility" do
+    it "excludes pending shops for anonymous viewers" do
+      create(:shop, name: "Active Shop")
+      create(:shop, :pending, name: "Pending Shop")
+
+      get "/shops"
+
+      names = response.parsed_body.map { |s| s["name"] }
+      expect(names).to include("Active Shop")
+      expect(names).not_to include("Pending Shop")
+    end
+
+    it "includes the requester's own pending shop" do
+      owner = create(:user)
+      create(:shop, :pending, name: "Mine", creator: owner)
+
+      get "/shops", headers: auth_headers(owner)
+
+      names = response.parsed_body.map { |s| s["name"] }
+      expect(names).to include("Mine")
+    end
+
+    it "shows all shops to admins" do
+      create(:shop, :pending, name: "PendingForAdmin")
+
+      get "/shops", headers: auth_headers(create(:user, :admin))
+
+      names = response.parsed_body.map { |s| s["name"] }
+      expect(names).to include("PendingForAdmin")
+    end
+  end
+
+  describe "POST /shops" do
+    let(:user) { create(:user) }
+
+    it "requires authentication" do
+      post "/shops", params: { shop: { name: "New" } }.to_json,
+                     headers: { "Content-Type" => "application/json" }
+      expect(response).to have_http_status(:unauthorized)
+    end
+
+    it "creates a pending shop owned by the creator" do
+      post "/shops", params: { shop: { name: "My New Shop" } }.to_json,
+                     headers: auth_headers(user)
+
+      expect(response).to have_http_status(:created)
+      body = response.parsed_body
+      expect(body["name"]).to eq("My New Shop")
+      expect(body["status"]).to eq("pending")
+      created = Shop.find(body["id"])
+      expect(created.creator).to eq(user)
+    end
+
+    it "returns 422 for a blank name" do
+      post "/shops", params: { shop: { name: "" } }.to_json,
+                     headers: auth_headers(user)
+      expect(response).to have_http_status(422)
+    end
   end
 end

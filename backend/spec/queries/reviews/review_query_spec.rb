@@ -3,6 +3,11 @@ require "rails_helper"
 RSpec.describe Reviews::ReviewQuery do
   let(:burger) { create(:burger) }
 
+  # グローバル検索は公開(active)店舗に紐づく burger のみ対象なので、
+  # 共有 burger を active 店舗へ紐付けておく。
+  let(:listed_shop) { create(:shop) }
+  before { create(:shops_and_burger, shop: listed_shop, burger: burger) }
+
   describe "#find_kept!" do
     it "returns a kept review with serializer associations preloaded" do
       review = create(:review, burger: burger)
@@ -37,6 +42,16 @@ RSpec.describe Reviews::ReviewQuery do
         new_review = create(:review, burger: burger, created_at: 1.day.ago)
         expect(result.first).to eq(new_review)
         expect(result.last).to eq(old_review)
+      end
+
+      it "excludes reviews whose burger is not linked to any active shop" do
+        visible = create(:review, burger: burger)
+        pending_shop = create(:shop, :pending)
+        hidden_burger = create(:burger)
+        create(:shops_and_burger, shop: pending_shop, burger: hidden_burger)
+        create(:review, burger: hidden_burger)
+
+        expect(result).to contain_exactly(visible)
       end
     end
 

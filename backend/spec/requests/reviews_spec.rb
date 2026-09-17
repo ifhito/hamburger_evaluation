@@ -146,6 +146,32 @@ RSpec.describe "Reviews", type: :request do
         expect(ShopsAndBurger.where(shop: shop).count).to eq(0)
       end
     end
+
+    context "based on shop status" do
+      it "allows the creator to review their own pending shop" do
+        pending_shop = create(:shop, :pending, creator: user)
+        post "/reviews",
+             params: { review: { rating: 4, comment: "good", shop_id: pending_shop.id, burger_name: "B" } }.to_json,
+             headers: auth_headers(user)
+        expect(response).to have_http_status(:created)
+      end
+
+      it "forbids reviewing another user's pending shop" do
+        pending_shop = create(:shop, :pending, creator: create(:user))
+        post "/reviews",
+             params: { review: { rating: 4, comment: "x", shop_id: pending_shop.id, burger_name: "B" } }.to_json,
+             headers: auth_headers(user)
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      it "forbids reviewing a rejected shop" do
+        rejected_shop = create(:shop, :rejected, creator: user)
+        post "/reviews",
+             params: { review: { rating: 4, comment: "x", shop_id: rejected_shop.id, burger_name: "B" } }.to_json,
+             headers: auth_headers(user)
+        expect(response).to have_http_status(:forbidden)
+      end
+    end
   end
 
   describe "PUT /reviews/:id" do

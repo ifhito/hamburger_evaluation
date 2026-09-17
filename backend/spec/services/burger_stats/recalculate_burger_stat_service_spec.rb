@@ -10,7 +10,6 @@ RSpec.describe BurgerStats::RecalculateBurgerStatService do
 
       allow(repository).to receive(:active_reviews_for).with(burger).and_return([ review ])
       allow(repository).to receive(:reviewer_ratings_for).with(reviewer).and_return([ 4, 5, 3 ])
-      allow(repository).to receive(:average_rating_for).with([ review ]).and_return(4.0)
       allow(repository).to receive(:upsert_projection!)
 
       described_class.new(burger, repository: repository).invoke

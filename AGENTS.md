@@ -1,129 +1,74 @@
 # AGENTS.md
 
-AI エージェント・CI 向けのクイックリファレンスです。
+## Stack
 
-## リポジトリ構成
+Ruby 3.3 / Rails 8 API と React 19 / TypeScript / Vite の SPA を PostgreSQL 16 で動かす monorepo。
 
-```
-hamburger_evaluation/
-├── backend/    # Rails 8 API (Ruby 3.3.10)
-└── frontend/   # React 19 + TypeScript + Vite (Node 22)
-```
-
-## バックエンド (backend/)
-
-### 技術スタック
-
-- Ruby 3.3.10 / Rails 8.0.4 (API mode)
-- PostgreSQL 16
-- JWT 認証 (bcrypt + jwt gem)
-- dry-struct / dry-types (Value Object・Parameter DTO)
-- Pundit (認可)
-- RSpec + FactoryBot (テスト)
-
-### アーキテクチャ (軽量 DDD)
-
-```
-app/
-├── controllers/          # 薄いコントローラー — 認可・Parameter生成・Service呼び出し
-├── domain/reviews/       # Value Object・FinderQuery (Reviews:: 名前空間)
-├── services/             # ユースケース単位のServiceクラス
-├── repositories/         # CUD操作のRepository
-├── parameters/           # dry-struct による入力DTO
-├── policies/             # Pundit ポリシー
-├── models/               # ActiveRecord (ビジネスロジックなし)
-└── serializers/          # JSONシリアライザ
-```
-
-### 主要コマンド
+## Build & Test
 
 ```bash
-# Docker で起動
-docker compose up          # from backend/
+# install
+cd backend && docker compose build api
+cd frontend && pnpm install --frozen-lockfile
 
-# テスト (カバレッジ 80% 以上が必須)
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
+# dev
+cd backend && docker compose up --build
+cd frontend && pnpm run dev
 
-# Lint
-bin/rubocop -f github
+# test
+cd backend && docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
+cd frontend && pnpm run test
 
-# セキュリティスキャン
-bin/brakeman --no-pager
+# typecheck
+cd frontend && pnpm run type-check
+
+# lint
+cd backend && docker compose run --rm api bin/rubocop -f github
+cd frontend && pnpm run lint
+
+# format
+cd backend && docker compose run --rm api bin/rubocop -A
+cd frontend && pnpm exec eslint . --fix
 ```
 
-## フロントエンド (frontend/)
+## Conventions
 
-### 技術スタック
+- Backend は host Ruby ではなく Docker Compose 経由で検証する。
+  なぜ: ローカル Ruby 差異ではなく CI と同じ Rails/PostgreSQL 前提で判断するため。
 
-- React 19 / TypeScript / Vite
-- SWR (データフェッチ)
-- Jotai (認証状態グローバル管理)
-- react-hook-form + Zod (フォームバリデーション)
-- axios + camelcase-keys/snakecase-keys (HTTP境界の命名変換)
-- ESLint + TypeScript strict (静的解析)
-- Vitest (ユニットテスト)
-- pnpm (パッケージマネージャー)
+- 認証は `devise_token_auth` ではなく custom JWT Bearer token を使う。
+  なぜ: 現行実装が login/signup のレスポンス token と axios interceptor を前提にしているため。
 
-### アーキテクチャ (domains ベース)
+- Rails domain code は ActiveRecord に直接依存させない。
+  なぜ: 評価ロジックや値オブジェクトを DB 永続化の詳細から分離するため。
 
-```
-src/
-├── app/
-│   ├── router/           # React Router — ProtectedRoute / GuestRoute
-│   └── App.tsx           # JotaiProvider > AuthProvider > RouterProvider
-├── domains/
-│   ├── auth/             # AuthProvider・Jotai atom・pages
-│   ├── reviews/          # api / hooks / pages
-│   ├── shops/            # api / hooks / pages
-│   └── users/            # api / hooks / pages
-├── api/client/           # buildApiClient (axios interceptors)
-├── states/               # authAtom (Jotai)
-└── components/           # 共有 UI コンポーネント + Storybook stories
-```
+- Controllers/jobs から直接 read/write の ActiveRecord 呼び出しを増やさない。
+  なぜ: read は query、write は repository、use case は service に寄せて境界を保つため。
 
-### 主要コマンド
+- Backend API は snake_case、frontend code は camelCase にする。
+  なぜ: Rails の自然な JSON 形と TypeScript 側の自然な状態形を HTTP 境界で変換するため。
 
-```bash
-# Docker で起動
-docker compose up          # from frontend/
+## Programmatic checks the agent MUST run before finishing
 
-# 品質チェック (CI と同じ)
-pnpm run lint              # ESLint
-pnpm run type-check        # tsc --noEmit
-pnpm run test              # Vitest
+1. `git status --short --branch --untracked-files=all` と `git diff --check`。
+2. Backend を変更した場合: `cd backend && docker compose run --rm -e RAILS_ENV=test api bundle exec rspec`。
+3. Backend を変更した場合: `cd backend && docker compose run --rm api bin/rubocop -f github` と `cd backend && docker compose run --rm api bin/brakeman --no-pager`。
+4. Frontend を変更した場合: `cd frontend && pnpm run type-check && pnpm run lint && pnpm run test`。
+5. Routing/build 設定または API 境界を変更した場合: `cd frontend && pnpm run build`。
 
-# 開発
-pnpm run dev               # http://localhost:5173
-pnpm run build             # プロダクションビルド
-```
+## Out of scope
 
-## CI
+- `.env`, `.env.*`, `backend/.env*`, `frontend/.env*`, `secrets/**`, `backend/.kamal/secrets`, `backend/config/master.key` の読み書き。
+- ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
+- unrelated files の stage / commit / push。
+- `git push --force`, destructive reset, production deploy, secret rotation。
+- Claude/Codex/Hermes の global config や `~/.hermes`, `~/.claude` への変更。
 
-ルート `.github/workflows/ci.yml` に定義。PR / main push 時に実行。
+## More context (load on demand)
 
-| ジョブ | 対象 | コマンド |
-|--------|------|---------|
-| backend_scan | backend | brakeman |
-| backend_lint | backend | rubocop |
-| backend_test | backend | rspec |
-| frontend_type_check | frontend | tsc |
-| frontend_lint | frontend | eslint |
-| frontend_test | frontend | vitest |
+Use the researcher subagent when you need to locate code patterns; never grep yourself in the parent context.
 
-## 認証フロー
-
-> **注意 (SETUP.md からの意図的な逸脱)**: SETUP.md では `devise_token_auth` を使い  
-> `access-token / client / uid` ヘッダーでセッション管理するよう指定されているが、  
-> このプロジェクトでは **カスタム JWT Bearer トークン** を採用している。  
-> 理由: devise_token_auth のステートフルなセッション管理を避け、シンプルなステートレス認証を優先した。
-
-1. POST `/signup` or `/login` → レスポンスボディで JWT トークン返却
-2. フロントは localStorage に保存 (`src/domains/auth/storage.ts`)
-3. Jotai atom (`authUserAtom`, `authTokenAtom`) でグローバル共有
-4. axios interceptor が `Authorization: Bearer <token>` ヘッダーを自動付与
-
-## API 命名規則
-
-- バックエンド: snake_case
-- フロントエンド: camelCase
-- 変換は axios interceptor が自動で行う (リクエスト: snakecaseKeys, レスポンス: camelcaseKeys)
+- `@docs/agent/backend.md`
+- `@docs/agent/frontend.md`
+- `@docs/agent/workflow.md`
+- `@harness-audit.md`

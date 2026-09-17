@@ -1,9 +1,13 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { GuestRoute } from './GuestRoute'
+import { AdminRoute } from './AdminRoute'
 
 import ShopListPage from '../../domains/shops/pages/ShopListPage'
 import ShopDetailPage from '../../domains/shops/pages/ShopDetailPage'
+import ShopNewPage from '../../domains/shops/pages/ShopNewPage'
+import AdminShopListPage from '../../domains/shops/pages/admin/AdminShopListPage'
+import AdminShopEditPage from '../../domains/shops/pages/admin/AdminShopEditPage'
 import ReviewListPage from '../../domains/reviews/pages/ReviewListPage'
 import ReviewDetailPage from '../../domains/reviews/pages/ReviewDetailPage'
 import ReviewNewPage from '../../domains/reviews/pages/ReviewNewPage'
@@ -37,10 +41,20 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
+      { path: '/shops/new', element: <ShopNewPage /> },
       { path: '/reviews/new', element: <ReviewNewPage /> },
       { path: '/reviews/:id/edit', element: <ReviewEditPage /> },
       { path: '/signout', element: <SignoutPage /> },
       { path: '/users/:id/edit', element: <UserUpdatePage /> },
+    ],
+  },
+
+  // Admin-only routes
+  {
+    element: <AdminRoute />,
+    children: [
+      { path: '/admin/shops', element: <AdminShopListPage /> },
+      { path: '/admin/shops/:id/edit', element: <AdminShopEditPage /> },
     ],
   },
 ])

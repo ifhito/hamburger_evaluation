@@ -12,13 +12,6 @@ module BurgerStats
       user.reviews.kept.map(&:rating)
     end
 
-    def average_rating_for(reviews)
-      ratings = reviews.map(&:rating)
-      return 0.0 if ratings.empty?
-
-      (ratings.sum.to_f / ratings.size).round(2)
-    end
-
     def upsert_projection!(burger_id:, review_count:, average_rating:, weighted_score:, confidence:, calculated_at:)
       BurgerStat.upsert(
         {

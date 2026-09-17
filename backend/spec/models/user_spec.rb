@@ -53,4 +53,23 @@ RSpec.describe User, type: :model do
       expect(duplicate).not_to be_valid
     end
   end
+
+  describe "admin" do
+    it "defaults to false" do
+      expect(create(:user).admin?).to be false
+    end
+
+    it "is true for the admin trait" do
+      expect(create(:user, :admin).admin?).to be true
+    end
+  end
+
+  describe "created_shops association" do
+    it "nullifies creator on destroy instead of deleting shops" do
+      user = create(:user)
+      shop = create(:shop, creator: user)
+      user.destroy
+      expect(shop.reload.creator_id).to be_nil
+    end
+  end
 end
