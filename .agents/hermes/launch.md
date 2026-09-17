@@ -24,6 +24,12 @@ hermes chat   --toolsets file,terminal,skills   --skills pr-hygiene
 hermes -w chat   --toolsets file,terminal,skills,todo,delegation   --skills backend-rails-boundaries,frontend-spa-boundaries,pr-hygiene
 ```
 
+## Implementer session
+
+```bash
+hermes chat -q "$(cat .agents/hermes/implementer.md)"   --toolsets file,terminal,skills,todo   --skills backend-rails-boundaries,frontend-spa-boundaries
+```
+
 ## One-shot reviewer
 
 ```bash
