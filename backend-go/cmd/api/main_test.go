@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -67,8 +68,26 @@ func TestServeGracefulShutdown(t *testing.T) {
 		t.Fatal("timed out waiting for request to be in flight")
 	}
 
-	cancel()                           // stands in for SIGTERM via signal.NotifyContext
-	time.Sleep(100 * time.Millisecond) // let Shutdown begin while the request is held
+	cancel() // stands in for SIGTERM via signal.NotifyContext
+
+	// Deterministically wait until Shutdown has begun: Shutdown closes the
+	// listener first, so poll until new TCP dials are refused before
+	// releasing the held handler. This guarantees the request is still in
+	// flight when shutdown starts, so the assertion below cannot pass
+	// vacuously.
+	deadline := time.Now().Add(testTimeout)
+	for {
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			break // listener closed: shutdown is underway
+		}
+		_ = conn.Close()
+		if time.Now().After(deadline) {
+			close(release)
+			t.Fatal("timed out waiting for shutdown to close the listener")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	close(release)
 
 	select {

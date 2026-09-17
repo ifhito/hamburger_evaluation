@@ -13,10 +13,15 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 )
 
-// okPinger and failPinger are the hand-written fakes for the health check.
+// pingerFake is a hand-written fake for handler.Pinger; it returns err on
+// every Ping.
+type pingerFake struct{ err error }
+
+func (p pingerFake) Ping(context.Context) error { return p.err }
+
 var (
-	okPinger   = handler.PingerFunc(func(context.Context) error { return nil })
-	failPinger = handler.PingerFunc(func(context.Context) error { return errors.New("db down") })
+	okPinger   = pingerFake{}
+	failPinger = pingerFake{err: errors.New("db down")}
 )
 
 // decodeError asserts body matches the {"error":"..."} shape and returns

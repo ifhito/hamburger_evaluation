@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 )
@@ -17,12 +18,6 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
-// PingerFunc adapts a function to Pinger.
-type PingerFunc func(ctx context.Context) error
-
-// Ping implements Pinger.
-func (f PingerFunc) Ping(ctx context.Context) error { return f(ctx) }
-
 type healthResponse struct {
 	Status string `json:"status"`
 }
@@ -34,6 +29,7 @@ func handleHealth(db Pinger) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), dbPingTimeout)
 		defer cancel()
 		if err := db.Ping(ctx); err != nil {
+			log.Printf("health: db ping failed: %v", err)
 			writeError(w, http.StatusServiceUnavailable, "database unavailable")
 			return
 		}

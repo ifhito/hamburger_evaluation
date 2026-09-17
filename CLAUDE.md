@@ -63,8 +63,10 @@ API documentation is served via Swagger (configured in the Rails backend).
 # Start (serves on :8080; health check at GET /up)
 cd backend-go
 docker compose up --build
+```
 
-# Validation (gofmt / go vet / go build / go test, run from backend-go/)
+```bash
+# Validation (gofmt / go vet / go build / go test), run from the repo root
 .agents/skills/backend-go-change-validation/scripts/go-checks.sh
 ```
 
