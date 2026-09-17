@@ -57,11 +57,19 @@ integration: committing implementer work, pushing, and managing the draft PR.
    the impact of each choice. At most 5 up front; overflow goes to the
    appendix. Never ask the user to re-litigate auto-fixed or discarded
    findings.
-10. **Report** — PR URL; what changed; validation evidence; per-round
-    verdicts from all three review passes and the verifier; auto-fixed list;
-    discarded list with evidence; the decision list from step 9; worktree
-    path. Leave the PR as draft — marking ready and merging are the user's
-    calls. Remove the worktree only when the user says the branch is done.
+10. **Auto-merge or hold** —
+    - **No P1/P2 decisions pending** (P3-only or none): finish the branch
+      yourself — `git worktree remove` the worktree, `gh pr ready`, then
+      `gh pr merge --merge --delete-branch` (merge commit, never squash or
+      rebase). P3 items are reported as deferrable follow-ups, not blockers.
+    - **P1 or P2 pending**: leave the PR as draft and stop; merging before
+      those decisions would preempt the user. Keep the worktree until the
+      decisions land.
+11. **Report** — PR URL and merge status; what changed; validation evidence;
+    per-round verdicts from all three review passes and the verifier;
+    auto-fixed list; discarded list with evidence; the decision list from
+    step 9; worktree path (or its removal). A merged PR closes its story
+    issue via `Closes #<n>` — confirm with `gh pr view`.
 
 ## Task Spec (what you send the implementer)
 
