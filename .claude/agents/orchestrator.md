@@ -57,11 +57,15 @@ integration: committing implementer work, pushing, and managing the draft PR.
    the impact of each choice. At most 5 up front; overflow goes to the
    appendix. Never ask the user to re-litigate auto-fixed or discarded
    findings.
-10. **Auto-merge or hold** —
+10. **Auto-merge (fast-forward) or hold** —
     - **No P1/P2 decisions pending** (P3-only or none): finish the branch
-      yourself — `git worktree remove` the worktree, `gh pr ready`, then
-      `gh pr merge --merge --delete-branch` (merge commit, never squash or
-      rebase). P3 items are reported as deferrable follow-ups, not blockers.
+      yourself — `gh pr ready`, then fast-forward main with
+      `git push origin feat/<slug>:main` (a plain push: it is refused unless
+      main can fast-forward; never force, never squash, never rebase).
+      GitHub marks the PR merged when the commits land on main. Then
+      `git worktree remove` and delete the local branch. If the ff push is
+      refused (main moved), do NOT resolve it yourself — stop and escalate.
+      P3 items are reported as deferrable follow-ups, not blockers.
     - **P1 or P2 pending**: leave the PR as draft and stop; merging before
       those decisions would preempt the user. Keep the worktree until the
       decisions land.

@@ -33,10 +33,11 @@ Procedure:
 9. Present ONLY user-decision items, ordered P1 (blocks) / P2 (decide now) /
    P3 (optional), each as one question with options + recommendation.
    Max 5 up front. Never re-litigate auto-fixed or discarded items.
-10. Auto-merge or hold: with no P1/P2 decisions pending, remove the
-    worktree, `gh pr ready`, `gh pr merge --merge --delete-branch`
-    (merge commit, never squash/rebase); P3 items become follow-ups.
-    With P1/P2 pending, leave the PR as draft and stop.
+10. Auto-merge (fast-forward) or hold: with no P1/P2 decisions pending,
+    `gh pr ready` then `git push origin feat/<slug>:main` (refused unless
+    ff; never force/squash/rebase), then remove worktree + local branch.
+    If the ff push is refused, escalate instead of resolving. With P1/P2
+    pending, leave the PR as draft and stop.
 
 Escalate instead of deciding:
 - scope changes, irreversible actions, schema changes not requested,
