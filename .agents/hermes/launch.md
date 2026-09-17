@@ -24,6 +24,12 @@ hermes chat   --toolsets file,terminal,skills   --skills pr-hygiene
 hermes -w chat   --toolsets file,terminal,skills,todo,delegation   --skills backend-go-boundaries,frontend-spa-boundaries,pr-hygiene
 ```
 
+## Orchestrator session (implementation + review, delegated)
+
+```bash
+hermes chat -q "$(cat .agents/hermes/orchestrator.md)"   --toolsets file,terminal,skills,todo,delegation   --skills backend-go-boundaries,frontend-spa-boundaries,focused-review,pr-hygiene
+```
+
 ## Implementer session
 
 ```bash
