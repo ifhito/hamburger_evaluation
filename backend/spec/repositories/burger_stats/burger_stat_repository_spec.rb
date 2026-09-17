@@ -34,18 +34,6 @@ RSpec.describe BurgerStats::BurgerStatRepository do
     end
   end
 
-  describe "#average_rating_for" do
-    it "returns a rounded average rating" do
-      reviews = [ instance_double(Review, rating: 4), instance_double(Review, rating: 5) ]
-
-      expect(repository.average_rating_for(reviews)).to eq(4.5)
-    end
-
-    it "returns 0.0 when there are no reviews" do
-      expect(repository.average_rating_for([])).to eq(0.0)
-    end
-  end
-
   describe "#upsert_projection!" do
     it "creates or updates the burger stat projection" do
       burger = create(:burger)

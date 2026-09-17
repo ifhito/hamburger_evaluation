@@ -18,7 +18,16 @@ export default function ShopDetailPage() {
   return (
     <Layout title={shop.name}>
       <div className={styles.container}>
-        {user && (
+        {shop.status === "pending" && (
+          <p className={styles.statusNotice}>{t("shops.detail.pendingNotice")}</p>
+        )}
+        {shop.status === "rejected" && (
+          <p className={styles.statusNotice}>
+            {t("shops.detail.rejectedNotice")}
+            {shop.moderationNote ? `: ${shop.moderationNote}` : ""}
+          </p>
+        )}
+        {user && shop.status !== "rejected" && (
           <div>
             <Link to={`/reviews/new?shop_id=${shop.id}`}>
               <Button type="button">{t("shops.detail.writeReview")}</Button>

@@ -31,3 +31,15 @@
 .muted {
   color: var(--color-text-muted);
 }
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.statusTag {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}

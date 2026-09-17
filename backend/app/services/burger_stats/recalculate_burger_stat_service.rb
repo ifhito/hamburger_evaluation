@@ -8,12 +8,13 @@ module BurgerStats
     def invoke
       active_reviews = @repository.active_reviews_for(@burger)
       facts = active_reviews.map { |review| review_fact_for(review) }
-      score = Reviews::BurgerScoreCalculator.new.call(facts)
+      burger = Burgers::BurgerEntity.new(id: @burger.id, review_facts: facts)
+      score = burger.score
 
       @repository.upsert_projection!(
-        burger_id:      @burger.id,
-        review_count:   active_reviews.size,
-        average_rating: @repository.average_rating_for(active_reviews),
+        burger_id:      burger.id,
+        review_count:   burger.review_count,
+        average_rating: burger.average_rating,
         weighted_score: score.weighted_average,
         confidence:     score.confidence,
         calculated_at:  Time.current

@@ -43,7 +43,12 @@ export default function UserUpdatePage() {
     setIsUpdating(true);
     try {
       const updated = await update(data);
-      refreshUser({ id: updated.id, username: updated.username, email: updated.email });
+      refreshUser({
+        id: updated.id,
+        username: updated.username,
+        email: updated.email,
+        admin: authUser?.admin ?? false,
+      });
       void navigate(`/users/${id}`);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("users.update.updateError")]);

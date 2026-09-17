@@ -5,7 +5,7 @@ class AuthController < ApplicationController
     user = user_repository.build(signup_params)
     if user_repository.save(user)
       token = encode_token(user.id)
-      render json: { id: user.id, username: user.username, email: user.email, token: token }, status: :created
+      render json: { id: user.id, username: user.username, email: user.email, admin: user.admin?, token: token }, status: :created
     else
       render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
     end

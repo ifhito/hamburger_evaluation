@@ -11,7 +11,16 @@ Rails.application.routes.draw do
   post "/logout", to: "auth#logout"
 
   # Resources
-  resources :shops, only: [ :index, :show ]
+  resources :shops, only: [ :index, :show, :create ]
   resources :reviews
   resources :users, only: [ :index, :update, :destroy ]
+
+  namespace :admin do
+    resources :shops, only: [ :index, :update ] do
+      member do
+        post :approve
+        post :reject
+      end
+    end
+  end
 end
