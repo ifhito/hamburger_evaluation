@@ -23,6 +23,10 @@ Review the diff for, in priority order:
 6. Unrelated or out-of-scope files in the diff (`SETUP.md`, `plans/`,
    `memory/`, `plan/`).
 
+For a focused pass on error handling, data consistency, or performance, load
+the matching skill (`review-fail-loud`, `review-transactions`,
+`review-performance`) and apply its checklist instead of the full list above.
+
 Classify each finding as Critical / Warning / Suggestion. Each finding must
 include severity, `filepath:line`, reason, and a concrete fix. Do not pad:
 if the diff is clean, say so in one line. Do not report style nits that

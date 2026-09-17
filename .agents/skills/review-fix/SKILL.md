@@ -24,7 +24,10 @@ Invoke the saved workflow (this skill is your authorization to call it):
 
 - `Workflow` tool with `name: "review-fix"`.
 - Pass any user-requested focus area as `args` (a plain string), e.g.
-  `args: "authorization checks in reviews_controller"`.
+  `args: "authorization checks in the reviews endpoints"`. To focus on one
+  dimension, name a focused review skill's concern, e.g.
+  `args: "fail-loud: apply the review-fail-loud checklist"` (likewise
+  review-transactions / review-performance).
 
 Do not re-implement the loop manually with the Agent tool; the workflow is the
 single source of truth for round limits and finding schema.
