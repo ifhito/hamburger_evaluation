@@ -54,6 +54,20 @@ API documentation is served via Swagger (configured in the Rails backend).
 
 **Shops** — *not yet implemented; see Future Plans below*
 
+## Backend (Go)
+
+- `backend-go/` — Go (1.22+) API using **net/http + sqlc + pgx** with clean architecture (handler → usecase → domain)
+- Runs with its own dedicated Postgres (host port 5433) so it does not collide with the Rails stack
+
+```bash
+# Start (serves on :8080; health check at GET /up)
+cd backend-go
+docker compose up --build
+
+# Validation (gofmt / go vet / go build / go test, run from backend-go/)
+.agents/skills/backend-go-change-validation/scripts/go-checks.sh
+```
+
 ## Frontend
 
 - Built with **Feature-Sliced Design (FSD)** — but intentionally limited to three layers only: `app`, `pages`, `shared`

@@ -1,0 +1,38 @@
+services:
+  api-go:
+    build: .
+    command: go run ./cmd/api
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-}
+      GOMEMLIMIT: 460MiB
+    mem_limit: 512m
+
+  db:
+    image: postgres:16
+    volumes:
+      - postgres_go_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: hamburger_evaluation_go_development
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_go_data:
+  go_mod_cache:
