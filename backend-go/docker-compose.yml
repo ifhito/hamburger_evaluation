@@ -1,10 +1,13 @@
 services:
   api-go:
     build: .
-    command: go run ./cmd/api
+    # Build then exec so the compiled binary is PID 1 and receives SIGTERM
+    # from `docker stop` (go run would not forward it to the API process).
+    command: ["sh", "-c", "go build -o /tmp/api ./cmd/api && exec /tmp/api"]
     volumes:
       - .:/app
       - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
     ports:
       - "8080:8080"
     depends_on:
@@ -36,3 +39,4 @@ services:
 volumes:
   postgres_go_data:
   go_mod_cache:
+  go_build_cache:
