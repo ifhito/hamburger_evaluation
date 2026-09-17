@@ -13,12 +13,16 @@ Review the diff for, in priority order:
 2. Backend boundary violations: ActiveRecord usage in `backend/app/domain`;
    direct `.find` / `.where` / `.includes` / `.save` / `.update!` / `.discard`
    in controllers or jobs instead of `queries/` / `repositories/`.
-3. Frontend boundary violations: casing conversion outside the HTTP boundary,
+3. Go clean-architecture violations (`backend-go/`): outward imports in
+   domain/usecase (net/http, database/sql, pgx, adapter packages), hand-edited
+   sqlc-generated code, business rules in handlers, response JSON diverging
+   from the Rails serializers.
+4. Frontend boundary violations: casing conversion outside the HTTP boundary,
    API calls bypassing `src/api/`, state managed outside the domain layer.
-4. Security: secret-like paths (`.env*`, `secrets/`, `master.key`), authz gaps
-   (missing Pundit checks), JWT handling mistakes.
-5. Missing or weakened tests for changed behavior.
-6. Unrelated or out-of-scope files in the diff (`SETUP.md`, `plans/`,
+5. Security: secret-like paths (`.env*`, `secrets/`, `master.key`), authz gaps
+   (missing Pundit checks or usecase-level authorization), JWT handling mistakes.
+6. Missing or weakened tests for changed behavior.
+7. Unrelated or out-of-scope files in the diff (`SETUP.md`, `plans/`,
    `memory/`, `plan/`).
 
 Classify each finding as Critical / Warning / Suggestion. Each finding must

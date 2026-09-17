@@ -45,6 +45,12 @@ ARCHITECTURE_FORBIDDEN_PATTERNS = (
     ".discard!(",
     ".upsert(",
 )
+GO_PREFIXES = ("backend-go/",)
+# クリーンアーキテクチャの内向き依存ルール: domain/usecase から外側への import を禁止
+GO_BOUNDARY_RULES = (
+    ("backend-go/internal/domain/", ('"net/http"', "database/sql", "pgx", "/adapter/", "/usecase/")),
+    ("backend-go/internal/usecase/", ('"net/http"', "database/sql", "pgx", "/adapter/")),
+)
 OUT_OF_SCOPE_STAGED_PREFIXES = ("plans/", "memory/", "plan/")
 OUT_OF_SCOPE_STAGED_FILES = {"SETUP.md"}
 FRONTEND_BUILD_ESCALATION_PREFIXES = (
@@ -115,6 +121,28 @@ def architecture_boundary_violations(paths: list[str]) -> list[str]:
     return violations
 
 
+def go_boundary_violations(paths: list[str]) -> list[str]:
+    violations: list[str] = []
+    for path in paths:
+        if not path.endswith(".go"):
+            continue
+        matched = [rule for prefix, rule in GO_BOUNDARY_RULES if path.startswith(prefix)]
+        if not matched:
+            continue
+        file_path = ROOT / path
+        if not file_path.is_file():
+            continue
+        for index, line in enumerate(file_path.read_text(errors="ignore").splitlines(), start=1):
+            stripped = line.strip()
+            if stripped.startswith("//"):
+                continue
+            for pattern in matched[0]:
+                if pattern in stripped:
+                    violations.append(f"{path}:{index}: contains `{pattern}`")
+                    break
+    return violations
+
+
 def main() -> int:
     os.chdir(ROOT)
     failures: list[str] = []
@@ -148,6 +176,14 @@ def main() -> int:
             for path in out_of_scope:
                 print(f"- {path}")
             failures.append("out-of-scope staged path sensor failed")
+
+    go_violations = go_boundary_violations(paths)
+    if go_violations:
+        print("Go clean-architecture boundary violations found in changed files:")
+        for violation in go_violations:
+            print(f"- {violation}")
+        print("Keep domain/usecase free of net/http, sql drivers, and adapter imports.")
+        failures.append("go architecture boundary sensor failed")
 
     architecture_violations = architecture_boundary_violations(paths)
     if architecture_violations:
@@ -190,6 +226,20 @@ def main() -> int:
                 failures.append("frontend sensor failed: " + " ".join(cmd))
     else:
         print("frontend sensors skipped: no frontend source changes detected")
+
+    go_dir = ROOT / "backend-go"
+    go_changed = any(p.startswith(GO_PREFIXES) for p in paths)
+    if go_changed and go_dir.is_dir():
+        for cmd in (
+            ["bash", "-c", 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'],
+            ["go", "vet", "./..."],
+            ["go", "build", "./..."],
+            ["go", "test", "./..."],
+        ):
+            if run(cmd, go_dir) != 0:
+                failures.append("go sensor failed: " + " ".join(cmd))
+    else:
+        print("go sensors skipped: no backend-go source changes detected")
 
     if failures:
         print("FAILED sensors:")

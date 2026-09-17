@@ -26,7 +26,14 @@
       "Bash(pnpm run type-check*)",
       "Bash(pnpm run lint*)",
       "Bash(pnpm run test*)",
-      "Bash(pnpm run build*)"
+      "Bash(pnpm run build*)",
+      "Bash(gofmt*)",
+      "Bash(go vet*)",
+      "Bash(go build*)",
+      "Bash(go test*)",
+      "Bash(go mod tidy*)",
+      "Bash(sqlc generate*)",
+      "Bash(.agents/skills/backend-go-change-validation/scripts/go-checks.sh*)"
     ],
     "ask": [
       "Bash(git add*)",

@@ -3,7 +3,7 @@
 ## Main coding session
 
 ```bash
-hermes chat   --toolsets file,terminal,skills,todo,delegation   --skills backend-rails-boundaries,frontend-spa-boundaries,pr-hygiene
+hermes chat   --toolsets file,terminal,skills,todo,delegation   --skills backend-rails-boundaries,backend-go-boundaries,frontend-spa-boundaries,pr-hygiene
 ```
 
 ## Read-only investigation

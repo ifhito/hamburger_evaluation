@@ -1,0 +1,88 @@
+---
+name: backend-go-boundaries
+description: Use when changing the Go API under backend-go/ — handlers, usecases, domain, repositories, sqlc queries, or Go tests in hamburger_evaluation.
+version: 1.0.0
+author: Hamburger Evaluation Agents
+license: MIT
+metadata:
+  hermes:
+    tags: [go, backend, clean-architecture, sqlc, testing]
+    related_skills: [backend-go-change-validation, pr-hygiene]
+---
+
+# Backend Go Boundaries
+
+## Overview
+
+Use this skill for changes under `backend-go/`. The Go API is a clean
+architecture rewrite of the Rails API (`backend/`), developed in parallel and
+API-compatible with the existing React frontend. Stack: Go 1.22+ standard
+`net/http` routing + `sqlc` + PostgreSQL 16. No web framework, no ORM.
+
+## Layout and Dependency Rule
+
+```text
+backend-go/
+├── cmd/api/main.go        # composition root: config, DB pool, wiring, server
+├── internal/
+│   ├── domain/            # entities, value objects, domain errors
+│   ├── usecase/           # application use cases + repository INTERFACES
+│   └── adapter/
+│       ├── handler/       # net/http handlers, DTOs, routing, middleware
+│       ├── repository/    # implements usecase interfaces via sqlc
+│       │   └── sqlcgen/   # sqlc-generated code — NEVER edit by hand
+│       └── infra/         # DB pool, JWT, password hashing, config
+├── db/
+│   ├── migrations/        # SQL migrations (shared schema with Rails during parallel dev)
+│   └── queries/           # sqlc query sources (*.sql)
+├── sqlc.yaml
+└── go.mod
+```
+
+Dependencies point inward only: `handler → usecase → domain`.
+
+- `domain` imports stdlib only. No `net/http`, no `database/sql`, no `pgx`,
+  no imports from `usecase`/`adapter`.
+- `usecase` imports `domain` and stdlib only. Repository interfaces are
+  declared in `usecase` (consumer side, Go convention), implemented in
+  `adapter/repository`.
+- `handler` decodes/validates requests, calls a usecase, encodes responses,
+  and maps domain errors to HTTP status. No SQL, no business rules.
+- `adapter/repository` is the only layer that touches sqlc/pgx. Queries live
+  in `db/queries/*.sql`; regenerate with `sqlc generate`, commit the result.
+
+## API Compatibility Rules
+
+- JSON is snake_case; the frontend converts casing at its HTTP boundary.
+  Response shapes must match the Rails serializers field-for-field.
+- Auth is the same custom JWT Bearer scheme (`Authorization: Bearer <token>`),
+  same claims and secret source, so tokens work across both backends.
+- Errors follow the Rails shape: `{"error": "..."}` or `{"errors": [...]}`
+  with the same status codes (401/403/404/422).
+- Authorization rules live in `domain`/`usecase` (e.g. review editable only by
+  its author, shop moderation admin-only), not in handlers.
+
+## Testing
+
+- Table-driven tests throughout.
+- `usecase`: unit tests with hand-written fake repositories (small structs in
+  the test file — no mock framework).
+- `handler`: `net/http/httptest` against the router with a fake usecase.
+- `adapter/repository`: integration tests against real PostgreSQL via
+  `docker compose` — skip with `testing.Short()`.
+
+## Common Pitfalls
+
+1. Editing files under `sqlcgen/` by hand instead of changing `db/queries/`.
+2. Leaking `pgx`/`sql` types or sqlc row structs above the repository layer —
+   map them to domain types at the repository boundary.
+3. Business rules drifting into handlers because "it's just one if".
+4. Response field names diverging from the Rails serializers (breaks the SPA).
+5. Introducing a router/DI framework — stdlib is a decision, not an accident.
+
+## Verification Checklist
+
+- [ ] `domain` and `usecase` have no outward imports (adapter/infra/pgx/net-http).
+- [ ] sqlc output regenerated and committed if `db/queries/` changed.
+- [ ] Response JSON verified against the Rails equivalent for changed endpoints.
+- [ ] Checks in [[backend-go-change-validation]] pass.
