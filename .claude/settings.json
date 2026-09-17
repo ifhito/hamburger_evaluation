@@ -57,15 +57,15 @@
       "Bash(pnpm install*)",
       "Bash(mkdir*)",
       "Bash(ln -s*)",
-      "Bash(chmod +x*)"
+      "Bash(chmod +x*)",
+      "Bash(docker*)",
+      "Bash(curl*)"
     ],
     "ask": [
       "Bash(git push*)",
       "Bash(gh pr create*)",
       "Bash(gh pr edit*)",
-      "Bash(gh pr close*)",
-      "Bash(docker compose up*)",
-      "Bash(bundle install*)"
+      "Bash(gh pr close*)"
     ],
     "deny": [
       "Read(.env)",
