@@ -24,8 +24,9 @@ Review the diff for, in priority order:
    `memory/`, `plan/`).
 
 For a focused pass (error handling, consistency, concurrency, performance,
-security, test quality), load the `focused-review` skill, read the matching
-lens reference, and apply its checklist instead of the full list above.
+resources, security, test quality), load the `focused-review` skill, read the
+matching lens reference, and apply its checklist instead of the full list
+above.
 
 Classify each finding as Critical / Warning / Suggestion. Each finding must
 include severity, `filepath:line`, reason, and a concrete fix. Do not pad:

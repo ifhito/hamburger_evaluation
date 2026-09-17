@@ -1,6 +1,6 @@
 ---
 name: focused-review
-description: Generic focused-review lenses — fail-loud, consistency, concurrency, performance, security, test quality. Use when reviewing a diff for one of these concerns, or to pick the right lenses for what a diff touches.
+description: Generic focused-review lenses — fail-loud, consistency, concurrency, performance, resources (memory/CPU/leaks), security, test quality. Use when reviewing a diff for one of these concerns, or to pick the right lenses for what a diff touches.
 allowed-tools: [Read, Grep, Glob, Bash(git status:*), Bash(git diff:*)]
 version: 1.0.0
 author: Hamburger Evaluation Agents
@@ -28,6 +28,7 @@ review with that checklist.
 | Consistency | writes, transactions, migrations, derived data | `references/consistency.md` |
 | Concurrency | goroutines, channels, shared state, caches | `references/concurrency.md` |
 | Performance | queries, list endpoints, loops over data, UI fetching | `references/performance.md` |
+| Resources | buffers, caches, pools, goroutine lifecycles, long-running work | `references/resources.md` |
 | Security | auth, input handling, SQL, file paths, secrets | `references/security.md` |
 | Test quality | new or changed tests, or behavior changes without tests | `references/test-quality.md` |
 

@@ -61,6 +61,27 @@ Dependencies point inward only: `handler → usecase → domain`.
 - Authorization rules live in `domain`/`usecase` (e.g. review editable only by
   its author, shop moderation admin-only), not in handlers.
 
+## Runtime Resource Guardrails
+
+Memory/CPU problems are configuration debt; these are defaults, not
+optimizations:
+
+- `http.Server` always sets `ReadHeaderTimeout`, `ReadTimeout`,
+  `WriteTimeout`, and `IdleTimeout`. Never bare `http.ListenAndServe` —
+  slow clients pile up goroutines forever without timeouts.
+- Request bodies are capped with `http.MaxBytesReader` (default 1 MiB)
+  before decoding.
+- Every DB/outbound call takes the request `ctx`; long operations get an
+  explicit `context.WithTimeout`.
+- One `pgxpool` created in `main`, with explicit `MaxConns` sized against
+  Postgres `max_connections` — never a pool or connection per request.
+- Graceful shutdown via `server.Shutdown(ctx)` on SIGTERM, then close the
+  pool, so deploys don't drop in-flight requests or leak connections.
+- List endpoints paginate by default (`LIMIT` + offset/cursor); "return
+  everything" is a decision, not a default.
+- Containers declare memory limits, and the process respects them
+  (`GOMEMLIMIT`, and `GOMAXPROCS` matching the CPU quota).
+
 ## Testing
 
 - Table-driven tests throughout.
