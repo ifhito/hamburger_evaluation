@@ -51,7 +51,6 @@
       "Bash(git push -u origin feat/*)",
       "Bash(gh pr create --draft*)",
       "Bash(gh pr ready*)",
-      "Bash(gh pr merge*)",
       "Bash(gh issue create*)",
       "Bash(gh issue edit*)",
       "Bash(pnpm install*)",
@@ -59,13 +58,14 @@
       "Bash(ln -s*)",
       "Bash(chmod +x*)",
       "Bash(docker*)",
-      "Bash(curl*)"
+      "Bash(curl*)",
+      "Bash(git push*)",
+      "Bash(gh pr create*)"
     ],
     "ask": [
-      "Bash(git push*)",
-      "Bash(gh pr create*)",
       "Bash(gh pr edit*)",
-      "Bash(gh pr close*)"
+      "Bash(gh pr close*)",
+      "Bash(gh pr merge*)"
     ],
     "deny": [
       "Read(.env)",
