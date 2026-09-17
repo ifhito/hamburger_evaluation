@@ -1,154 +1,307 @@
-# 取得(GET)
-/reviews:
-  get:
-    summary: レビュー一覧の取得
-    description: レビューのリストを取得します。
-    responses:
-      '200':
-        description: 成功
+paths:
+  # 取得(GET) - 一覧
+  /reviews:
+    get:
+      summary: レビュー一覧の取得
+      description: レビューのリストを取得します。クエリパラメータでフィルタリング可能。
+      parameters:
+        - name: rating
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+          description: 指定した評価値のレビューのみ返す
+        - name: keyword
+          in: query
+          required: false
+          schema:
+            type: string
+          description: コメントに含むキーワードで絞り込む
+        - name: shop_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: 指定した店舗のバーガーに対するレビューのみ返す
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+        '400':
+          description: 不正なリクエスト
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    # 作成(POST)
+    post:
+      summary: レビューの作成
+      description: 新しいレビューを作成します。認証必須。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: array
-              items:
+              $ref: '#/components/schemas/ReviewInput'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
                 $ref: '#/components/schemas/Review'
-      '400':
-        description: 不正なリクエスト
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-      '500':
-        description: サーバーエラー
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-# 取得(GET)
-/reviews/{reviewId}:
-  get:
-    summary: レビューの取得
-    description: 指定したIDのレビューを取得します。
-    parameters:
-      - name: reviewId
-        in: path
-        required: true
-        schema:
-          type: string
-    responses:
-      '200':
-        description: 成功
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Review'
-      '400':
-        description: 不正なリクエスト
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-      '404':
-        description: レビューが見つかりません
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-      '500':
-        description: サーバーエラー
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-# 作成(POST)
-/reviews:
-  post:
-    summary: レビューの作成
-    description: 新しいレビューを作成します。
-    requestBody:
-      required: true
-      content:
-        application/json:
+        '400':
+          description: 不正なリクエスト
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # 取得(GET) / 更新(PUT) / 削除(DELETE) - 単一リソース
+  /reviews/{reviewId}:
+    get:
+      summary: レビューの取得
+      description: 指定したIDのレビューを取得します。
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
           schema:
-            $ref: '#/components/schemas/ReviewInput'
-    responses:
-      '201':
-        description: 作成成功
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Review'
-      '400':
-        description: 不正なリクエスト
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-      '500':
-        description: サーバーエラー
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-# 更新(PUT)
-/reviews/{reviewId}:
-  put:
-    summary: レビューの更新
-    description: 指定したIDのレビューを更新します。
-    parameters:
-      - name: reviewId
-        in: path
-        required: true
-        schema:
-          type: string
-    requestBody:
-      required: true
-      content:
-        application/json:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '404':
+          description: レビューが見つかりません
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: レビューの更新
+      description: 指定したIDのレビューを更新します。認証必須・本人のみ可能。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
           schema:
-            $ref: '#/components/schemas/ReviewInput'
-    responses:
-      '200':
-        description: 更新成功
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Review'
-      '400':
-        description: 不正なリクエスト
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-      '500':
-        description: サーバーエラー
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-# 削除(DELETE)
-/reviews/{reviewId}:
-  delete:
-    summary: レビューの削除
-    description: 指定したIDのレビューを削除します。
-    parameters:
-      - name: reviewId
-        in: path
+            type: integer
+      requestBody:
         required: true
-        schema:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewInput'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Review'
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 権限エラー（他人のレビューは更新不可）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: レビューが見つかりません
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: レビューの削除
+      description: 指定したIDのレビューを削除します（ソフトデリート）。認証必須・本人のみ可能。
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: 削除成功
+        '401':
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 権限エラー（他人のレビューは削除不可）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: レビューが見つかりません
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Review:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        comment:
           type: string
-    responses:
-      '204':
-        description: 削除成功
-      '400':
-        description: 不正なリクエスト
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
-      '500':
-        description: サーバーエラー
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Error'
+          example: "外はcrispy、中はジューシーで最高でした"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-03-25T10:00:00.000Z"
+        user:
+          $ref: '#/components/schemas/ReviewUser'
+        burger:
+          $ref: '#/components/schemas/ReviewBurger'
+
+    ReviewInput:
+      type: object
+      required:
+        - rating
+        - comment
+        - shop_id
+        - burger_name
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        comment:
+          type: string
+          example: "外はcrispy、中はジューシーで最高でした"
+        shop_id:
+          type: integer
+          example: 1
+        burger_name:
+          type: string
+          example: "てりやきバーガー"
+
+    ReviewUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: "burger_lover"
+
+    ReviewBurger:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "てりやきバーガー"
+        average_rating:
+          type: number
+          format: float
+          example: 4.25
+          description: 全レビューの単純平均評価
+        review_count:
+          type: integer
+          example: 8
+          description: レビュー件数
+        weighted_score:
+          type: number
+          format: float
+          example: 4.18
+          description: レビュアーの信頼度と投稿日時による重み付き平均スコア
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.72
+          description: スコアの信頼性 (0.0〜1.0)。0.6以上で信頼できるスコアと判断
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Forbidden"

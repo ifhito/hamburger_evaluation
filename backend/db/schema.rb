@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_03_19_000000) do
+ActiveRecord::Schema[8.0].define(version: 2026_06_13_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -20,6 +20,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_19_000000) do
     t.integer "review_count", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.float "weighted_score", default: 0.0
+    t.float "confidence", default: 0.0
     t.index ["burger_id"], name: "index_burger_stats_on_burger_id", unique: true
   end
 
@@ -46,6 +48,11 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_19_000000) do
     t.string "name"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "status", default: 0, null: false
+    t.string "moderation_note"
+    t.bigint "creator_id"
+    t.index ["creator_id"], name: "index_shops_on_creator_id"
+    t.index ["status"], name: "index_shops_on_status"
   end
 
   create_table "shops_and_burgers", force: :cascade do |t|
@@ -64,6 +71,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_19_000000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "discarded_at"
+    t.boolean "admin", default: false, null: false
     t.index ["discarded_at"], name: "index_users_on_discarded_at"
     t.index ["email"], name: "index_users_on_email", unique: true
   end
@@ -71,6 +79,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_19_000000) do
   add_foreign_key "burger_stats", "burgers"
   add_foreign_key "reviews", "burgers"
   add_foreign_key "reviews", "users"
+  add_foreign_key "shops", "users", column: "creator_id"
   add_foreign_key "shops_and_burgers", "burgers"
   add_foreign_key "shops_and_burgers", "shops"
 end

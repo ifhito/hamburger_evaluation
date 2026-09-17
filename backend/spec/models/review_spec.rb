@@ -52,10 +52,10 @@ RSpec.describe Review, type: :model do
         expect(Review.keyword_search("crispy")).to contain_exactly(matched)
       end
 
-      it "is case-sensitive (LIKE behavior)" do
-        create(:review, comment: "CRISPY texture")
-        matched = create(:review, comment: "crispy texture")
-        expect(Review.keyword_search("crispy")).to contain_exactly(matched)
+      it "is case-insensitive (ILIKE behavior)" do
+        upper = create(:review, comment: "CRISPY texture")
+        lower = create(:review, comment: "crispy texture")
+        expect(Review.keyword_search("crispy")).to contain_exactly(upper, lower)
       end
     end
 
@@ -72,20 +72,40 @@ RSpec.describe Review, type: :model do
 
   describe "callbacks" do
     describe "after_create" do
-      it "enqueues BurgerStatUpdateJob with the burger_id" do
+      it "publishes a review-changed event with the burger_id" do
         burger = create(:burger)
-        expect {
-          create(:review, burger: burger)
-        }.to have_enqueued_job(BurgerStatUpdateJob).with(burger.id)
+
+        expect(Reviews::ReviewEvents).to receive(:review_changed_for_burger).with(burger.id)
+
+        create(:review, burger: burger)
+      end
+    end
+
+    describe "after_update_commit" do
+      it "publishes a review-changed event when rating changes" do
+        review = create(:review, rating: 3)
+
+        expect(Reviews::ReviewEvents).to receive(:review_changed_for_burger).with(review.burger_id)
+
+        review.update!(rating: 5)
+      end
+
+      it "does not publish a review-changed event when only comment changes" do
+        review = create(:review, rating: 3, comment: "original")
+
+        expect(Reviews::ReviewEvents).not_to receive(:review_changed_for_burger)
+
+        review.update!(comment: "updated")
       end
     end
 
     describe "after_discard" do
-      it "enqueues BurgerStatUpdateJob when discarded" do
+      it "publishes a review-changed event when discarded" do
         review = create(:review)
-        expect {
-          review.discard
-        }.to have_enqueued_job(BurgerStatUpdateJob).with(review.burger_id)
+
+        expect(Reviews::ReviewEvents).to receive(:review_changed_for_burger).with(review.burger_id)
+
+        review.discard
       end
     end
   end
