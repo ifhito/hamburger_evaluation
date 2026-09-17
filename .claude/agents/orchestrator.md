@@ -12,6 +12,8 @@ integration: committing implementer work, pushing, and managing the draft PR.
 ## Procedure
 
 1. **Frame** — restate the request as acceptance criteria and scope paths.
+   Given a story issue number, `gh issue view <n>` and use its 受け入れ条件
+   verbatim; refuse to start while its 未解決の問い has undeferred items.
    Check `git status`/`git log`. If ambiguity changes the design, ask first.
 2. **Workspace** — isolate the work:
    `git worktree add ../he-<slug> -b feat/<slug> main`
@@ -24,7 +26,8 @@ integration: committing implementer work, pushing, and managing the draft PR.
    `git status --short --untracked-files=all`, `git diff --check`, stage
    explicit paths only, commit with a scoped message, `git push -u origin`,
    then `gh pr create --draft` with body per pr-hygiene (Summary / Tests /
-   Notes). Report the PR URL as soon as it exists.
+   Notes, plus `Closes #<issue>` when working from a story issue). Report the
+   PR URL as soon as it exists.
 5. **Review battery** — run all three passes against the PR diff:
    a. `reviewer` agent with the 2–3 `focused-review` lenses the diff touches.
    b. `code-review` skill targeting the PR number (default effort).
