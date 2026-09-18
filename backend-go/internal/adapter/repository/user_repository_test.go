@@ -3,65 +3,26 @@ package repository_test
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 	"testing"
-	"time"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// migrationsDir points at db/migrations relative to this package.
-const migrationsDir = "../../../db/migrations"
-
 // TestUserRepository exercises the repository against a real PostgreSQL,
-// following the db/migrations_test.go pattern: a per-run database is
-// created inside the compose Postgres instance, migrated up, and dropped
-// afterwards. It requires TEST_DATABASE_URL to point at a maintenance
-// database whose user may create and drop databases.
+// using the shared dbtest scaffold: a per-run database is created inside
+// the compose Postgres instance, migrated up, and dropped afterwards. It
+// requires TEST_DATABASE_URL to point at a maintenance database whose user
+// may create and drop databases; without it the test skips (inside
+// dbtest.New).
 func TestUserRepository(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
 	}
-	adminURL := os.Getenv("TEST_DATABASE_URL")
-	if adminURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set; skipping DB-backed repository test")
-	}
 	ctx := context.Background()
-
-	admin, err := pgx.Connect(ctx, adminURL)
-	if err != nil {
-		t.Fatalf("connect to admin database: %v", err)
-	}
-	t.Cleanup(func() { _ = admin.Close(context.Background()) })
-
-	dbName := fmt.Sprintf("hamburger_evaluation_go_repo_test_%d_%d", os.Getpid(), time.Now().UnixNano())
-	if _, err := admin.Exec(ctx, "CREATE DATABASE "+dbName); err != nil {
-		t.Fatalf("create test database: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = admin.Exec(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", dbName))
-	})
-
-	testURL, err := withDatabase(adminURL, dbName)
-	if err != nil {
-		t.Fatalf("build test database URL: %v", err)
-	}
-	conn, err := pgx.Connect(ctx, testURL)
-	if err != nil {
-		t.Fatalf("connect to test database: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close(context.Background()) })
-
-	applyUpMigrations(ctx, t, conn)
+	conn, _ := dbtest.New(t)
 
 	repo := repository.NewUserRepository(conn)
 
@@ -137,42 +98,4 @@ func TestUserRepository(t *testing.T) {
 			t.Fatalf("GetActiveUserByID error = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})
-}
-
-// applyUpMigrations applies all *.up.sql files in ascending order.
-func applyUpMigrations(ctx context.Context, t *testing.T, conn *pgx.Conn) {
-	t.Helper()
-	entries, err := os.ReadDir(migrationsDir)
-	if err != nil {
-		t.Fatalf("read migrations dir: %v", err)
-	}
-	var ups []string
-	for _, entry := range entries {
-		if strings.HasSuffix(entry.Name(), ".up.sql") {
-			ups = append(ups, filepath.Join(migrationsDir, entry.Name()))
-		}
-	}
-	if len(ups) == 0 {
-		t.Fatal("no up migrations found")
-	}
-	sort.Strings(ups)
-	for _, file := range ups {
-		sql, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatalf("read migration %s: %v", file, err)
-		}
-		if _, err := conn.Exec(ctx, string(sql)); err != nil {
-			t.Fatalf("apply migration %s: %v", file, err)
-		}
-	}
-}
-
-// withDatabase returns rawURL with its database (path) replaced by name.
-func withDatabase(rawURL, name string) (string, error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "", fmt.Errorf("parse database URL: %w", err)
-	}
-	u.Path = "/" + name
-	return u.String(), nil
 }
