@@ -199,10 +199,24 @@ func TestBurgerStatsAverageRating(t *testing.T) {
 		want    float64
 	}{
 		{name: "empty is 0.0", ratings: nil, want: 0.0},
-		// (4+5)/2 = 4.5, exact.
+		// (4+5)/2 = 4.5, exact. Ordinary case: the MRI boundary correction
+		// must NOT fire ((450+0.5)/100 = 4.505 > 4.5), so 4.5 stays 4.5.
 		{name: "mean of 4 and 5", ratings: []float64{4, 5}, want: 4.5},
-		// 13/3 = 4.3333... -> 4.33.
+		// 13/3 = 4.3333... -> 4.33. Ordinary case: no over-correction
+		// ((433+0.5)/100 = 4.335 > 4.3333...), so 4.33 stays 4.33.
 		{name: "rounds 13/3 to 4.33", ratings: []float64{4, 4, 5}, want: 4.33},
+		// MRI numeric.c round_half_up boundary: 39x1 + 1x2 sums to 41, mean
+		// 41/40 whose nearest double is 1.0249999999999999 (41.0/40*100 ==
+		// 102.49999999999999), so math.Round alone gives 1.02. MRI's
+		// (f+0.5)/scale <= x correction fires (102.5/100 is the very same
+		// double, <= x holds) and bumps to 1.03 — matching Ruby 3.3:
+		// (41.0/40).round(2) == 1.03.
+		{name: "MRI boundary 41/40 rounds to 1.03", ratings: append(repeatRatings(1.0, 39), 2.0), want: 1.03},
+		// Same boundary shape: 31x4 + 9x5 sums to 169, mean 169/40 ==
+		// 4.2249999999999996 as a double (169.0/40*100 ==
+		// 422.49999999999994), plain rounding gives 4.22; the correction
+		// fires and yields 4.23 — matching Ruby's (169.0/40).round(2).
+		{name: "MRI boundary 169/40 rounds to 4.23", ratings: append(repeatRatings(4.0, 31), repeatRatings(5.0, 9)...), want: 4.23},
 		// (4.0+4.25)/2 = 4.125 (exactly representable) -> 4.13: Ruby
 		// rounds halves away from zero, not to even (4.12).
 		{name: "rounds halves away from zero", ratings: []float64{4.0, 4.25}, want: 4.13},

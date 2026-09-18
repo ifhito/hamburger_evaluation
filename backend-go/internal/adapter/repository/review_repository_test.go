@@ -66,11 +66,24 @@ func TestReviewRepository(t *testing.T) {
 	mustLink(pending, hidden)
 	mustLink(rejected, outcast)
 
-	if _, err := conn.Exec(ctx,
-		`INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at)
-		 VALUES ($1, 2, 4.0, 3.9, 0.7, now())`, cheese); err != nil {
-		t.Fatalf("insert burger stats: %v", err)
+	// The read subtests assert these literal stats for cheese. The S7
+	// recalculation overwrites this row on every review write, so each
+	// write subtest below re-seeds it in its cleanup via this upsert.
+	seedCheeseStats := func(t *testing.T) {
+		t.Helper()
+		if _, err := conn.Exec(ctx,
+			`INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at)
+			 VALUES ($1, 2, 4.0, 3.9, 0.7, now())
+			 ON CONFLICT (burger_id) DO UPDATE SET
+			   review_count = EXCLUDED.review_count,
+			   average_rating = EXCLUDED.average_rating,
+			   weighted_score = EXCLUDED.weighted_score,
+			   confidence = EXCLUDED.confidence,
+			   calculated_at = EXCLUDED.calculated_at`, cheese); err != nil {
+			t.Fatalf("seed burger stats: %v", err)
+		}
 	}
+	seedCheeseStats(t)
 
 	insertReview := `INSERT INTO reviews (rating, comment, user_id, burger_id, discarded_at, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
@@ -226,11 +239,13 @@ func TestReviewRepository(t *testing.T) {
 		if _, err := repo.GetReview(ctx, created.ID); err != nil {
 			t.Errorf("GetReview after create returned error: %v", err)
 		}
-		// Remove it again so the feed assertions of sibling subtests stay
-		// exact regardless of execution order.
+		// Remove it again and re-seed cheese's burger_stats (the create
+		// recalculated them) so the feed and stats assertions of sibling
+		// subtests stay exact regardless of execution order.
 		if _, err := conn.Exec(ctx, `DELETE FROM reviews WHERE id = $1`, created.ID); err != nil {
 			t.Fatalf("delete created review: %v", err)
 		}
+		seedCheeseStats(t)
 	})
 
 	t.Run("UpdateReviewContent writes only rating and comment", func(t *testing.T) {
@@ -248,10 +263,12 @@ func TestReviewRepository(t *testing.T) {
 		if _, err := repo.GetReview(ctx, rOld); err != nil {
 			t.Errorf("GetReview after update returned error: %v", err)
 		}
-		// Restore for sibling subtests.
+		// Restore the review and re-seed cheese's burger_stats (both updates
+		// recalculated them) for sibling subtests.
 		if _, err := repo.UpdateReviewContent(ctx, rOld, 5, "Tasty"); err != nil {
 			t.Fatalf("restore review: %v", err)
 		}
+		seedCheeseStats(t)
 	})
 
 	t.Run("UpdateReviewContent on discarded or unknown reviews yields ErrReviewNotFound", func(t *testing.T) {
@@ -297,10 +314,12 @@ func TestReviewRepository(t *testing.T) {
 		if err := repo.DiscardReview(ctx, 99999); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		// Clean up for sibling subtests.
+		// Clean up for sibling subtests: remove the victim and re-seed
+		// cheese's burger_stats (the discard recalculated them).
 		if _, err := conn.Exec(ctx, `DELETE FROM reviews WHERE id = $1`, victim); err != nil {
 			t.Fatalf("delete victim review: %v", err)
 		}
+		seedCheeseStats(t)
 	})
 }
 

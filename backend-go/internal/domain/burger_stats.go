@@ -140,10 +140,26 @@ func recencyFactor(createdAt, now time.Time) float64 {
 	return math.Exp(-daysAgo * math.Ln2 / recencyHalfLifeDays)
 }
 
-// roundHalfAwayFromZero mirrors Ruby Float#round (half away from zero):
-// scale is 100 for 2 decimals and 10000 for 4 decimals.
+// roundHalfAwayFromZero mirrors Ruby Float#round (half away from zero) by
+// porting MRI numeric.c round_half_up: scale is 100 for 2 decimals and
+// 10000 for 4 decimals. Beyond math.Round(value*scale), MRI applies a
+// correction for decimal boundaries whose nearest double sits just below
+// the exact boundary (e.g. 41.0/40 -> 1.0249999999999999): when the next
+// rounding step up/down, mapped back through the scale, still does not
+// exceed the original value, the result is bumped one step towards away
+// from zero — exactly reproducing Ruby's Float#round output.
 func roundHalfAwayFromZero(value, scale float64) float64 {
-	return math.Round(value*scale) / scale
+	f := math.Round(value * scale)
+	if value > 0 {
+		if (f+0.5)/scale <= value {
+			f++
+		}
+	} else if value < 0 {
+		if (f-0.5)/scale >= value {
+			f--
+		}
+	}
+	return f / scale
 }
 
 // clampFloat mirrors Ruby Comparable#clamp for floats.

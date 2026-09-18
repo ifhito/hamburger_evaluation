@@ -135,7 +135,8 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 	q := r.q.WithTx(tx)
 	// Lock BEFORE the insert: the insert's FK check takes a KEY SHARE lock
 	// on the burgers row, and upgrading it to FOR UPDATE afterwards could
-	// deadlock two concurrent creators.
+	// deadlock two concurrent creators. The helper's own lock below is then
+	// a free re-acquisition (row locks are transaction-owned in PostgreSQL).
 	if _, err := q.LockBurgerForStats(ctx, review.BurgerID); err != nil {
 		return domain.Review{}, fmt.Errorf("create review: lock burger: %w", err)
 	}
@@ -181,9 +182,6 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 		}
 		return domain.Review{}, fmt.Errorf("update review content: %w", err)
 	}
-	if _, err := q.LockBurgerForStats(ctx, row.BurgerID); err != nil {
-		return domain.Review{}, fmt.Errorf("update review content: lock burger: %w", err)
-	}
 	if err := recalculateBurgerStats(ctx, q, row.BurgerID); err != nil {
 		return domain.Review{}, fmt.Errorf("update review content: %w", err)
 	}
@@ -212,9 +210,6 @@ func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
 		}
 		return fmt.Errorf("discard review: %w", err)
 	}
-	if _, err := q.LockBurgerForStats(ctx, burgerID); err != nil {
-		return fmt.Errorf("discard review: lock burger: %w", err)
-	}
 	if err := recalculateBurgerStats(ctx, q, burgerID); err != nil {
 		return fmt.Errorf("discard review: %w", err)
 	}
@@ -226,11 +221,18 @@ func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
 
 // recalculateBurgerStats recomputes and upserts the burger's stats row
 // from its kept reviews via the domain calculator, inside the caller's
-// transaction: q must be tx-scoped and the burgers row already locked via
-// LockBurgerForStats (see that query for the lost-update rationale). Zero
-// kept reviews still upsert the zero row (Rails BurgerScore.empty).
+// transaction: q must be tx-scoped. The helper itself takes the per-burger
+// FOR UPDATE lock via LockBurgerForStats first (see that query for the
+// lost-update rationale); re-acquiring a lock the transaction already
+// holds is a no-op. Future callers recalculating MULTIPLE burgers in one
+// transaction (the S8 user-discard flow) must invoke it per burger in
+// ascending burger_id order so overlapping burger sets cannot deadlock.
+// Zero kept reviews still upsert the zero row (Rails BurgerScore.empty).
 // Package-level so the S8 user-discard flow can reuse it.
 func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID int64) error {
+	if _, err := q.LockBurgerForStats(ctx, burgerID); err != nil {
+		return fmt.Errorf("recalculate burger stats: lock burger: %w", err)
+	}
 	rows, err := q.ListBurgerReviewFacts(ctx, burgerID)
 	if err != nil {
 		return fmt.Errorf("recalculate burger stats: list facts: %w", err)
