@@ -50,8 +50,26 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 // JSON. It deliberately tolerates unknown fields — clients send extras
 // such as password_confirmation-adjacent fields.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBody(w, r, dst, false)
+}
+
+// decodeOptionalJSON is the decodeJSON variant for endpoints whose body is
+// optional (e.g. the reject moderation note): an empty body succeeds and
+// leaves dst untouched instead of answering 400, matching Rails where
+// absent params are simply nil. Everything else behaves like decodeJSON.
+func decodeOptionalJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONBody(w, r, dst, true)
+}
+
+// decodeJSONBody is the shared core of decodeJSON and decodeOptionalJSON;
+// allowEmpty makes an empty body (io.EOF on the first Decode) a success
+// that leaves dst untouched.
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, allowEmpty bool) bool {
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(dst); err != nil {
+		if allowEmpty && errors.Is(err, io.EOF) {
+			return true // empty body: nothing to decode
+		}
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
 			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
@@ -63,31 +81,6 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	// Reject trailing garbage after the JSON value: a second Decode must
 	// hit clean end-of-stream, otherwise the body was not a single JSON
 	// document.
-	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return false
-	}
-	return true
-}
-
-// decodeOptionalJSON is the decodeJSON variant for endpoints whose body is
-// optional (e.g. the reject moderation note): an empty body succeeds and
-// leaves dst untouched instead of answering 400, matching Rails where
-// absent params are simply nil. Everything else behaves like decodeJSON.
-func decodeOptionalJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(dst); err != nil {
-		if errors.Is(err, io.EOF) {
-			return true // empty body: nothing to decode
-		}
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
-			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
-			return false
-		}
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return false
-	}
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return false
