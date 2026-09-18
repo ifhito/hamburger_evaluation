@@ -9,3 +9,8 @@ type User struct {
 	Email    string
 	Admin    bool
 }
+
+// Manages reports whether the user may manage (edit or delete) the
+// account with the given id: self-management only, an admin gets no pass
+// (issue #16 R2/R3).
+func (u User) Manages(id int64) bool { return u.ID == id }

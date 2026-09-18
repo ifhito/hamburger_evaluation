@@ -86,7 +86,8 @@ func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, alic
 	if err != nil {
 		t.Fatalf("issue admin token: %v", err)
 	}
-	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo), usecase.NewReviews(newReviewRepoFake())),
+	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo), usecase.NewReviews(newReviewRepoFake()),
+			usecase.NewUsers(users, hasherFake{})),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID
 }
 

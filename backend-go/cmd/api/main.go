@@ -56,8 +56,9 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	defer pool.Close()
 
 	jwtCodec := infra.NewJWTCodec(cfg.JWTSecret, cfg.JWTTTL)
+	userRepo := repository.NewUserRepository(pool)
 	auth := usecase.NewAuth(
-		repository.NewUserRepository(pool),
+		userRepo,
 		infra.BcryptPasswordHasher{},
 		jwtCodec,
 		jwtCodec,
@@ -65,8 +66,9 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 
 	shops := usecase.NewShops(repository.NewShopRepository(pool))
 	reviews := usecase.NewReviews(repository.NewReviewRepository(pool))
+	users := usecase.NewUsers(userRepo, infra.BcryptPasswordHasher{})
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews), ready)
+	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users), ready)
 }
 
 // serve runs an http.Server with explicit timeouts (never bare

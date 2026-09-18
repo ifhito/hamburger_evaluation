@@ -73,7 +73,7 @@ FROM reviews r
 JOIN users u ON u.id = r.user_id
 JOIN burgers b ON b.id = r.burger_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
-WHERE r.id = $1 AND r.discarded_at IS NULL
+WHERE r.id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL
 `
 
 type GetReviewDetailRow struct {
@@ -91,9 +91,11 @@ type GetReviewDetailRow struct {
 	Confidence    pgtype.Float8
 }
 
-// One non-discarded review with author, burger, and stats — serves both
-// the public detail endpoint and the load-for-authorization of edit and
-// delete (user_id carries the ownership check).
+// One non-discarded review of a non-discarded user with author, burger,
+// and stats — serves both the public detail endpoint and the
+// load-for-authorization of edit and delete (user_id carries the
+// ownership check). A discarded author makes the review indistinguishable
+// from a missing one (S8).
 func (q *Queries) GetReviewDetail(ctx context.Context, id int64) (GetReviewDetailRow, error) {
 	row := q.db.QueryRow(ctx, getReviewDetail, id)
 	var i GetReviewDetailRow
@@ -124,6 +126,7 @@ JOIN users u ON u.id = r.user_id
 JOIN burgers b ON b.id = r.burger_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
 WHERE r.discarded_at IS NULL
+  AND u.discarded_at IS NULL
   AND EXISTS (
       SELECT 1
       FROM shops_burgers sb
@@ -154,10 +157,12 @@ type ListPublicReviewsRow struct {
 	Confidence    pgtype.Float8
 }
 
-// Global review feed: non-discarded reviews whose burger is served by at
-// least one active shop (status 1), with author, burger, and stats in one
-// query (no N+1). EXISTS instead of a plain JOIN on shops_burgers so a
-// burger linked to several active shops still yields exactly one row.
+// Global review feed: non-discarded reviews of non-discarded users whose
+// burger is served by at least one active shop (status 1), with author,
+// burger, and stats in one query (no N+1). EXISTS instead of a plain JOIN
+// on shops_burgers so a burger linked to several active shops still
+// yields exactly one row. The u.discarded_at filter hides discarded
+// users' (still kept) reviews from the feed (S8).
 func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsParams) ([]ListPublicReviewsRow, error) {
 	rows, err := q.db.Query(ctx, listPublicReviews, arg.PageOffset, arg.PageLimit)
 	if err != nil {
@@ -184,6 +189,37 @@ func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsPa
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserKeptReviewBurgerIDs = `-- name: ListUserKeptReviewBurgerIDs :many
+SELECT DISTINCT burger_id FROM reviews
+WHERE user_id = $1 AND discarded_at IS NULL
+ORDER BY burger_id
+`
+
+// The distinct burgers the user's kept reviews touch, for the S8
+// user-discard stats recalculation. The ascending burger_id ORDER BY is
+// load-bearing: recalculateBurgerStats locks each burger FOR UPDATE, and
+// all multi-burger callers must lock in ascending burger_id order so
+// overlapping burger sets cannot deadlock.
+func (q *Queries) ListUserKeptReviewBurgerIDs(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listUserKeptReviewBurgerIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var burger_id int64
+		if err := rows.Scan(&burger_id); err != nil {
+			return nil, err
+		}
+		items = append(items, burger_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

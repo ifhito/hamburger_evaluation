@@ -101,6 +101,8 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 		{name: "DELETE /shops/1 returns 405 Allow GET", method: http.MethodDelete, path: "/shops/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
 		{name: "PATCH /reviews returns 405 Allow GET, POST", method: http.MethodPatch, path: "/reviews", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
 		{name: "PATCH /reviews/1 returns 405 Allow DELETE, GET, PUT", method: http.MethodPatch, path: "/reviews/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, GET, PUT"},
+		{name: "POST /users returns 405 Allow GET", method: http.MethodPost, path: "/users", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
+		{name: "GET /users/1 returns 405 Allow DELETE, PUT", method: http.MethodGet, path: "/users/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, PUT"},
 		{name: "GET /admin/shops/1/approve returns 405 Allow POST", method: http.MethodGet, path: "/admin/shops/1/approve", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 	}
 	for _, tt := range tests {
