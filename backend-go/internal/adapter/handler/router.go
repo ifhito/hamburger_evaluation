@@ -20,13 +20,15 @@ type route struct {
 // NewRouter builds the HTTP handler tree: stdlib Go 1.22 method-pattern
 // mux wrapped in the global body-cap middleware. Unknown routes get 404
 // and wrong methods 405, both in the JSON error shape.
-func NewRouter(db Pinger, auth *usecase.Auth) http.Handler {
+func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops) http.Handler {
 	mux := http.NewServeMux()
 	registerRoutes(mux, []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(auth)}},
 		{path: "/login", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogin(auth)}},
 		{path: "/logout", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogout}, middleware: RequireAuth(auth)},
+		{path: "/shops", methods: map[string]http.HandlerFunc{http.MethodGet: handleListShops(shops)}, middleware: OptionalAuth(auth)},
+		{path: "/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodGet: handleGetShop(shops)}, middleware: OptionalAuth(auth)},
 	})
 	return limitBody(mux)
 }
