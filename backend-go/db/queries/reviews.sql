@@ -51,10 +51,13 @@ SET rating = $2,
 WHERE id = $1 AND discarded_at IS NULL
 RETURNING *;
 
--- name: DiscardReview :execrows
+-- name: DiscardReview :one
 -- Column-scoped soft delete: only stamps discarded_at, and only once —
 -- an already-discarded review matches no row, surfacing as not found.
+-- Returns burger_id so the caller can recalculate that burger's stats in
+-- the same transaction.
 UPDATE reviews
 SET discarded_at = now(),
     updated_at = now()
-WHERE id = $1 AND discarded_at IS NULL;
+WHERE id = $1 AND discarded_at IS NULL
+RETURNING burger_id;

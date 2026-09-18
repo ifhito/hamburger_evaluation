@@ -29,16 +29,19 @@ type ReviewRepository interface {
 	// shops_burgers, else (a wrapped) domain.ErrBurgerNotFound.
 	GetShopBurger(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error)
 	// CreateReview persists a new (already validated) review and returns
-	// it with its generated id and created_at.
+	// it with its generated id and created_at. The write also recalculates
+	// the burger's burger_stats in the same transaction (issue #15, S7).
 	CreateReview(ctx context.Context, review domain.Review) (domain.Review, error)
 	// UpdateReviewContent persists only rating and comment of the still
 	// kept review under id and returns the stored row, or (a wrapped)
 	// domain.ErrReviewNotFound when it is missing or discarded.
-	// Column-scoped so discarded_at is never written.
+	// Column-scoped so discarded_at is never written. The write also
+	// recalculates the burger's burger_stats in the same transaction.
 	UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
 	// DiscardReview soft-deletes the review (stamps discarded_at, never a
 	// hard DELETE), or returns (a wrapped) domain.ErrReviewNotFound when
-	// it is missing or already discarded.
+	// it is missing or already discarded. The write also recalculates the
+	// burger's burger_stats in the same transaction.
 	DiscardReview(ctx context.Context, id int64) error
 }
 
@@ -96,7 +99,6 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
 	}
-	s.burgerStatsChanged(ctx, burgerID)
 	return domain.ReviewDetail{
 		Review: created,
 		User:   &domain.UserRef{ID: viewer.ID, Username: viewer.Username},
@@ -125,7 +127,6 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
 	detail.Review = updated
-	s.burgerStatsChanged(ctx, updated.BurgerID)
 	return detail, nil
 }
 
@@ -143,12 +144,5 @@ func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) erro
 	if err := s.repo.DiscardReview(ctx, id); err != nil {
 		return fmt.Errorf("delete review: %w", err)
 	}
-	s.burgerStatsChanged(ctx, detail.BurgerID)
 	return nil
-}
-
-// burgerStatsChanged is the explicit S7 hook point, called after every
-// successful review create, update, and discard for the affected burger.
-func (s *Reviews) burgerStatsChanged(ctx context.Context, burgerID int64) {
-	// TODO(S7): trigger burger_stats recalculation for burgerID
 }
