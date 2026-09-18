@@ -111,10 +111,10 @@ func newTestRouter(p handler.Pinger) http.Handler {
 	return newTestRouterWith(p, auth)
 }
 
-// newTestRouterWith wires the router with the given auth and an empty
-// in-memory shops fake, for tests that do not care about shop data.
+// newTestRouterWith wires the router with the given auth and empty
+// in-memory shop/review fakes, for tests that do not care about that data.
 func newTestRouterWith(p handler.Pinger, auth *usecase.Auth) http.Handler {
-	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}))
+	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}), usecase.NewReviews(newReviewRepoFake()))
 }
 
 // do runs one request through the router in-process and returns the

@@ -64,8 +64,9 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	)
 
 	shops := usecase.NewShops(repository.NewShopRepository(pool))
+	reviews := usecase.NewReviews(repository.NewReviewRepository(pool))
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops), ready)
+	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews), ready)
 }
 
 // serve runs an http.Server with explicit timeouts (never bare

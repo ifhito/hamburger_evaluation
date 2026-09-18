@@ -25,7 +25,7 @@ type route struct {
 // NewRouter builds the HTTP handler tree: stdlib Go 1.22 method-pattern
 // mux wrapped in the global body-cap middleware. Unknown routes get 404
 // and wrong methods 405, both in the JSON error shape.
-func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops) http.Handler {
+func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *usecase.Reviews) http.Handler {
 	mux := http.NewServeMux()
 	registerRoutes(mux, []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
@@ -44,6 +44,30 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops) http.Handler
 			methodMiddleware: map[string]func(http.Handler) http.Handler{http.MethodPost: RequireAuth(auth)},
 		},
 		{path: "/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodGet: handleGetShop(shops)}, middleware: OptionalAuth(auth)},
+		// The review feed and detail stay anonymous-friendly; only the
+		// writes (POST/PUT/DELETE) require a login.
+		{
+			path: "/reviews",
+			methods: map[string]http.HandlerFunc{
+				http.MethodGet:  handleListReviews(reviews),
+				http.MethodPost: handleCreateReview(reviews),
+			},
+			middleware:       OptionalAuth(auth),
+			methodMiddleware: map[string]func(http.Handler) http.Handler{http.MethodPost: RequireAuth(auth)},
+		},
+		{
+			path: "/reviews/{id}",
+			methods: map[string]http.HandlerFunc{
+				http.MethodGet:    handleGetReview(reviews),
+				http.MethodPut:    handleUpdateReview(reviews),
+				http.MethodDelete: handleDeleteReview(reviews),
+			},
+			middleware: OptionalAuth(auth),
+			methodMiddleware: map[string]func(http.Handler) http.Handler{
+				http.MethodPut:    RequireAuth(auth),
+				http.MethodDelete: RequireAuth(auth),
+			},
+		},
 		// Moderation endpoints: RequireAuth only authenticates; the
 		// admin decision itself lives in the usecase (ErrForbidden).
 		{path: "/admin/shops", methods: map[string]http.HandlerFunc{http.MethodGet: handleAdminListShops(shops)}, middleware: RequireAuth(auth)},
