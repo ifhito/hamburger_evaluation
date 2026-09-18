@@ -1,6 +1,9 @@
 package infra
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadConfig(t *testing.T) {
 	tests := []struct {
@@ -11,8 +14,17 @@ func TestLoadConfig(t *testing.T) {
 	}{
 		{
 			name: "defaults applied",
-			env:  map[string]string{"DATABASE_URL": "postgres://localhost/app"},
-			want: Config{Port: "8080", DatabaseURL: "postgres://localhost/app", DBMaxConns: 10},
+			env: map[string]string{
+				"DATABASE_URL": "postgres://localhost/app",
+				"JWT_SECRET":   "test-only-secret",
+			},
+			want: Config{
+				Port:        "8080",
+				DatabaseURL: "postgres://localhost/app",
+				JWTSecret:   "test-only-secret",
+				JWTTTL:      24 * time.Hour,
+				DBMaxConns:  10,
+			},
 		},
 		{
 			name: "explicit values",
@@ -20,23 +32,70 @@ func TestLoadConfig(t *testing.T) {
 				"PORT":         "9090",
 				"DATABASE_URL": "postgres://localhost/app",
 				"JWT_SECRET":   "test-only-secret",
+				"JWT_TTL":      "1h30m",
 				"DB_MAX_CONNS": "4",
 			},
-			want: Config{Port: "9090", DatabaseURL: "postgres://localhost/app", JWTSecret: "test-only-secret", DBMaxConns: 4},
+			want: Config{
+				Port:        "9090",
+				DatabaseURL: "postgres://localhost/app",
+				JWTSecret:   "test-only-secret",
+				JWTTTL:      90 * time.Minute,
+				DBMaxConns:  4,
+			},
 		},
 		{
 			name:    "missing DATABASE_URL fails",
-			env:     map[string]string{},
+			env:     map[string]string{"JWT_SECRET": "test-only-secret"},
 			wantErr: true,
 		},
 		{
-			name:    "non-numeric DB_MAX_CONNS fails",
-			env:     map[string]string{"DATABASE_URL": "postgres://localhost/app", "DB_MAX_CONNS": "lots"},
+			name:    "missing JWT_SECRET fails",
+			env:     map[string]string{"DATABASE_URL": "postgres://localhost/app"},
 			wantErr: true,
 		},
 		{
-			name:    "non-positive DB_MAX_CONNS fails",
-			env:     map[string]string{"DATABASE_URL": "postgres://localhost/app", "DB_MAX_CONNS": "0"},
+			name: "non-duration JWT_TTL fails",
+			env: map[string]string{
+				"DATABASE_URL": "postgres://localhost/app",
+				"JWT_SECRET":   "test-only-secret",
+				"JWT_TTL":      "soon",
+			},
+			wantErr: true,
+		},
+		{
+			name: "zero JWT_TTL fails",
+			env: map[string]string{
+				"DATABASE_URL": "postgres://localhost/app",
+				"JWT_SECRET":   "test-only-secret",
+				"JWT_TTL":      "0s",
+			},
+			wantErr: true,
+		},
+		{
+			name: "negative JWT_TTL fails",
+			env: map[string]string{
+				"DATABASE_URL": "postgres://localhost/app",
+				"JWT_SECRET":   "test-only-secret",
+				"JWT_TTL":      "-1h",
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-numeric DB_MAX_CONNS fails",
+			env: map[string]string{
+				"DATABASE_URL": "postgres://localhost/app",
+				"JWT_SECRET":   "test-only-secret",
+				"DB_MAX_CONNS": "lots",
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-positive DB_MAX_CONNS fails",
+			env: map[string]string{
+				"DATABASE_URL": "postgres://localhost/app",
+				"JWT_SECRET":   "test-only-secret",
+				"DB_MAX_CONNS": "0",
+			},
 			wantErr: true,
 		},
 	}

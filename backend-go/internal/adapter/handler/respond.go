@@ -6,12 +6,19 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 )
 
 type errorResponse struct {
 	Error string `json:"error"`
+}
+
+// errorsResponse is the list shape {"errors":[...]}, reserved for
+// validation failures (422).
+type errorsResponse struct {
+	Errors []string `json:"errors"`
 }
 
 // writeJSON encodes v as JSON with the given status. Marshal failures for
@@ -34,4 +41,22 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // writeError writes the single-error JSON shape {"error":"..."}.
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, errorResponse{Error: msg})
+}
+
+// decodeJSON decodes the request body into dst and reports whether it
+// succeeded; on failure the error response has already been written: 413
+// when the body-cap MaxBytesReader tripped, 400 for malformed or empty
+// JSON. It deliberately tolerates unknown fields — clients send extras
+// such as password_confirmation-adjacent fields.
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return false
+		}
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	return true
 }
