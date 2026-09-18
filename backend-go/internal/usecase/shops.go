@@ -52,8 +52,13 @@ func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, p
 	if perPage > maxShopsPerPage {
 		perPage = maxShopsPerPage
 	}
-	// Far-out pages yield an empty list; clamping the offset keeps it in
-	// int32 without changing that outcome.
+	// Far-out pages yield an empty list; clamping page before the
+	// multiplication keeps the product (at most (2^31-1)*100) inside int64,
+	// and clamping the offset keeps it in int32 without changing that
+	// outcome.
+	if page > math.MaxInt32 {
+		page = math.MaxInt32
+	}
 	offset := min(int64(page-1)*int64(perPage), math.MaxInt32)
 	shops, err := s.repo.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, int32(perPage), int32(offset))
 	if err != nil {

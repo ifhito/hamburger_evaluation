@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -57,6 +58,8 @@ func TestShopsListPagination(t *testing.T) {
 		{name: "explicit page and per_page", page: 3, perPage: 5, wantLimit: 5, wantOffset: 10},
 		{name: "per_page above 100 is clamped", page: 1, perPage: 101, wantLimit: 100, wantOffset: 0},
 		{name: "huge page clamps offset instead of overflowing", page: 1 << 40, perPage: 100, wantLimit: 100, wantOffset: 1<<31 - 1},
+		{name: "page MaxInt64 with default per_page clamps offset", page: math.MaxInt64, perPage: 0, wantLimit: 20, wantOffset: math.MaxInt32},
+		{name: "page MaxInt64 with explicit per_page clamps offset", page: math.MaxInt64, perPage: 20, wantLimit: 20, wantOffset: math.MaxInt32},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
