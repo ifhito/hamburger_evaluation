@@ -74,34 +74,151 @@ func (q *Queries) GetShop(ctx context.Context, id int64) (Shop, error) {
 	return i, err
 }
 
-const listShops = `-- name: ListShops :many
-SELECT id, name, status, moderation_note, creator_id, created_at, updated_at FROM shops
-ORDER BY id
-LIMIT $1 OFFSET $2
+const getShopWithCreator = `-- name: GetShopWithCreator :one
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+       u.username AS creator_username
+FROM shops s
+LEFT JOIN users u ON u.id = s.creator_id
+WHERE s.id = $1
 `
 
-type ListShopsParams struct {
-	Limit  int32
-	Offset int32
+type GetShopWithCreatorRow struct {
+	ID              int64
+	Name            string
+	Status          int16
+	ModerationNote  pgtype.Text
+	CreatorID       pgtype.Int8
+	CreatorUsername pgtype.Text
 }
 
-func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]Shop, error) {
-	rows, err := q.db.Query(ctx, listShops, arg.Limit, arg.Offset)
+func (q *Queries) GetShopWithCreator(ctx context.Context, id int64) (GetShopWithCreatorRow, error) {
+	row := q.db.QueryRow(ctx, getShopWithCreator, id)
+	var i GetShopWithCreatorRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ModerationNote,
+		&i.CreatorID,
+		&i.CreatorUsername,
+	)
+	return i, err
+}
+
+const listShopReviews = `-- name: ListShopReviews :many
+SELECT r.id, r.rating, r.comment, r.created_at,
+       u.id AS user_id, u.username AS user_username,
+       b.id AS burger_id, b.name AS burger_name,
+       bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
+FROM reviews r
+JOIN shops_burgers sb ON sb.burger_id = r.burger_id
+JOIN burgers b ON b.id = r.burger_id
+JOIN users u ON u.id = r.user_id
+LEFT JOIN burger_stats bs ON bs.burger_id = b.id
+WHERE sb.shop_id = $1 AND r.discarded_at IS NULL
+ORDER BY r.created_at DESC, r.id DESC
+`
+
+type ListShopReviewsRow struct {
+	ID            int64
+	Rating        int16
+	Comment       pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UserID        int64
+	UserUsername  string
+	BurgerID      int64
+	BurgerName    string
+	ReviewCount   pgtype.Int8
+	AverageRating pgtype.Float8
+	WeightedScore pgtype.Float8
+	Confidence    pgtype.Float8
+}
+
+func (q *Queries) ListShopReviews(ctx context.Context, shopID int64) ([]ListShopReviewsRow, error) {
+	rows, err := q.db.Query(ctx, listShopReviews, shopID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Shop
+	var items []ListShopReviewsRow
 	for rows.Next() {
-		var i Shop
+		var i ListShopReviewsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Rating,
+			&i.Comment,
+			&i.CreatedAt,
+			&i.UserID,
+			&i.UserUsername,
+			&i.BurgerID,
+			&i.BurgerName,
+			&i.ReviewCount,
+			&i.AverageRating,
+			&i.WeightedScore,
+			&i.Confidence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listShops = `-- name: ListShops :many
+SELECT id, name, status, moderation_note, creator_id FROM shops
+WHERE ($1::boolean
+       OR status = 1
+       OR creator_id = $2::bigint)
+  AND ($3::text IS NULL OR name ILIKE $3::text)
+ORDER BY name, id
+LIMIT $5 OFFSET $4
+`
+
+type ListShopsParams struct {
+	ViewAll     bool
+	ViewerID    pgtype.Int8
+	NamePattern pgtype.Text
+	PageOffset  int32
+	PageLimit   int32
+}
+
+type ListShopsRow struct {
+	ID             int64
+	Name           string
+	Status         int16
+	ModerationNote pgtype.Text
+	CreatorID      pgtype.Int8
+}
+
+// The WHERE clause below is the SQL translation of domain.ShopVisibility
+// (view all / active / own); the rule itself lives in the domain package.
+// status 1 = active. name_pattern is a pre-escaped ILIKE pattern (or NULL
+// for no keyword filter); comparing creator_id with a NULL viewer_id is
+// never true, which is exactly the anonymous case.
+func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListShopsRow, error) {
+	rows, err := q.db.Query(ctx, listShops,
+		arg.ViewAll,
+		arg.ViewerID,
+		arg.NamePattern,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListShopsRow
+	for rows.Next() {
+		var i ListShopsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.Status,
 			&i.ModerationNote,
 			&i.CreatorID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

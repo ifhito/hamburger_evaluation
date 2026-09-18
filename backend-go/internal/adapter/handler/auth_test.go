@@ -108,7 +108,13 @@ func newAuthKit() (*userRepoFake, *usecase.Auth, *infra.JWTCodec) {
 // or routing behavior.
 func newTestRouter(p handler.Pinger) http.Handler {
 	_, auth, _ := newAuthKit()
-	return handler.NewRouter(p, auth)
+	return newTestRouterWith(p, auth)
+}
+
+// newTestRouterWith wires the router with the given auth and an empty
+// in-memory shops fake, for tests that do not care about shop data.
+func newTestRouterWith(p handler.Pinger, auth *usecase.Auth) http.Handler {
+	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}))
 }
 
 // do runs one request through the router in-process and returns the
@@ -146,7 +152,7 @@ func decodeAuthUser(t *testing.T, body []byte) (resp struct {
 // POST /logout route.
 func TestSignupThenLogout(t *testing.T) {
 	_, auth, _ := newAuthKit()
-	router := handler.NewRouter(okPinger, auth)
+	router := newTestRouterWith(okPinger, auth)
 
 	rec := do(router, http.MethodPost, "/signup",
 		`{"username":"alice","email":"alice@example.com","password":"password123","password_confirmation":"password123"}`, "")
@@ -230,7 +236,7 @@ func TestSignupErrors(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
-			rec := do(handler.NewRouter(okPinger, auth), http.MethodPost, "/signup", tt.body, "")
+			rec := do(newTestRouterWith(okPinger, auth), http.MethodPost, "/signup", tt.body, "")
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tt.wantStatus, rec.Body)
 			}
@@ -295,7 +301,7 @@ func TestLogin(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
-			rec := do(handler.NewRouter(okPinger, auth), http.MethodPost, "/login", tt.body, "")
+			rec := do(newTestRouterWith(okPinger, auth), http.MethodPost, "/login", tt.body, "")
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tt.wantStatus, rec.Body)
 			}
@@ -347,7 +353,7 @@ func TestRequireAuth(t *testing.T) {
 		t.Fatalf("issue unknown-user token: %v", err)
 	}
 
-	router := handler.NewRouter(okPinger, auth)
+	router := newTestRouterWith(okPinger, auth)
 	tests := []struct {
 		name       string
 		authHeader string
@@ -395,7 +401,7 @@ func TestRequireAuthInfraFailure(t *testing.T) {
 	}
 	repo.err = io.ErrUnexpectedEOF
 
-	rec := do(handler.NewRouter(okPinger, auth), http.MethodPost, "/logout", "", "Bearer "+token)
+	rec := do(newTestRouterWith(okPinger, auth), http.MethodPost, "/logout", "", "Bearer "+token)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusInternalServerError, rec.Body)
 	}
