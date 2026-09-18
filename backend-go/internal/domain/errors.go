@@ -22,6 +22,13 @@ var (
 	// viewer may not see it; the two cases are deliberately identical so
 	// hidden shops' existence is not leaked.
 	ErrShopNotFound = errors.New("shop not found")
+	// ErrReviewNotFound signals that no non-discarded review matches the
+	// lookup; missing and soft-deleted reviews are deliberately identical.
+	ErrReviewNotFound = errors.New("review not found")
+	// ErrBurgerNotFound signals that no burger matches the lookup within
+	// the requested shop (unknown burger and burger of another shop are
+	// deliberately identical).
+	ErrBurgerNotFound = errors.New("burger not found")
 	// ErrForbidden signals that the viewer is authenticated but not
 	// allowed to perform the operation (e.g. a non-admin calling a
 	// moderation use case).
