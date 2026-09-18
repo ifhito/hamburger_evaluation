@@ -4,10 +4,12 @@ VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: ListPublicReviews :many
--- Global review feed: non-discarded reviews whose burger is served by at
--- least one active shop (status 1), with author, burger, and stats in one
--- query (no N+1). EXISTS instead of a plain JOIN on shops_burgers so a
--- burger linked to several active shops still yields exactly one row.
+-- Global review feed: non-discarded reviews of non-discarded users whose
+-- burger is served by at least one active shop (status 1), with author,
+-- burger, and stats in one query (no N+1). EXISTS instead of a plain JOIN
+-- on shops_burgers so a burger linked to several active shops still
+-- yields exactly one row. The u.discarded_at filter hides discarded
+-- users' (still kept) reviews from the feed (S8).
 SELECT r.id, r.rating, r.comment, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
@@ -17,6 +19,7 @@ JOIN users u ON u.id = r.user_id
 JOIN burgers b ON b.id = r.burger_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
 WHERE r.discarded_at IS NULL
+  AND u.discarded_at IS NULL
   AND EXISTS (
       SELECT 1
       FROM shops_burgers sb
@@ -27,9 +30,11 @@ ORDER BY r.created_at DESC, r.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: GetReviewDetail :one
--- One non-discarded review with author, burger, and stats — serves both
--- the public detail endpoint and the load-for-authorization of edit and
--- delete (user_id carries the ownership check).
+-- One non-discarded review of a non-discarded user with author, burger,
+-- and stats — serves both the public detail endpoint and the
+-- load-for-authorization of edit and delete (user_id carries the
+-- ownership check). A discarded author makes the review indistinguishable
+-- from a missing one (S8).
 SELECT r.id, r.rating, r.comment, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
@@ -38,7 +43,17 @@ FROM reviews r
 JOIN users u ON u.id = r.user_id
 JOIN burgers b ON b.id = r.burger_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
-WHERE r.id = $1 AND r.discarded_at IS NULL;
+WHERE r.id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL;
+
+-- name: ListUserKeptReviewBurgerIDs :many
+-- The distinct burgers the user's kept reviews touch, for the S8
+-- user-discard stats recalculation. The ascending burger_id ORDER BY is
+-- load-bearing: recalculateBurgerStats locks each burger FOR UPDATE, and
+-- all multi-burger callers must lock in ascending burger_id order so
+-- overlapping burger sets cannot deadlock.
+SELECT DISTINCT burger_id FROM reviews
+WHERE user_id = $1 AND discarded_at IS NULL
+ORDER BY burger_id;
 
 -- name: UpdateReviewContent :one
 -- Column-scoped edit: touches only rating and comment (never

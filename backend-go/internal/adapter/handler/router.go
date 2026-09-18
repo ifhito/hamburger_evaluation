@@ -25,7 +25,7 @@ type route struct {
 // NewRouter builds the HTTP handler tree: stdlib Go 1.22 method-pattern
 // mux wrapped in the global body-cap middleware. Unknown routes get 404
 // and wrong methods 405, both in the JSON error shape.
-func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *usecase.Reviews) http.Handler {
+func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users) http.Handler {
 	mux := http.NewServeMux()
 	registerRoutes(mux, []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
@@ -67,6 +67,18 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *use
 				http.MethodPut:    RequireAuth(auth),
 				http.MethodDelete: RequireAuth(auth),
 			},
+		},
+		// The user index is public (Rails parity, no auth at all); editing
+		// and deleting an account require a login, and the self-only rule
+		// itself lives in the usecase (ErrForbidden).
+		{path: "/users", methods: map[string]http.HandlerFunc{http.MethodGet: handleListUsers(users)}},
+		{
+			path: "/users/{id}",
+			methods: map[string]http.HandlerFunc{
+				http.MethodPut:    handleUpdateUser(users),
+				http.MethodDelete: handleDeleteUser(users),
+			},
+			middleware: RequireAuth(auth),
 		},
 		// Moderation endpoints: RequireAuth only authenticates; the
 		// admin decision itself lives in the usecase (ErrForbidden).

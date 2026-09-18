@@ -42,6 +42,9 @@ LEFT JOIN users u ON u.id = s.creator_id
 WHERE s.id = $1;
 
 -- name: ListShopReviews :many
+-- The shop's non-discarded reviews of non-discarded users, newest first;
+-- the u.discarded_at filter hides discarded users' (still kept) reviews
+-- from the shop detail (S8).
 SELECT r.id, r.rating, r.comment, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
@@ -51,7 +54,7 @@ JOIN shops_burgers sb ON sb.burger_id = r.burger_id
 JOIN burgers b ON b.id = r.burger_id
 JOIN users u ON u.id = r.user_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
-WHERE sb.shop_id = $1 AND r.discarded_at IS NULL
+WHERE sb.shop_id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL
 ORDER BY r.created_at DESC, r.id DESC;
 
 -- name: UpdateShop :one

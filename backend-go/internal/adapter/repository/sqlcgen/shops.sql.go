@@ -115,7 +115,7 @@ JOIN shops_burgers sb ON sb.burger_id = r.burger_id
 JOIN burgers b ON b.id = r.burger_id
 JOIN users u ON u.id = r.user_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
-WHERE sb.shop_id = $1 AND r.discarded_at IS NULL
+WHERE sb.shop_id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL
 ORDER BY r.created_at DESC, r.id DESC
 `
 
@@ -134,6 +134,9 @@ type ListShopReviewsRow struct {
 	Confidence    pgtype.Float8
 }
 
+// The shop's non-discarded reviews of non-discarded users, newest first;
+// the u.discarded_at filter hides discarded users' (still kept) reviews
+// from the shop detail (S8).
 func (q *Queries) ListShopReviews(ctx context.Context, shopID int64) ([]ListShopReviewsRow, error) {
 	rows, err := q.db.Query(ctx, listShopReviews, shopID)
 	if err != nil {

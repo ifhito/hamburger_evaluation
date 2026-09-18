@@ -211,7 +211,8 @@ func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, 
 		}
 		return "Bearer " + tok
 	}
-	router = handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}), usecase.NewReviews(repo))
+	router = handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}), usecase.NewReviews(repo),
+		usecase.NewUsers(users, hasherFake{}))
 	return router, token(alice.ID), token(bob.ID), token(admin.ID)
 }
 
