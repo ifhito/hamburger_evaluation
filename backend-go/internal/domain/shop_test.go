@@ -1,6 +1,8 @@
 package domain_test
 
 import (
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -45,6 +47,94 @@ func TestShopVisibility(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewShopSubmission pins the submission constructor: a valid name
+// yields a pending shop with the creator recorded and no moderation note;
+// blank and whitespace-only names fail with the exact Rails message.
+func TestNewShopSubmission(t *testing.T) {
+	t.Run("valid name starts pending with creator", func(t *testing.T) {
+		shop, err := domain.NewShopSubmission("New Shack", 7)
+		if err != nil {
+			t.Fatalf("NewShopSubmission returned error: %v", err)
+		}
+		if shop.Name != "New Shack" || shop.Status != domain.ShopStatusPending {
+			t.Errorf("shop = %+v, want name New Shack, status pending", shop)
+		}
+		if shop.ModerationNote != nil {
+			t.Errorf("ModerationNote = %v, want nil", *shop.ModerationNote)
+		}
+		if shop.CreatorID == nil || *shop.CreatorID != 7 {
+			t.Errorf("CreatorID = %v, want 7", shop.CreatorID)
+		}
+	})
+
+	for _, name := range []string{"", "   ", "\t\n"} {
+		t.Run("blank name "+name+" fails validation", func(t *testing.T) {
+			_, err := domain.NewShopSubmission(name, 7)
+			var vErr *domain.ValidationError
+			if !errors.As(err, &vErr) {
+				t.Fatalf("error = %v, want *domain.ValidationError", err)
+			}
+			want := []string{"Name can't be blank"}
+			if !reflect.DeepEqual(vErr.Messages, want) {
+				t.Errorf("messages = %v, want %v", vErr.Messages, want)
+			}
+		})
+	}
+}
+
+// TestShopModerationTransitions pins the Rails-parity state machine:
+// approve and reject are unconditional value transitions from any current
+// status; approve clears the moderation note, reject replaces it.
+func TestShopModerationTransitions(t *testing.T) {
+	statuses := []domain.ShopStatus{
+		domain.ShopStatusPending,
+		domain.ShopStatusActive,
+		domain.ShopStatusRejected, // rejected→active re-approval is allowed
+	}
+
+	for _, from := range statuses {
+		t.Run("approve from "+string(from)+" activates and clears note", func(t *testing.T) {
+			shop := domain.Shop{ID: 1, Name: "Shack", Status: from, ModerationNote: ptr("old note")}
+			got := shop.Approve()
+			if got.Status != domain.ShopStatusActive {
+				t.Errorf("status = %q, want %q", got.Status, domain.ShopStatusActive)
+			}
+			if got.ModerationNote != nil {
+				t.Errorf("ModerationNote = %v, want nil", *got.ModerationNote)
+			}
+		})
+
+		t.Run("reject from "+string(from)+" sets status and note", func(t *testing.T) {
+			shop := domain.Shop{ID: 1, Name: "Shack", Status: from}
+			got := shop.Reject(ptr("needs fixes"))
+			if got.Status != domain.ShopStatusRejected {
+				t.Errorf("status = %q, want %q", got.Status, domain.ShopStatusRejected)
+			}
+			if got.ModerationNote == nil || *got.ModerationNote != "needs fixes" {
+				t.Errorf("ModerationNote = %v, want needs fixes", got.ModerationNote)
+			}
+		})
+	}
+
+	t.Run("reject without note clears any previous note", func(t *testing.T) {
+		shop := domain.Shop{ID: 1, Status: domain.ShopStatusRejected, ModerationNote: ptr("old note")}
+		if got := shop.Reject(nil); got.ModerationNote != nil {
+			t.Errorf("ModerationNote = %v, want nil", *got.ModerationNote)
+		}
+	})
+
+	t.Run("transitions keep visibility coherent", func(t *testing.T) {
+		anon := domain.ShopVisibilityFor(nil)
+		shop := domain.Shop{ID: 1, Status: domain.ShopStatusPending}
+		if approved := shop.Approve(); !anon.CanView(approved) {
+			t.Error("approved shop is not anonymously visible")
+		}
+		if rejected := shop.Approve().Reject(nil); anon.CanView(rejected) {
+			t.Error("rejected shop is still anonymously visible")
+		}
+	})
 }
 
 // TestShopVisibilityFor pins the descriptor itself, since repositories
