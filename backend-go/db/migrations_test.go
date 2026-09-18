@@ -10,15 +10,20 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// testDBName is created fresh (and dropped) inside the compose Postgres
-// instance so tests always start from an empty database without touching the
-// development database or its volume.
-const testDBName = "hamburger_evaluation_go_test"
+// testDBName returns a per-run database name. The database is created fresh
+// (and dropped) inside the compose Postgres instance so tests always start
+// from an empty database without touching the development database or its
+// volume; the pid/timestamp suffix keeps concurrent or aborted runs from
+// colliding while staying a valid lowercase PostgreSQL identifier.
+func testDBName() string {
+	return fmt.Sprintf("hamburger_evaluation_go_test_%d_%d", os.Getpid(), time.Now().UnixNano())
+}
 
 // TestMigrationsAcceptance covers AC1-AC4 of story S2 against a real
 // PostgreSQL. It requires TEST_DATABASE_URL to point at a maintenance
@@ -40,13 +45,14 @@ func TestMigrationsAcceptance(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = admin.Close(context.Background()) })
 
-	mustExec(ctx, t, admin, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", testDBName))
-	mustExec(ctx, t, admin, "CREATE DATABASE "+testDBName)
+	dbName := testDBName()
+	mustExec(ctx, t, admin, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", dbName))
+	mustExec(ctx, t, admin, "CREATE DATABASE "+dbName)
 	t.Cleanup(func() {
-		_, _ = admin.Exec(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", testDBName))
+		_, _ = admin.Exec(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", dbName))
 	})
 
-	testURL, err := withDatabase(adminURL, testDBName)
+	testURL, err := withDatabase(adminURL, dbName)
 	if err != nil {
 		t.Fatalf("build test database URL: %v", err)
 	}
@@ -118,28 +124,80 @@ func TestMigrationsAcceptance(t *testing.T) {
 }
 
 // loadMigrations returns the *.up.sql files in ascending order and the
-// *.down.sql files in descending order, and fails the test on unpaired files.
+// *.down.sql files in descending order. It fails the test if any file does
+// not match <version>_<name>.{up,down}.sql or if any version does not have
+// exactly one up and one down file.
 func loadMigrations(t *testing.T) (ups, downs []string) {
 	t.Helper()
 	entries, err := os.ReadDir("migrations")
 	if err != nil {
 		t.Fatalf("read migrations dir: %v", err)
 	}
+	upsByVersion := map[string]int{}
+	downsByVersion := map[string]int{}
 	for _, entry := range entries {
 		name := entry.Name()
-		switch {
-		case strings.HasSuffix(name, ".up.sql"):
+		version, direction, ok := parseMigrationName(name)
+		if !ok {
+			t.Fatalf("migration %s does not match <version>_<name>.up.sql / .down.sql", name)
+		}
+		switch direction {
+		case "up":
+			upsByVersion[version]++
 			ups = append(ups, filepath.Join("migrations", name))
-		case strings.HasSuffix(name, ".down.sql"):
+		case "down":
+			downsByVersion[version]++
 			downs = append(downs, filepath.Join("migrations", name))
 		}
 	}
-	if len(ups) == 0 || len(ups) != len(downs) {
-		t.Fatalf("expected matching up/down migration pairs, got %d up and %d down", len(ups), len(downs))
+	if len(ups) == 0 {
+		t.Fatal("no up migrations found in migrations dir")
+	}
+	versions := map[string]bool{}
+	for version := range upsByVersion {
+		versions[version] = true
+	}
+	for version := range downsByVersion {
+		versions[version] = true
+	}
+	sortedVersions := make([]string, 0, len(versions))
+	for version := range versions {
+		sortedVersions = append(sortedVersions, version)
+	}
+	sort.Strings(sortedVersions)
+	for _, version := range sortedVersions {
+		if upsByVersion[version] != 1 || downsByVersion[version] != 1 {
+			t.Fatalf("version %s: expected exactly one .up.sql and one .down.sql, got %d up and %d down",
+				version, upsByVersion[version], downsByVersion[version])
+		}
 	}
 	sort.Strings(ups)
 	sort.Sort(sort.Reverse(sort.StringSlice(downs)))
 	return ups, downs
+}
+
+// parseMigrationName splits a migration file name into its numeric version
+// prefix (e.g. "000001") and direction ("up" or "down"). ok is false when the
+// name does not match <digits>_<name>.up.sql / .down.sql.
+func parseMigrationName(name string) (version, direction string, ok bool) {
+	switch {
+	case strings.HasSuffix(name, ".up.sql"):
+		direction = "up"
+	case strings.HasSuffix(name, ".down.sql"):
+		direction = "down"
+	default:
+		return "", "", false
+	}
+	version, rest, found := strings.Cut(name, "_")
+	if !found || version == "" || rest == "" {
+		return "", "", false
+	}
+	for _, r := range version {
+		if r < '0' || r > '9' {
+			return "", "", false
+		}
+	}
+	return version, direction, true
 }
 
 func applyMigrations(ctx context.Context, t *testing.T, conn *pgx.Conn, files []string) {
@@ -163,6 +221,52 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
 		t.Fatalf("tables mismatch:\n got %v\nwant %v", gotTables, wantTables)
+	}
+
+	// Column-level schema: table/column/data_type/is_nullable, ordered by
+	// table name then column position, exactly as the migrations define them.
+	wantColumns := []string{
+		"burger_stats/burger_id/bigint/NO",
+		"burger_stats/review_count/bigint/NO",
+		"burger_stats/average_rating/double precision/NO",
+		"burger_stats/weighted_score/double precision/NO",
+		"burger_stats/confidence/double precision/NO",
+		"burger_stats/calculated_at/timestamp with time zone/NO",
+		"burgers/id/bigint/NO",
+		"burgers/name/text/NO",
+		"burgers/created_at/timestamp with time zone/NO",
+		"burgers/updated_at/timestamp with time zone/NO",
+		"reviews/id/bigint/NO",
+		"reviews/rating/smallint/NO",
+		"reviews/comment/text/YES",
+		"reviews/user_id/bigint/NO",
+		"reviews/burger_id/bigint/NO",
+		"reviews/discarded_at/timestamp with time zone/YES",
+		"reviews/created_at/timestamp with time zone/NO",
+		"reviews/updated_at/timestamp with time zone/NO",
+		"shops/id/bigint/NO",
+		"shops/name/text/NO",
+		"shops/status/smallint/NO",
+		"shops/moderation_note/text/YES",
+		"shops/creator_id/bigint/YES",
+		"shops/created_at/timestamp with time zone/NO",
+		"shops/updated_at/timestamp with time zone/NO",
+		"shops_burgers/shop_id/bigint/NO",
+		"shops_burgers/burger_id/bigint/NO",
+		"users/id/bigint/NO",
+		"users/email/text/NO",
+		"users/username/text/NO",
+		"users/password_digest/text/NO",
+		"users/admin/boolean/NO",
+		"users/discarded_at/timestamp with time zone/YES",
+		"users/created_at/timestamp with time zone/NO",
+		"users/updated_at/timestamp with time zone/NO",
+	}
+	gotColumns := queryStrings(ctx, t, conn,
+		"SELECT table_name || '/' || column_name || '/' || data_type || '/' || is_nullable FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position")
+	if strings.Join(gotColumns, "\n") != strings.Join(wantColumns, "\n") {
+		t.Fatalf("columns mismatch:\n got:\n%s\nwant:\n%s",
+			strings.Join(gotColumns, "\n"), strings.Join(wantColumns, "\n"))
 	}
 
 	// Key constraints: contype is p=primary key, u=unique, c=check,

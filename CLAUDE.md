@@ -70,6 +70,25 @@ docker compose up --build
 .agents/skills/backend-go-change-validation/scripts/go-checks.sh
 ```
 
+```bash
+# Migrations — by default they target the dev DB; override with MIGRATE_DATABASE_URL
+cd backend-go
+docker compose run --rm migrate up
+docker compose run --rm migrate down -all
+```
+
+```bash
+# Regenerate sqlc code — must produce zero diff under internal/adapter/repository/sqlcgen
+cd backend-go
+docker compose run --rm sqlc generate
+```
+
+```bash
+# DB acceptance tests (compose db service must be up; tests skip silently without TEST_DATABASE_URL)
+cd backend-go
+TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=disable' go test ./db/...
+```
+
 ## Frontend
 
 - Built with **Feature-Sliced Design (FSD)** — but intentionally limited to three layers only: `app`, `pages`, `shared`
