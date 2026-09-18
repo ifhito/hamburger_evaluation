@@ -14,10 +14,11 @@ const (
 	maxShopsPerPage     = 100
 )
 
-// ShopRepository is the consumer-side persistence contract for shop reads.
+// ShopRepository is the consumer-side persistence contract for shops.
 // Implementations translate the visibility descriptor into SQL parameters
-// (the rule itself lives in domain.ShopVisibility) and return
-// (a wrapped) domain.ErrShopNotFound when no shop matches an id.
+// (the rule itself lives in domain.ShopVisibility), keep the smallint
+// status encoding to themselves, and return (a wrapped)
+// domain.ErrShopNotFound when no shop matches an id.
 type ShopRepository interface {
 	// ListShops returns visible shops matching keyword (literal substring
 	// of the name, case-insensitive; empty matches all), ordered by name
@@ -29,9 +30,19 @@ type ShopRepository interface {
 	// ListShopReviews returns the non-discarded reviews of the shop's
 	// burgers, newest first (created_at desc, id desc).
 	ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
+	// CreateShop persists a new shop and returns it with its generated id.
+	CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error)
+	// ListShopsForModeration returns every shop with its creator (Reviews
+	// left empty), newest first (created_at desc, id desc), optionally
+	// filtered to one status (nil = all).
+	ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
+	// UpdateShop persists name, status, and moderation note under shop.ID
+	// and returns the stored row.
+	UpdateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error)
 }
 
-// Shops implements the shop read use cases (list and detail).
+// Shops implements the shop use cases: public list and detail, user
+// submission, and admin moderation.
 type Shops struct {
 	repo ShopRepository
 }
@@ -83,5 +94,103 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id int64) (domain.
 		return domain.ShopDetail{}, fmt.Errorf("list shop reviews: %w", err)
 	}
 	detail.Reviews = reviews
+	return detail, nil
+}
+
+// Create submits a new shop on behalf of viewer: it starts pending (a
+// moderator activates it later) with viewer recorded as creator. A blank
+// name surfaces the domain *ValidationError unchanged.
+func (s *Shops) Create(ctx context.Context, viewer domain.User, name string) (domain.ShopDetail, error) {
+	shop, err := domain.NewShopSubmission(name, viewer.ID)
+	if err != nil {
+		return domain.ShopDetail{}, err
+	}
+	created, err := s.repo.CreateShop(ctx, shop)
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("create shop: %w", err)
+	}
+	// The creator is the viewer itself, so the response ref is composed
+	// here instead of re-fetching the row with a join.
+	return domain.ShopDetail{
+		Shop:    created,
+		Creator: &domain.UserRef{ID: viewer.ID, Username: viewer.Username},
+	}, nil
+}
+
+// AdminList returns every shop for the moderation screen, newest first,
+// optionally filtered by the status string of the API. An unknown status
+// matches nothing (like Rails where(status: unknown)) instead of erroring.
+// Non-admin viewers get domain.ErrForbidden.
+func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string) ([]domain.ShopDetail, error) {
+	if !viewer.Admin {
+		return nil, domain.ErrForbidden
+	}
+	var filter *domain.ShopStatus
+	if status != "" {
+		switch st := domain.ShopStatus(status); st {
+		case domain.ShopStatusPending, domain.ShopStatusActive, domain.ShopStatusRejected:
+			filter = &st
+		default:
+			return []domain.ShopDetail{}, nil
+		}
+	}
+	shops, err := s.repo.ListShopsForModeration(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("admin list shops: %w", err)
+	}
+	return shops, nil
+}
+
+// AdminUpdateName renames a shop (the only moderation edit, Rails
+// parity). Non-admin viewers get domain.ErrForbidden before any lookup so
+// they cannot probe which ids exist; a blank name is a *ValidationError.
+func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int64, name string) (domain.ShopDetail, error) {
+	if !viewer.Admin {
+		return domain.ShopDetail{}, domain.ErrForbidden
+	}
+	if err := domain.ValidateShopName(name); err != nil {
+		return domain.ShopDetail{}, err
+	}
+	return s.moderate(ctx, id, func(shop domain.Shop) domain.Shop {
+		shop.Name = name
+		return shop
+	})
+}
+
+// Approve activates a shop and clears its moderation note (the domain
+// transition), making it publicly visible. Non-admin viewers get
+// domain.ErrForbidden before any lookup.
+func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (domain.ShopDetail, error) {
+	if !viewer.Admin {
+		return domain.ShopDetail{}, domain.ErrForbidden
+	}
+	return s.moderate(ctx, id, domain.Shop.Approve)
+}
+
+// Reject rejects a shop with an optional moderation note, hiding it from
+// the public list. Non-admin viewers get domain.ErrForbidden before any
+// lookup.
+func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *string) (domain.ShopDetail, error) {
+	if !viewer.Admin {
+		return domain.ShopDetail{}, domain.ErrForbidden
+	}
+	return s.moderate(ctx, id, func(shop domain.Shop) domain.Shop {
+		return shop.Reject(note)
+	})
+}
+
+// moderate is the shared read-modify-write of the admin operations: load
+// the shop with its creator, apply the domain transition, persist, and
+// return the detail carrying the updated shop.
+func (s *Shops) moderate(ctx context.Context, id int64, transition func(domain.Shop) domain.Shop) (domain.ShopDetail, error) {
+	detail, err := s.repo.GetShopWithCreator(ctx, id)
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
+	}
+	updated, err := s.repo.UpdateShop(ctx, transition(detail.Shop))
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
+	}
+	detail.Shop = updated
 	return detail, nil
 }

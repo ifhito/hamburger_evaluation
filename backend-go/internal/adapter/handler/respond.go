@@ -69,3 +69,28 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	}
 	return true
 }
+
+// decodeOptionalJSON is the decodeJSON variant for endpoints whose body is
+// optional (e.g. the reject moderation note): an empty body succeeds and
+// leaves dst untouched instead of answering 400, matching Rails where
+// absent params are simply nil. Everything else behaves like decodeJSON.
+func decodeOptionalJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(dst); err != nil {
+		if errors.Is(err, io.EOF) {
+			return true // empty body: nothing to decode
+		}
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return false
+		}
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	return true
+}

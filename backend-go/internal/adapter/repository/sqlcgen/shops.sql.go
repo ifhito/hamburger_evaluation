@@ -230,6 +230,56 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 	return items, nil
 }
 
+const listShopsForModeration = `-- name: ListShopsForModeration :many
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+       u.username AS creator_username
+FROM shops s
+LEFT JOIN users u ON u.id = s.creator_id
+WHERE $1::smallint IS NULL
+   OR s.status = $1::smallint
+ORDER BY s.created_at DESC, s.id DESC
+`
+
+type ListShopsForModerationRow struct {
+	ID              int64
+	Name            string
+	Status          int16
+	ModerationNote  pgtype.Text
+	CreatorID       pgtype.Int8
+	CreatorUsername pgtype.Text
+}
+
+// Admin moderation list: every shop with its creator, newest first
+// (id desc breaks created_at ties for a deterministic order).
+// status_code is the smallint status filter, NULL for all statuses; the
+// string-to-smallint mapping lives in the repository.
+func (q *Queries) ListShopsForModeration(ctx context.Context, statusCode pgtype.Int2) ([]ListShopsForModerationRow, error) {
+	rows, err := q.db.Query(ctx, listShopsForModeration, statusCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListShopsForModerationRow
+	for rows.Next() {
+		var i ListShopsForModerationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
+			&i.ModerationNote,
+			&i.CreatorID,
+			&i.CreatorUsername,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateShop = `-- name: UpdateShop :one
 UPDATE shops
 SET name = $2,

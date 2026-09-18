@@ -289,3 +289,162 @@ func TestShopRepository(t *testing.T) {
 		}
 	})
 }
+
+// TestShopModerationRepository exercises the S5 submission and moderation
+// persistence against a real PostgreSQL: creating pending shops, the
+// admin moderation list (ordering, filter, creator join), the moderation
+// update, and the visibility consequences of approve/reject.
+func TestShopModerationRepository(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed repository test in short mode")
+	}
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	repo := repository.NewShopRepository(conn)
+
+	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
+	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+
+	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id, created_at)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id`
+	// status codes: 0=pending, 1=active, 2=rejected. Explicit created_at
+	// values pin the moderation-list ordering; old1/old2 share one instant
+	// so id desc must break the tie.
+	tOld := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	tNew := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
+	old1 := insertRow(ctx, t, conn, insertShop, "Old One", 1, nil, alice, tOld)
+	old2 := insertRow(ctx, t, conn, insertShop, "Old Two", 2, "needs fixes", nil, tOld)
+	newest := insertRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
+
+	anon := domain.ShopVisibilityFor(nil)
+	aliceVis := domain.ShopVisibilityFor(&domain.User{ID: alice})
+
+	t.Run("CreateShop persists a pending shop with its creator", func(t *testing.T) {
+		submission, err := domain.NewShopSubmission("Fresh Shack", alice)
+		if err != nil {
+			t.Fatalf("NewShopSubmission returned error: %v", err)
+		}
+		created, err := repo.CreateShop(ctx, submission)
+		if err != nil {
+			t.Fatalf("CreateShop returned error: %v", err)
+		}
+		if created.ID == 0 || created.Status != domain.ShopStatusPending || created.ModerationNote != nil {
+			t.Errorf("created = %+v, want generated id, pending, nil note", created)
+		}
+		detail, err := repo.GetShopWithCreator(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("GetShopWithCreator returned error: %v", err)
+		}
+		if !reflect.DeepEqual(detail.Creator, &domain.UserRef{ID: alice, Username: "alice"}) {
+			t.Errorf("creator = %+v, want alice", detail.Creator)
+		}
+
+		// The S4 visibility rule holds for a freshly created shop: the
+		// creator sees it in the list, anonymous viewers do not.
+		anonShops, err := repo.ListShops(ctx, anon, "Fresh Shack", 100, 0)
+		if err != nil {
+			t.Fatalf("ListShops returned error: %v", err)
+		}
+		if len(anonShops) != 0 {
+			t.Errorf("anonymous list = %v, want empty", anonShops)
+		}
+		ownShops, err := repo.ListShops(ctx, aliceVis, "Fresh Shack", 100, 0)
+		if err != nil {
+			t.Fatalf("ListShops returned error: %v", err)
+		}
+		if len(ownShops) != 1 || ownShops[0].ID != created.ID {
+			t.Errorf("creator list = %v, want the created shop", ownShops)
+		}
+
+		// Remove it again so the ordering assertions below stay exact.
+		if _, err := conn.Exec(ctx, `DELETE FROM shops WHERE id = $1`, created.ID); err != nil {
+			t.Fatalf("delete created shop: %v", err)
+		}
+	})
+
+	t.Run("ListShopsForModeration orders created_at desc then id desc", func(t *testing.T) {
+		shops, err := repo.ListShopsForModeration(ctx, nil)
+		if err != nil {
+			t.Fatalf("ListShopsForModeration returned error: %v", err)
+		}
+		ids := make([]int64, 0, len(shops))
+		for _, s := range shops {
+			ids = append(ids, s.ID)
+		}
+		if want := []int64{newest, old2, old1}; !reflect.DeepEqual(ids, want) {
+			t.Fatalf("ids = %v, want %v", ids, want)
+		}
+		if !reflect.DeepEqual(shops[0].Creator, &domain.UserRef{ID: alice, Username: "alice"}) {
+			t.Errorf("creator = %+v, want alice", shops[0].Creator)
+		}
+		if shops[1].Creator != nil {
+			t.Errorf("creatorless shop creator = %+v, want nil", shops[1].Creator)
+		}
+		if shops[1].ModerationNote == nil || *shops[1].ModerationNote != "needs fixes" {
+			t.Errorf("note = %v, want needs fixes", shops[1].ModerationNote)
+		}
+	})
+
+	t.Run("ListShopsForModeration filters by status", func(t *testing.T) {
+		status := domain.ShopStatusRejected
+		shops, err := repo.ListShopsForModeration(ctx, &status)
+		if err != nil {
+			t.Fatalf("ListShopsForModeration returned error: %v", err)
+		}
+		if len(shops) != 1 || shops[0].ID != old2 {
+			t.Errorf("shops = %+v, want only the rejected one", shops)
+		}
+	})
+
+	t.Run("UpdateShop persists approve and reject with visibility", func(t *testing.T) {
+		detail, err := repo.GetShopWithCreator(ctx, newest)
+		if err != nil {
+			t.Fatalf("GetShopWithCreator returned error: %v", err)
+		}
+
+		approved, err := repo.UpdateShop(ctx, detail.Shop.Approve())
+		if err != nil {
+			t.Fatalf("UpdateShop returned error: %v", err)
+		}
+		if approved.Status != domain.ShopStatusActive || approved.ModerationNote != nil {
+			t.Errorf("approved = %+v, want active with nil note", approved)
+		}
+		anonShops, err := repo.ListShops(ctx, anon, "Newest", 100, 0)
+		if err != nil {
+			t.Fatalf("ListShops returned error: %v", err)
+		}
+		if len(anonShops) != 1 || anonShops[0].ID != newest {
+			t.Errorf("anonymous list after approve = %v, want the shop", anonShops)
+		}
+
+		note := "spam"
+		rejected, err := repo.UpdateShop(ctx, approved.Reject(&note))
+		if err != nil {
+			t.Fatalf("UpdateShop returned error: %v", err)
+		}
+		if rejected.Status != domain.ShopStatusRejected || rejected.ModerationNote == nil || *rejected.ModerationNote != note {
+			t.Errorf("rejected = %+v, want rejected with the note", rejected)
+		}
+		stored, err := repo.GetShopWithCreator(ctx, newest)
+		if err != nil {
+			t.Fatalf("GetShopWithCreator returned error: %v", err)
+		}
+		if stored.Status != domain.ShopStatusRejected || stored.ModerationNote == nil || *stored.ModerationNote != note {
+			t.Errorf("stored = %+v, want the persisted rejection", stored.Shop)
+		}
+		anonShops, err = repo.ListShops(ctx, anon, "Newest", 100, 0)
+		if err != nil {
+			t.Fatalf("ListShops returned error: %v", err)
+		}
+		if len(anonShops) != 0 {
+			t.Errorf("anonymous list after reject = %v, want empty", anonShops)
+		}
+	})
+
+	t.Run("UpdateShop on unknown id yields ErrShopNotFound", func(t *testing.T) {
+		_, err := repo.UpdateShop(ctx, domain.Shop{ID: 99999, Name: "x", Status: domain.ShopStatusActive})
+		if !errors.Is(err, domain.ErrShopNotFound) {
+			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
+		}
+	})
+}

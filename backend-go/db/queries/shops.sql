@@ -21,6 +21,19 @@ WHERE (sqlc.arg(view_all)::boolean
 ORDER BY name, id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
+-- name: ListShopsForModeration :many
+-- Admin moderation list: every shop with its creator, newest first
+-- (id desc breaks created_at ties for a deterministic order).
+-- status_code is the smallint status filter, NULL for all statuses; the
+-- string-to-smallint mapping lives in the repository.
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+       u.username AS creator_username
+FROM shops s
+LEFT JOIN users u ON u.id = s.creator_id
+WHERE sqlc.narg(status_code)::smallint IS NULL
+   OR s.status = sqlc.narg(status_code)::smallint
+ORDER BY s.created_at DESC, s.id DESC;
+
 -- name: GetShopWithCreator :one
 SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
        u.username AS creator_username
