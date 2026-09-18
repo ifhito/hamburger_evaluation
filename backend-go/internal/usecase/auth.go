@@ -130,6 +130,11 @@ func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, stri
 	return user, token, nil
 }
 
+// dummyPasswordDigest is a fixed, valid bcrypt digest (of an arbitrary
+// throwaway string, cost 10 like infra's hasher) used only for the dummy
+// compare in Login. It matches no real password stored by this app.
+const dummyPasswordDigest = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+
 // Login authenticates an active user by email and password and returns
 // the user with a fresh token. Unknown email and wrong password both
 // yield domain.ErrInvalidCredentials.
@@ -137,6 +142,11 @@ func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, 
 	creds, err := a.users.GetActiveUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
+			// Burn one hash comparison so the unknown-email path takes
+			// about as long as the wrong-password path; otherwise the
+			// response-time difference would let callers enumerate
+			// which emails have accounts.
+			_ = a.hasher.Compare(dummyPasswordDigest, password)
 			return domain.User{}, "", domain.ErrInvalidCredentials
 		}
 		return domain.User{}, "", fmt.Errorf("get user by email: %w", err)

@@ -54,6 +54,24 @@ func (fakeHasher) Compare(digest, password string) error {
 	return nil
 }
 
+// recordingHasher behaves like fakeHasher but counts Compare calls so
+// tests can assert the dummy comparison on Login's unknown-email path.
+type recordingHasher struct {
+	compareCalls int
+}
+
+func (h *recordingHasher) Hash(password string) (string, error) {
+	return "digest(" + password + ")", nil
+}
+
+func (h *recordingHasher) Compare(digest, password string) error {
+	h.compareCalls++
+	if digest != "digest("+password+")" {
+		return errors.New("password mismatch")
+	}
+	return nil
+}
+
 type fakeIssuer struct{}
 
 func (fakeIssuer) Issue(userID int64) (string, error) {
@@ -273,6 +291,26 @@ func TestAuthLogin(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("unknown email still performs a dummy hash comparison", func(t *testing.T) {
+		// Timing side-channel guard: without a Compare call the
+		// unknown-email path would return measurably faster than the
+		// wrong-password path, allowing email enumeration.
+		notFound := &fakeUserRepo{
+			getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
+				return usecase.UserCredentials{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
+			},
+		}
+		hasher := &recordingHasher{}
+		auth := usecase.NewAuth(notFound, hasher, fakeIssuer{}, fakeVerifier{})
+		_, _, err := auth.Login(context.Background(), "b@example.com", "password123")
+		if !errors.Is(err, domain.ErrInvalidCredentials) {
+			t.Fatalf("Login error = %v, want %v", err, domain.ErrInvalidCredentials)
+		}
+		if hasher.compareCalls != 1 {
+			t.Fatalf("Compare calls = %d, want 1 (dummy comparison on not-found path)", hasher.compareCalls)
+		}
+	})
 
 	t.Run("repository failure propagates, not invalid credentials", func(t *testing.T) {
 		repoErr := errors.New("connection lost")

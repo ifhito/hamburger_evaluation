@@ -18,6 +18,8 @@ services:
       DATABASE_URL: postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable
       # The api fails loudly at boot when JWT_SECRET is unset; export it
       # before `docker compose up` (e.g. `export JWT_SECRET=...`).
+      # For tokens issued by the Rails backend to remain valid, JWT_SECRET
+      # must equal the Rails secret_key_base.
       JWT_SECRET: ${JWT_SECRET:-}
       GOMEMLIMIT: 920MiB
     mem_limit: 1g

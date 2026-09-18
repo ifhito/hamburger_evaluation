@@ -22,6 +22,8 @@ type Config struct {
 	// DatabaseURL is the PostgreSQL connection string. DATABASE_URL, required.
 	DatabaseURL string
 	// JWTSecret is the HMAC secret for JWT auth. JWT_SECRET, required.
+	// For tokens issued by the Rails backend to remain valid, it must
+	// equal the Rails secret_key_base.
 	// Its value must never be hardcoded or logged.
 	JWTSecret string
 	// JWTTTL is the lifetime of issued JWTs. JWT_TTL (a Go duration such

@@ -46,10 +46,15 @@ func ViewerFrom(ctx context.Context) (domain.User, bool) {
 }
 
 // bearerToken extracts the token from "Authorization: Bearer <token>".
-// A missing header, another scheme, or an empty token yields ok=false.
+// Per RFC 6750 the scheme is matched case-insensitively and extra
+// whitespace between scheme and token is tolerated. A missing header,
+// another scheme, a bare token, or an empty token yields ok=false.
 func bearerToken(r *http.Request) (string, bool) {
-	token, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	return token, found && token != ""
+	fields := strings.Fields(r.Header.Get("Authorization"))
+	if len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") {
+		return "", false
+	}
+	return fields[1], true
 }
 
 // RequireAuth guards a route: without a valid Bearer token of an active
@@ -66,13 +71,18 @@ func RequireAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 			}
 			viewer, err := auth.AuthenticateToken(r.Context(), token)
 			if err != nil {
-				// Infrastructure failures also end in 401 (Rails parity:
-				// any authentication failure is unauthorized) but are
-				// logged; the token itself never is.
-				if !errors.Is(err, domain.ErrUnauthenticated) {
-					log.Printf("auth: authenticate token: %v", err)
+				if errors.Is(err, domain.ErrUnauthenticated) {
+					writeError(w, http.StatusUnauthorized, "Unauthorized")
+					return
 				}
-				writeError(w, http.StatusUnauthorized, "Unauthorized")
+				// Anything else is an infrastructure failure (e.g. a DB
+				// error the usecase propagates), a server fault rather
+				// than an authentication decision: log it (never the
+				// token) and answer 500, consistent with handleSignup
+				// and handleLogin (Rails rescues only decode/not-found,
+				// so infra failures are 500 there too).
+				log.Printf("auth: authenticate token: %v", err)
+				writeError(w, http.StatusInternalServerError, "internal server error")
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), viewerKey, viewer)))
@@ -87,8 +97,15 @@ func OptionalAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if token, ok := bearerToken(r); ok {
-				if viewer, err := auth.AuthenticateToken(r.Context(), token); err == nil {
+				viewer, err := auth.AuthenticateToken(r.Context(), token)
+				switch {
+				case err == nil:
 					r = r.WithContext(context.WithValue(r.Context(), viewerKey, viewer))
+				case !errors.Is(err, domain.ErrUnauthenticated):
+					// Infrastructure failures are swallowed by contract
+					// (this middleware never rejects) but must not be
+					// silent; the token itself is never logged.
+					log.Printf("auth: optional authenticate token: %v", err)
 				}
 			}
 			next.ServeHTTP(w, r)

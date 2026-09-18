@@ -275,6 +275,12 @@ func TestLogin(t *testing.T) {
 			wantBody:   `{"error":"invalid JSON body"}`,
 		},
 		{
+			name:       "trailing garbage after JSON returns 400",
+			body:       `{"email":"a@x","password":"p"}garbage`,
+			wantStatus: http.StatusBadRequest,
+			wantBody:   `{"error":"invalid JSON body"}`,
+		},
+		{
 			name:       "repository failure returns 500",
 			setup:      func(repo *userRepoFake) { repo.err = io.ErrUnexpectedEOF },
 			body:       `{"email":"alice@example.com","password":"password123"}`,
@@ -348,8 +354,13 @@ func TestRequireAuth(t *testing.T) {
 		wantStatus int
 	}{
 		{name: "valid token passes", authHeader: "Bearer " + validToken, wantStatus: http.StatusOK},
+		{name: "lowercase bearer scheme passes (RFC 6750)", authHeader: "bearer " + validToken, wantStatus: http.StatusOK},
+		{name: "uppercase BEARER scheme passes (RFC 6750)", authHeader: "BEARER " + validToken, wantStatus: http.StatusOK},
+		{name: "extra whitespace after scheme passes (RFC 6750)", authHeader: "Bearer  " + validToken, wantStatus: http.StatusOK},
 		{name: "AC4 no token", authHeader: "", wantStatus: http.StatusUnauthorized},
 		{name: "AC4 non-Bearer scheme", authHeader: "Token " + validToken, wantStatus: http.StatusUnauthorized},
+		{name: "Basic scheme is rejected", authHeader: "Basic " + validToken, wantStatus: http.StatusUnauthorized},
+		{name: "bare token without scheme is rejected", authHeader: validToken, wantStatus: http.StatusUnauthorized},
 		{name: "AC4 empty bearer token", authHeader: "Bearer ", wantStatus: http.StatusUnauthorized},
 		{name: "AC4 tampered token", authHeader: "Bearer " + validToken + "x", wantStatus: http.StatusUnauthorized},
 		{name: "AC4 token signed with another secret", authHeader: "Bearer " + wrongSecretToken, wantStatus: http.StatusUnauthorized},
@@ -369,6 +380,27 @@ func TestRequireAuth(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestRequireAuthInfraFailure: a repository failure while resolving a
+// syntactically valid token is a server fault, not an authentication
+// decision — RequireAuth answers 500, not 401.
+func TestRequireAuthInfraFailure(t *testing.T) {
+	repo, auth, codec := newAuthKit()
+	alice := repo.seed("alice", "alice@example.com", "password123")
+	token, err := codec.Issue(alice.ID)
+	if err != nil {
+		t.Fatalf("issue token: %v", err)
+	}
+	repo.err = io.ErrUnexpectedEOF
+
+	rec := do(handler.NewRouter(okPinger, auth), http.MethodPost, "/logout", "", "Bearer "+token)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusInternalServerError, rec.Body)
+	}
+	if got := rec.Body.String(); got != `{"error":"internal server error"}` {
+		t.Errorf("body = %q, want the 500 JSON error", got)
 	}
 }
 
@@ -418,6 +450,36 @@ func TestOptionalAuth(t *testing.T) {
 				t.Errorf("viewer.ID = %d, want %d", viewer.ID, alice.ID)
 			}
 		})
+	}
+}
+
+// TestOptionalAuthInfraFailure: OptionalAuth never rejects, even on a
+// repository failure — the downstream handler still runs anonymously.
+func TestOptionalAuthInfraFailure(t *testing.T) {
+	repo, auth, codec := newAuthKit()
+	alice := repo.seed("alice", "alice@example.com", "password123")
+	token, err := codec.Issue(alice.ID)
+	if err != nil {
+		t.Fatalf("issue token: %v", err)
+	}
+	repo.err = io.ErrUnexpectedEOF
+
+	var viewerPresent bool
+	probe := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, viewerPresent = handler.ViewerFrom(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	handler.OptionalAuth(auth)(probe).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (downstream must always run)", rec.Code, http.StatusOK)
+	}
+	if viewerPresent {
+		t.Error("viewer present on repository failure, want anonymous")
 	}
 }
 

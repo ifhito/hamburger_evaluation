@@ -7,6 +7,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 )
@@ -49,12 +50,20 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 // JSON. It deliberately tolerates unknown fields — clients send extras
 // such as password_confirmation-adjacent fields.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(dst); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
 			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
 			return false
 		}
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	// Reject trailing garbage after the JSON value: a second Decode must
+	// hit clean end-of-stream, otherwise the body was not a single JSON
+	// document.
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return false
 	}
