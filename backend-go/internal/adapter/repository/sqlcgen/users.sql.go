@@ -55,6 +55,48 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
 	return err
 }
 
+const getActiveUserByEmail = `-- name: GetActiveUserByEmail :one
+SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
+WHERE email = $1 AND discarded_at IS NULL
+`
+
+func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getActiveUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getActiveUserByID = `-- name: GetActiveUserByID :one
+SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
+WHERE id = $1 AND discarded_at IS NULL
+`
+
+func (q *Queries) GetActiveUserByID(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRow(ctx, getActiveUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
 WHERE id = $1
