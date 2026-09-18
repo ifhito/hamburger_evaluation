@@ -172,29 +172,48 @@ func (r *ShopRepository) ListShopsForModeration(ctx context.Context, status *dom
 	return details, nil
 }
 
-// UpdateShop persists name, status, and moderation note under shop.ID and
-// returns the stored row, or domain.ErrShopNotFound when the shop vanished
-// between read and write.
-func (r *ShopRepository) UpdateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error) {
-	code, err := statusCode(shop.Status)
-	if err != nil {
-		return domain.Shop{}, fmt.Errorf("update shop: %w", err)
-	}
-	row, err := r.q.UpdateShop(ctx, sqlcgen.UpdateShopParams{
-		ID:             shop.ID,
-		Name:           shop.Name,
-		Status:         code,
-		ModerationNote: textOrNull(shop.ModerationNote),
-	})
+// UpdateShopName persists only the shop's name under id and returns the
+// stored row, or domain.ErrShopNotFound when the shop vanished between
+// read and write. Writing a single column keeps a concurrent status
+// change from being reverted by a stale snapshot.
+func (r *ShopRepository) UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error) {
+	row, err := r.q.UpdateShopName(ctx, sqlcgen.UpdateShopNameParams{ID: id, Name: name})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Shop{}, fmt.Errorf("update shop: %w", domain.ErrShopNotFound)
+			return domain.Shop{}, fmt.Errorf("update shop name: %w", domain.ErrShopNotFound)
 		}
-		return domain.Shop{}, fmt.Errorf("update shop: %w", err)
+		return domain.Shop{}, fmt.Errorf("update shop name: %w", err)
 	}
 	updated, err := toDomainShop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
 	if err != nil {
-		return domain.Shop{}, fmt.Errorf("update shop: %w", err)
+		return domain.Shop{}, fmt.Errorf("update shop name: %w", err)
+	}
+	return updated, nil
+}
+
+// UpdateShopStatus persists only the shop's status and moderation note
+// under id and returns the stored row, or domain.ErrShopNotFound when the
+// shop vanished between read and write. Not touching name keeps a
+// concurrent rename from being reverted by a stale snapshot.
+func (r *ShopRepository) UpdateShopStatus(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
+	code, err := statusCode(status)
+	if err != nil {
+		return domain.Shop{}, fmt.Errorf("update shop status: %w", err)
+	}
+	row, err := r.q.UpdateShopStatus(ctx, sqlcgen.UpdateShopStatusParams{
+		ID:             id,
+		Status:         code,
+		ModerationNote: textOrNull(note),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Shop{}, fmt.Errorf("update shop status: %w", domain.ErrShopNotFound)
+		}
+		return domain.Shop{}, fmt.Errorf("update shop status: %w", err)
+	}
+	updated, err := toDomainShop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+	if err != nil {
+		return domain.Shop{}, fmt.Errorf("update shop status: %w", err)
 	}
 	return updated, nil
 }

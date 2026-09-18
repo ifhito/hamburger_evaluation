@@ -316,3 +316,66 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 	)
 	return i, err
 }
+
+const updateShopName = `-- name: UpdateShopName :one
+UPDATE shops
+SET name = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
+`
+
+type UpdateShopNameParams struct {
+	ID   int64
+	Name string
+}
+
+// Column-scoped rename: touches only name so a concurrent status change
+// (approve/reject) is never reverted from a stale snapshot.
+func (q *Queries) UpdateShopName(ctx context.Context, arg UpdateShopNameParams) (Shop, error) {
+	row := q.db.QueryRow(ctx, updateShopName, arg.ID, arg.Name)
+	var i Shop
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ModerationNote,
+		&i.CreatorID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateShopStatus = `-- name: UpdateShopStatus :one
+UPDATE shops
+SET status = $2,
+    moderation_note = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
+`
+
+type UpdateShopStatusParams struct {
+	ID             int64
+	Status         int16
+	ModerationNote pgtype.Text
+}
+
+// Column-scoped moderation transition: touches only status and
+// moderation_note so a concurrent rename is never reverted from a stale
+// snapshot.
+func (q *Queries) UpdateShopStatus(ctx context.Context, arg UpdateShopStatusParams) (Shop, error) {
+	row := q.db.QueryRow(ctx, updateShopStatus, arg.ID, arg.Status, arg.ModerationNote)
+	var i Shop
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ModerationNote,
+		&i.CreatorID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

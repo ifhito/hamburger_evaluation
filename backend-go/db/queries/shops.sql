@@ -63,6 +63,26 @@ SET name = $2,
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateShopName :one
+-- Column-scoped rename: touches only name so a concurrent status change
+-- (approve/reject) is never reverted from a stale snapshot.
+UPDATE shops
+SET name = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateShopStatus :one
+-- Column-scoped moderation transition: touches only status and
+-- moderation_note so a concurrent rename is never reverted from a stale
+-- snapshot.
+UPDATE shops
+SET status = $2,
+    moderation_note = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: DeleteShop :exec
 DELETE FROM shops
 WHERE id = $1;

@@ -36,9 +36,14 @@ type ShopRepository interface {
 	// left empty), newest first (created_at desc, id desc), optionally
 	// filtered to one status (nil = all).
 	ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
-	// UpdateShop persists name, status, and moderation note under shop.ID
-	// and returns the stored row.
-	UpdateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error)
+	// UpdateShopName persists only the shop's name under id and returns
+	// the stored row. Column-scoped so a concurrent status change is
+	// never reverted by a stale snapshot.
+	UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error)
+	// UpdateShopStatus persists only the shop's status and moderation
+	// note under id and returns the stored row. Column-scoped so a
+	// concurrent rename is never reverted by a stale snapshot.
+	UpdateShopStatus(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error)
 }
 
 // Shops implements the shop use cases: public list and detail, user
@@ -151,10 +156,19 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int6
 	if err := domain.ValidateShopName(name); err != nil {
 		return domain.ShopDetail{}, err
 	}
-	return s.moderate(ctx, id, func(shop domain.Shop) domain.Shop {
-		shop.Name = name
-		return shop
-	})
+	// The fetch supplies the creator for the response (and a 404 for
+	// unknown ids); the write itself touches only the name column so it
+	// cannot revert a concurrent status change.
+	detail, err := s.repo.GetShopWithCreator(ctx, id)
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
+	}
+	updated, err := s.repo.UpdateShopName(ctx, id, name)
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
+	}
+	detail.Shop = updated
+	return detail, nil
 }
 
 // Approve activates a shop and clears its moderation note (the domain
@@ -179,15 +193,18 @@ func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *
 	})
 }
 
-// moderate is the shared read-modify-write of the admin operations: load
-// the shop with its creator, apply the domain transition, persist, and
-// return the detail carrying the updated shop.
+// moderate is the shared flow of the status transitions: load the shop
+// with its creator (for the response and the 404), apply the domain
+// transition, persist only its status and moderation note, and return the
+// detail carrying the stored row. The column-scoped write cannot revert a
+// concurrent rename from the stale snapshot.
 func (s *Shops) moderate(ctx context.Context, id int64, transition func(domain.Shop) domain.Shop) (domain.ShopDetail, error) {
 	detail, err := s.repo.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
 	}
-	updated, err := s.repo.UpdateShop(ctx, transition(detail.Shop))
+	next := transition(detail.Shop)
+	updated, err := s.repo.UpdateShopStatus(ctx, id, next.Status, next.ModerationNote)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
 	}

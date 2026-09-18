@@ -41,14 +41,28 @@ func (f *shopRepoFake) ListShopsForModeration(_ context.Context, status *domain.
 	return out, nil
 }
 
-func (f *shopRepoFake) UpdateShop(_ context.Context, shop domain.Shop) (domain.Shop, error) {
+func (f *shopRepoFake) UpdateShopName(_ context.Context, id int64, name string) (domain.Shop, error) {
 	if f.err != nil {
 		return domain.Shop{}, f.err
 	}
 	for i, d := range f.shops {
-		if d.ID == shop.ID {
-			f.shops[i].Shop = shop
-			return shop, nil
+		if d.ID == id {
+			f.shops[i].Shop.Name = name
+			return f.shops[i].Shop, nil
+		}
+	}
+	return domain.Shop{}, domain.ErrShopNotFound
+}
+
+func (f *shopRepoFake) UpdateShopStatus(_ context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
+	if f.err != nil {
+		return domain.Shop{}, f.err
+	}
+	for i, d := range f.shops {
+		if d.ID == id {
+			f.shops[i].Shop.Status = status
+			f.shops[i].Shop.ModerationNote = note
+			return f.shops[i].Shop, nil
 		}
 	}
 	return domain.Shop{}, domain.ErrShopNotFound

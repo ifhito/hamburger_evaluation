@@ -21,7 +21,8 @@ type fakeShopRepo struct {
 	listShopReviews        func(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
 	createShop             func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
 	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
-	updateShop             func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
+	updateShopName         func(ctx context.Context, id int64, name string) (domain.Shop, error)
+	updateShopStatus       func(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error)
 }
 
 func (f *fakeShopRepo) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
@@ -59,11 +60,18 @@ func (f *fakeShopRepo) ListShopsForModeration(ctx context.Context, status *domai
 	return f.listShopsForModeration(ctx, status)
 }
 
-func (f *fakeShopRepo) UpdateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error) {
-	if f.updateShop == nil {
-		panic("unexpected UpdateShop call")
+func (f *fakeShopRepo) UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error) {
+	if f.updateShopName == nil {
+		panic("unexpected UpdateShopName call")
 	}
-	return f.updateShop(ctx, shop)
+	return f.updateShopName(ctx, id, name)
+}
+
+func (f *fakeShopRepo) UpdateShopStatus(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
+	if f.updateShopStatus == nil {
+		panic("unexpected UpdateShopStatus call")
+	}
+	return f.updateShopStatus(ctx, id, status, note)
 }
 
 func int64Ptr(v int64) *int64 { return &v }
@@ -318,9 +326,10 @@ func TestShopsAdminList(t *testing.T) {
 	})
 }
 
-// TestShopsModeration covers the admin read-modify-write operations:
-// transitions and renames reach UpdateShop with the domain state applied,
-// and unknown ids surface domain.ErrShopNotFound.
+// TestShopsModeration covers the admin write operations: each persists
+// only its own columns (status/note for the transitions, name for the
+// rename — the fake panics on any other write), and unknown ids surface
+// domain.ErrShopNotFound.
 func TestShopsModeration(t *testing.T) {
 	admin := domain.User{ID: 2, Admin: true}
 	ctx := context.Background()
@@ -328,63 +337,86 @@ func TestShopsModeration(t *testing.T) {
 		Shop:    domain.Shop{ID: 10, Name: "Shack", Status: domain.ShopStatusRejected, ModerationNote: strPtr("old note"), CreatorID: int64Ptr(1)},
 		Creator: &domain.UserRef{ID: 1, Username: "alice"},
 	}
-	// repoFor returns a fake serving only the rejected shop and recording
-	// what UpdateShop receives.
-	repoFor := func(updated *domain.Shop) *fakeShopRepo {
+	getRejected := func(_ context.Context, id int64) (domain.ShopDetail, error) {
+		if id == rejected.ID {
+			return rejected, nil
+		}
+		return domain.ShopDetail{}, domain.ErrShopNotFound
+	}
+	// statusWrite records the arguments of one UpdateShopStatus call.
+	type statusWrite struct {
+		id     int64
+		status domain.ShopStatus
+		note   *string
+	}
+	// statusRepoFor serves only the rejected shop and records the
+	// column-scoped status write; updateShopName stays unset, so a status
+	// transition touching the name panics the test.
+	statusRepoFor := func(got *statusWrite) *fakeShopRepo {
 		return &fakeShopRepo{
-			getShopWithCreator: func(_ context.Context, id int64) (domain.ShopDetail, error) {
-				if id == rejected.ID {
-					return rejected, nil
-				}
-				return domain.ShopDetail{}, domain.ErrShopNotFound
-			},
-			updateShop: func(_ context.Context, shop domain.Shop) (domain.Shop, error) {
-				*updated = shop
-				return shop, nil
+			getShopWithCreator: getRejected,
+			updateShopStatus: func(_ context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
+				*got = statusWrite{id: id, status: status, note: note}
+				stored := rejected.Shop
+				stored.Status = status
+				stored.ModerationNote = note
+				return stored, nil
 			},
 		}
 	}
 
-	t.Run("Approve activates and clears note (rejected to active)", func(t *testing.T) {
-		var updated domain.Shop
-		got, err := usecase.NewShops(repoFor(&updated)).Approve(ctx, admin, rejected.ID)
+	t.Run("Approve persists only status and note (rejected to active)", func(t *testing.T) {
+		var write statusWrite
+		got, err := usecase.NewShops(statusRepoFor(&write)).Approve(ctx, admin, rejected.ID)
 		if err != nil {
 			t.Fatalf("Approve returned error: %v", err)
 		}
-		if updated.Status != domain.ShopStatusActive || updated.ModerationNote != nil {
-			t.Errorf("persisted shop = %+v, want active with nil note", updated)
+		if write.id != rejected.ID || write.status != domain.ShopStatusActive || write.note != nil {
+			t.Errorf("status write = %+v, want id %d, active, nil note", write, rejected.ID)
 		}
-		if got.Status != domain.ShopStatusActive || !reflect.DeepEqual(got.Creator, rejected.Creator) {
-			t.Errorf("detail = %+v, want active shop with creator", got)
+		if got.Status != domain.ShopStatusActive || got.Name != rejected.Name || !reflect.DeepEqual(got.Creator, rejected.Creator) {
+			t.Errorf("detail = %+v, want active shop with unchanged name and creator", got)
 		}
 	})
 
-	t.Run("Reject sets status and note", func(t *testing.T) {
-		var updated domain.Shop
+	t.Run("Reject persists only status and note", func(t *testing.T) {
+		var write statusWrite
 		note := strPtr("needs fixes")
-		got, err := usecase.NewShops(repoFor(&updated)).Reject(ctx, admin, rejected.ID, note)
+		got, err := usecase.NewShops(statusRepoFor(&write)).Reject(ctx, admin, rejected.ID, note)
 		if err != nil {
 			t.Fatalf("Reject returned error: %v", err)
 		}
-		if updated.Status != domain.ShopStatusRejected || updated.ModerationNote != note {
-			t.Errorf("persisted shop = %+v, want rejected with the note", updated)
+		if write.id != rejected.ID || write.status != domain.ShopStatusRejected || write.note != note {
+			t.Errorf("status write = %+v, want id %d, rejected, the note", write, rejected.ID)
 		}
 		if got.ModerationNote != note {
 			t.Errorf("detail note = %v, want %v", got.ModerationNote, note)
 		}
 	})
 
-	t.Run("AdminUpdateName renames only", func(t *testing.T) {
-		var updated domain.Shop
-		got, err := usecase.NewShops(repoFor(&updated)).AdminUpdateName(ctx, admin, rejected.ID, "Renamed")
+	t.Run("AdminUpdateName persists only the name", func(t *testing.T) {
+		var gotID int64
+		var gotName string
+		// updateShopStatus stays unset, so a rename touching status/note
+		// panics the test.
+		repo := &fakeShopRepo{
+			getShopWithCreator: getRejected,
+			updateShopName: func(_ context.Context, id int64, name string) (domain.Shop, error) {
+				gotID, gotName = id, name
+				stored := rejected.Shop
+				stored.Name = name
+				return stored, nil
+			},
+		}
+		got, err := usecase.NewShops(repo).AdminUpdateName(ctx, admin, rejected.ID, "Renamed")
 		if err != nil {
 			t.Fatalf("AdminUpdateName returned error: %v", err)
 		}
-		if updated.Name != "Renamed" || updated.Status != rejected.Status {
-			t.Errorf("persisted shop = %+v, want renamed with status unchanged", updated)
+		if gotID != rejected.ID || gotName != "Renamed" {
+			t.Errorf("name write = (%d, %q), want (%d, Renamed)", gotID, gotName, rejected.ID)
 		}
-		if got.Name != "Renamed" {
-			t.Errorf("detail name = %q, want Renamed", got.Name)
+		if got.Name != "Renamed" || got.Status != rejected.Status {
+			t.Errorf("detail = %+v, want renamed with status unchanged", got)
 		}
 	})
 
@@ -397,9 +429,10 @@ func TestShopsModeration(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown id yields ErrShopNotFound", func(t *testing.T) {
-		var updated domain.Shop
-		shops := usecase.NewShops(repoFor(&updated))
+	t.Run("unknown id yields ErrShopNotFound without any write", func(t *testing.T) {
+		// Both write behaviors stay unset: any write after the failed
+		// lookup panics the test.
+		shops := usecase.NewShops(&fakeShopRepo{getShopWithCreator: getRejected})
 		for name, call := range map[string]func() error{
 			"Approve":         func() error { _, err := shops.Approve(ctx, admin, 999); return err },
 			"Reject":          func() error { _, err := shops.Reject(ctx, admin, 999, nil); return err },

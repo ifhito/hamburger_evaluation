@@ -396,15 +396,16 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateShop persists approve and reject with visibility", func(t *testing.T) {
+	t.Run("UpdateShopStatus persists approve and reject with visibility", func(t *testing.T) {
 		detail, err := repo.GetShopWithCreator(ctx, newest)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}
 
-		approved, err := repo.UpdateShop(ctx, detail.Shop.Approve())
+		next := detail.Shop.Approve()
+		approved, err := repo.UpdateShopStatus(ctx, newest, next.Status, next.ModerationNote)
 		if err != nil {
-			t.Fatalf("UpdateShop returned error: %v", err)
+			t.Fatalf("UpdateShopStatus returned error: %v", err)
 		}
 		if approved.Status != domain.ShopStatusActive || approved.ModerationNote != nil {
 			t.Errorf("approved = %+v, want active with nil note", approved)
@@ -418,9 +419,10 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 
 		note := "spam"
-		rejected, err := repo.UpdateShop(ctx, approved.Reject(&note))
+		next = approved.Reject(&note)
+		rejected, err := repo.UpdateShopStatus(ctx, newest, next.Status, next.ModerationNote)
 		if err != nil {
-			t.Fatalf("UpdateShop returned error: %v", err)
+			t.Fatalf("UpdateShopStatus returned error: %v", err)
 		}
 		if rejected.Status != domain.ShopStatusRejected || rejected.ModerationNote == nil || *rejected.ModerationNote != note {
 			t.Errorf("rejected = %+v, want rejected with the note", rejected)
@@ -441,8 +443,68 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateShop on unknown id yields ErrShopNotFound", func(t *testing.T) {
-		_, err := repo.UpdateShop(ctx, domain.Shop{ID: 99999, Name: "x", Status: domain.ShopStatusActive})
+	t.Run("column-scoped writes never revert a concurrent update", func(t *testing.T) {
+		shop := insertRow(ctx, t, conn, insertShop, "Race Shack", 0, nil, alice, tNew)
+
+		// Lost-update regression, direction 1: a stale renamer read its
+		// snapshot before a concurrent approve. The old full-row write
+		// would restore status pending and revert the approval; the
+		// column-scoped rename must leave status and note alone.
+		stale, err := repo.GetShopWithCreator(ctx, shop)
+		if err != nil {
+			t.Fatalf("GetShopWithCreator returned error: %v", err)
+		}
+		if stale.Status != domain.ShopStatusPending {
+			t.Fatalf("snapshot status = %q, want pending", stale.Status)
+		}
+		next := stale.Shop.Approve() // the concurrent admin approves
+		if _, err := repo.UpdateShopStatus(ctx, shop, next.Status, next.ModerationNote); err != nil {
+			t.Fatalf("UpdateShopStatus returned error: %v", err)
+		}
+		renamed, err := repo.UpdateShopName(ctx, shop, "Race Shack Renamed") // the stale renamer writes
+		if err != nil {
+			t.Fatalf("UpdateShopName returned error: %v", err)
+		}
+		if renamed.Name != "Race Shack Renamed" || renamed.Status != domain.ShopStatusActive || renamed.ModerationNote != nil {
+			t.Errorf("after stale rename = %+v, want new name AND active with nil note", renamed)
+		}
+
+		// Direction 2: a status write from a snapshot taken before a
+		// concurrent rename must leave the new name intact.
+		note := "spam"
+		next = stale.Shop.Reject(&note)
+		rejected, err := repo.UpdateShopStatus(ctx, shop, next.Status, next.ModerationNote)
+		if err != nil {
+			t.Fatalf("UpdateShopStatus returned error: %v", err)
+		}
+		if rejected.Name != "Race Shack Renamed" || rejected.Status != domain.ShopStatusRejected || rejected.ModerationNote == nil || *rejected.ModerationNote != note {
+			t.Errorf("after stale status write = %+v, want kept name AND rejected with the note", rejected)
+		}
+
+		stored, err := repo.GetShopWithCreator(ctx, shop)
+		if err != nil {
+			t.Fatalf("GetShopWithCreator returned error: %v", err)
+		}
+		if stored.Name != "Race Shack Renamed" || stored.Status != domain.ShopStatusRejected {
+			t.Errorf("stored = %+v, want renamed and rejected", stored.Shop)
+		}
+
+		// Remove it again so the ordering assertions of sibling subtests
+		// stay exact regardless of execution order.
+		if _, err := conn.Exec(ctx, `DELETE FROM shops WHERE id = $1`, shop); err != nil {
+			t.Fatalf("delete race shop: %v", err)
+		}
+	})
+
+	t.Run("UpdateShopName on unknown id yields ErrShopNotFound", func(t *testing.T) {
+		_, err := repo.UpdateShopName(ctx, 99999, "x")
+		if !errors.Is(err, domain.ErrShopNotFound) {
+			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
+		}
+	})
+
+	t.Run("UpdateShopStatus on unknown id yields ErrShopNotFound", func(t *testing.T) {
+		_, err := repo.UpdateShopStatus(ctx, 99999, domain.ShopStatusActive, nil)
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
