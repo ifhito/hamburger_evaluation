@@ -85,8 +85,8 @@ func TestUsersList(t *testing.T) {
 	}
 }
 
-// TestUsersUpdateCheckOrder pins the Rails find-then-authorize order
-// (issue #16 AC2): an unknown target yields ErrUserNotFound even for a
+// TestUsersUpdateCheckOrder pins the find-then-authorize order of issue
+// #16 AC2: an unknown target yields ErrUserNotFound even for a
 // non-owner, an existing foreign target yields ErrForbidden before any
 // validation or write (the unset updateProfile would panic if reached).
 func TestUsersUpdateCheckOrder(t *testing.T) {

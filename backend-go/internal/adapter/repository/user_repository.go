@@ -40,10 +40,6 @@ var (
 	_ usecase.UsersRepository = (*UserRepository)(nil)
 )
 
-// ProfileChanges aliases the usecase type (the consumer-side contract
-// owns it; the repository merely conforms — dependencies point inward).
-type ProfileChanges = usecase.ProfileChanges
-
 // CreateUser inserts a new user and returns it. A unique violation on
 // the email column maps to domain.ErrEmailTaken.
 func (r *UserRepository) CreateUser(ctx context.Context, params usecase.CreateUserParams) (domain.User, error) {
@@ -106,7 +102,7 @@ func (r *UserRepository) ListActiveUsers(ctx context.Context) ([]domain.User, er
 // yields domain.ErrEmailTaken (either way the transaction is rolled back,
 // so no field is partially applied). Zero present fields are a plain
 // lookup of the current user (200 no-op, Rails parity).
-func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (domain.User, error) {
+func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
 	if changes.Username == nil && changes.Email == nil && changes.PasswordDigest == nil {
 		return r.GetActiveUserByID(ctx, id)
 	}

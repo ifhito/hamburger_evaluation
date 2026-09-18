@@ -16,9 +16,10 @@ import (
 const userNotFoundMessage = "User not found"
 
 // userResponse is the token-less user JSON shape of GET /users (array
-// elements) and PUT /users/{id} (single object), per the frontend
-// contract (User in domains/users/api/types.ts) — authUserResponse minus
-// token (Rails UserSerializer).
+// elements) and PUT /users/{id} (single object): {id, username, email,
+// admin} per issue #16's 仕様 (「user 形 + admin フラグ」, the response
+// shape of the issue's cited frontend contract) — authUserResponse minus
+// token.
 type userResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -57,8 +58,10 @@ func userIDPathValue(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 // writeUserError maps the users usecase errors onto HTTP: the domain
 // self-management decision to 403, the not-found sentinel to 404 (checked
-// after the load, so a nonexistent id 404s even for a non-owner — Rails
-// find-then-authorize order), validation to 422, anything else to 500.
+// after the load, so a nonexistent id 404s even for a non-owner — the
+// find-then-authorize order of issue #16 AC2; this deliberately diverges
+// from this branch's Rails controller, which ignores the path id),
+// validation to 422, anything else to 500.
 func writeUserError(w http.ResponseWriter, op string, err error) {
 	var vErr *domain.ValidationError
 	switch {

@@ -101,7 +101,9 @@ func (in UpdateUserInput) validate() []string {
 	return msgs
 }
 
-// Update edits the target user's profile in the Rails check order: load
+// Update edits the target user's profile in the issue #16 AC2 check
+// order (deliberately diverging from this branch's Rails controller,
+// which ignores the path id and operates on current_user): load
 // (404 for missing and discarded alike — even for a non-owner), the
 // domain self-management rule (403), input validation (422), then the
 // column-scoped write. A taken email surfaces as *domain.ValidationError,

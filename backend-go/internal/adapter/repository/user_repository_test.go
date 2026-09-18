@@ -13,7 +13,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// strPtr returns a pointer to s, for repository.ProfileChanges fields.
+// strPtr returns a pointer to s, for usecase.ProfileChanges fields.
 func strPtr(s string) *string { return &s }
 
 // TestUserRepository exercises the repository against a real PostgreSQL,
@@ -164,7 +164,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("UpdateUserProfile applies only the present fields", func(t *testing.T) {
-		updated, err := repo.UpdateUserProfile(ctx, bob, repository.ProfileChanges{Username: strPtr("bobby")})
+		updated, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{Username: strPtr("bobby")})
 		if err != nil {
 			t.Fatalf("UpdateUserProfile returned error: %v", err)
 		}
@@ -182,7 +182,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("UpdateUserProfile applies several fields in one transaction", func(t *testing.T) {
-		updated, err := repo.UpdateUserProfile(ctx, bob, repository.ProfileChanges{
+		updated, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{
 			Email:          strPtr("bobby@example.com"),
 			PasswordDigest: strPtr("digest-bobby"),
 		})
@@ -202,7 +202,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("UpdateUserProfile with zero changes returns the current user", func(t *testing.T) {
-		user, err := repo.UpdateUserProfile(ctx, bob, repository.ProfileChanges{})
+		user, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{})
 		if err != nil {
 			t.Fatalf("UpdateUserProfile returned error: %v", err)
 		}
@@ -212,7 +212,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("UpdateUserProfile taken email yields ErrEmailTaken and rolls back", func(t *testing.T) {
-		_, err := repo.UpdateUserProfile(ctx, bob, repository.ProfileChanges{
+		_, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{
 			Username: strPtr("sneaky"),
 			Email:    strPtr("alice@example.com"),
 		})
@@ -231,10 +231,10 @@ func TestUserRepositoryManagement(t *testing.T) {
 
 	t.Run("UpdateUserProfile unknown and discarded ids yield ErrUserNotFound", func(t *testing.T) {
 		for name, id := range map[string]int64{"unknown": 99999, "discarded": ghost} {
-			if _, err := repo.UpdateUserProfile(ctx, id, repository.ProfileChanges{Username: strPtr("x")}); !errors.Is(err, domain.ErrUserNotFound) {
+			if _, err := repo.UpdateUserProfile(ctx, id, usecase.ProfileChanges{Username: strPtr("x")}); !errors.Is(err, domain.ErrUserNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrUserNotFound)
 			}
-			if _, err := repo.UpdateUserProfile(ctx, id, repository.ProfileChanges{}); !errors.Is(err, domain.ErrUserNotFound) {
+			if _, err := repo.UpdateUserProfile(ctx, id, usecase.ProfileChanges{}); !errors.Is(err, domain.ErrUserNotFound) {
 				t.Errorf("%s (zero changes): error = %v, want %v", name, err, domain.ErrUserNotFound)
 			}
 		}
