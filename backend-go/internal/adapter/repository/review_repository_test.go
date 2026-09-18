@@ -3,11 +3,13 @@ package repository_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -298,6 +300,332 @@ func TestReviewRepository(t *testing.T) {
 		// Clean up for sibling subtests.
 		if _, err := conn.Exec(ctx, `DELETE FROM reviews WHERE id = $1`, victim); err != nil {
 			t.Fatalf("delete victim review: %v", err)
+		}
+	})
+}
+
+// storedBurgerStats is the burger_stats row as read back in tests.
+type storedBurgerStats struct {
+	ReviewCount   int64
+	AverageRating float64
+	WeightedScore float64
+	Confidence    float64
+	CalculatedAt  time.Time
+}
+
+// fetchBurgerStats reads the burger_stats row directly; ok is false when
+// no row exists.
+func fetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) (storedBurgerStats, bool) {
+	t.Helper()
+	var s storedBurgerStats
+	err := conn.QueryRow(ctx,
+		`SELECT review_count, average_rating, weighted_score, confidence, calculated_at
+		 FROM burger_stats WHERE burger_id = $1`, burgerID,
+	).Scan(&s.ReviewCount, &s.AverageRating, &s.WeightedScore, &s.Confidence, &s.CalculatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return storedBurgerStats{}, false
+	}
+	if err != nil {
+		t.Fatalf("fetch burger stats: %v", err)
+	}
+	return s, true
+}
+
+// keptReviewFacts loads the burger's kept reviews of kept users (the same
+// rule the repository uses) as domain facts, with each fact author's kept
+// ratings across all burgers as reviewer history.
+func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) []domain.ReviewFact {
+	t.Helper()
+	rows, err := conn.Query(ctx,
+		`SELECT r.rating, r.created_at, r.user_id
+		 FROM reviews r JOIN users u ON u.id = r.user_id
+		 WHERE r.burger_id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL
+		 ORDER BY r.id`, burgerID)
+	if err != nil {
+		t.Fatalf("query review facts: %v", err)
+	}
+	type factRow struct {
+		rating    int16
+		createdAt time.Time
+		userID    int64
+	}
+	var factRows []factRow
+	for rows.Next() {
+		var fr factRow
+		if err := rows.Scan(&fr.rating, &fr.createdAt, &fr.userID); err != nil {
+			t.Fatalf("scan review fact: %v", err)
+		}
+		factRows = append(factRows, fr)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate review facts: %v", err)
+	}
+	facts := make([]domain.ReviewFact, 0, len(factRows))
+	for _, fr := range factRows {
+		facts = append(facts, domain.ReviewFact{
+			Rating:          float64(fr.rating),
+			CreatedAt:       fr.createdAt,
+			ReviewerHistory: domain.ReviewerHistory{Ratings: keptRatingsOf(ctx, t, conn, fr.userID)},
+		})
+	}
+	return facts
+}
+
+// keptRatingsOf returns the user's kept ratings across all burgers, id
+// ascending (the reviewer-trust history).
+func keptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID int64) []float64 {
+	t.Helper()
+	rows, err := conn.Query(ctx,
+		`SELECT rating FROM reviews WHERE user_id = $1 AND discarded_at IS NULL ORDER BY id`, userID)
+	if err != nil {
+		t.Fatalf("query reviewer history: %v", err)
+	}
+	var ratings []float64
+	for rows.Next() {
+		var rating int16
+		if err := rows.Scan(&rating); err != nil {
+			t.Fatalf("scan reviewer rating: %v", err)
+		}
+		ratings = append(ratings, float64(rating))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate reviewer history: %v", err)
+	}
+	return ratings
+}
+
+// requireConsistentStats asserts the stored burger_stats row exists and
+// exactly equals a recomputation via the domain functions from the stored
+// review rows and the stored calculated_at (the repository truncates its
+// "now" to the timestamptz resolution precisely so this round-trips), then
+// returns the row. Floats are compared exactly: same inputs through the
+// same pure functions must yield identical values.
+func requireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) storedBurgerStats {
+	t.Helper()
+	got, ok := fetchBurgerStats(ctx, t, conn, burgerID)
+	if !ok {
+		t.Fatalf("burger %d has no burger_stats row, want one", burgerID)
+	}
+	facts := keptReviewFacts(ctx, t, conn, burgerID)
+	score := domain.CalculateBurgerScore(facts, got.CalculatedAt)
+	want := storedBurgerStats{
+		ReviewCount:   int64(len(facts)),
+		AverageRating: domain.AverageRating(facts),
+		WeightedScore: score.WeightedAverage,
+		Confidence:    score.Confidence,
+		CalculatedAt:  got.CalculatedAt,
+	}
+	if got != want {
+		t.Fatalf("stored stats = %+v, want recomputed %+v", got, want)
+	}
+	return got
+}
+
+// mustCreateReview builds and persists a review through the repository.
+func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID, burgerID int64) domain.Review {
+	t.Helper()
+	review, err := domain.NewReview(rating, comment, authorID, burgerID)
+	if err != nil {
+		t.Fatalf("NewReview returned error: %v", err)
+	}
+	created, err := repo.CreateReview(ctx, review)
+	if err != nil {
+		t.Fatalf("CreateReview returned error: %v", err)
+	}
+	return created
+}
+
+// TestReviewRepositoryBurgerStats exercises the S7 same-transaction
+// burger_stats recalculation (issue #15): every review write leaves the
+// stats row exactly consistent with the domain calculator over the kept
+// reviews of kept users, concurrent writers never lose an update, and
+// failed writes leave the stats untouched.
+func TestReviewRepositoryBurgerStats(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed repository test in short mode")
+	}
+	ctx := context.Background()
+	conn, dbURL := dbtest.New(t)
+	repo := repository.NewReviewRepository(conn)
+
+	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
+	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+	bob := insertRow(ctx, t, conn, insertUser, "bob@example.com", "bob", false)
+
+	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
+	burger := insertRow(ctx, t, conn, insertBurger, "Stats Burger")
+
+	var aliceReview domain.Review
+
+	t.Run("AC1 CreateReview upserts stats in the same transaction", func(t *testing.T) {
+		aliceReview = mustCreateReview(ctx, t, repo, 5, "great", alice, burger)
+		stats := requireConsistentStats(ctx, t, conn, burger)
+		if stats.ReviewCount != 1 || stats.AverageRating != 5.0 {
+			t.Errorf("stats after first review = %+v, want count 1 and average 5.0", stats)
+		}
+
+		mustCreateReview(ctx, t, repo, 4, "good", bob, burger)
+		stats = requireConsistentStats(ctx, t, conn, burger)
+		if stats.ReviewCount != 2 || stats.AverageRating != 4.5 {
+			t.Errorf("stats after second review = %+v, want count 2 and average 4.5", stats)
+		}
+	})
+
+	t.Run("UpdateReviewContent recalculates stats", func(t *testing.T) {
+		before := requireConsistentStats(ctx, t, conn, burger)
+		if _, err := repo.UpdateReviewContent(ctx, aliceReview.ID, 1, "changed my mind"); err != nil {
+			t.Fatalf("UpdateReviewContent returned error: %v", err)
+		}
+		stats := requireConsistentStats(ctx, t, conn, burger)
+		if stats.ReviewCount != 2 || stats.AverageRating != 2.5 {
+			t.Errorf("stats after edit = %+v, want count 2 and average 2.5", stats)
+		}
+		if stats.WeightedScore == before.WeightedScore {
+			t.Errorf("weighted score stayed %v after a 5→1 edit, want a change", stats.WeightedScore)
+		}
+	})
+
+	t.Run("AC2 DiscardReview recalculates without the discarded review", func(t *testing.T) {
+		if err := repo.DiscardReview(ctx, aliceReview.ID); err != nil {
+			t.Fatalf("DiscardReview returned error: %v", err)
+		}
+		stats := requireConsistentStats(ctx, t, conn, burger)
+		if stats.ReviewCount != 1 || stats.AverageRating != 4.0 {
+			t.Errorf("stats after discard = %+v, want only bob's rating 4 left", stats)
+		}
+	})
+
+	t.Run("AC2 discarding the only review leaves the zero row", func(t *testing.T) {
+		var bobReviewID int64
+		if err := conn.QueryRow(ctx,
+			`SELECT id FROM reviews WHERE burger_id = $1 AND discarded_at IS NULL`, burger,
+		).Scan(&bobReviewID); err != nil {
+			t.Fatalf("find remaining review: %v", err)
+		}
+		if err := repo.DiscardReview(ctx, bobReviewID); err != nil {
+			t.Fatalf("DiscardReview returned error: %v", err)
+		}
+		stats := requireConsistentStats(ctx, t, conn, burger)
+		want := storedBurgerStats{ReviewCount: 0, AverageRating: 0.0, WeightedScore: 0.0, Confidence: 0.0, CalculatedAt: stats.CalculatedAt}
+		if stats != want {
+			t.Errorf("stats after last discard = %+v, want the zero row", stats)
+		}
+	})
+
+	t.Run("AC4 reviews and histories of discarded users are excluded", func(t *testing.T) {
+		ac4Burger := insertRow(ctx, t, conn, insertBurger, "AC4 Burger")
+		carl := insertRow(ctx, t, conn, insertUser, "carl@example.com", "carl", false)
+		aliceAC4 := mustCreateReview(ctx, t, repo, 5, "mine stays", alice, ac4Burger)
+		mustCreateReview(ctx, t, repo, 2, "mine vanishes", carl, ac4Burger)
+		if got := requireConsistentStats(ctx, t, conn, ac4Burger); got.ReviewCount != 2 {
+			t.Fatalf("stats before user discard = %+v, want count 2", got)
+		}
+
+		if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = now() WHERE id = $1`, carl); err != nil {
+			t.Fatalf("discard user: %v", err)
+		}
+		// Trigger recalculation via a kept user's write.
+		if _, err := repo.UpdateReviewContent(ctx, aliceAC4.ID, 4, "still here"); err != nil {
+			t.Fatalf("UpdateReviewContent returned error: %v", err)
+		}
+
+		stats := requireConsistentStats(ctx, t, conn, ac4Burger)
+		if stats.ReviewCount != 1 || stats.AverageRating != 4.0 {
+			t.Errorf("stats after user discard = %+v, want only alice's kept review", stats)
+		}
+		// Carl's ratings feed neither the facts nor any reviewer history:
+		// the stored score equals one computed from alice's fact and
+		// alice's own kept ratings alone.
+		var createdAt time.Time
+		if err := conn.QueryRow(ctx, `SELECT created_at FROM reviews WHERE id = $1`, aliceAC4.ID).Scan(&createdAt); err != nil {
+			t.Fatalf("select review created_at: %v", err)
+		}
+		aliceOnly := []domain.ReviewFact{{
+			Rating:          4,
+			CreatedAt:       createdAt,
+			ReviewerHistory: domain.ReviewerHistory{Ratings: keptRatingsOf(ctx, t, conn, alice)},
+		}}
+		if want := domain.CalculateBurgerScore(aliceOnly, stats.CalculatedAt); stats.WeightedScore != want.WeightedAverage || stats.Confidence != want.Confidence {
+			t.Errorf("stats = %+v, want score %+v from alice's fact and history alone", stats, want)
+		}
+	})
+
+	t.Run("AC3 concurrent creates on one burger never lose an update", func(t *testing.T) {
+		pool, err := pgxpool.New(ctx, dbURL)
+		if err != nil {
+			t.Fatalf("open pool: %v", err)
+		}
+		t.Cleanup(pool.Close)
+		poolRepo := repository.NewReviewRepository(pool)
+
+		dave := insertRow(ctx, t, conn, insertUser, "dave@example.com", "dave", false)
+		erin := insertRow(ctx, t, conn, insertUser, "erin@example.com", "erin", false)
+
+		// Without the FOR UPDATE serialization both transactions read a
+		// snapshot missing the other's review and the later upsert writes
+		// review_count 1 (lost update). Repeat with fresh burgers so a
+		// lucky interleaving cannot mask the race.
+		for i := 0; i < 5; i++ {
+			raceBurger := insertRow(ctx, t, conn, insertBurger, fmt.Sprintf("Race Burger %d", i))
+			daveReview, err := domain.NewReview(5, "race", dave, raceBurger)
+			if err != nil {
+				t.Fatalf("NewReview returned error: %v", err)
+			}
+			erinReview, err := domain.NewReview(3, "race", erin, raceBurger)
+			if err != nil {
+				t.Fatalf("NewReview returned error: %v", err)
+			}
+			start := make(chan struct{})
+			errs := make(chan error, 2)
+			for _, review := range []domain.Review{daveReview, erinReview} {
+				review := review
+				go func() {
+					<-start
+					_, err := poolRepo.CreateReview(ctx, review)
+					errs <- err
+				}()
+			}
+			close(start)
+			for j := 0; j < 2; j++ {
+				if err := <-errs; err != nil {
+					t.Fatalf("iteration %d: concurrent CreateReview returned error: %v", i, err)
+				}
+			}
+			stats := requireConsistentStats(ctx, t, conn, raceBurger)
+			if stats.ReviewCount != 2 || stats.AverageRating != 4.0 {
+				t.Fatalf("iteration %d: stats = %+v, want count 2 and average 4.0 (both writers)", i, stats)
+			}
+		}
+	})
+
+	t.Run("failed writes leave burger_stats untouched", func(t *testing.T) {
+		errBurger := insertRow(ctx, t, conn, insertBurger, "Error Burger")
+		mustCreateReview(ctx, t, repo, 5, "baseline", alice, errBurger)
+		victim := mustCreateReview(ctx, t, repo, 3, "to discard", bob, errBurger)
+		if err := repo.DiscardReview(ctx, victim.ID); err != nil {
+			t.Fatalf("DiscardReview returned error: %v", err)
+		}
+		before := requireConsistentStats(ctx, t, conn, errBurger)
+
+		if _, err := repo.UpdateReviewContent(ctx, victim.ID, 1, "x"); !errors.Is(err, domain.ErrReviewNotFound) {
+			t.Errorf("update discarded review = %v, want %v", err, domain.ErrReviewNotFound)
+		}
+		if _, err := repo.UpdateReviewContent(ctx, 99999, 1, "x"); !errors.Is(err, domain.ErrReviewNotFound) {
+			t.Errorf("update unknown review = %v, want %v", err, domain.ErrReviewNotFound)
+		}
+		if err := repo.DiscardReview(ctx, victim.ID); !errors.Is(err, domain.ErrReviewNotFound) {
+			t.Errorf("second discard = %v, want %v", err, domain.ErrReviewNotFound)
+		}
+		if err := repo.DiscardReview(ctx, 99999); !errors.Is(err, domain.ErrReviewNotFound) {
+			t.Errorf("unknown discard = %v, want %v", err, domain.ErrReviewNotFound)
+		}
+
+		after, ok := fetchBurgerStats(ctx, t, conn, errBurger)
+		if !ok {
+			t.Fatal("burger_stats row disappeared")
+		}
+		if after != before || !after.CalculatedAt.Equal(before.CalculatedAt) {
+			t.Errorf("stats after failed writes = %+v, want unchanged %+v", after, before)
 		}
 	})
 }

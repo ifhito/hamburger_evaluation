@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,17 +14,29 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
+// beginnerDBTX is the connection dependency of ReviewRepository: the sqlc
+// query surface plus Begin, so each review write can wrap the write and
+// the burger_stats recalculation in one transaction. Both *pgxpool.Pool
+// and *pgx.Conn satisfy it.
+type beginnerDBTX interface {
+	sqlcgen.DBTX
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
 // ReviewRepository implements usecase.ReviewRepository over sqlc-generated
 // queries. The soft-delete predicate (discarded_at IS NULL) and the
 // active-shop EXISTS filter live in the SQL; the authorization rules
-// themselves live in the domain package.
+// themselves live in the domain package. Every write (create, edit,
+// discard) also recalculates the affected burger's burger_stats row inside
+// the same transaction, serialized per burger via LockBurgerForStats.
 type ReviewRepository struct {
-	q *sqlcgen.Queries
+	db beginnerDBTX
+	q  *sqlcgen.Queries
 }
 
 // NewReviewRepository wraps db (normally the shared pgx pool).
-func NewReviewRepository(db sqlcgen.DBTX) *ReviewRepository {
-	return &ReviewRepository{q: sqlcgen.New(db)}
+func NewReviewRepository(db beginnerDBTX) *ReviewRepository {
+	return &ReviewRepository{db: db, q: sqlcgen.New(db)}
 }
 
 var _ usecase.ReviewRepository = (*ReviewRepository)(nil)
@@ -110,9 +123,23 @@ func (r *ReviewRepository) GetShopBurger(ctx context.Context, shopID, burgerID i
 }
 
 // CreateReview inserts the (already validated) review and returns it with
-// its generated id and created_at.
+// its generated id and created_at. The insert and the burger_stats
+// recalculation happen in one transaction so the stats can never lag or
+// outlive the review.
 func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
-	row, err := r.q.CreateReview(ctx, sqlcgen.CreateReviewParams{
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return domain.Review{}, fmt.Errorf("create review: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	// Lock BEFORE the insert: the insert's FK check takes a KEY SHARE lock
+	// on the burgers row, and upgrading it to FOR UPDATE afterwards could
+	// deadlock two concurrent creators.
+	if _, err := q.LockBurgerForStats(ctx, review.BurgerID); err != nil {
+		return domain.Review{}, fmt.Errorf("create review: lock burger: %w", err)
+	}
+	row, err := q.CreateReview(ctx, sqlcgen.CreateReviewParams{
 		Rating:   int16(review.Rating),
 		Comment:  textOrNull(review.Comment),
 		UserID:   review.AuthorID,
@@ -121,15 +148,29 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 	if err != nil {
 		return domain.Review{}, fmt.Errorf("create review: %w", err)
 	}
+	if err := recalculateBurgerStats(ctx, q, review.BurgerID); err != nil {
+		return domain.Review{}, fmt.Errorf("create review: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Review{}, fmt.Errorf("create review: commit: %w", err)
+	}
 	return toDomainReview(row), nil
 }
 
 // UpdateReviewContent persists only rating and comment of the still kept
 // review under id and returns the stored row, or domain.ErrReviewNotFound
-// when it is missing or discarded. Column-scoped: discarded_at is never
-// written, so an edit can neither resurrect nor race a soft delete.
+// when it is missing or discarded (the transaction is rolled back, so the
+// stats stay untouched). Column-scoped: discarded_at is never written, so
+// an edit can neither resurrect nor race a soft delete. The update and the
+// burger_stats recalculation happen in one transaction.
 func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error) {
-	row, err := r.q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return domain.Review{}, fmt.Errorf("update review content: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	row, err := q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
 		ID:      id,
 		Rating:  int16(rating),
 		Comment: pgtype.Text{String: comment, Valid: true},
@@ -140,19 +181,101 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 		}
 		return domain.Review{}, fmt.Errorf("update review content: %w", err)
 	}
+	if _, err := q.LockBurgerForStats(ctx, row.BurgerID); err != nil {
+		return domain.Review{}, fmt.Errorf("update review content: lock burger: %w", err)
+	}
+	if err := recalculateBurgerStats(ctx, q, row.BurgerID); err != nil {
+		return domain.Review{}, fmt.Errorf("update review content: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Review{}, fmt.Errorf("update review content: commit: %w", err)
+	}
 	return toDomainReview(row), nil
 }
 
 // DiscardReview soft-deletes the review (stamps discarded_at, never a
 // hard DELETE). Missing and already-discarded reviews match no row and
-// yield domain.ErrReviewNotFound.
+// yield domain.ErrReviewNotFound (the transaction is rolled back, so the
+// stats stay untouched). The discard and the burger_stats recalculation
+// happen in one transaction.
 func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
-	affected, err := r.q.DiscardReview(ctx, id)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
+		return fmt.Errorf("discard review: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	burgerID, err := q.DiscardReview(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("discard review: %w", domain.ErrReviewNotFound)
+		}
 		return fmt.Errorf("discard review: %w", err)
 	}
-	if affected == 0 {
-		return fmt.Errorf("discard review: %w", domain.ErrReviewNotFound)
+	if _, err := q.LockBurgerForStats(ctx, burgerID); err != nil {
+		return fmt.Errorf("discard review: lock burger: %w", err)
+	}
+	if err := recalculateBurgerStats(ctx, q, burgerID); err != nil {
+		return fmt.Errorf("discard review: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("discard review: commit: %w", err)
+	}
+	return nil
+}
+
+// recalculateBurgerStats recomputes and upserts the burger's stats row
+// from its kept reviews via the domain calculator, inside the caller's
+// transaction: q must be tx-scoped and the burgers row already locked via
+// LockBurgerForStats (see that query for the lost-update rationale). Zero
+// kept reviews still upsert the zero row (Rails BurgerScore.empty).
+// Package-level so the S8 user-discard flow can reuse it.
+func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID int64) error {
+	rows, err := q.ListBurgerReviewFacts(ctx, burgerID)
+	if err != nil {
+		return fmt.Errorf("recalculate burger stats: list facts: %w", err)
+	}
+	// Reviewer-trust histories for the distinct fact authors: each one's
+	// kept ratings across all burgers, grouped by user.
+	historyByUser := make(map[int64][]float64, len(rows))
+	userIDs := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		if _, seen := historyByUser[row.UserID]; !seen {
+			historyByUser[row.UserID] = nil
+			userIDs = append(userIDs, row.UserID)
+		}
+	}
+	if len(userIDs) > 0 {
+		ratings, err := q.ListReviewerRatings(ctx, userIDs)
+		if err != nil {
+			return fmt.Errorf("recalculate burger stats: list reviewer ratings: %w", err)
+		}
+		for _, rating := range ratings {
+			historyByUser[rating.UserID] = append(historyByUser[rating.UserID], float64(rating.Rating))
+		}
+	}
+	facts := make([]domain.ReviewFact, 0, len(rows))
+	for _, row := range rows {
+		facts = append(facts, domain.ReviewFact{
+			Rating:          float64(row.Rating),
+			CreatedAt:       row.CreatedAt.Time,
+			ReviewerHistory: domain.ReviewerHistory{Ratings: historyByUser[row.UserID]},
+		})
+	}
+	// Truncated to microseconds (the timestamptz resolution) so the stored
+	// calculated_at is exactly the instant the score was computed with —
+	// tests recompute the score from the stored rows and this timestamp.
+	now := time.Now().Truncate(time.Microsecond)
+	score := domain.CalculateBurgerScore(facts, now)
+	if _, err := q.UpsertBurgerStats(ctx, sqlcgen.UpsertBurgerStatsParams{
+		BurgerID:      burgerID,
+		ReviewCount:   int64(len(facts)),
+		AverageRating: domain.AverageRating(facts),
+		WeightedScore: score.WeightedAverage,
+		Confidence:    score.Confidence,
+		CalculatedAt:  pgtype.Timestamptz{Time: now, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("recalculate burger stats: upsert: %w", err)
 	}
 	return nil
 }

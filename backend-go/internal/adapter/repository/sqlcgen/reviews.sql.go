@@ -45,21 +45,23 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 	return i, err
 }
 
-const discardReview = `-- name: DiscardReview :execrows
+const discardReview = `-- name: DiscardReview :one
 UPDATE reviews
 SET discarded_at = now(),
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
+RETURNING burger_id
 `
 
 // Column-scoped soft delete: only stamps discarded_at, and only once —
 // an already-discarded review matches no row, surfacing as not found.
+// Returns burger_id so the caller can recalculate that burger's stats in
+// the same transaction.
 func (q *Queries) DiscardReview(ctx context.Context, id int64) (int64, error) {
-	result, err := q.db.Exec(ctx, discardReview, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	row := q.db.QueryRow(ctx, discardReview, id)
+	var burger_id int64
+	err := row.Scan(&burger_id)
+	return burger_id, err
 }
 
 const getReviewDetail = `-- name: GetReviewDetail :one
