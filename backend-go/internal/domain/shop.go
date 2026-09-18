@@ -64,9 +64,10 @@ func (s Shop) Reject(note *string) Shop {
 
 // CanBeReviewedBy is the single home of the reviewable rule: whether
 // viewer (always authenticated — posting requires a login) may post a
-// review for a burger of this shop. Rejected shops are never reviewable,
-// active shops are reviewable by anyone authenticated, and pending shops
-// only by their creator or an admin — mirroring who can see them.
+// review for a burger of this shop. Rejected shops are never reviewable
+// (even by their creator or an admin, who may still view them via
+// ShopVisibility.CanView), active shops are reviewable by anyone
+// authenticated, and pending shops only by their creator or an admin.
 func (s Shop) CanBeReviewedBy(viewer User) bool {
 	switch s.Status {
 	case ShopStatusActive:

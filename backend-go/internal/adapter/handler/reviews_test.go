@@ -513,6 +513,43 @@ func TestUpdateReview(t *testing.T) {
 	})
 }
 
+// TestUpdateReviewIgnoresShopAndBurgerID pins the PUT tampering rule: a
+// review never moves to another shop or burger, so shop_id/burger_id in
+// an edit body are silently ignored — the response (and a subsequent GET)
+// still shows the original burger with only rating/comment updated.
+func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
+	router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
+	path := fmt.Sprintf("/reviews/%d", cheeseReviewID)
+
+	// pendingShopID/plainBurgerID exist but differ from the review's
+	// original active shop and Cheese burger.
+	body := fmt.Sprintf(`{"review":{"rating":2,"comment":"Tampered","shop_id":%d,"burger_id":%d}}`,
+		pendingShopID, plainBurgerID)
+	rec := do(router, http.MethodPut, path, body, aliceAuth)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
+	}
+	want := fmt.Sprintf(`{"id":%d,"rating":2,"comment":"Tampered","created_at":"2024-06-01T12:01:00Z",`+
+		`"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
+		cheeseReviewID)
+	if got := rec.Body.String(); got != want {
+		t.Errorf("body = %s, want the original burger with updated content %s", got, want)
+	}
+	if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != want {
+		t.Errorf("detail after tampered edit = %s, want %s", detail.Body, want)
+	}
+
+	// Bogus ids are just as inert.
+	rec = do(router, http.MethodPut, path, `{"review":{"rating":2,"comment":"Tampered","shop_id":999,"burger_id":888}}`, aliceAuth)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bogus ids: status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
+	}
+	if got := rec.Body.String(); got != want {
+		t.Errorf("bogus ids: body = %s, want %s", got, want)
+	}
+}
+
 // TestDeleteReview covers AC3/AC6 at the HTTP level: only the author may
 // soft-delete (204, no body); afterwards the review is gone from detail
 // and feed, and a second delete 404s.

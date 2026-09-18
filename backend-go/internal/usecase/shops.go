@@ -3,15 +3,8 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-)
-
-// Pagination bounds for shop listing (Rails parity).
-const (
-	defaultShopsPerPage = 20
-	maxShopsPerPage     = 100
 )
 
 // ShopRepository is the consumer-side persistence contract for shops.
@@ -56,27 +49,10 @@ func NewShops(repo ShopRepository) *Shops { return &Shops{repo: repo} }
 
 // List returns the shops visible to viewer (nil = anonymous) matching
 // keyword, paginated. Out-of-range page/perPage fall back to defaults
-// instead of erroring: page < 1 becomes 1, perPage < 1 becomes 20, and
-// perPage is capped at 100.
+// instead of erroring, per the clampPage rules.
 func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.Shop, error) {
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 {
-		perPage = defaultShopsPerPage
-	}
-	if perPage > maxShopsPerPage {
-		perPage = maxShopsPerPage
-	}
-	// Far-out pages yield an empty list; clamping page before the
-	// multiplication keeps the product (at most (2^31-1)*100) inside int64,
-	// and clamping the offset keeps it in int32 without changing that
-	// outcome.
-	if page > math.MaxInt32 {
-		page = math.MaxInt32
-	}
-	offset := min(int64(page-1)*int64(perPage), math.MaxInt32)
-	shops, err := s.repo.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, int32(perPage), int32(offset))
+	limit, offset := clampPage(page, perPage)
+	shops, err := s.repo.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list shops: %w", err)
 	}

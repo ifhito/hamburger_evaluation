@@ -3,16 +3,8 @@ package usecase
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-)
-
-// Pagination bounds for the global review feed (same Rails parity as
-// shops).
-const (
-	defaultReviewsPerPage = 20
-	maxReviewsPerPage     = 100
 )
 
 // ReviewRepository is the consumer-side persistence contract for reviews.
@@ -59,27 +51,10 @@ type Reviews struct {
 func NewReviews(repo ReviewRepository) *Reviews { return &Reviews{repo: repo} }
 
 // List returns the public review feed, paginated with the same fallback
-// rules as Shops.List: page < 1 becomes 1, perPage < 1 becomes 20, and
-// perPage is capped at 100.
+// rules as Shops.List, per clampPage.
 func (s *Reviews) List(ctx context.Context, page, perPage int) ([]domain.ReviewDetail, error) {
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 {
-		perPage = defaultReviewsPerPage
-	}
-	if perPage > maxReviewsPerPage {
-		perPage = maxReviewsPerPage
-	}
-	// Far-out pages yield an empty list; clamping page before the
-	// multiplication keeps the product inside int64, and clamping the
-	// offset keeps it in int32 without changing that outcome (same
-	// reasoning as Shops.List).
-	if page > math.MaxInt32 {
-		page = math.MaxInt32
-	}
-	offset := min(int64(page-1)*int64(perPage), math.MaxInt32)
-	reviews, err := s.repo.ListReviews(ctx, int32(perPage), int32(offset))
+	limit, offset := clampPage(page, perPage)
+	reviews, err := s.repo.ListReviews(ctx, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list reviews: %w", err)
 	}
