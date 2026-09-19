@@ -92,7 +92,8 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	if err != nil && len(head) == 0 {
 		return Processed{}, fmt.Errorf("%w: empty or unreadable payload", ErrUnsupportedImage)
 	}
-	switch ct := http.DetectContentType(head); ct {
+	ct := http.DetectContentType(head)
+	switch ct {
 	case "image/jpeg", "image/png", "image/webp":
 	default:
 		return Processed{}, fmt.Errorf("%w: detected %s", ErrUnsupportedImage, ct)
@@ -100,6 +101,15 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	data, err := io.ReadAll(br)
 	if err != nil {
 		return Processed{}, fmt.Errorf("read image: %w", err)
+	}
+	// EXIF Orientation must come from the original upload bytes: the
+	// re-encode below drops all metadata, so the stored pixels themselves
+	// have to be upright. Only sniffed JPEGs are checked — png/webp pass
+	// through with no EXIF handling. jpegOrientation is best-effort and
+	// returns 1 (no correction) for anything malformed.
+	orientation := 1
+	if ct == "image/jpeg" {
+		orientation = jpegOrientation(data)
 	}
 	// From here on the work is memory-heavy (decode + shrink + encode
 	// buffers); decodeSem caps how many uploads do it at once. The wait is
@@ -124,7 +134,9 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	if err != nil {
 		return Processed{}, fmt.Errorf("%w: %v", ErrUnsupportedImage, err)
 	}
-	img = shrink(img)
+	// Orient after shrink: the transform then touches fewer pixels, and
+	// shrink-first is correct because the long edge is rotation-invariant.
+	img = orient(shrink(img), orientation)
 	var out bytes.Buffer
 	if format == "png" {
 		if err := png.Encode(&out, img); err != nil {
