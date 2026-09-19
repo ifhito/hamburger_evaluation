@@ -194,6 +194,49 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("shop_id filter requires the filter shop itself to be active", func(t *testing.T) {
+		// A burger linked to BOTH an active and a pending shop: its review
+		// is in the feed (via the active link), but filtering by the pending
+		// shop must return nothing — stricter than Rails' status-blind shop
+		// filter, consistent with the feed's active-shop rule.
+		mixedActive := insertRow(ctx, t, conn, insertShop, "Mixed Active", 1, nil, nil)
+		mixed := insertRow(ctx, t, conn, insertBurger, "Mixed")
+		mustLink(mixedActive, mixed)
+		mustLink(pending, mixed)
+		rMixed := insertRow(ctx, t, conn, insertReview, 4, "mixed", alice, mixed, nil, t2)
+		t.Cleanup(func() {
+			for _, del := range []struct {
+				sql string
+				id  int64
+			}{
+				{`DELETE FROM reviews WHERE id = $1`, rMixed},
+				{`DELETE FROM shops_burgers WHERE burger_id = $1`, mixed},
+				{`DELETE FROM burgers WHERE id = $1`, mixed},
+				{`DELETE FROM shops WHERE id = $1`, mixedActive},
+			} {
+				if _, err := conn.Exec(ctx, del.sql, del.id); err != nil {
+					t.Fatalf("cleanup %q: %v", del.sql, err)
+				}
+			}
+		})
+
+		byShop := func(id int64) usecase.ReviewListFilter { return usecase.ReviewListFilter{ShopID: &id} }
+		got, err := repo.ListReviews(ctx, byShop(pending), 100, 0)
+		if err != nil {
+			t.Fatalf("ListReviews returned error: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("pending shop filter = %v, want empty", reviewIDs(got))
+		}
+		got, err = repo.ListReviews(ctx, byShop(mixedActive), 100, 0)
+		if err != nil {
+			t.Fatalf("ListReviews returned error: %v", err)
+		}
+		if want := []int64{rMixed}; !reflect.DeepEqual(reviewIDs(got), want) {
+			t.Errorf("active shop filter = %v, want %v", reviewIDs(got), want)
+		}
+	})
+
 	t.Run("GetReview joins author, burger, and stats", func(t *testing.T) {
 		got, err := repo.GetReview(ctx, rTie1)
 		if err != nil {
@@ -365,7 +408,7 @@ func TestReviewRepository(t *testing.T) {
 }
 
 // TestReviewRepositoryCreateReviewForNamedBurger exercises the burger_name
-// find-or-create submission path (issue #17): shop-scoped reuse by exact
+// find-or-create submission path (S6 P3-1): shop-scoped reuse by exact
 // name, burger + link creation for unknown names, per-shop name scoping
 // (the same name at another shop is a distinct burger row), and the
 // single-transaction guarantee (a failed insert commits no orphan burger

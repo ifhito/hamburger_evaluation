@@ -132,27 +132,9 @@ func (r *ReviewRepository) GetShopBurger(ctx context.Context, shopID, burgerID i
 func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
 	var row sqlcgen.Review
 	err := withTx(ctx, r.db, "create review", func(q *sqlcgen.Queries) error {
-		// Lock BEFORE the insert: the insert's FK check takes a KEY SHARE lock
-		// on the burgers row, and upgrading it to FOR UPDATE afterwards could
-		// deadlock two concurrent creators. The helper's own lock below is then
-		// a free re-acquisition (row locks are transaction-owned in PostgreSQL).
-		if _, err := q.LockBurgerForStats(ctx, review.BurgerID); err != nil {
-			return fmt.Errorf("create review: lock burger: %w", err)
-		}
 		var err error
-		row, err = q.CreateReview(ctx, sqlcgen.CreateReviewParams{
-			Rating:   int16(review.Rating),
-			Comment:  textOrNull(review.Comment),
-			UserID:   review.AuthorID,
-			BurgerID: review.BurgerID,
-		})
-		if err != nil {
-			return fmt.Errorf("create review: %w", err)
-		}
-		if err := recalculateBurgerStats(ctx, q, review.BurgerID); err != nil {
-			return fmt.Errorf("create review: %w", err)
-		}
-		return nil
+		row, err = insertReviewAndRecalc(ctx, q, review, "create review")
+		return err
 	})
 	if err != nil {
 		return domain.Review{}, err
@@ -163,7 +145,7 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 // CreateReviewForNamedBurger inserts the (already validated) review against
 // the shop's burger with the exact name burgerName, creating the burger and
 // its shops_burgers link when the shop has none by that name (Rails
-// find_or_create_burger, issue #17). Find-or-create, review insert, and
+// find_or_create_burger, S6 P3-1). Find-or-create, review insert, and
 // burger_stats recalculation share ONE transaction, so a failure at any
 // step commits no orphan burger or link. There is deliberately no unique
 // index on (shop, name): two concurrent creators of the same new name can
@@ -203,23 +185,8 @@ func (r *ReviewRepository) CreateReviewForNamedBurger(ctx context.Context, shopI
 			return fmt.Errorf("create review for named burger: find burger: %w", err)
 		}
 		review.BurgerID = burger.ID
-		// Lock BEFORE the insert, for the same deadlock reason as CreateReview.
-		if _, err := q.LockBurgerForStats(ctx, review.BurgerID); err != nil {
-			return fmt.Errorf("create review for named burger: lock burger: %w", err)
-		}
-		row, err = q.CreateReview(ctx, sqlcgen.CreateReviewParams{
-			Rating:   int16(review.Rating),
-			Comment:  textOrNull(review.Comment),
-			UserID:   review.AuthorID,
-			BurgerID: review.BurgerID,
-		})
-		if err != nil {
-			return fmt.Errorf("create review for named burger: %w", err)
-		}
-		if err := recalculateBurgerStats(ctx, q, review.BurgerID); err != nil {
-			return fmt.Errorf("create review for named burger: %w", err)
-		}
-		return nil
+		row, err = insertReviewAndRecalc(ctx, q, review, "create review for named burger")
+		return err
 	})
 	if err != nil {
 		return domain.Review{}, domain.ShopReviewBurger{}, err
@@ -278,6 +245,34 @@ func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
 		}
 		return nil
 	})
+}
+
+// insertReviewAndRecalc is the shared tail of both create paths: lock the
+// burger, insert the review, recalculate its burger_stats. It runs inside
+// the caller's transaction — q must be tx-scoped, and the helper never
+// opens a transaction of its own. The lock comes BEFORE the insert: the
+// insert's FK check takes a KEY SHARE lock on the burgers row, and
+// upgrading it to FOR UPDATE afterwards could deadlock two concurrent
+// creators. recalculateBurgerStats' own lock is then a free
+// re-acquisition (row locks are transaction-owned in PostgreSQL). op
+// prefixes the error messages, preserving each call site's wording.
+func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domain.Review, op string) (sqlcgen.Review, error) {
+	if _, err := q.LockBurgerForStats(ctx, review.BurgerID); err != nil {
+		return sqlcgen.Review{}, fmt.Errorf("%s: lock burger: %w", op, err)
+	}
+	row, err := q.CreateReview(ctx, sqlcgen.CreateReviewParams{
+		Rating:   int16(review.Rating),
+		Comment:  textOrNull(review.Comment),
+		UserID:   review.AuthorID,
+		BurgerID: review.BurgerID,
+	})
+	if err != nil {
+		return sqlcgen.Review{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if err := recalculateBurgerStats(ctx, q, review.BurgerID); err != nil {
+		return sqlcgen.Review{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return row, nil
 }
 
 // recalculateBurgerStats recomputes and upserts the burger's stats row

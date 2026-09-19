@@ -57,7 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedUser = localStorage.getItem('auth_user')
       if (storedUser) {
         try {
-          setUser(JSON.parse(storedUser) as AuthUser)
+          const parsed = JSON.parse(storedUser) as AuthUser
+          // Older stored users may lack admin; keep it a real boolean.
+          setUser({ ...parsed, admin: Boolean(parsed.admin) })
           setTokenState(storedToken)
         } catch {
           removeToken()

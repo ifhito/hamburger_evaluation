@@ -82,7 +82,9 @@ func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewLis
 			!strings.Contains(strings.ToLower(*review.Comment), strings.ToLower(filter.Keyword))) {
 			return false
 		}
-		if filter.ShopID != nil && !slices.Contains(f.links[*filter.ShopID], review.BurgerID) {
+		// Like the SQL, the filter shop must itself be active.
+		if filter.ShopID != nil && (f.shops[*filter.ShopID].Status != domain.ShopStatusActive ||
+			!slices.Contains(f.links[*filter.ShopID], review.BurgerID)) {
 			return false
 		}
 		return true
@@ -344,7 +346,7 @@ func TestCreateReview(t *testing.T) {
 		}
 	})
 
-	t.Run("burger_name reuses the shop's burger of that name (issue #17)", func(t *testing.T) {
+	t.Run("burger_name reuses the shop's burger of that name (S6 P3-1)", func(t *testing.T) {
 		repo := seedReviewWorld(1)
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"Tasty","shop_id":%d,"burger_name":"Cheese"}}`, activeShopID)
@@ -362,7 +364,7 @@ func TestCreateReview(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown burger_name creates the burger and its link (issue #17)", func(t *testing.T) {
+	t.Run("unknown burger_name creates the burger and its link (S6 P3-1)", func(t *testing.T) {
 		repo := seedReviewWorld(1)
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := fmt.Sprintf(`{"review":{"rating":5,"comment":"New","shop_id":%d,"burger_name":"Veggie"}}`, activeShopID)

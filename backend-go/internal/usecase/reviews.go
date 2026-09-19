@@ -36,7 +36,7 @@ type ReviewRepository interface {
 	// CreateReviewForNamedBurger persists a new (already validated) review
 	// against the shop's burger with the given exact name, creating the
 	// burger and its shops_burgers link when the shop has none by that name
-	// (Rails find_or_create_burger, issue #17). The review's BurgerID input
+	// (Rails find_or_create_burger, S6 P3-1). The review's BurgerID input
 	// is ignored and set to the resolved burger. Find-or-create, review
 	// insert, and burger_stats recalculation happen in ONE transaction, so
 	// a failed insert leaves no orphan burger or link. The returned burger
@@ -107,7 +107,7 @@ func (s *Reviews) Get(ctx context.Context, id int64) (domain.ReviewDetail, error
 // rule (403), then the burger resolution, then content validation (422).
 // A positive burgerID takes precedence and must name a burger linked to
 // the shop (404 otherwise); else a non-blank burgerName find-or-creates
-// the shop's burger by exact, untrimmed name (Rails parity, issue #17)
+// the shop's burger by exact, untrimmed name (Rails parity, S6 P3-1)
 // inside the same transaction as the insert; neither is a validation
 // failure (422) — never a silent default. The response detail is composed
 // from the viewer and the burger resolved for the existence check — no

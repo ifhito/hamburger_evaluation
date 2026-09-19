@@ -22,7 +22,7 @@ The backend follows clean architecture (handler → usecase → domain): depende
 - Serves on **:8080**; health check at `GET /up`
 - Runs with its own dedicated Postgres (host port 5433)
 - Authentication: **JWT** — token is returned on login and must be sent as `Authorization: Bearer <token>`. The API fails loudly at boot when `JWT_SECRET` is unset; export it before `docker compose up`.
-- API JSON uses **snake_case** on the wire; the frontend converts casing at its HTTP boundary.
+- API JSON uses **snake_case** on the wire; the frontend uses the snake_case wire types directly end-to-end (no casing-conversion layer).
 
 ```bash
 # Start (serves on :8080; health check at GET /up)

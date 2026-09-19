@@ -17,7 +17,9 @@ RETURNING *;
 -- (keyword_search; a NULL comment never matches, like Rails);
 -- filter_shop_id keeps reviews whose burger is linked to that shop
 -- (Rails' shops_and_burgers join), again via EXISTS to avoid row
--- multiplication.
+-- multiplication; the filter shop must itself be active (status 1) —
+-- stricter than Rails, whose shop filter was status-blind, and
+-- consistent with the feed EXISTS's existing active-shop rule.
 SELECT r.id, r.rating, r.comment, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
@@ -39,6 +41,7 @@ WHERE r.discarded_at IS NULL
   AND (sqlc.narg(filter_shop_id)::bigint IS NULL OR EXISTS (
       SELECT 1
       FROM shops_burgers fsb
+      JOIN shops fs ON fs.id = fsb.shop_id AND fs.status = 1
       WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = sqlc.narg(filter_shop_id)::bigint
   ))
 ORDER BY r.created_at DESC, r.id DESC

@@ -114,7 +114,7 @@ pnpm run storybook
 
 ## Notes
 
-- API の JSON は snake_case です。フロントエンドは HTTP 境界でケース変換を行います。
+- API の JSON は snake_case です。フロントエンドは snake_case のワイヤ型をそのまま使用します（ケース変換層はありません）。
 - 認証付き API は `Authorization: Bearer <token>` を前提にしています。
 - `/admin/*` と `/users/:id` の認可判定（管理者のみ・本人のみ）は usecase 層で行います。
 - フロントエンドは小さめの FSD 構成として `app`, `pages`, `shared` に絞っています。

@@ -24,7 +24,7 @@ const burgerNotFoundMessage = "Burger not found"
 // and PUT /reviews/{id} (PUT ignores shop_id/burger_id/burger_name — a
 // review never moves to another burger). On POST the burger is named by
 // burger_id or, when that is absent, by burger_name (find-or-create, the
-// frontend contract — issue #17); precedence is the usecase's decision.
+// frontend contract — S6 P3-1); precedence is the usecase's decision.
 // Missing fields decode to zero values, which the domain rejects —
 // Rails-parity 422 rather than 400.
 type reviewParamsRequest struct {
