@@ -56,11 +56,6 @@ type ReviewRepository interface {
 	// Column-scoped so discarded_at is never written. The write also
 	// recalculates the burger's burger_stats in the same transaction.
 	UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
-	// UpdateReviewPhotoKey persists only photo_key of the still kept
-	// review under id and returns the stored row, or (a wrapped)
-	// domain.ErrReviewNotFound when it is missing or discarded (S10).
-	// photo_key plays no role in burger_stats, so no recalculation.
-	UpdateReviewPhotoKey(ctx context.Context, id int64, photoKey *string) (domain.Review, error)
 	// UpdateReviewContentAndPhotoKey persists rating, comment, AND
 	// photo_key of the still kept review under id atomically — the two
 	// column-scoped writes plus the burger_stats recalculation share ONE

@@ -2,6 +2,7 @@ package photo_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"hash/crc32"
@@ -126,7 +127,7 @@ func TestProcess(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := photo.Process(bytes.NewReader(tt.input))
+			got, err := photo.Process(context.Background(), bytes.NewReader(tt.input))
 			if err != nil {
 				t.Fatalf("Process returned error: %v", err)
 			}
@@ -159,7 +160,7 @@ func TestProcessRejections(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := photo.Process(bytes.NewReader(tt.input))
+			_, err := photo.Process(context.Background(), bytes.NewReader(tt.input))
 			if !errors.Is(err, photo.ErrUnsupportedImage) {
 				t.Fatalf("Process error = %v, want ErrUnsupportedImage", err)
 			}

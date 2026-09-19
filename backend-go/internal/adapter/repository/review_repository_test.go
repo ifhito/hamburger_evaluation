@@ -867,7 +867,8 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 
 // TestReviewRepositoryPhotoKey covers the S10 photo_key persistence:
 // CreateReview stores the key, the joined read queries return it, and
-// UpdateReviewPhotoKey swaps only the key on still-kept reviews.
+// UpdateReviewContentAndPhotoKey swaps content and key together on
+// still-kept reviews.
 func TestReviewRepositoryPhotoKey(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -915,19 +916,6 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateReviewPhotoKey swaps only the key", func(t *testing.T) {
-		updated, err := repo.UpdateReviewPhotoKey(ctx, created.ID, strPtr("reviews/def.png"))
-		if err != nil {
-			t.Fatalf("UpdateReviewPhotoKey returned error: %v", err)
-		}
-		if updated.PhotoKey == nil || *updated.PhotoKey != "reviews/def.png" {
-			t.Errorf("updated PhotoKey = %v, want reviews/def.png", updated.PhotoKey)
-		}
-		if updated.Rating != 4 || updated.Comment == nil || *updated.Comment != "Tasty" {
-			t.Errorf("updated review = %+v, want rating and comment untouched", updated)
-		}
-	})
-
 	t.Run("UpdateReviewContentAndPhotoKey writes content and key together", func(t *testing.T) {
 		updated, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 5, "Even better", strPtr("reviews/both.png"))
 		if err != nil {
@@ -964,10 +952,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		if err := repo.DiscardReview(ctx, created.ID); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}
-		if _, err := repo.UpdateReviewPhotoKey(ctx, created.ID, nil); !errors.Is(err, domain.ErrReviewNotFound) {
-			t.Fatalf("UpdateReviewPhotoKey error = %v, want %v", err, domain.ErrReviewNotFound)
-		}
-		// The combined write rolls back too: no content change survives.
+		// The combined write rolls back: no content change survives.
 		if _, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 1, "ghost", strPtr("reviews/ghost.jpg")); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("UpdateReviewContentAndPhotoKey error = %v, want %v", err, domain.ErrReviewNotFound)
 		}

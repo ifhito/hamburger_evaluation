@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -95,7 +96,7 @@ func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartRev
 	for {
 		part, err := mr.NextPart()
 		// Strict comparison on purpose (like stdlib ReadForm): since Go
-		// 1.22 NextPart returns a %w-WRAPPED io.EOF for a body that ends
+		// 1.20 NextPart returns a %w-WRAPPED io.EOF for a body that ends
 		// cleanly WITHOUT the final boundary (truncated but HTTP-complete),
 		// and errors.Is would misread that truncation as a complete form.
 		if err == io.EOF { //nolint:errorlint // see the comment above
@@ -111,7 +112,7 @@ func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartRev
 				writeError(w, http.StatusBadRequest, "duplicate photo field")
 				return form, false
 			}
-			processed, ok := readPhotoPart(w, part)
+			processed, ok := readPhotoPart(r.Context(), w, part)
 			if !ok {
 				return form, false
 			}
@@ -157,11 +158,12 @@ func readTextPart(w http.ResponseWriter, part *multipart.Part) (string, bool) {
 // readPhotoPart streams the photo part into photo.Process under the 5 MiB
 // cap; the +1 sentinel byte detects "over the cap" without buffering the
 // excess. The size check comes first so a huge non-image is reported as
-// too large, never half-decoded. false means the error response was
-// already written.
-func readPhotoPart(w http.ResponseWriter, part *multipart.Part) (*photo.Processed, bool) {
+// too large, never half-decoded. ctx (the request context) bounds the
+// wait for the decode semaphore inside Process. false means the error
+// response was already written.
+func readPhotoPart(ctx context.Context, w http.ResponseWriter, part *multipart.Part) (*photo.Processed, bool) {
 	limited := &io.LimitedReader{R: part, N: maxPhotoBytes + 1}
-	processed, err := photo.Process(limited)
+	processed, err := photo.Process(ctx, limited)
 	if limited.N == 0 { // the part held more than maxPhotoBytes
 		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoTooLargeMessage}})
 		return nil, false
@@ -172,7 +174,10 @@ func readPhotoPart(w http.ResponseWriter, part *multipart.Part) (*photo.Processe
 			return nil, false
 		}
 		// Non-sentinel Process errors on this path are mid-stream read
-		// failures, i.e. a broken multipart body (or the global body cap).
+		// failures, i.e. a broken multipart body (or the global body cap),
+		// or a canceled request context while queueing for the decode
+		// semaphore. Cancellation deliberately shares the 400 path: the
+		// client is gone, so the response is unobservable anyway.
 		writeMultipartReadError(w, err)
 		return nil, false
 	}

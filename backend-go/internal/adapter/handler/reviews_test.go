@@ -195,18 +195,6 @@ func (f *reviewRepoFake) UpdateReviewContent(_ context.Context, id int64, rating
 	return rec.review, nil
 }
 
-func (f *reviewRepoFake) UpdateReviewPhotoKey(_ context.Context, id int64, photoKey *string) (domain.Review, error) {
-	if f.err != nil {
-		return domain.Review{}, f.err
-	}
-	rec, ok := f.reviews[id]
-	if !ok || rec.discarded {
-		return domain.Review{}, domain.ErrReviewNotFound
-	}
-	rec.review.PhotoKey = photoKey
-	return rec.review, nil
-}
-
 func (f *reviewRepoFake) UpdateReviewContentAndPhotoKey(_ context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
 	if f.err != nil {
 		return domain.Review{}, f.err

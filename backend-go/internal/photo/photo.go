@@ -9,6 +9,7 @@ package photo
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -47,8 +48,10 @@ const (
 // This is a memory guard: decoding is the memory-heavy part of a photo
 // request (worst case ~maxDecodedBytes per upload, so ~2×128MiB in
 // flight), and without the cap a handful of concurrent uploads could blow
-// the container's 1GiB limit (GOMEMLIMIT 920MiB). The acquire blocks
-// without a timeout — requests queue briefly instead of failing.
+// the container's 1GiB limit (GOMEMLIMIT 920MiB). The acquire has no
+// timeout of its own — requests queue briefly instead of failing — but the
+// queueing is bounded by request-context cancellation: a canceled ctx
+// stops the wait.
 var decodeSem = make(chan struct{}, 2)
 
 // bytesPerPixel estimates the decoded in-memory cost per pixel from the
@@ -78,8 +81,12 @@ type Processed struct {
 // in memory up to the caller's read limit (the handler's 5 MiB + 1 cap
 // today), and returns the normalized result. Payloads that are not
 // jpeg/png/webp by magic bytes, fail to decode, or declare dimensions
-// beyond the bomb guard yield a wrapped ErrUnsupportedImage.
-func Process(r io.Reader) (Processed, error) {
+// beyond the bomb guard yield a wrapped ErrUnsupportedImage. Waiting for
+// the decode semaphore is bounded by ctx: cancellation (client gone,
+// server shutdown) returns ctx.Err() instead of queueing forever. The
+// server's WriteTimeout keeps ticking while a request queues — that
+// interaction is unchanged by design.
+func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	br := bufio.NewReader(r)
 	head, err := br.Peek(512)
 	if err != nil && len(head) == 0 {
@@ -95,8 +102,13 @@ func Process(r io.Reader) (Processed, error) {
 		return Processed{}, fmt.Errorf("read image: %w", err)
 	}
 	// From here on the work is memory-heavy (decode + shrink + encode
-	// buffers); decodeSem caps how many uploads do it at once.
-	decodeSem <- struct{}{}
+	// buffers); decodeSem caps how many uploads do it at once. The wait is
+	// bounded by request-context cancellation, not a timeout.
+	select {
+	case decodeSem <- struct{}{}:
+	case <-ctx.Done():
+		return Processed{}, ctx.Err()
+	}
 	defer func() { <-decodeSem }()
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {

@@ -26,7 +26,6 @@ type fakeReviewRepo struct {
 	createReview               func(ctx context.Context, review domain.Review) (domain.Review, error)
 	createReviewForNamedBurger func(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error)
 	updateReviewContent        func(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
-	updateReviewPhotoKey       func(ctx context.Context, id int64, photoKey *string) (domain.Review, error)
 	updateReviewContentAndKey  func(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error)
 	discardReview              func(ctx context.Context, id int64) error
 }
@@ -78,13 +77,6 @@ func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id int64, rati
 		panic("unexpected UpdateReviewContent call")
 	}
 	return f.updateReviewContent(ctx, id, rating, comment)
-}
-
-func (f *fakeReviewRepo) UpdateReviewPhotoKey(ctx context.Context, id int64, photoKey *string) (domain.Review, error) {
-	if f.updateReviewPhotoKey == nil {
-		panic("unexpected UpdateReviewPhotoKey call")
-	}
-	return f.updateReviewPhotoKey(ctx, id, photoKey)
 }
 
 func (f *fakeReviewRepo) UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
@@ -730,8 +722,8 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 		photos := &fakePhotoStorage{}
 		repo := &fakeReviewRepo{
 			getReview: getReview,
-			// updateReviewPhotoKey and updateReviewContentAndKey unset:
-			// any photo-key write would panic.
+			// updateReviewContentAndKey unset: any photo-key write would
+			// panic.
 			updateReviewContent: func(_ context.Context, _ int64, _ int, _ string) (domain.Review, error) {
 				return stored.Review, nil
 			},

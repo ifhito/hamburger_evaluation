@@ -226,25 +226,6 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 	return toDomainReview(row), nil
 }
 
-// UpdateReviewPhotoKey persists only photo_key of the still kept review
-// under id and returns the stored row, or domain.ErrReviewNotFound when it
-// is missing or discarded. photo_key plays no role in burger_stats, so
-// unlike the other writes this one needs no transaction and no
-// recalculation.
-func (r *ReviewRepository) UpdateReviewPhotoKey(ctx context.Context, id int64, photoKey *string) (domain.Review, error) {
-	row, err := r.q.UpdateReviewPhotoKey(ctx, sqlcgen.UpdateReviewPhotoKeyParams{
-		ID:       id,
-		PhotoKey: textOrNull(photoKey),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Review{}, fmt.Errorf("update review photo key: %w", domain.ErrReviewNotFound)
-		}
-		return domain.Review{}, fmt.Errorf("update review photo key: %w", err)
-	}
-	return toDomainReview(row), nil
-}
-
 // UpdateReviewContentAndPhotoKey persists rating, comment, and photo_key
 // of the still kept review under id, or domain.ErrReviewNotFound when it
 // is missing or discarded. The two existing column-scoped statements
