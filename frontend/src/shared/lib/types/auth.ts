@@ -2,6 +2,7 @@ export interface AuthUser {
   id: number
   username: string
   email: string
+  admin: boolean
 }
 
 export interface SignupRequest {
@@ -11,10 +12,12 @@ export interface SignupRequest {
   password_confirmation: string
 }
 
+// Go authUserResponse: signup and login share the same body.
 export interface SignupResponse {
   id: number
   username: string
   email: string
+  admin: boolean
   token: string
 }
 
@@ -23,6 +26,4 @@ export interface LoginRequest {
   password: string
 }
 
-export interface LoginResponse {
-  token: string
-}
+export type LoginResponse = SignupResponse

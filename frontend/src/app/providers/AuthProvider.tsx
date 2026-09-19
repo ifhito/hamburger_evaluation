@@ -11,7 +11,6 @@ import {
   getToken,
   removeToken,
   setToken,
-  usersApi,
 } from '../../shared/lib/api'
 import type {
   AuthUser,
@@ -46,15 +45,6 @@ function isTokenExpired(token: string): boolean {
   return Date.now() / 1000 > payload.exp
 }
 
-async function fetchUserById(userId: number): Promise<AuthUser | null> {
-  try {
-    const users = await usersApi.list()
-    return users.find((u) => u.id === userId) ?? null
-  } catch {
-    return null
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [token, setTokenState] = useState<string | null>(null)
@@ -85,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await authApi.signup(data)
     setToken(res.token)
     setTokenState(res.token)
-    const authUser: AuthUser = { id: res.id, username: res.username, email: res.email }
+    const authUser: AuthUser = { id: res.id, username: res.username, email: res.email, admin: res.admin }
     setUser(authUser)
     localStorage.setItem('auth_user', JSON.stringify(authUser))
   }, [])
@@ -94,13 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await authApi.login(data)
     setToken(res.token)
     setTokenState(res.token)
-    const payload = decodeJwtPayload(res.token)
-    const userId = payload.user_id as number
-    const fetchedUser = await fetchUserById(userId)
-    setUser(fetchedUser)
-    if (fetchedUser) {
-      localStorage.setItem('auth_user', JSON.stringify(fetchedUser))
-    }
+    const authUser: AuthUser = { id: res.id, username: res.username, email: res.email, admin: res.admin }
+    setUser(authUser)
+    localStorage.setItem('auth_user', JSON.stringify(authUser))
   }, [])
 
   const logout = useCallback(async () => {

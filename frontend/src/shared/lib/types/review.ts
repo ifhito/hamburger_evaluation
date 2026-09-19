@@ -1,10 +1,17 @@
 export interface Review {
   id: number
   rating: number
-  comment: string
+  comment: string | null
   created_at: string
   user: { id: number; username: string } | null
-  burger: { id: number; name: string; average_rating: number; review_count: number } | null
+  burger: {
+    id: number
+    name: string
+    average_rating: number
+    review_count: number
+    weighted_score: number
+    confidence: number
+  } | null
 }
 
 export interface ReviewCreateInput {

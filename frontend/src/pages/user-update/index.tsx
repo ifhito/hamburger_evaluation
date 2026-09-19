@@ -37,7 +37,7 @@ export default function UserUpdatePage() {
     }
     try {
       const updated = await updateUser.mutateAsync(data)
-      refreshUser({ id: updated.id, username: updated.username, email: updated.email })
+      refreshUser({ id: updated.id, username: updated.username, email: updated.email, admin: updated.admin })
       void navigate(`/users/${id}`)
     } catch (err) {
       if (err instanceof ApiRequestError) {
