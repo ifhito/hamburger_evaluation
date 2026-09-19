@@ -133,13 +133,23 @@ WHERE r.discarded_at IS NULL
       JOIN shops s ON s.id = sb.shop_id
       WHERE sb.burger_id = r.burger_id AND s.status = 1
   )
+  AND ($1::bigint IS NULL OR r.rating = $1::bigint)
+  AND ($2::text IS NULL OR r.comment ILIKE $2::text)
+  AND ($3::bigint IS NULL OR EXISTS (
+      SELECT 1
+      FROM shops_burgers fsb
+      WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = $3::bigint
+  ))
 ORDER BY r.created_at DESC, r.id DESC
-LIMIT $2 OFFSET $1
+LIMIT $5 OFFSET $4
 `
 
 type ListPublicReviewsParams struct {
-	PageOffset int32
-	PageLimit  int32
+	FilterRating   pgtype.Int8
+	CommentPattern pgtype.Text
+	FilterShopID   pgtype.Int8
+	PageOffset     int32
+	PageLimit      int32
 }
 
 type ListPublicReviewsRow struct {
@@ -163,8 +173,22 @@ type ListPublicReviewsRow struct {
 // on shops_burgers so a burger linked to several active shops still
 // yields exactly one row. The u.discarded_at filter hides discarded
 // users' (still kept) reviews from the feed (S8).
+// The three narg filters mirror Rails ReviewQuery (NULL = absent, ANDed):
+// filter_rating is an exact rating match (bigint so out-of-range values
+// compare false instead of overflowing the smallint column);
+// comment_pattern is a pre-escaped ILIKE pattern over comment
+// (keyword_search; a NULL comment never matches, like Rails);
+// filter_shop_id keeps reviews whose burger is linked to that shop
+// (Rails' shops_and_burgers join), again via EXISTS to avoid row
+// multiplication.
 func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsParams) ([]ListPublicReviewsRow, error) {
-	rows, err := q.db.Query(ctx, listPublicReviews, arg.PageOffset, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listPublicReviews,
+		arg.FilterRating,
+		arg.CommentPattern,
+		arg.FilterShopID,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

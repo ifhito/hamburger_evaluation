@@ -33,13 +33,25 @@ func NewReviewRepository(db beginnerDBTX) *ReviewRepository {
 var _ usecase.ReviewRepository = (*ReviewRepository)(nil)
 
 // ListReviews returns the public review feed: non-discarded reviews whose
-// burger is linked to at least one active shop, with author, burger, and
-// stats in a single query (no N+1), newest first.
-func (r *ReviewRepository) ListReviews(ctx context.Context, limit, offset int32) ([]domain.ReviewDetail, error) {
-	rows, err := r.q.ListPublicReviews(ctx, sqlcgen.ListPublicReviewsParams{
+// burger is linked to at least one active shop, narrowed by filter (Rails
+// ReviewQuery parity), with author, burger, and stats in a single query
+// (no N+1), newest first. The keyword goes through likeEscaper into an
+// ILIKE parameter, never concatenated into SQL; absent filters stay NULL.
+func (r *ReviewRepository) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
+	params := sqlcgen.ListPublicReviewsParams{
 		PageLimit:  limit,
 		PageOffset: offset,
-	})
+	}
+	if filter.Rating != nil {
+		params.FilterRating = pgtype.Int8{Int64: int64(*filter.Rating), Valid: true}
+	}
+	if filter.Keyword != "" {
+		params.CommentPattern = pgtype.Text{String: "%" + likeEscaper.Replace(filter.Keyword) + "%", Valid: true}
+	}
+	if filter.ShopID != nil {
+		params.FilterShopID = pgtype.Int8{Int64: *filter.ShopID, Valid: true}
+	}
+	rows, err := r.q.ListPublicReviews(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list reviews: %w", err)
 	}
@@ -146,6 +158,73 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 		return domain.Review{}, err
 	}
 	return toDomainReview(row), nil
+}
+
+// CreateReviewForNamedBurger inserts the (already validated) review against
+// the shop's burger with the exact name burgerName, creating the burger and
+// its shops_burgers link when the shop has none by that name (Rails
+// find_or_create_burger, issue #17). Find-or-create, review insert, and
+// burger_stats recalculation share ONE transaction, so a failure at any
+// step commits no orphan burger or link. There is deliberately no unique
+// index on (shop, name): two concurrent creators of the same new name can
+// both insert a burger — the same race Rails' find_or_create_burger has;
+// parity, not a bug. The returned burger carries the pre-insert stats,
+// exactly like GetShopBurger on the burger_id path (zeros for a brand-new
+// burger).
+func (r *ReviewRepository) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
+	var row sqlcgen.Review
+	var burger domain.ShopReviewBurger
+	err := withTx(ctx, r.db, "create review for named burger", func(q *sqlcgen.Queries) error {
+		found, err := q.GetShopBurgerByNameWithStats(ctx, sqlcgen.GetShopBurgerByNameWithStatsParams{
+			ShopID: shopID,
+			Name:   burgerName,
+		})
+		switch {
+		case err == nil:
+			burger = domain.ShopReviewBurger{
+				ID:   found.ID,
+				Name: found.Name,
+				// The stats row may not exist yet; zero values then.
+				AverageRating: found.AverageRating.Float64,
+				ReviewCount:   found.ReviewCount.Int64,
+				WeightedScore: found.WeightedScore.Float64,
+				Confidence:    found.Confidence.Float64,
+			}
+		case errors.Is(err, pgx.ErrNoRows):
+			created, err := q.CreateBurger(ctx, burgerName)
+			if err != nil {
+				return fmt.Errorf("create review for named burger: create burger: %w", err)
+			}
+			if err := q.CreateShopBurger(ctx, sqlcgen.CreateShopBurgerParams{ShopID: shopID, BurgerID: created.ID}); err != nil {
+				return fmt.Errorf("create review for named burger: link burger: %w", err)
+			}
+			burger = domain.ShopReviewBurger{ID: created.ID, Name: created.Name}
+		default:
+			return fmt.Errorf("create review for named burger: find burger: %w", err)
+		}
+		review.BurgerID = burger.ID
+		// Lock BEFORE the insert, for the same deadlock reason as CreateReview.
+		if _, err := q.LockBurgerForStats(ctx, review.BurgerID); err != nil {
+			return fmt.Errorf("create review for named burger: lock burger: %w", err)
+		}
+		row, err = q.CreateReview(ctx, sqlcgen.CreateReviewParams{
+			Rating:   int16(review.Rating),
+			Comment:  textOrNull(review.Comment),
+			UserID:   review.AuthorID,
+			BurgerID: review.BurgerID,
+		})
+		if err != nil {
+			return fmt.Errorf("create review for named burger: %w", err)
+		}
+		if err := recalculateBurgerStats(ctx, q, review.BurgerID); err != nil {
+			return fmt.Errorf("create review for named burger: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Review{}, domain.ShopReviewBurger{}, err
+	}
+	return toDomainReview(row), burger, nil
 }
 
 // UpdateReviewContent persists only rating and comment of the still kept

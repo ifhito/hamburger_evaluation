@@ -17,20 +17,21 @@ import (
 // Unset behaviors panic so tests fail loudly on unexpected calls —
 // especially writes outside the tested flow.
 type fakeReviewRepo struct {
-	listReviews         func(ctx context.Context, limit, offset int32) ([]domain.ReviewDetail, error)
-	getReview           func(ctx context.Context, id int64) (domain.ReviewDetail, error)
-	getShop             func(ctx context.Context, id int64) (domain.Shop, error)
-	getShopBurger       func(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error)
-	createReview        func(ctx context.Context, review domain.Review) (domain.Review, error)
-	updateReviewContent func(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
-	discardReview       func(ctx context.Context, id int64) error
+	listReviews                func(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error)
+	getReview                  func(ctx context.Context, id int64) (domain.ReviewDetail, error)
+	getShop                    func(ctx context.Context, id int64) (domain.Shop, error)
+	getShopBurger              func(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error)
+	createReview               func(ctx context.Context, review domain.Review) (domain.Review, error)
+	createReviewForNamedBurger func(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error)
+	updateReviewContent        func(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
+	discardReview              func(ctx context.Context, id int64) error
 }
 
-func (f *fakeReviewRepo) ListReviews(ctx context.Context, limit, offset int32) ([]domain.ReviewDetail, error) {
+func (f *fakeReviewRepo) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
 	if f.listReviews == nil {
 		panic("unexpected ListReviews call")
 	}
-	return f.listReviews(ctx, limit, offset)
+	return f.listReviews(ctx, filter, limit, offset)
 }
 
 func (f *fakeReviewRepo) GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error) {
@@ -59,6 +60,13 @@ func (f *fakeReviewRepo) CreateReview(ctx context.Context, review domain.Review)
 		panic("unexpected CreateReview call")
 	}
 	return f.createReview(ctx, review)
+}
+
+func (f *fakeReviewRepo) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
+	if f.createReviewForNamedBurger == nil {
+		panic("unexpected CreateReviewForNamedBurger call")
+	}
+	return f.createReviewForNamedBurger(ctx, shopID, burgerName, review)
 }
 
 func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error) {
@@ -96,12 +104,12 @@ func TestReviewsListPagination(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotLimit, gotOffset int32
 			repo := &fakeReviewRepo{
-				listReviews: func(_ context.Context, limit, offset int32) ([]domain.ReviewDetail, error) {
+				listReviews: func(_ context.Context, _ usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
 					gotLimit, gotOffset = limit, offset
 					return []domain.ReviewDetail{}, nil
 				},
 			}
-			if _, err := usecase.NewReviews(repo).List(context.Background(), tt.page, tt.perPage); err != nil {
+			if _, err := usecase.NewReviews(repo).List(context.Background(), usecase.ReviewListFilter{}, tt.page, tt.perPage); err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}
 			if gotLimit != tt.wantLimit || gotOffset != tt.wantOffset {
@@ -111,14 +119,36 @@ func TestReviewsListPagination(t *testing.T) {
 	}
 }
 
+// TestReviewsListFilterPassThrough pins that List hands the filter to the
+// repository untouched: the usecase neither normalizes nor validates the
+// filter values (the handler decides presence, the SQL does the matching).
+func TestReviewsListFilterPassThrough(t *testing.T) {
+	rating := 4
+	shopID := int64(7)
+	want := usecase.ReviewListFilter{Rating: &rating, Keyword: "tasty", ShopID: &shopID}
+	var got usecase.ReviewListFilter
+	repo := &fakeReviewRepo{
+		listReviews: func(_ context.Context, filter usecase.ReviewListFilter, _, _ int32) ([]domain.ReviewDetail, error) {
+			got = filter
+			return []domain.ReviewDetail{}, nil
+		},
+	}
+	if _, err := usecase.NewReviews(repo).List(context.Background(), want, 1, 20); err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("filter = %+v, want %+v", got, want)
+	}
+}
+
 // TestReviewsListFailure: a repository failure propagates wrapped.
 func TestReviewsListFailure(t *testing.T) {
 	repo := &fakeReviewRepo{
-		listReviews: func(_ context.Context, _, _ int32) ([]domain.ReviewDetail, error) {
+		listReviews: func(_ context.Context, _ usecase.ReviewListFilter, _, _ int32) ([]domain.ReviewDetail, error) {
 			return nil, io.ErrUnexpectedEOF
 		},
 	}
-	if _, err := usecase.NewReviews(repo).List(context.Background(), 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) {
+	if _, err := usecase.NewReviews(repo).List(context.Background(), usecase.ReviewListFilter{}, 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("List error = %v, want %v", err, io.ErrUnexpectedEOF)
 	}
 }
@@ -196,7 +226,7 @@ func TestReviewsCreate(t *testing.T) {
 				return review, nil
 			},
 		}
-		got, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, cheese.ID, 4, "Tasty")
+		got, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty")
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -216,7 +246,7 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("unknown shop yields ErrShopNotFound before anything else", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop}
-		if _, err := usecase.NewReviews(repo).Create(ctx, bob, 999, cheese.ID, 4, "ok"); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := usecase.NewReviews(repo).Create(ctx, bob, 999, cheese.ID, "", 4, "ok"); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
@@ -224,7 +254,7 @@ func TestReviewsCreate(t *testing.T) {
 	t.Run("AC2 rejected shop yields ErrForbidden before the burger lookup", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop} // getShopBurger unset: a lookup would panic
 		for _, viewer := range []domain.User{alice, bob, admin} {
-			if _, err := usecase.NewReviews(repo).Create(ctx, viewer, rejectedShop.ID, cheese.ID, 4, "ok"); !errors.Is(err, domain.ErrForbidden) {
+			if _, err := usecase.NewReviews(repo).Create(ctx, viewer, rejectedShop.ID, cheese.ID, "", 4, "ok"); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
 			}
 		}
@@ -240,27 +270,107 @@ func TestReviewsCreate(t *testing.T) {
 			},
 		}
 		reviews := usecase.NewReviews(repo)
-		if _, err := reviews.Create(ctx, alice, pendingShop.ID, cheese.ID, 4, "ok"); err != nil {
+		if _, err := reviews.Create(ctx, alice, pendingShop.ID, cheese.ID, "", 4, "ok"); err != nil {
 			t.Errorf("creator: Create returned error: %v", err)
 		}
-		if _, err := reviews.Create(ctx, admin, pendingShop.ID, cheese.ID, 4, "ok"); err != nil {
+		if _, err := reviews.Create(ctx, admin, pendingShop.ID, cheese.ID, "", 4, "ok"); err != nil {
 			t.Errorf("admin: Create returned error: %v", err)
 		}
-		if _, err := usecase.NewReviews(&fakeReviewRepo{getShop: getShop}).Create(ctx, bob, pendingShop.ID, cheese.ID, 4, "ok"); !errors.Is(err, domain.ErrForbidden) {
+		if _, err := usecase.NewReviews(&fakeReviewRepo{getShop: getShop}).Create(ctx, bob, pendingShop.ID, cheese.ID, "", 4, "ok"); !errors.Is(err, domain.ErrForbidden) {
 			t.Errorf("other user: error = %v, want %v", err, domain.ErrForbidden)
 		}
 	})
 
 	t.Run("unlinked burger yields ErrBurgerNotFound without an insert", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview unset
-		if _, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 999, 4, "ok"); !errors.Is(err, domain.ErrBurgerNotFound) {
+		if _, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 999, "", 4, "ok"); !errors.Is(err, domain.ErrBurgerNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrBurgerNotFound)
 		}
 	})
 
 	t.Run("AC4 invalid content yields ValidationError without an insert", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview unset
-		_, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, cheese.ID, 0, " ")
+		_, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, " ")
+		var vErr *domain.ValidationError
+		if !errors.As(err, &vErr) {
+			t.Fatalf("error = %v, want *domain.ValidationError", err)
+		}
+		want := []string{"Rating must be in 1..5", "Comment can't be blank"}
+		if !reflect.DeepEqual(vErr.Messages, want) {
+			t.Errorf("messages = %v, want %v", vErr.Messages, want)
+		}
+	})
+
+	t.Run("burger_name path find-or-creates through the repository and composes the payload", func(t *testing.T) {
+		smash := domain.ShopReviewBurger{ID: 7, Name: " Smash "}
+		var gotShopID int64
+		var gotName string
+		var gotReview domain.Review
+		repo := &fakeReviewRepo{
+			getShop: getShop, // getShopBurger and createReview unset: any call panics
+			createReviewForNamedBurger: func(_ context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
+				gotShopID, gotName, gotReview = shopID, burgerName, review
+				review.ID = 44
+				review.BurgerID = smash.ID
+				return review, smash, nil
+			},
+		}
+		// The name reaches the repository untrimmed (Rails never trims).
+		got, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 0, " Smash ", 4, "Juicy")
+		if err != nil {
+			t.Fatalf("Create returned error: %v", err)
+		}
+		if gotShopID != activeShop.ID || gotName != " Smash " {
+			t.Errorf("repo got shop %d name %q, want %d %q", gotShopID, gotName, activeShop.ID, " Smash ")
+		}
+		if gotReview.AuthorID != bob.ID || gotReview.Rating != 4 {
+			t.Errorf("repo got review %+v, want author %d rating 4", gotReview, bob.ID)
+		}
+		if got.ID != 44 || got.BurgerID != smash.ID {
+			t.Errorf("detail review = %+v, want id 44 for burger %d", got.Review, smash.ID)
+		}
+		if !reflect.DeepEqual(got.Burger, &smash) {
+			t.Errorf("burger = %+v, want %+v", got.Burger, smash)
+		}
+	})
+
+	t.Run("a positive burger_id wins over burger_name", func(t *testing.T) {
+		repo := &fakeReviewRepo{
+			getShop:       getShop,
+			getShopBurger: getShopBurger, // createReviewForNamedBurger unset: a call panics
+			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
+				review.ID = 45
+				return review, nil
+			},
+		}
+		got, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, cheese.ID, "Ignored", 4, "ok")
+		if err != nil {
+			t.Fatalf("Create returned error: %v", err)
+		}
+		if got.BurgerID != cheese.ID || !reflect.DeepEqual(got.Burger, &cheese) {
+			t.Errorf("burger = %+v, want the burger_id one %+v", got.Burger, cheese)
+		}
+	})
+
+	t.Run("neither burger_id nor a usable burger_name yields ValidationError without any write", func(t *testing.T) {
+		for name, burgerName := range map[string]string{"missing": "", "whitespace-only": "  \t "} {
+			t.Run(name, func(t *testing.T) {
+				repo := &fakeReviewRepo{getShop: getShop} // every write unset: a call panics
+				_, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 0, burgerName, 4, "ok")
+				var vErr *domain.ValidationError
+				if !errors.As(err, &vErr) {
+					t.Fatalf("error = %v, want *domain.ValidationError", err)
+				}
+				if want := []string{"Burger name can't be blank"}; !reflect.DeepEqual(vErr.Messages, want) {
+					t.Errorf("messages = %v, want %v", vErr.Messages, want)
+				}
+			})
+		}
+	})
+
+	t.Run("burger_name path validates content before the write", func(t *testing.T) {
+		repo := &fakeReviewRepo{getShop: getShop} // createReviewForNamedBurger unset: a call panics
+		_, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 0, "Smash", 0, " ")
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)

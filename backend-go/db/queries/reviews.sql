@@ -10,6 +10,14 @@ RETURNING *;
 -- on shops_burgers so a burger linked to several active shops still
 -- yields exactly one row. The u.discarded_at filter hides discarded
 -- users' (still kept) reviews from the feed (S8).
+-- The three narg filters mirror Rails ReviewQuery (NULL = absent, ANDed):
+-- filter_rating is an exact rating match (bigint so out-of-range values
+-- compare false instead of overflowing the smallint column);
+-- comment_pattern is a pre-escaped ILIKE pattern over comment
+-- (keyword_search; a NULL comment never matches, like Rails);
+-- filter_shop_id keeps reviews whose burger is linked to that shop
+-- (Rails' shops_and_burgers join), again via EXISTS to avoid row
+-- multiplication.
 SELECT r.id, r.rating, r.comment, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
@@ -26,6 +34,13 @@ WHERE r.discarded_at IS NULL
       JOIN shops s ON s.id = sb.shop_id
       WHERE sb.burger_id = r.burger_id AND s.status = 1
   )
+  AND (sqlc.narg(filter_rating)::bigint IS NULL OR r.rating = sqlc.narg(filter_rating)::bigint)
+  AND (sqlc.narg(comment_pattern)::text IS NULL OR r.comment ILIKE sqlc.narg(comment_pattern)::text)
+  AND (sqlc.narg(filter_shop_id)::bigint IS NULL OR EXISTS (
+      SELECT 1
+      FROM shops_burgers fsb
+      WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = sqlc.narg(filter_shop_id)::bigint
+  ))
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
