@@ -2,6 +2,7 @@ export interface Review {
   id: number
   rating: number
   comment: string | null
+  photo_url: string | null
   created_at: string
   user: { id: number; username: string } | null
   burger: {

@@ -128,6 +128,11 @@ func TestRunShutsDownCleanly(t *testing.T) {
 		JWTSecret:  "test-secret",
 		JWTTTL:     time.Minute,
 		DBMaxConns: 1,
+		// Photo storage as LoadConfig's disk-mode defaults would set it,
+		// pointed at a throwaway dir.
+		PhotoStorage:       "disk",
+		PhotoDiskDir:       t.TempDir(),
+		PhotoPublicBaseURL: "/photos",
 	}
 
 	addrCh := make(chan string, 1)

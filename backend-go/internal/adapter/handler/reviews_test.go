@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -194,6 +195,18 @@ func (f *reviewRepoFake) UpdateReviewContent(_ context.Context, id int64, rating
 	return rec.review, nil
 }
 
+func (f *reviewRepoFake) UpdateReviewPhotoKey(_ context.Context, id int64, photoKey *string) (domain.Review, error) {
+	if f.err != nil {
+		return domain.Review{}, f.err
+	}
+	rec, ok := f.reviews[id]
+	if !ok || rec.discarded {
+		return domain.Review{}, domain.ErrReviewNotFound
+	}
+	rec.review.PhotoKey = photoKey
+	return rec.review, nil
+}
+
 func (f *reviewRepoFake) DiscardReview(_ context.Context, id int64) error {
 	if f.err != nil {
 		return f.err
@@ -243,6 +256,15 @@ func seedReviewWorld(creatorID int64) *reviewRepoFake {
 // an admin (id 3). The fake's usernames map is aligned with those ids.
 func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, aliceAuth, bobAuth, adminAuth string) {
 	t.Helper()
+	router, _, aliceAuth, bobAuth, adminAuth = newPhotoReviewsRouter(t, repo)
+	return router, aliceAuth, bobAuth, adminAuth
+}
+
+// newPhotoReviewsRouter is newReviewsRouter plus the S10 photo wiring: a
+// real disk store rooted in a fresh temp dir (returned for file
+// assertions) served under GET /photos/ exactly like main's disk mode.
+func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, photoDir, aliceAuth, bobAuth, adminAuth string) {
+	t.Helper()
 	users, auth, codec := newAuthKit()
 	alice := users.seed("alice", "alice@example.com", "password123")
 	bob := users.seed("bob", "bob@example.com", "password123")
@@ -259,9 +281,11 @@ func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, 
 		}
 		return "Bearer " + tok
 	}
-	router = handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}), usecase.NewReviews(repo),
-		usecase.NewUsers(users, hasherFake{}))
-	return router, token(alice.ID), token(bob.ID), token(admin.ID)
+	photoDir = t.TempDir()
+	router = handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}),
+		usecase.NewReviews(repo, storage.NewDisk(photoDir, "/photos")),
+		usecase.NewUsers(users, hasherFake{}), http.FileServer(http.Dir(photoDir)))
+	return router, photoDir, token(alice.ID), token(bob.ID), token(admin.ID)
 }
 
 // TestCreateReview covers AC1 and AC2 at the HTTP level: posting to an
@@ -276,7 +300,7 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","user":{"id":1,"username":"alice"},` +
+		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
 			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -354,7 +378,7 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","user":{"id":1,"username":"alice"},` +
+		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
 			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the existing Cheese burger %s", got, want)
@@ -373,7 +397,7 @@ func TestCreateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
 		// The created burger (fake id 7) carries zero stats.
-		want := `{"id":1,"rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","user":{"id":1,"username":"alice"},` +
+		want := `{"id":1,"rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
 			`"burger":{"id":7,"name":"Veggie","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the created burger %s", got, want)
@@ -392,7 +416,7 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		want := `{"id":1,"rating":4,"comment":"Both","created_at":"2024-06-01T12:01:00Z","user":{"id":1,"username":"alice"},` +
+		want := `{"id":1,"rating":4,"comment":"Both","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
 			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the burger_id burger %s", got, want)
@@ -492,7 +516,7 @@ func TestListReviews(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 		want := fmt.Sprintf(`[{"id":%d,"rating":4,"comment":"On cheese","created_at":"2024-06-01T12:01:00Z",`+
-			`"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}]`,
+			`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}]`,
 			cheeseReviewID)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -703,7 +727,7 @@ func TestUpdateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 		want := fmt.Sprintf(`{"id":%d,"rating":5,"comment":"Even better","created_at":"2024-06-01T12:01:00Z",`+
-			`"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
+			`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
 			cheeseReviewID)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -751,7 +775,7 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
 	want := fmt.Sprintf(`{"id":%d,"rating":2,"comment":"Tampered","created_at":"2024-06-01T12:01:00Z",`+
-		`"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
+		`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
 		cheeseReviewID)
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want the original burger with updated content %s", got, want)

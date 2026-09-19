@@ -1,6 +1,6 @@
 -- name: CreateReview :one
-INSERT INTO reviews (rating, comment, user_id, burger_id)
-VALUES ($1, $2, $3, $4)
+INSERT INTO reviews (rating, comment, user_id, burger_id, photo_key)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: ListPublicReviews :many
@@ -20,7 +20,7 @@ RETURNING *;
 -- multiplication; the filter shop must itself be active (status 1) —
 -- stricter than Rails, whose shop filter was status-blind, and
 -- consistent with the feed EXISTS's existing active-shop rule.
-SELECT r.id, r.rating, r.comment, r.created_at,
+SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
@@ -53,7 +53,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- load-for-authorization of edit and delete (user_id carries the
 -- ownership check). A discarded author makes the review indistinguishable
 -- from a missing one (S8).
-SELECT r.id, r.rating, r.comment, r.created_at,
+SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
@@ -80,6 +80,16 @@ ORDER BY burger_id;
 UPDATE reviews
 SET rating = $2,
     comment = $3,
+    updated_at = now()
+WHERE id = $1 AND discarded_at IS NULL
+RETURNING *;
+
+-- name: UpdateReviewPhotoKey :one
+-- Column-scoped photo replacement (S10): touches only photo_key (never
+-- rating/comment/discarded_at), and only while the review is still kept.
+-- photo_key does not affect burger_stats, so no recalculation is needed.
+UPDATE reviews
+SET photo_key = $2,
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
 RETURNING *;

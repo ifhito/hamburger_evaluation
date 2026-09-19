@@ -2,12 +2,16 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"log"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -37,6 +41,152 @@ type reviewParamsRequest struct {
 	} `json:"review"`
 }
 
+const (
+	// maxPhotoBytes caps the raw photo upload at 5 MiB (S10 AC3); larger
+	// uploads get 422, not 413 — the global review body cap is wider.
+	maxPhotoBytes int64 = 5 << 20
+	// maxMultipartTextBytes caps each text field of a multipart review
+	// submission. Small next to the photo cap, yet roomy enough for any
+	// realistic comment (the JSON path is capped only by the body limit).
+	maxMultipartTextBytes int64 = 64 << 10
+)
+
+const photoTooLargeMessage = "Photo is too large (max 5MB)"
+
+const photoUnsupportedMessage = "Photo must be a JPEG, PNG, or WebP image"
+
+// multipartReviewForm carries the flat fields of a multipart/form-data
+// review submission (S10 wire contract): the same values as
+// reviewParamsRequest plus the processed photo (nil when the photo part
+// is absent).
+type multipartReviewForm struct {
+	rating     int
+	comment    string
+	shopID     int64
+	burgerID   int64
+	burgerName string
+	photo      *photo.Processed
+}
+
+// isMultipart reports whether the request declares multipart/form-data
+// (the S10 photo submission path); everything else stays on the existing
+// JSON path (backward compatibility).
+func isMultipart(r *http.Request) bool {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return err == nil && mediaType == "multipart/form-data"
+}
+
+// decodeReviewMultipart streams the multipart body via r.MultipartReader —
+// the raw upload is never buffered wholesale. Text fields are read with a
+// small per-field cap, unknown parts are ignored (NextPart discards their
+// bodies), and the photo part is validated/normalized by photo.Process
+// under the 5 MiB cap. false means the error response was already
+// written: 413 when the global body cap tripped, 422 for an oversized or
+// non-image photo, 400 for malformed multipart (including a duplicate
+// photo part). Absent or non-numeric rating/shop_id/burger_id decode to 0
+// and flow into the same validation/not-found paths as the JSON body.
+func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartReviewForm, bool) {
+	var form multipartReviewForm
+	mr, err := r.MultipartReader()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid multipart body")
+		return form, false
+	}
+	for {
+		part, err := mr.NextPart()
+		if errors.Is(err, io.EOF) {
+			return form, true
+		}
+		if err != nil {
+			writeMultipartReadError(w, err)
+			return form, false
+		}
+		name := part.FormName()
+		if name == "photo" {
+			if form.photo != nil {
+				writeError(w, http.StatusBadRequest, "duplicate photo field")
+				return form, false
+			}
+			processed, ok := readPhotoPart(w, part)
+			if !ok {
+				return form, false
+			}
+			form.photo = processed
+			continue
+		}
+		value, ok := readTextPart(w, part)
+		if !ok {
+			return form, false
+		}
+		switch name {
+		case "rating":
+			form.rating, _ = strconv.Atoi(value)
+		case "comment":
+			form.comment = value
+		case "shop_id":
+			form.shopID, _ = strconv.ParseInt(value, 10, 64)
+		case "burger_id":
+			form.burgerID, _ = strconv.ParseInt(value, 10, 64)
+		case "burger_name":
+			form.burgerName = value
+		}
+		// Unknown fields are ignored, like decodeJSON's unknown-field
+		// tolerance.
+	}
+}
+
+// readTextPart reads one text field under the per-field cap; false means
+// the error response was already written.
+func readTextPart(w http.ResponseWriter, part *multipart.Part) (string, bool) {
+	data, err := io.ReadAll(io.LimitReader(part, maxMultipartTextBytes+1))
+	if err != nil {
+		writeMultipartReadError(w, err)
+		return "", false
+	}
+	if int64(len(data)) > maxMultipartTextBytes {
+		writeError(w, http.StatusBadRequest, "multipart field too large")
+		return "", false
+	}
+	return string(data), true
+}
+
+// readPhotoPart streams the photo part into photo.Process under the 5 MiB
+// cap; the +1 sentinel byte detects "over the cap" without buffering the
+// excess. The size check comes first so a huge non-image is reported as
+// too large, never half-decoded. false means the error response was
+// already written.
+func readPhotoPart(w http.ResponseWriter, part *multipart.Part) (*photo.Processed, bool) {
+	limited := &io.LimitedReader{R: part, N: maxPhotoBytes + 1}
+	processed, err := photo.Process(limited)
+	if limited.N == 0 { // the part held more than maxPhotoBytes
+		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoTooLargeMessage}})
+		return nil, false
+	}
+	if err != nil {
+		if errors.Is(err, photo.ErrUnsupportedImage) {
+			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoUnsupportedMessage}})
+			return nil, false
+		}
+		// Non-sentinel Process errors on this path are mid-stream read
+		// failures, i.e. a broken multipart body (or the global body cap).
+		writeMultipartReadError(w, err)
+		return nil, false
+	}
+	return &processed, true
+}
+
+// writeMultipartReadError maps a mid-stream multipart read failure: the
+// global body-cap MaxBytesReader surfaces as 413, anything else as a
+// malformed body (400).
+func writeMultipartReadError(w http.ResponseWriter, err error) {
+	var maxErr *http.MaxBytesError
+	if errors.As(err, &maxErr) {
+		writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+	writeError(w, http.StatusBadRequest, "invalid multipart body")
+}
+
 // newReviewResponse maps the domain payload onto the wire shape shared
 // with shop detail reviews (frontend Review, snake_case).
 func newReviewResponse(detail domain.ReviewDetail) shopReviewResponse {
@@ -45,6 +195,7 @@ func newReviewResponse(detail domain.ReviewDetail) shopReviewResponse {
 		Rating:    detail.Rating,
 		Comment:   detail.Comment,
 		CreatedAt: detail.CreatedAt.UTC().Format(time.RFC3339),
+		PhotoURL:  detail.PhotoURL,
 		User:      newUserRefResponse(detail.User),
 	}
 	if detail.Burger != nil {
@@ -172,12 +323,27 @@ func handleCreateReview(reviews *usecase.Reviews) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		var req reviewParamsRequest
-		if !decodeJSON(w, r, &req) {
-			return
+		var form multipartReviewForm
+		if isMultipart(r) {
+			var ok bool
+			if form, ok = decodeReviewMultipart(w, r); !ok {
+				return
+			}
+		} else {
+			var req reviewParamsRequest
+			if !decodeJSON(w, r, &req) {
+				return
+			}
+			form = multipartReviewForm{
+				rating:     req.Review.Rating,
+				comment:    req.Review.Comment,
+				shopID:     req.Review.ShopID,
+				burgerID:   req.Review.BurgerID,
+				burgerName: req.Review.BurgerName,
+			}
 		}
-		detail, err := reviews.Create(r.Context(), viewer, req.Review.ShopID, req.Review.BurgerID,
-			req.Review.BurgerName, req.Review.Rating, req.Review.Comment)
+		detail, err := reviews.Create(r.Context(), viewer, form.shopID, form.burgerID,
+			form.burgerName, form.rating, form.comment, form.photo)
 		if err != nil {
 			writeReviewError(w, "create", err)
 			return
@@ -199,11 +365,23 @@ func handleUpdateReview(reviews *usecase.Reviews) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		var req reviewParamsRequest
-		if !decodeJSON(w, r, &req) {
-			return
+		// PUT uses only rating, comment, and photo; the multipart parser's
+		// other fields are ignored, exactly like the JSON body's
+		// shop_id/burger_id/burger_name.
+		var form multipartReviewForm
+		if isMultipart(r) {
+			var ok bool
+			if form, ok = decodeReviewMultipart(w, r); !ok {
+				return
+			}
+		} else {
+			var req reviewParamsRequest
+			if !decodeJSON(w, r, &req) {
+				return
+			}
+			form = multipartReviewForm{rating: req.Review.Rating, comment: req.Review.Comment}
 		}
-		detail, err := reviews.Update(r.Context(), viewer, id, req.Review.Rating, req.Review.Comment)
+		detail, err := reviews.Update(r.Context(), viewer, id, form.rating, form.comment, form.photo)
 		if err != nil {
 			writeReviewError(w, "update", err)
 			return

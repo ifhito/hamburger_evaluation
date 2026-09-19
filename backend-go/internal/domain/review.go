@@ -7,9 +7,13 @@ import (
 
 // Review is the domain representation of a burger review row.
 type Review struct {
-	ID        int64
-	Rating    int
-	Comment   *string
+	ID      int64
+	Rating  int
+	Comment *string
+	// PhotoKey is the storage key of the review's photo, nil when none
+	// is attached (S10). Keys are opaque here; URLs are built by the
+	// usecase via its photo storage — never by the domain.
+	PhotoKey  *string
 	AuthorID  int64
 	BurgerID  int64
 	CreatedAt time.Time
@@ -70,4 +74,8 @@ type ReviewDetail struct {
 	Review
 	User   *UserRef
 	Burger *ShopReviewBurger
+	// PhotoURL is the public URL of the review's photo, nil when none is
+	// attached. It is derived from PhotoKey by the usecase (via its photo
+	// storage) — the domain itself never builds URLs.
+	PhotoURL *string
 }

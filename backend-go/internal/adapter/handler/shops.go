@@ -39,12 +39,17 @@ type userRefResponse struct {
 }
 
 type shopReviewResponse struct {
-	ID        int64                 `json:"id"`
-	Rating    int                   `json:"rating"`
-	Comment   *string               `json:"comment"`
-	CreatedAt string                `json:"created_at"`
-	User      *userRefResponse      `json:"user"`
-	Burger    *reviewBurgerResponse `json:"burger"`
+	ID        int64   `json:"id"`
+	Rating    int     `json:"rating"`
+	Comment   *string `json:"comment"`
+	CreatedAt string  `json:"created_at"`
+	// PhotoURL is the public URL of the review's photo, null when none is
+	// attached (S10). For the reviews embedded in GET /shops/{id} it stays
+	// null in this story: the Shops usecase is deliberately not wired to
+	// photo storage.
+	PhotoURL *string               `json:"photo_url"`
+	User     *userRefResponse      `json:"user"`
+	Burger   *reviewBurgerResponse `json:"burger"`
 }
 
 type reviewBurgerResponse struct {

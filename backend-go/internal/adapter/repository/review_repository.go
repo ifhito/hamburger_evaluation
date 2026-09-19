@@ -58,7 +58,7 @@ func (r *ReviewRepository) ListReviews(ctx context.Context, filter usecase.Revie
 	reviews := make([]domain.ReviewDetail, 0, len(rows))
 	for _, row := range rows {
 		reviews = append(reviews, toReviewDetail(
-			row.ID, row.Rating, row.Comment, row.CreatedAt,
+			row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt,
 			row.UserID, row.UserUsername, row.BurgerID, row.BurgerName,
 			row.ReviewCount, row.AverageRating, row.WeightedScore, row.Confidence,
 		))
@@ -78,7 +78,7 @@ func (r *ReviewRepository) GetReview(ctx context.Context, id int64) (domain.Revi
 		return domain.ReviewDetail{}, fmt.Errorf("get review: %w", err)
 	}
 	return toReviewDetail(
-		row.ID, row.Rating, row.Comment, row.CreatedAt,
+		row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt,
 		row.UserID, row.UserUsername, row.BurgerID, row.BurgerName,
 		row.ReviewCount, row.AverageRating, row.WeightedScore, row.Confidence,
 	), nil
@@ -226,6 +226,25 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 	return toDomainReview(row), nil
 }
 
+// UpdateReviewPhotoKey persists only photo_key of the still kept review
+// under id and returns the stored row, or domain.ErrReviewNotFound when it
+// is missing or discarded. photo_key plays no role in burger_stats, so
+// unlike the other writes this one needs no transaction and no
+// recalculation.
+func (r *ReviewRepository) UpdateReviewPhotoKey(ctx context.Context, id int64, photoKey *string) (domain.Review, error) {
+	row, err := r.q.UpdateReviewPhotoKey(ctx, sqlcgen.UpdateReviewPhotoKeyParams{
+		ID:       id,
+		PhotoKey: textOrNull(photoKey),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Review{}, fmt.Errorf("update review photo key: %w", domain.ErrReviewNotFound)
+		}
+		return domain.Review{}, fmt.Errorf("update review photo key: %w", err)
+	}
+	return toDomainReview(row), nil
+}
+
 // DiscardReview soft-deletes the review (stamps discarded_at, never a
 // hard DELETE). Missing and already-discarded reviews match no row and
 // yield domain.ErrReviewNotFound (the transaction is rolled back, so the
@@ -265,6 +284,7 @@ func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domai
 		Comment:  textOrNull(review.Comment),
 		UserID:   review.AuthorID,
 		BurgerID: review.BurgerID,
+		PhotoKey: textOrNull(review.PhotoKey),
 	})
 	if err != nil {
 		return sqlcgen.Review{}, fmt.Errorf("%s: %w", op, err)
@@ -351,13 +371,17 @@ func toDomainReview(row sqlcgen.Review) domain.Review {
 		comment := row.Comment.String
 		review.Comment = &comment
 	}
+	if row.PhotoKey.Valid {
+		key := row.PhotoKey.String
+		review.PhotoKey = &key
+	}
 	return review
 }
 
 // toReviewDetail maps the joined review columns (shared by the list and
 // detail queries) onto the domain payload; absent stats become zeros.
 func toReviewDetail(
-	id int64, rating int16, comment pgtype.Text, createdAt pgtype.Timestamptz,
+	id int64, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz,
 	userID int64, username string, burgerID int64, burgerName string,
 	reviewCount pgtype.Int8, averageRating, weightedScore, confidence pgtype.Float8,
 ) domain.ReviewDetail {
@@ -383,6 +407,10 @@ func toReviewDetail(
 	if comment.Valid {
 		c := comment.String
 		detail.Comment = &c
+	}
+	if photoKey.Valid {
+		key := photoKey.String
+		detail.PhotoKey = &key
 	}
 	return detail
 }

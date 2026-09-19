@@ -115,6 +115,9 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"reviews/discarded_at/timestamp with time zone/YES",
 		"reviews/created_at/timestamp with time zone/NO",
 		"reviews/updated_at/timestamp with time zone/NO",
+		// photo_key was added by 000007 (S10), so it sits last by ordinal
+		// position.
+		"reviews/photo_key/text/YES",
 		"shops/id/bigint/NO",
 		"shops/name/text/NO",
 		"shops/status/smallint/NO",
