@@ -1,6 +1,6 @@
 # Frontend
 
-React + TypeScript + Vite で構成された SPA です。Rails API を呼び出して、ショップ・レビュー・ユーザー画面を提供します。
+React + TypeScript + Vite で構成された SPA です。Go API を呼び出して、ショップ・レビュー・ユーザー画面を提供します。
 
 ## Stack
 

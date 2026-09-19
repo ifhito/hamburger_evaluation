@@ -1,28 +1,28 @@
 # Hamburger Evaluation
 
-ハンバーガーのレビュー投稿アプリです。ユーザー登録、ログイン、レビュー投稿、プロフィール更新ができます。構成は `backend/` の Rails API と `frontend/` の React SPA に分かれています。
+ハンバーガーのレビュー投稿アプリです。ユーザー登録、ログイン、レビュー投稿、プロフィール更新ができます。構成は `backend-go/` の Go API と `frontend/` の React SPA に分かれています。
 
 ## Stack
 
-- `backend/`: Ruby on Rails 8 API, PostgreSQL, JWT auth, RSpec
+- `backend-go/`: Go 1.22+, net/http + sqlc + pgx, PostgreSQL 16, JWT auth
 - `frontend/`: React 19, TypeScript, Vite, React Router, TanStack Query, Storybook
 
 ## Repository Layout
 
 ```text
 .
-├── backend/   # Rails API
-├── frontend/  # React SPA
-└── plan/      # Planning docs
+├── backend-go/  # Go API
+├── frontend/    # React SPA
+└── plan/        # Planning docs
 ```
 
 ## Main Features
 
 - JWT ベースのサインアップ / サインイン / サインアウト
-- ショップ一覧、ショップ詳細
+- ショップ一覧、ショップ詳細、ショップ申請と管理者による承認 / 却下
 - レビュー一覧、詳細、作成、編集、削除
 - ユーザー詳細、プロフィール更新、退会
-- バーガー統計の更新ジョブ
+- レビュー由来のバーガー統計
 
 ## Local Development
 
@@ -30,18 +30,22 @@
 
 ### 1. Backend
 
+`JWT_SECRET` が未設定だと API は起動時にエラーになります。事前に export してください。
+
 ```bash
-cd backend
+cd backend-go
+export JWT_SECRET=<任意のシークレット>
 docker compose up --build
 ```
 
-API は `http://localhost:3000` で起動します。
+API は `http://localhost:8080` で起動します（ヘルスチェックは `GET /up`）。専用の PostgreSQL はホストポート 5433 で公開されます。
 
-別ターミナルで初回セットアップを行います。
+別ターミナルで初回セットアップ（マイグレーションと開発用シードデータ投入）を行います。
 
 ```bash
-cd backend
-docker compose run --rm api bundle exec rails db:prepare
+cd backend-go
+docker compose run --rm migrate up
+docker compose run --rm seed
 ```
 
 ### 2. Frontend
@@ -57,26 +61,43 @@ docker compose up --build
 
 ### Backend
 
+リポジトリルートから検証スクリプト（gofmt / go vet / go build / go test）を実行します。
+
 ```bash
-cd backend
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
+.agents/skills/backend-go-change-validation/scripts/go-checks.sh
+```
+
+DB 受け入れテストは compose の db サービス起動中に実行します（`TEST_DATABASE_URL` 未設定時はスキップされます）。
+
+```bash
+cd backend-go
+TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=disable' go test ./db/...
 ```
 
 ### Frontend
 
-現状は Storybook ベースの UI 確認が中心です。
+チェックはビルド（`tsc -b && vite build`）のみです。lint / test スクリプトはありません。
 
 ```bash
 cd frontend
-docker compose run --rm frontend npm run storybook
+pnpm run build
+```
+
+UI 確認には Storybook が使えます。
+
+```bash
+cd frontend
+pnpm run storybook
 ```
 
 ## API Overview
 
+- `GET /up`
 - `POST /signup`
 - `POST /login`
 - `POST /logout`
 - `GET /shops`
+- `POST /shops`
 - `GET /shops/:id`
 - `GET /reviews`
 - `GET /reviews/:id`
@@ -86,11 +107,14 @@ docker compose run --rm frontend npm run storybook
 - `GET /users`
 - `PUT /users/:id`
 - `DELETE /users/:id`
-
-詳細は `backend/docs/API/` を参照してください。
+- `GET /admin/shops`
+- `PUT /admin/shops/:id`
+- `POST /admin/shops/:id/approve`
+- `POST /admin/shops/:id/reject`
 
 ## Notes
 
-- `.gitignore` で `frontend/node_modules`, `frontend/dist`, `backend/log`, `backend/tmp`, `backend/coverage`, `backend/config/master.key` などは除外しています。
+- API の JSON は snake_case です。フロントエンドは HTTP 境界でケース変換を行います。
 - 認証付き API は `Authorization: Bearer <token>` を前提にしています。
+- `/admin/*` と `/users/:id` の認可判定（管理者のみ・本人のみ）は usecase 層で行います。
 - フロントエンドは小さめの FSD 構成として `app`, `pages`, `shared` に絞っています。
