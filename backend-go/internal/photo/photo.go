@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -31,10 +32,36 @@ const (
 	maxEdge = 1600
 	// maxDimension and maxPixels bound the size declared in the image
 	// header, checked before the full decode (decompression-bomb guard).
+	// 24MP covers real camera output; the long edge is shrunk to 1600px
+	// anyway.
 	maxDimension = 10000
-	maxPixels    = 40_000_000
-	jpegQuality  = 85
+	maxPixels    = 24_000_000
+	// maxDecodedBytes caps the estimated in-memory size of the decoded
+	// pixel buffer (bytesPerPixel × declared pixels), so a 16-bit image
+	// cannot slip a ~2× larger decode past the pixel-count guard.
+	maxDecodedBytes = 128 << 20
+	jpegQuality     = 85
 )
+
+// decodeSem bounds concurrent decode/shrink/encode work to two uploads.
+// This is a memory guard: decoding is the memory-heavy part of a photo
+// request (worst case ~maxDecodedBytes per upload, so ~2×128MiB in
+// flight), and without the cap a handful of concurrent uploads could blow
+// the container's 1GiB limit (GOMEMLIMIT 920MiB). The acquire blocks
+// without a timeout — requests queue briefly instead of failing.
+var decodeSem = make(chan struct{}, 2)
+
+// bytesPerPixel estimates the decoded in-memory cost per pixel from the
+// header's color model: the 16-bit models decode to 8 bytes per pixel,
+// everything else is assumed 4 (8-bit RGBA/NRGBA, the worst common case).
+func bytesPerPixel(m color.Model) int64 {
+	switch m {
+	case color.RGBA64Model, color.NRGBA64Model, color.Gray16Model:
+		return 8
+	default:
+		return 4
+	}
+}
 
 // Processed is the normalized image ready for storage; the original
 // upload bytes are discarded.
@@ -47,11 +74,11 @@ type Processed struct {
 	Ext string
 }
 
-// Process reads one uploaded image from r (streaming; it buffers
-// internally only as much as decoding needs) and returns the normalized
-// result. Payloads that are not jpeg/png/webp by magic bytes, fail to
-// decode, or declare dimensions beyond the bomb guard yield a wrapped
-// ErrUnsupportedImage.
+// Process reads one uploaded image from r, buffering the ENTIRE payload
+// in memory up to the caller's read limit (the handler's 5 MiB + 1 cap
+// today), and returns the normalized result. Payloads that are not
+// jpeg/png/webp by magic bytes, fail to decode, or declare dimensions
+// beyond the bomb guard yield a wrapped ErrUnsupportedImage.
 func Process(r io.Reader) (Processed, error) {
 	br := bufio.NewReader(r)
 	head, err := br.Peek(512)
@@ -67,12 +94,19 @@ func Process(r io.Reader) (Processed, error) {
 	if err != nil {
 		return Processed{}, fmt.Errorf("read image: %w", err)
 	}
+	// From here on the work is memory-heavy (decode + shrink + encode
+	// buffers); decodeSem caps how many uploads do it at once.
+	decodeSem <- struct{}{}
+	defer func() { <-decodeSem }()
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return Processed{}, fmt.Errorf("%w: %v", ErrUnsupportedImage, err)
 	}
 	if cfg.Width > maxDimension || cfg.Height > maxDimension || cfg.Width*cfg.Height > maxPixels {
 		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the size limit", ErrUnsupportedImage, cfg.Width, cfg.Height)
+	}
+	if int64(cfg.Width)*int64(cfg.Height)*bytesPerPixel(cfg.ColorModel) > maxDecodedBytes {
+		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the decode memory limit", ErrUnsupportedImage, cfg.Width, cfg.Height)
 	}
 	img, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {

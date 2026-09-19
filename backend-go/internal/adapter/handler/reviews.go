@@ -94,7 +94,11 @@ func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartRev
 	}
 	for {
 		part, err := mr.NextPart()
-		if errors.Is(err, io.EOF) {
+		// Strict comparison on purpose (like stdlib ReadForm): since Go
+		// 1.22 NextPart returns a %w-WRAPPED io.EOF for a body that ends
+		// cleanly WITHOUT the final boundary (truncated but HTTP-complete),
+		// and errors.Is would misread that truncation as a complete form.
+		if err == io.EOF { //nolint:errorlint // see the comment above
 			return form, true
 		}
 		if err != nil {

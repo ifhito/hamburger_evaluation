@@ -12,6 +12,7 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -106,15 +107,20 @@ func newAuthKit() (*userRepoFake, *usecase.Auth, *infra.JWTCodec) {
 
 // newTestRouter is the default router for tests that only need db health
 // or routing behavior.
-func newTestRouter(p handler.Pinger) http.Handler {
+func newTestRouter(t *testing.T, p handler.Pinger) http.Handler {
+	t.Helper()
 	_, auth, _ := newAuthKit()
-	return newTestRouterWith(p, auth)
+	return newTestRouterWith(t, p, auth)
 }
 
-// newTestRouterWith wires the router with the given auth and empty
-// in-memory shop/review fakes, for tests that do not care about that data.
-func newTestRouterWith(p handler.Pinger, auth *usecase.Auth) http.Handler {
-	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}), usecase.NewReviews(newReviewRepoFake(), nil),
+// newTestRouterWith wires the router with the given auth, empty in-memory
+// shop/review fakes, and a real disk photo store in a fresh temp dir
+// (NewReviews demands a non-nil storage), for tests that do not care
+// about that data.
+func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.Handler {
+	t.Helper()
+	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}),
+		usecase.NewReviews(newReviewRepoFake(), storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(newUserRepoFake(), hasherFake{}), nil)
 }
 
@@ -153,7 +159,7 @@ func decodeAuthUser(t *testing.T, body []byte) (resp struct {
 // POST /logout route.
 func TestSignupThenLogout(t *testing.T) {
 	_, auth, _ := newAuthKit()
-	router := newTestRouterWith(okPinger, auth)
+	router := newTestRouterWith(t, okPinger, auth)
 
 	rec := do(router, http.MethodPost, "/signup",
 		`{"username":"alice","email":"alice@example.com","password":"password123","password_confirmation":"password123"}`, "")
@@ -237,7 +243,7 @@ func TestSignupErrors(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
-			rec := do(newTestRouterWith(okPinger, auth), http.MethodPost, "/signup", tt.body, "")
+			rec := do(newTestRouterWith(t, okPinger, auth), http.MethodPost, "/signup", tt.body, "")
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tt.wantStatus, rec.Body)
 			}
@@ -302,7 +308,7 @@ func TestLogin(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
-			rec := do(newTestRouterWith(okPinger, auth), http.MethodPost, "/login", tt.body, "")
+			rec := do(newTestRouterWith(t, okPinger, auth), http.MethodPost, "/login", tt.body, "")
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tt.wantStatus, rec.Body)
 			}
@@ -354,7 +360,7 @@ func TestRequireAuth(t *testing.T) {
 		t.Fatalf("issue unknown-user token: %v", err)
 	}
 
-	router := newTestRouterWith(okPinger, auth)
+	router := newTestRouterWith(t, okPinger, auth)
 	tests := []struct {
 		name       string
 		authHeader string
@@ -402,7 +408,7 @@ func TestRequireAuthInfraFailure(t *testing.T) {
 	}
 	repo.err = io.ErrUnexpectedEOF
 
-	rec := do(newTestRouterWith(okPinger, auth), http.MethodPost, "/logout", "", "Bearer "+token)
+	rec := do(newTestRouterWith(t, okPinger, auth), http.MethodPost, "/logout", "", "Bearer "+token)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusInternalServerError, rec.Body)
 	}
@@ -499,7 +505,7 @@ func TestSignupBodyTooLarge(t *testing.T) {
 	body := struct{ io.Reader }{strings.NewReader(`{"username":"` + strings.Repeat("a", 2<<20))}
 	req := httptest.NewRequest(http.MethodPost, "/signup", body)
 	rec := httptest.NewRecorder()
-	newTestRouter(okPinger).ServeHTTP(rec, req)
+	newTestRouter(t, okPinger).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusRequestEntityTooLarge, rec.Body)

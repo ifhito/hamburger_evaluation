@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
@@ -60,6 +61,14 @@ type ReviewRepository interface {
 	// domain.ErrReviewNotFound when it is missing or discarded (S10).
 	// photo_key plays no role in burger_stats, so no recalculation.
 	UpdateReviewPhotoKey(ctx context.Context, id int64, photoKey *string) (domain.Review, error)
+	// UpdateReviewContentAndPhotoKey persists rating, comment, AND
+	// photo_key of the still kept review under id atomically — the two
+	// column-scoped writes plus the burger_stats recalculation share ONE
+	// transaction, so a photo-carrying edit can never commit the content
+	// without the key (S10 review fix). Returns the stored row, or (a
+	// wrapped) domain.ErrReviewNotFound when the review is missing or
+	// discarded (nothing is committed then).
+	UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error)
 	// DiscardReview soft-deletes the review (stamps discarded_at, never a
 	// hard DELETE), or returns (a wrapped) domain.ErrReviewNotFound when
 	// it is missing or already discarded. The write also recalculates the
@@ -91,7 +100,14 @@ type Reviews struct {
 	photos PhotoStorage
 }
 
+// NewReviews wires the review use cases. photos must be non-nil (disk or
+// S3 in production, a fake in tests): every request path may dereference
+// it (photoURL, deletePhotoBestEffort), so a nil storage fails loudly
+// here instead of panicking mid-request.
 func NewReviews(repo ReviewRepository, photos PhotoStorage) *Reviews {
+	if photos == nil {
+		panic("usecase.NewReviews: nil PhotoStorage")
+	}
 	return &Reviews{repo: repo, photos: photos}
 }
 
@@ -180,10 +196,12 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 // admin gets no pass), content validation (422), then the column-scoped
 // write. The stored row is merged into the loaded detail so the response
 // carries author, burger, and stats without a re-fetch. A non-nil upload
-// (S10) replaces the photo: the new blob is stored first, photo_key is
-// switched via its own column-scoped write, and only after that DB
-// success is the old blob best-effort deleted. A nil upload leaves
-// photo_key untouched (there is no photo-removal path).
+// (S10) replaces the photo: the new blob is stored first, then content
+// and photo_key are switched in ONE repository transaction (so a failure
+// can never commit the content without the key), and only after that DB
+// success is the old blob best-effort deleted. A nil upload takes the
+// content-only write and leaves photo_key untouched (there is no
+// photo-removal path).
 func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
 	detail, err := s.repo.GetReview(ctx, id)
 	if err != nil {
@@ -199,19 +217,17 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
-	updated, err := s.repo.UpdateReviewContent(ctx, id, rating, comment)
-	if err != nil {
-		s.deletePhotoBestEffort(ctx, newKey)
-		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
-	}
+	var updated domain.Review
 	if newKey != nil {
-		if updated, err = s.repo.UpdateReviewPhotoKey(ctx, id, newKey); err != nil {
+		if updated, err = s.repo.UpdateReviewContentAndPhotoKey(ctx, id, rating, comment, newKey); err != nil {
 			s.deletePhotoBestEffort(ctx, newKey)
 			return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 		}
 		// The old blob is unreferenced only now that the DB points at the
 		// new key; losing it is a leaked file, not a broken review.
 		s.deletePhotoBestEffort(ctx, detail.PhotoKey)
+	} else if updated, err = s.repo.UpdateReviewContent(ctx, id, rating, comment); err != nil {
+		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
 	detail.Review = updated
 	detail.PhotoURL = s.photoURL(updated.PhotoKey)
@@ -260,11 +276,16 @@ func (s *Reviews) putPhoto(ctx context.Context, upload *photo.Processed) (*strin
 // documented best-effort exception to fail-loud: the DB is already the
 // source of truth by the time it runs, so a storage failure here means a
 // leaked (or already-gone) blob, never a broken review — it is logged
-// with the key and the request still succeeds.
+// with the key and the request still succeeds. The delete runs detached
+// from the request's cancellation (WithoutCancel) under its own short
+// timeout: a client that hangs up must not turn every delete into a
+// guaranteed orphan (S3 mode), while the timeout keeps the call bounded.
 func (s *Reviews) deletePhotoBestEffort(ctx context.Context, key *string) {
 	if key == nil {
 		return
 	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
 	if err := s.photos.Delete(ctx, *key); err != nil {
 		slog.Warn("best-effort review photo delete failed", "key", *key, "error", err)
 	}

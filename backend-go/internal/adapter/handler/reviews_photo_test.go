@@ -208,6 +208,20 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 		}
 	})
 
+	t.Run("truncated body without the closing boundary returns 400", func(t *testing.T) {
+		// The field parts are complete but the "--\r\n" tail of the final
+		// boundary is cut off: HTTP-complete yet truncated multipart. Go
+		// 1.22 NextPart reports this as a WRAPPED io.EOF; treating it as a
+		// clean end would answer 201 with the photo silently dropped.
+		full, contentType := multipartBody(t, fields, jpegBytes(t, 4096))
+		raw := full.Bytes()
+		truncated := bytes.NewBuffer(raw[:len(raw)-len("--\r\n")])
+		rec := doMultipart(router, http.MethodPost, "/reviews", truncated, contentType, aliceAuth)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusBadRequest, rec.Body)
+		}
+	})
+
 	t.Run("multipart rating 0 gets the JSON validation message", func(t *testing.T) {
 		body, contentType := multipartBody(t, map[string]string{
 			"rating":    "not-a-number",
@@ -316,9 +330,29 @@ func TestPhotoTraversal(t *testing.T) {
 		t.Error("traversal request leaked the file outside the photo root")
 	}
 
-	// A directory request must not list the stored keys either.
 	if rec := do(router, http.MethodGet, "/photos/nope.jpg", "", ""); rec.Code != http.StatusNotFound {
 		t.Errorf("missing photo status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+// TestPhotoDirectoryRequests pins handler.PhotoFileServer's anti-listing
+// rule (the same wrapper cmd/api wires): directory requests — the mount
+// root and the existing reviews/ subdir holding stored files — answer
+// 404 and never enumerate the stored keys.
+func TestPhotoDirectoryRequests(t *testing.T) {
+	router, _, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
+	// A stored photo guarantees the reviews/ subdir exists with a file.
+	_, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
+	storedName := strings.TrimPrefix(photoURL, "/photos/reviews/")
+
+	for _, path := range []string{"/photos/", "/photos/reviews/"} {
+		rec := do(router, http.MethodGet, path, "", "")
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want %d (body %s)", path, rec.Code, http.StatusNotFound, rec.Body)
+		}
+		if strings.Contains(rec.Body.String(), storedName) {
+			t.Errorf("GET %s leaked the stored key %q in a listing", path, storedName)
+		}
 	}
 }
 

@@ -207,6 +207,21 @@ func (f *reviewRepoFake) UpdateReviewPhotoKey(_ context.Context, id int64, photo
 	return rec.review, nil
 }
 
+func (f *reviewRepoFake) UpdateReviewContentAndPhotoKey(_ context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+	if f.err != nil {
+		return domain.Review{}, f.err
+	}
+	rec, ok := f.reviews[id]
+	if !ok || rec.discarded {
+		return domain.Review{}, domain.ErrReviewNotFound
+	}
+	rec.review.Rating = rating
+	c := comment
+	rec.review.Comment = &c
+	rec.review.PhotoKey = photoKey
+	return rec.review, nil
+}
+
 func (f *reviewRepoFake) DiscardReview(_ context.Context, id int64) error {
 	if f.err != nil {
 		return f.err
@@ -262,7 +277,8 @@ func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, 
 
 // newPhotoReviewsRouter is newReviewsRouter plus the S10 photo wiring: a
 // real disk store rooted in a fresh temp dir (returned for file
-// assertions) served under GET /photos/ exactly like main's disk mode.
+// assertions), served under GET /photos/ through the same
+// handler.PhotoFileServer wrapper cmd/api wires in disk mode.
 func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, photoDir, aliceAuth, bobAuth, adminAuth string) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
@@ -284,7 +300,7 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Hand
 	photoDir = t.TempDir()
 	router = handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}),
 		usecase.NewReviews(repo, storage.NewDisk(photoDir, "/photos")),
-		usecase.NewUsers(users, hasherFake{}), http.FileServer(http.Dir(photoDir)))
+		usecase.NewUsers(users, hasherFake{}), handler.PhotoFileServer(photoDir))
 	return router, photoDir, token(alice.ID), token(bob.ID), token(admin.ID)
 }
 

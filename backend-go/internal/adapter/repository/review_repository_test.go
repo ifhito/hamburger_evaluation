@@ -928,6 +928,28 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 	})
 
+	t.Run("UpdateReviewContentAndPhotoKey writes content and key together", func(t *testing.T) {
+		updated, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 5, "Even better", strPtr("reviews/both.png"))
+		if err != nil {
+			t.Fatalf("UpdateReviewContentAndPhotoKey returned error: %v", err)
+		}
+		if updated.Rating != 5 || updated.Comment == nil || *updated.Comment != "Even better" {
+			t.Errorf("updated = %+v, want rating 5 and the new comment", updated)
+		}
+		if updated.PhotoKey == nil || *updated.PhotoKey != "reviews/both.png" {
+			t.Errorf("updated PhotoKey = %v, want reviews/both.png", updated.PhotoKey)
+		}
+		// The committed row carries BOTH the content and the key (one
+		// transaction — never content without the key).
+		detail, err := repo.GetReview(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("GetReview after combined update returned error: %v", err)
+		}
+		if detail.Rating != 5 || detail.PhotoKey == nil || *detail.PhotoKey != "reviews/both.png" {
+			t.Errorf("stored = rating %d, key %v, want 5 and reviews/both.png", detail.Rating, detail.PhotoKey)
+		}
+	})
+
 	t.Run("keyless create stays NULL", func(t *testing.T) {
 		plain, err := repo.CreateReview(ctx, domain.Review{Rating: 3, Comment: &comment, AuthorID: alice, BurgerID: burger})
 		if err != nil {
@@ -944,6 +966,18 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 		if _, err := repo.UpdateReviewPhotoKey(ctx, created.ID, nil); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("UpdateReviewPhotoKey error = %v, want %v", err, domain.ErrReviewNotFound)
+		}
+		// The combined write rolls back too: no content change survives.
+		if _, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 1, "ghost", strPtr("reviews/ghost.jpg")); !errors.Is(err, domain.ErrReviewNotFound) {
+			t.Fatalf("UpdateReviewContentAndPhotoKey error = %v, want %v", err, domain.ErrReviewNotFound)
+		}
+		var rating int16
+		var key *string
+		if err := conn.QueryRow(ctx, `SELECT rating, photo_key FROM reviews WHERE id = $1`, created.ID).Scan(&rating, &key); err != nil {
+			t.Fatalf("select discarded review: %v", err)
+		}
+		if rating == 1 || (key != nil && *key == "reviews/ghost.jpg") {
+			t.Errorf("discarded review row = rating %d, key %v; the failed combined write leaked a change", rating, key)
 		}
 	})
 }

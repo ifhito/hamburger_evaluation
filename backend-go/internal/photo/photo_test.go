@@ -36,14 +36,15 @@ func encode(t *testing.T, format string, w, h int) []byte {
 }
 
 // pngHeader hand-crafts a PNG signature plus a valid IHDR chunk declaring
-// w x h, so DecodeConfig sees the dimensions without the test allocating a
-// real image of that size.
-func pngHeader(t *testing.T, w, h uint32) []byte {
+// w x h at the given bit depth (8 or 16), so DecodeConfig sees the
+// dimensions and color model without the test allocating a real image of
+// that size.
+func pngHeader(t *testing.T, w, h uint32, bitDepth byte) []byte {
 	t.Helper()
 	ihdr := make([]byte, 13)
 	binary.BigEndian.PutUint32(ihdr[0:], w)
 	binary.BigEndian.PutUint32(ihdr[4:], h)
-	ihdr[8] = 8 // bit depth
+	ihdr[8] = bitDepth
 	ihdr[9] = 2 // color type: truecolor
 	var buf bytes.Buffer
 	buf.Write([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
@@ -148,9 +149,13 @@ func TestProcessRejections(t *testing.T) {
 		{name: "plain text", input: []byte("just some text, definitely not an image")},
 		{name: "empty payload", input: nil},
 		{name: "png magic bytes without image data", input: []byte("\x89PNG\r\n\x1a\ngarbage")},
-		{name: "width beyond 10000", input: pngHeader(t, 10001, 1)},
-		{name: "height beyond 10000", input: pngHeader(t, 1, 10001)},
-		{name: "pixel count beyond 40M", input: pngHeader(t, 7000, 7000)},
+		{name: "width beyond 10000", input: pngHeader(t, 10001, 1, 8)},
+		{name: "height beyond 10000", input: pngHeader(t, 1, 10001, 8)},
+		{name: "pixel count beyond 24M", input: pngHeader(t, 5000, 5000, 8)},
+		// 4500x4500 is 20.25M pixels — under maxPixels — but at 16-bit
+		// truecolor (8 bytes/px decoded) the estimate is ~162MB, over the
+		// 128MiB decode memory limit.
+		{name: "16-bit image under the pixel cap but over the decode memory limit", input: pngHeader(t, 4500, 4500, 16)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -67,9 +66,10 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	)
 
 	// Review photo storage (S10): S3-compatible in s3 mode, else local
-	// disk, which the API also serves itself under GET /photos/ (the dir
-	// resolves relative to the working dir; the container mounts . as
-	// /app). photoFiles stays nil in s3 mode.
+	// disk, which the API also serves itself under GET /photos/ via
+	// handler.PhotoFileServer (the dir resolves relative to the working
+	// dir; the container mounts . as /app). photoFiles stays nil in s3
+	// mode.
 	var photos usecase.PhotoStorage
 	var photoFiles http.Handler
 	if cfg.PhotoStorage == "s3" {
@@ -77,7 +77,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 			cfg.PhotoS3AccessKeyID, cfg.PhotoS3SecretAccessKey, cfg.PhotoPublicBaseURL)
 	} else {
 		photos = storage.NewDisk(cfg.PhotoDiskDir, cfg.PhotoPublicBaseURL)
-		photoFiles = photoFileServer(cfg.PhotoDiskDir)
+		photoFiles = handler.PhotoFileServer(cfg.PhotoDiskDir)
 	}
 
 	shops := usecase.NewShops(repository.NewShopRepository(pool))
@@ -85,21 +85,6 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	users := usecase.NewUsers(userRepo, infra.BcryptPasswordHasher{})
 
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users, photoFiles), ready)
-}
-
-// photoFileServer serves the disk photo dir read-only: http.FileServer
-// over http.Dir already confines requests to root (".." never escapes),
-// and the wrapper turns directory requests into 404s instead of listings
-// so stored keys are not enumerable.
-func photoFileServer(root string) http.Handler {
-	files := http.FileServer(http.Dir(root))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if p := r.URL.Path; p == "" || strings.HasSuffix(p, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		files.ServeHTTP(w, r)
-	})
 }
 
 // serve runs an http.Server with explicit timeouts (never bare
