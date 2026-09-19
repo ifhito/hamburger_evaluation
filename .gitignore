@@ -3,17 +3,6 @@
 # Local tooling
 .claude/settings.local.json
 
-# Secrets
-backend/.kamal/secrets
-backend/config/master.key
-
-# Ruby / Rails runtime files
-backend/log/*
-!backend/log/.keep
-backend/tmp/*
-!backend/tmp/.keep
-backend/coverage/
-
 # Frontend build artifacts and dependencies
 frontend/node_modules/
 frontend/dist/
@@ -23,5 +12,3 @@ frontend/dist/
 .env.*
 frontend/.env
 frontend/.env.*
-backend/.env
-backend/.env.*

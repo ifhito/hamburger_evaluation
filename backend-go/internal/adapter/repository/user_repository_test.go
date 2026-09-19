@@ -292,7 +292,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	t.Run("read paths hide the discarded user's kept reviews", func(t *testing.T) {
 		// Feed: only alice's review remains, and its displayed stats match
 		// the recalculated burger_stats row (count 1).
-		feed, err := reviewRepo.ListReviews(ctx, 100, 0)
+		feed, err := reviewRepo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}

@@ -33,6 +33,17 @@ func ValidateReviewContent(rating int, comment string) error {
 	return nil
 }
 
+// ValidateBurgerName enforces the Rails Burger name presence rule for the
+// burger_name review submission path: a blank or whitespace-only name is
+// rejected. (Rails answers a blank name with an unrescued RecordInvalid;
+// here it is a proper validation failure — fail loud with a 422.)
+func ValidateBurgerName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return &ValidationError{Messages: []string{"Burger name can't be blank"}}
+	}
+	return nil
+}
+
 // NewReview builds a validated new review by author for burger. The
 // comment is stored as given (only its presence is validated), matching
 // Rails which never trims user text.

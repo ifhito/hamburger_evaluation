@@ -22,7 +22,7 @@ export default function ReviewEditPage() {
   useEffect(() => {
     if (review && !initialized) {
       setField('rating', review.rating)
-      setField('comment', review.comment)
+      setField('comment', review.comment ?? '')
       setInitialized(true)
     }
   }, [review, initialized, setField])

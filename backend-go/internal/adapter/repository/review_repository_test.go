@@ -14,6 +14,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 // reviewIDs extracts the review ids preserving order.
@@ -97,7 +98,7 @@ func TestReviewRepository(t *testing.T) {
 	insertRow(ctx, t, conn, insertReview, 2, "rejected only", alice, outcast, nil, t2)
 
 	t.Run("ListReviews filters to active-shop burgers, no dupes, newest first", func(t *testing.T) {
-		reviews, err := repo.ListReviews(ctx, 100, 0)
+		reviews, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -130,26 +131,109 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("ListReviews paginates the ordered feed", func(t *testing.T) {
-		page1, err := repo.ListReviews(ctx, 2, 0)
+		page1, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if got, want := reviewIDs(page1), []int64{rTie2, rTie1}; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 1 = %v, want %v", got, want)
 		}
-		page2, err := repo.ListReviews(ctx, 2, 2)
+		page2, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 2)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if got, want := reviewIDs(page2), []int64{rOld}; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 2 = %v, want %v", got, want)
 		}
-		far, err := repo.ListReviews(ctx, 2, 100)
+		far, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 100)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if len(far) != 0 {
 			t.Errorf("far page = %v, want empty", far)
+		}
+	})
+
+	t.Run("ListReviews applies the Rails ReviewQuery filters on top of the feed rules", func(t *testing.T) {
+		intp := func(n int) *int { return &n }
+		int64p := func(n int64) *int64 { return &n }
+		tests := []struct {
+			name   string
+			filter usecase.ReviewListFilter
+			want   []int64
+		}{
+			{name: "rating exact match (by_rating)", filter: usecase.ReviewListFilter{Rating: intp(4)}, want: []int64{rTie2}},
+			// Rating-2 reviews exist only on the pending/rejected-only
+			// burgers: the active-shop feed rule still applies.
+			{name: "rating matching only hidden reviews is empty", filter: usecase.ReviewListFilter{Rating: intp(2)}, want: []int64{}},
+			{name: "keyword is case-insensitive (keyword_search ILIKE)", filter: usecase.ReviewListFilter{Keyword: "tAsT"}, want: []int64{rOld}},
+			// NULL comments never match, like Rails' comment ILIKE.
+			{name: "keyword skips NULL comments", filter: usecase.ReviewListFilter{Keyword: "a"}, want: []int64{rOld}},
+			// Unescaped, "%" would ILIKE-match every non-NULL comment.
+			{name: "keyword LIKE metacharacters match literally", filter: usecase.ReviewListFilter{Keyword: "%"}, want: []int64{}},
+			{name: "keyword matching only hidden reviews is empty", filter: usecase.ReviewListFilter{Keyword: "only"}, want: []int64{}},
+			{name: "shop_id follows the shops_burgers link", filter: usecase.ReviewListFilter{ShopID: int64p(active2)}, want: []int64{rTie1, rOld}},
+			{name: "shop_id keeps all burgers of the shop", filter: usecase.ReviewListFilter{ShopID: int64p(active1)}, want: []int64{rTie2, rTie1, rOld}},
+			{name: "unknown shop_id is empty", filter: usecase.ReviewListFilter{ShopID: int64p(99999)}, want: []int64{}},
+			{name: "filters combine with AND", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: int64p(active2)}, want: []int64{rOld}},
+			{name: "AND combination with no match is empty", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []int64{}},
+			// Out-of-range ratings must compare false, not overflow the
+			// smallint column into a SQL error.
+			{name: "rating beyond smallint is empty, not an error", filter: usecase.ReviewListFilter{Rating: intp(1 << 40)}, want: []int64{}},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				reviews, err := repo.ListReviews(ctx, tt.filter, 100, 0)
+				if err != nil {
+					t.Fatalf("ListReviews returned error: %v", err)
+				}
+				if got := reviewIDs(reviews); !reflect.DeepEqual(got, tt.want) {
+					t.Errorf("ids = %v, want %v", got, tt.want)
+				}
+			})
+		}
+	})
+
+	t.Run("shop_id filter requires the filter shop itself to be active", func(t *testing.T) {
+		// A burger linked to BOTH an active and a pending shop: its review
+		// is in the feed (via the active link), but filtering by the pending
+		// shop must return nothing — stricter than Rails' status-blind shop
+		// filter, consistent with the feed's active-shop rule.
+		mixedActive := insertRow(ctx, t, conn, insertShop, "Mixed Active", 1, nil, nil)
+		mixed := insertRow(ctx, t, conn, insertBurger, "Mixed")
+		mustLink(mixedActive, mixed)
+		mustLink(pending, mixed)
+		rMixed := insertRow(ctx, t, conn, insertReview, 4, "mixed", alice, mixed, nil, t2)
+		t.Cleanup(func() {
+			for _, del := range []struct {
+				sql string
+				id  int64
+			}{
+				{`DELETE FROM reviews WHERE id = $1`, rMixed},
+				{`DELETE FROM shops_burgers WHERE burger_id = $1`, mixed},
+				{`DELETE FROM burgers WHERE id = $1`, mixed},
+				{`DELETE FROM shops WHERE id = $1`, mixedActive},
+			} {
+				if _, err := conn.Exec(ctx, del.sql, del.id); err != nil {
+					t.Fatalf("cleanup %q: %v", del.sql, err)
+				}
+			}
+		})
+
+		byShop := func(id int64) usecase.ReviewListFilter { return usecase.ReviewListFilter{ShopID: &id} }
+		got, err := repo.ListReviews(ctx, byShop(pending), 100, 0)
+		if err != nil {
+			t.Fatalf("ListReviews returned error: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("pending shop filter = %v, want empty", reviewIDs(got))
+		}
+		got, err = repo.ListReviews(ctx, byShop(mixedActive), 100, 0)
+		if err != nil {
+			t.Fatalf("ListReviews returned error: %v", err)
+		}
+		if want := []int64{rMixed}; !reflect.DeepEqual(reviewIDs(got), want) {
+			t.Errorf("active shop filter = %v, want %v", reviewIDs(got), want)
 		}
 	})
 
@@ -287,7 +371,7 @@ func TestReviewRepository(t *testing.T) {
 		if _, err := repo.GetReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("GetReview after discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		reviews, err := repo.ListReviews(ctx, 100, 0)
+		reviews, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -320,6 +404,138 @@ func TestReviewRepository(t *testing.T) {
 			t.Fatalf("delete victim review: %v", err)
 		}
 		seedCheeseStats(t)
+	})
+}
+
+// TestReviewRepositoryCreateReviewForNamedBurger exercises the burger_name
+// find-or-create submission path (S6 P3-1): shop-scoped reuse by exact
+// name, burger + link creation for unknown names, per-shop name scoping
+// (the same name at another shop is a distinct burger row), and the
+// single-transaction guarantee (a failed insert commits no orphan burger
+// or link).
+func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed repository test in short mode")
+	}
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	repo := repository.NewReviewRepository(conn)
+
+	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
+	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+
+	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
+	shopA := insertRow(ctx, t, conn, insertShop, "Shop A", 1, nil, alice)
+	shopB := insertRow(ctx, t, conn, insertShop, "Shop B", 1, nil, nil)
+
+	cheese := insertRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
+	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopA, cheese); err != nil {
+		t.Fatalf("link shop A cheese: %v", err)
+	}
+	if _, err := conn.Exec(ctx,
+		`INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at)
+		 VALUES ($1, 2, 4.0, 3.9, 0.7, now())`, cheese); err != nil {
+		t.Fatalf("seed cheese stats: %v", err)
+	}
+
+	countRows := func(t *testing.T, query string, args ...any) int64 {
+		t.Helper()
+		var n int64
+		if err := conn.QueryRow(ctx, query, args...).Scan(&n); err != nil {
+			t.Fatalf("count (%s): %v", query, err)
+		}
+		return n
+	}
+	burgersNamed := func(t *testing.T, name string) int64 {
+		return countRows(t, `SELECT count(*) FROM burgers WHERE name = $1`, name)
+	}
+
+	mustNamedCreate := func(t *testing.T, shopID int64, name string) (domain.Review, domain.ShopReviewBurger) {
+		t.Helper()
+		review, err := domain.NewReview(4, "via name", alice, 0)
+		if err != nil {
+			t.Fatalf("NewReview returned error: %v", err)
+		}
+		created, burger, err := repo.CreateReviewForNamedBurger(ctx, shopID, name, review)
+		if err != nil {
+			t.Fatalf("CreateReviewForNamedBurger returned error: %v", err)
+		}
+		return created, burger
+	}
+
+	t.Run("existing name in the shop is reused with its pre-insert stats", func(t *testing.T) {
+		created, burger := mustNamedCreate(t, shopA, "Cheese")
+		if burger.ID != cheese {
+			t.Fatalf("burger id = %d, want the existing Cheese %d", burger.ID, cheese)
+		}
+		want := domain.ShopReviewBurger{ID: cheese, Name: "Cheese", AverageRating: 4.0, ReviewCount: 2, WeightedScore: 3.9, Confidence: 0.7}
+		if !reflect.DeepEqual(burger, want) {
+			t.Errorf("burger = %+v, want the seeded pre-insert stats %+v", burger, want)
+		}
+		if created.ID == 0 || created.BurgerID != cheese || created.CreatedAt.IsZero() {
+			t.Errorf("created = %+v, want a stored review for burger %d", created, cheese)
+		}
+		if got := burgersNamed(t, "Cheese"); got != 1 {
+			t.Errorf("Cheese burger rows = %d, want no duplicate", got)
+		}
+		// The insert recalculated the stats in the same transaction.
+		if stats := requireConsistentStats(ctx, t, conn, cheese); stats.ReviewCount != 1 {
+			t.Errorf("stats = %+v, want the recalculated count 1 (only the new kept review)", stats)
+		}
+	})
+
+	t.Run("unknown name creates the burger and its shops_burgers link", func(t *testing.T) {
+		created, burger := mustNamedCreate(t, shopA, "Veggie")
+		if burger.Name != "Veggie" || burger.ID == cheese {
+			t.Fatalf("burger = %+v, want a new Veggie row", burger)
+		}
+		if zero := (domain.ShopReviewBurger{ID: burger.ID, Name: "Veggie"}); !reflect.DeepEqual(burger, zero) {
+			t.Errorf("burger = %+v, want zero pre-insert stats", burger)
+		}
+		if created.BurgerID != burger.ID {
+			t.Errorf("review burger = %d, want %d", created.BurgerID, burger.ID)
+		}
+		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1 AND burger_id = $2`, shopA, burger.ID); got != 1 {
+			t.Errorf("link rows = %d, want 1", got)
+		}
+		if stats := requireConsistentStats(ctx, t, conn, burger.ID); stats.ReviewCount != 1 {
+			t.Errorf("stats = %+v, want count 1", stats)
+		}
+	})
+
+	t.Run("the same name at another shop is a distinct burger row", func(t *testing.T) {
+		_, burger := mustNamedCreate(t, shopB, "Cheese")
+		if burger.ID == cheese {
+			t.Fatalf("burger id = %d, want a new row distinct from shop A's Cheese %d", burger.ID, cheese)
+		}
+		if got := burgersNamed(t, "Cheese"); got != 2 {
+			t.Errorf("Cheese burger rows = %d, want 2 (one per shop)", got)
+		}
+		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1 AND burger_id = $2`, shopB, burger.ID); got != 1 {
+			t.Errorf("shop B link rows = %d, want 1", got)
+		}
+		// Shop A's Cheese link still points at the original burger only.
+		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1`, shopA); got != 2 {
+			t.Errorf("shop A link rows = %d, want its original Cheese and Veggie", got)
+		}
+	})
+
+	t.Run("a failed insert commits no orphan burger or link", func(t *testing.T) {
+		// The unknown author violates the reviews.user_id FK after the
+		// burger and link inserts — the whole transaction must roll back.
+		review := domain.Review{Rating: 4, AuthorID: 99999}
+		if _, _, err := repo.CreateReviewForNamedBurger(ctx, shopA, "Ghost", review); err == nil {
+			t.Fatal("CreateReviewForNamedBurger returned nil error, want the FK failure")
+		}
+		if got := burgersNamed(t, "Ghost"); got != 0 {
+			t.Errorf("Ghost burger rows = %d, want the rollback to leave none", got)
+		}
+		if got := countRows(t, `SELECT count(*) FROM shops_burgers sb JOIN burgers b ON b.id = sb.burger_id WHERE b.name = 'Ghost'`); got != 0 {
+			t.Errorf("Ghost link rows = %d, want none", got)
+		}
+		if got := countRows(t, `SELECT count(*) FROM reviews WHERE user_id = 99999`); got != 0 {
+			t.Errorf("review rows = %d, want none", got)
+		}
 	})
 }
 

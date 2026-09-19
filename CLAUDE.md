@@ -12,52 +12,17 @@ Two separate sub-projects, each run via Docker:
 
 | Directory | Stack | Role |
 |-----------|-------|------|
-| `backend/` | Ruby on Rails (API mode) | REST API server |
-| `frontend/` | React (TypeScript) | SPA client |
+| `backend-go/` | Go (1.22+), net/http + sqlc + pgx | REST API server |
+| `frontend/` | React (TypeScript) + Vite | SPA client |
 
-## Development
+The backend follows clean architecture (handler → usecase → domain): dependencies point inward, and authorization decisions live in usecase/domain, not in handlers.
 
-All services are run via Docker. Start each component from its respective directory.
+## Backend (`backend-go/`)
 
-```bash
-# Each service is started from its directory
-docker compose up   # (from backend/ or frontend/)
-```
-
-API documentation is served via Swagger (configured in the Rails backend).
-
-## Backend
-
-- Rails in **API mode** (no views/assets)
-- API endpoints are documented in `backend/docs/API/` as YAML files
-- Authentication: **JWT** — token is returned on login and must be sent as a Bearer token
-
-### Endpoints
-
-**Auth**
-- `POST /signup` — create account (username, email, password)
-- `POST /login` — authenticate and receive JWT token
-- `POST /logout` — invalidate current session
-
-**Reviews**
-- `GET /reviews` — list all reviews
-- `GET /reviews/:id` — get a single review
-- `POST /reviews` — create a review (auth required)
-- `PUT /reviews/:id` — update a review (auth required)
-- `DELETE /reviews/:id` — delete a review (auth required)
-
-**Users**
-- `GET /users` — list all users
-- `POST /users` — create a user
-- `PUT /users/:id` — update a user
-- `DELETE /users/:id` — delete a user
-
-**Shops** — *not yet implemented; see Future Plans below*
-
-## Backend (Go)
-
-- `backend-go/` — Go (1.22+) API using **net/http + sqlc + pgx** with clean architecture (handler → usecase → domain)
-- Runs with its own dedicated Postgres (host port 5433) so it does not collide with the Rails stack
+- Serves on **:8080**; health check at `GET /up`
+- Runs with its own dedicated Postgres (host port 5433)
+- Authentication: **JWT** — token is returned on login and must be sent as `Authorization: Bearer <token>`. The API fails loudly at boot when `JWT_SECRET` is unset; export it before `docker compose up`.
+- API JSON uses **snake_case** on the wire; the frontend uses the snake_case wire types directly end-to-end (no casing-conversion layer).
 
 ```bash
 # Start (serves on :8080; health check at GET /up)
@@ -78,6 +43,13 @@ docker compose run --rm migrate down -all
 ```
 
 ```bash
+# Seed idempotent dev fixtures (admin + alice/bob/charlie, shops, burgers,
+# reviews, burger_stats) — run after `migrate up`; override with DATABASE_URL
+cd backend-go
+docker compose run --rm seed
+```
+
+```bash
 # Regenerate sqlc code — must produce zero diff under internal/adapter/repository/sqlcgen
 cd backend-go
 docker compose run --rm sqlc generate
@@ -89,12 +61,58 @@ cd backend-go
 TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=disable' go test ./db/...
 ```
 
-## Frontend
+### Endpoints
+
+**Health**
+- `GET /up` — health check (DB ping)
+
+**Auth**
+- `POST /signup` — create account (username, email, password)
+- `POST /login` — authenticate and receive JWT token
+- `POST /logout` — invalidate current session (auth required)
+
+**Shops**
+- `GET /shops` — list shops
+- `GET /shops/:id` — get a single shop
+- `POST /shops` — submit a shop (auth required)
+
+**Reviews**
+- `GET /reviews` — list all reviews
+- `GET /reviews/:id` — get a single review
+- `POST /reviews` — create a review (auth required)
+- `PUT /reviews/:id` — update a review (auth required)
+- `DELETE /reviews/:id` — delete a review (auth required)
+
+**Users**
+- `GET /users` — list all users
+- `PUT /users/:id` — update a user (auth required; self-only, enforced in usecase)
+- `DELETE /users/:id` — delete a user (auth required; self-only, enforced in usecase)
+
+**Admin** (auth required; admin-only decision enforced in usecase)
+- `GET /admin/shops` — list shops for moderation
+- `PUT /admin/shops/:id` — update a shop
+- `POST /admin/shops/:id/approve` — approve a submitted shop
+- `POST /admin/shops/:id/reject` — reject a submitted shop
+
+## Frontend (`frontend/`)
 
 - Built with **Feature-Sliced Design (FSD)** — but intentionally limited to three layers only: `app`, `pages`, `shared`
 - No `features`, `entities`, or `widgets` layers — keep it small
 - Storybook is configured for component development
 - Start with plain HTML (no custom design system yet)
+
+```bash
+# Start (serves on :5173)
+cd frontend
+docker compose up --build
+```
+
+```bash
+# Validation — build is the only check; `tsc -b` inside it doubles as the type check.
+# There are no lint or test scripts in package.json.
+cd frontend
+pnpm run build
+```
 
 **Directory layout** (`src/`):
 ```
@@ -120,61 +138,19 @@ shared/
 
 ## Database Schema
 
-Five tables in total:
+Six tables, defined by the migrations in `backend-go/db/migrations/`:
 
-**users**: id (Rails PK), email, encrypted_password, username
-
-**shops**: id, name
-
-**burgers**: id, shops_and_burgers_id (FK)
-
-**reviews**: id, rating, comment, users_id (FK), burgers_id (FK)
-
-**shops_and_burgers** *(join table)*: id, shop_id (FK), burger_id (FK)
+- **users** — id, email, username, password_digest, admin flag, soft delete (discarded_at)
+- **shops** — name, moderation status (pending/active/rejected), moderation_note, creator FK
+- **burgers** — burgers linked to shops via the join table
+- **shops_burgers** *(join table)* — shop_id (FK), burger_id (FK)
+- **reviews** — rating, comment, user FK, burger FK
+- **burger_stats** — review-derived aggregates per burger
 
 ### Relationships
 
 ```
 users    1 ──0..* reviews
 burgers  1 ──0..* reviews
-shops   *──────* burgers  (via shops_and_burgers)
+shops   *──────* burgers  (via shops_burgers)
 ```
-
-- A user can post many reviews
-- A burger can have many reviews
-- Shops and burgers share a many-to-many relationship through `shops_and_burgers`
-
-## Testing Policy
-
-**Backend uses TDD (Test-Driven Development) as the default approach.**
-
-When adding new features or fixing bugs in `backend/`:
-
-1. 🔴 Write a failing test first
-2. 🟢 Write the minimum implementation to make it pass
-3. 🔵 Refactor
-
-**Test stack**: RSpec + FactoryBot + Faker + Shoulda Matchers + DatabaseCleaner + SimpleCov
-
-**Coverage target**: 80% minimum (enforced via `simplecov`)
-
-```bash
-# Run all tests with coverage report
-# NOTE: RAILS_ENV=test must be passed explicitly because docker-compose.yml sets RAILS_ENV=development
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
-
-# File-specific run
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec spec/models/user_spec.rb
-
-# View coverage report
-open backend/coverage/index.html
-```
-
----
-
-## Future Plans
-
-The following are intentionally deferred and **not** part of the MVP:
-
-- **Shops API** (`shops.yaml` is a placeholder): store listing/search endpoints will be added later
-- **Burger name and details**: `burgers` currently holds only `id` and `shops_and_burgers_id`; columns for name, ingredients, and price are planned for a future iteration
