@@ -15,6 +15,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
@@ -83,7 +84,8 @@ func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) stri
 	t.Helper()
 	repo, auth, codec := newAuthKit()
 	router := handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}),
-		usecase.NewReviews(newReviewRepoFake()), usecase.NewUsers(repo, hasherFake{}))
+		usecase.NewReviews(newReviewRepoFake(), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(repo, hasherFake{}), nil)
 	token := func(id int64) string {
 		t.Helper()
 		tok, err := codec.Issue(id)
@@ -352,8 +354,8 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	auth := usecase.NewAuth(userRepo, hasher, codec, codec)
 	router := handler.NewRouter(conn, auth,
 		usecase.NewShops(repository.NewShopRepository(conn)),
-		usecase.NewReviews(repository.NewReviewRepository(conn)),
-		usecase.NewUsers(userRepo, hasher))
+		usecase.NewReviews(repository.NewReviewRepository(conn), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(userRepo, hasher), nil)
 	return conn, router
 }
 

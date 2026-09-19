@@ -22,6 +22,7 @@ export default function ReviewNewPage() {
   const { fields, errors, setField, validate, toCreateInput } = useReviewForm({ shop_id: shopId })
   const createReview = useCreateReview()
   const [serverError, setServerError] = useState<string | string[] | null>(null)
+  const [photo, setPhoto] = useState<File | null>(null)
 
   if (!shopId) return <Navigate to="/shops" replace />
 
@@ -30,7 +31,19 @@ export default function ReviewNewPage() {
     if (!validate(['comment', 'burger_name'])) return
     setServerError(null)
     try {
-      const review = await createReview.mutateAsync(toCreateInput())
+      let input: FormData | ReturnType<typeof toCreateInput>
+      if (photo) {
+        const formData = new FormData()
+        formData.append('rating', String(fields.rating))
+        formData.append('comment', fields.comment)
+        formData.append('shop_id', String(fields.shop_id))
+        formData.append('burger_name', fields.burger_name)
+        formData.append('photo', photo)
+        input = formData
+      } else {
+        input = toCreateInput()
+      }
+      const review = await createReview.mutateAsync(input)
       void navigate(`/reviews/${review.id}`)
     } catch (err) {
       if (err instanceof ApiRequestError) {
@@ -70,6 +83,15 @@ export default function ReviewNewPage() {
           error={errors.burger_name}
           placeholder="Enter burger name"
         />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label htmlFor="photo" style={{ fontSize: '0.875rem', fontWeight: 500 }}>Photo (optional)</label>
+          <input
+            id="photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+          />
+        </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <Button type="submit" isLoading={createReview.isPending}>Submit Review</Button>
           <Link to={`/shops/${shopId}`}>

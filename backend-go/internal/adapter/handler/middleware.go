@@ -14,6 +14,22 @@ import (
 // maxRequestBodyBytes caps request bodies at 1 MiB (resource guardrail).
 const maxRequestBodyBytes int64 = 1 << 20
 
+// maxReviewRequestBodyBytes caps the review submission bodies at 6 MiB:
+// room for the 5 MiB photo (S10) plus fields and multipart framing. The
+// photo itself is still checked against its own 5 MiB limit, which is what
+// yields the 422 — this cap only stops runaway bodies with 413.
+const maxReviewRequestBodyBytes int64 = 6 << 20
+
+// bodyLimit returns the request's body cap: only the review write
+// endpoints (which may carry a multipart photo, S10) get the larger one.
+func bodyLimit(r *http.Request) int64 {
+	if (r.Method == http.MethodPost && r.URL.Path == "/reviews") ||
+		(r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/reviews/")) {
+		return maxReviewRequestBodyBytes
+	}
+	return maxRequestBodyBytes
+}
+
 // limitBody is the global body-cap middleware. It rejects requests whose
 // declared Content-Length exceeds the limit up front with 413 and the
 // error JSON shape (covering handlers that never read the body), and wraps
@@ -21,12 +37,13 @@ const maxRequestBodyBytes int64 = 1 << 20
 // chunked requests without Content-Length) are also capped.
 func limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ContentLength > maxRequestBodyBytes {
+		limit := bodyLimit(r)
+		if r.ContentLength > limit {
 			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
 			return
 		}
 		if r.Body != nil {
-			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
 		}
 		next.ServeHTTP(w, r)
 	})

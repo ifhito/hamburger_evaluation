@@ -17,6 +17,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
+        // Review photos are served from /photos on the API (no path rewrite).
+        '/photos': {
+          target: proxyTarget,
+          changeOrigin: true,
+        },
       },
     },
   }

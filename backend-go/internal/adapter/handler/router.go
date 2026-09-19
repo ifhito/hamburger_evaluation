@@ -24,9 +24,16 @@ type route struct {
 
 // NewRouter builds the HTTP handler tree: stdlib Go 1.22 method-pattern
 // mux wrapped in the global body-cap middleware. Unknown routes get 404
-// and wrong methods 405, both in the JSON error shape.
-func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users) http.Handler {
+// and wrong methods 405, both in the JSON error shape. photoFiles, when
+// non-nil (disk photo storage, S10), serves review photos under GET
+// /photos/ — registered on the mux directly so the JSON 404 catch-all
+// does not swallow it; in s3 mode it is nil and photo URLs point at the
+// bucket's public domain instead.
+func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler) http.Handler {
 	mux := http.NewServeMux()
+	if photoFiles != nil {
+		mux.Handle("GET /photos/", http.StripPrefix("/photos/", photoFiles))
+	}
 	registerRoutes(mux, []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(auth)}},

@@ -33,6 +33,7 @@ type Review struct {
 	DiscardedAt pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+	PhotoKey    pgtype.Text
 }
 
 type Shop struct {

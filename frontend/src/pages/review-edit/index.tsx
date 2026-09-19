@@ -18,6 +18,7 @@ export default function ReviewEditPage() {
   const { fields, errors, setField, validate } = useReviewForm()
   const [initialized, setInitialized] = useState(false)
   const [serverError, setServerError] = useState<string | string[] | null>(null)
+  const [photo, setPhoto] = useState<File | null>(null)
 
   useEffect(() => {
     if (review && !initialized) {
@@ -32,7 +33,17 @@ export default function ReviewEditPage() {
     if (!validate(['comment'])) return
     setServerError(null)
     try {
-      await updateReview.mutateAsync({ rating: fields.rating, comment: fields.comment })
+      let input: FormData | { rating: number; comment: string }
+      if (photo) {
+        const formData = new FormData()
+        formData.append('rating', String(fields.rating))
+        formData.append('comment', fields.comment)
+        formData.append('photo', photo)
+        input = formData
+      } else {
+        input = { rating: fields.rating, comment: fields.comment }
+      }
+      await updateReview.mutateAsync(input)
       void navigate(`/reviews/${id}`)
     } catch (err) {
       if (err instanceof ApiRequestError) {
@@ -61,6 +72,24 @@ export default function ReviewEditPage() {
             onChange={(e) => setField('comment', e.target.value)}
             error={errors.comment}
           />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label htmlFor="photo" style={{ fontSize: '0.875rem', fontWeight: 500 }}>
+              {review?.photo_url ? 'Replace Photo (optional)' : 'Photo (optional)'}
+            </label>
+            {review?.photo_url && (
+              <img
+                src={review.photo_url}
+                alt="Current review photo"
+                style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', alignSelf: 'flex-start', borderRadius: 'var(--radius)' }}
+              />
+            )}
+            <input
+              id="photo"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+            />
+          </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <Button type="submit" isLoading={updateReview.isPending}>Save Changes</Button>
             <Link to={`/reviews/${id}`}>

@@ -34,6 +34,13 @@ export default function ReviewDetailPage() {
             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>{formatDate(review.created_at)}</span>
           </div>
           <p style={{ marginBottom: 16, lineHeight: 1.7 }}>{review.comment}</p>
+          {review.photo_url && (
+            <img
+              src={review.photo_url}
+              alt="Review photo"
+              style={{ maxWidth: '100%', maxHeight: 400, objectFit: 'contain', display: 'block', marginBottom: 16, borderRadius: 'var(--radius)' }}
+            />
+          )}
           {review.burger && (
             <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>
               Burger #{review.burger.id} · Avg rating: {review.burger.average_rating.toFixed(1)} · {review.burger.review_count} reviews

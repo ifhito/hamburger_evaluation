@@ -12,9 +12,9 @@ import (
 )
 
 const createReview = `-- name: CreateReview :one
-INSERT INTO reviews (rating, comment, user_id, burger_id)
-VALUES ($1, $2, $3, $4)
-RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, updated_at
+INSERT INTO reviews (rating, comment, user_id, burger_id, photo_key)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, updated_at, photo_key
 `
 
 type CreateReviewParams struct {
@@ -22,6 +22,7 @@ type CreateReviewParams struct {
 	Comment  pgtype.Text
 	UserID   int64
 	BurgerID int64
+	PhotoKey pgtype.Text
 }
 
 func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Review, error) {
@@ -30,6 +31,7 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 		arg.Comment,
 		arg.UserID,
 		arg.BurgerID,
+		arg.PhotoKey,
 	)
 	var i Review
 	err := row.Scan(
@@ -41,6 +43,7 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 		&i.DiscardedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoKey,
 	)
 	return i, err
 }
@@ -65,7 +68,7 @@ func (q *Queries) DiscardReview(ctx context.Context, id int64) (int64, error) {
 }
 
 const getReviewDetail = `-- name: GetReviewDetail :one
-SELECT r.id, r.rating, r.comment, r.created_at,
+SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
@@ -80,6 +83,7 @@ type GetReviewDetailRow struct {
 	ID            int64
 	Rating        int16
 	Comment       pgtype.Text
+	PhotoKey      pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UserID        int64
 	UserUsername  string
@@ -103,6 +107,7 @@ func (q *Queries) GetReviewDetail(ctx context.Context, id int64) (GetReviewDetai
 		&i.ID,
 		&i.Rating,
 		&i.Comment,
+		&i.PhotoKey,
 		&i.CreatedAt,
 		&i.UserID,
 		&i.UserUsername,
@@ -117,7 +122,7 @@ func (q *Queries) GetReviewDetail(ctx context.Context, id int64) (GetReviewDetai
 }
 
 const listPublicReviews = `-- name: ListPublicReviews :many
-SELECT r.id, r.rating, r.comment, r.created_at,
+SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
@@ -157,6 +162,7 @@ type ListPublicReviewsRow struct {
 	ID            int64
 	Rating        int16
 	Comment       pgtype.Text
+	PhotoKey      pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UserID        int64
 	UserUsername  string
@@ -203,6 +209,7 @@ func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsPa
 			&i.ID,
 			&i.Rating,
 			&i.Comment,
+			&i.PhotoKey,
 			&i.CreatedAt,
 			&i.UserID,
 			&i.UserUsername,
@@ -260,7 +267,7 @@ SET rating = $2,
     comment = $3,
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
-RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, updated_at
+RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, updated_at, photo_key
 `
 
 type UpdateReviewContentParams struct {
@@ -284,6 +291,40 @@ func (q *Queries) UpdateReviewContent(ctx context.Context, arg UpdateReviewConte
 		&i.DiscardedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PhotoKey,
+	)
+	return i, err
+}
+
+const updateReviewPhotoKey = `-- name: UpdateReviewPhotoKey :one
+UPDATE reviews
+SET photo_key = $2,
+    updated_at = now()
+WHERE id = $1 AND discarded_at IS NULL
+RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, updated_at, photo_key
+`
+
+type UpdateReviewPhotoKeyParams struct {
+	ID       int64
+	PhotoKey pgtype.Text
+}
+
+// Column-scoped photo replacement (S10): touches only photo_key (never
+// rating/comment/discarded_at), and only while the review is still kept.
+// photo_key does not affect burger_stats, so no recalculation is needed.
+func (q *Queries) UpdateReviewPhotoKey(ctx context.Context, arg UpdateReviewPhotoKeyParams) (Review, error) {
+	row := q.db.QueryRow(ctx, updateReviewPhotoKey, arg.ID, arg.PhotoKey)
+	var i Review
+	err := row.Scan(
+		&i.ID,
+		&i.Rating,
+		&i.Comment,
+		&i.UserID,
+		&i.BurgerID,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PhotoKey,
 	)
 	return i, err
 }

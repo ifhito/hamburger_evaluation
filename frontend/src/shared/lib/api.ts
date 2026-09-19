@@ -27,8 +27,11 @@ export const removeToken = (): void => localStorage.removeItem('token')
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { headers: optHeaders, ...restOptions } = options ?? {}
+  // For FormData bodies the browser must set Content-Type itself (multipart boundary).
+  const baseHeaders: Record<string, string> =
+    restOptions.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...optHeaders },
+    headers: { ...baseHeaders, ...optHeaders },
     ...restOptions,
   })
   if (!res.ok) {
@@ -76,11 +79,13 @@ export const reviewsApi = {
   get(id: number): Promise<Review> {
     return request(`/reviews/${id}`)
   },
-  create(data: ReviewCreateInput): Promise<Review> {
-    return authRequest('/reviews', { method: 'POST', body: JSON.stringify({ review: data }) })
+  create(data: ReviewCreateInput | FormData): Promise<Review> {
+    const body = data instanceof FormData ? data : JSON.stringify({ review: data })
+    return authRequest('/reviews', { method: 'POST', body })
   },
-  update(id: number, data: ReviewUpdateInput): Promise<Review> {
-    return authRequest(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify({ review: data }) })
+  update(id: number, data: ReviewUpdateInput | FormData): Promise<Review> {
+    const body = data instanceof FormData ? data : JSON.stringify({ review: data })
+    return authRequest(`/reviews/${id}`, { method: 'PUT', body })
   },
   delete(id: number): Promise<void> {
     return authRequest(`/reviews/${id}`, { method: 'DELETE' })

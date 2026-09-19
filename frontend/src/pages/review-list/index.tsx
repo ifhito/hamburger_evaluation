@@ -75,6 +75,14 @@ export default function ReviewListPage() {
               <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{formatDate(review.created_at)}</span>
             </div>
             <p style={{ marginBottom: 8 }}>{review.comment}</p>
+            {review.photo_url && (
+              <img
+                src={review.photo_url}
+                alt="Review photo"
+                loading="lazy"
+                style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', display: 'block', marginBottom: 8, borderRadius: 'var(--radius)' }}
+              />
+            )}
             <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'flex', gap: 12 }}>
               {review.user && (
                 <Link to={`/users/${review.user.id}`}>{review.user.username}</Link>

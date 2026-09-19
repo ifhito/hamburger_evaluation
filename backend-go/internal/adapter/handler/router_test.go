@@ -65,7 +65,7 @@ func TestHealth(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/up", nil)
-			newTestRouter(tt.pinger).ServeHTTP(rec, req)
+			newTestRouter(t, tt.pinger).ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
@@ -109,7 +109,7 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(tt.method, tt.path, nil)
-			newTestRouter(okPinger).ServeHTTP(rec, req)
+			newTestRouter(t, okPinger).ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
@@ -127,7 +127,7 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 // TestBodyLimit covers AC3: a POST with a 2 MiB body gets 413 with the
 // error JSON shape, and a subsequent request on the same client succeeds.
 func TestBodyLimit(t *testing.T) {
-	srv := httptest.NewServer(newTestRouter(okPinger))
+	srv := httptest.NewServer(newTestRouter(t, okPinger))
 	defer srv.Close()
 	client := srv.Client()
 
