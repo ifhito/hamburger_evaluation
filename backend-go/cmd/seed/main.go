@@ -6,6 +6,8 @@
 //
 // すべての fixture のパスワードは "Password123!" である（signup と同じ強度ルールを
 // 満たす）。これらはよく知られた開発用 fixture であり、secret ではない。
+// すでに存在する email のユーザーは変更しない（パスワードの digest も更新しない）ので、
+// S13 より前に seed 済みの DB では、作成時のパスワード（password123）のままである。
 // docker compose で実行する：
 //
 //	docker compose run --rm migrate up
