@@ -48,12 +48,14 @@ hamburger_evaluation/
 backend-go/
 ├── cmd/api/main.go     # composition root: 設定、DB プール、配線、サーバ
 ├── internal/
-│   ├── domain/         # エンティティ / 値オブジェクト / ドメインエラー。標準ライブラリのみ
-│   ├── usecase/        # ユースケース + 永続化のインターフェース(利用側で宣言)
+│   ├── domain/         # エンティティ / 値オブジェクト / ドメインエラー / 書き込みの *Repository の interface と、それを呼ぶ *Service。標準ライブラリのみ
+│   ├── usecase/        # ユースケース + 読み取りの *Query(利用側で宣言)。repository には依存しない
 │   └── adapter/
 │       ├── handler/    # net/http のハンドラ、DTO、ルーティング、middleware
-│       ├── repository/ # usecase のインターフェースを sqlc で実装
+│       ├── query/      # usecase の *Query(読み取り)を sqlc で実装
+│       ├── repository/ # domain の *Repository(書き込み)を sqlc で実装
 │       │   └── sqlcgen/  # sqlc の生成コード。手で編集しない
+│       ├── rowmap/     # sqlc の行 → domain の写像(query と repository で共有)
 │       └── infra/      # DB プール、JWT、パスワードハッシュ、設定
 ├── db/
 │   ├── migrations/     # SQL マイグレーション
@@ -64,8 +66,9 @@ backend-go/
 ### 実装ルール
 
 - `domain` に `net/http`・`database/sql`・`pgx`・`usecase`・`adapter` の依存を持ち込まない。
-- 永続化のインターフェースは `usecase` 側で宣言し、`adapter/repository` が実装する。読み取りは `*Query`、書き込みは `*Repository` に分ける。
+- 読み取りの `*Query` は `usecase` 側で宣言し、`adapter/query` が実装する。書き込みの `*Repository` は `domain` が宣言し、`adapter/repository` が実装する。repository を呼ぶのは `domain` のサービスだけで、`usecase` は repository に依存しない(読み取りは `*Query`、書き込みは domain のサービスを通す)。
 - 認可の判断は handler ではなく usecase / domain に置く。
+- ドメインのルール(検証・権限・導出)の判断は backend の `domain` だけが持つ。frontend は入力・説明・表示・サーバーのエラーの表示だけを行い、ルールを複製しない。
 - sqlc の行構造体や `pgx` の型を `adapter/` の外に出さない。ドメインの形と DB の形は別々に設計する。
 - `sqlcgen/` は手で編集しない。`db/queries/` を変更して再生成する。
 - 詳細は `.agents/skills/backend-go-boundaries` と `.agents/skills/db-design` を参照する。
