@@ -26,15 +26,39 @@ type UserCredentials struct {
 	PasswordDigest string
 }
 
-// UserRepository は auth 向けの consumer 側の永続化の契約である。
-// 実装は storage のエラーを domain のエラーに対応させる。
-// CreateUser は email の unique violation に対して（wrap された）
-// domain.ErrEmailTaken を返し、lookup は、active な（discard されていない）
-// ユーザーが一致しないとき domain.ErrUserNotFound を返す。
-type UserRepository interface {
-	CreateUser(ctx context.Context, params CreateUserParams) (domain.User, error)
+// UserQuery は、auth とユーザー管理の use case 向けの consumer 側の読み取りの
+// 契約である。実装は storage のエラーを domain のエラーに対応させ、active な
+// （discard されていない）ユーザーが一致しないとき（wrap された）
+// domain.ErrUserNotFound を返す。読み取り専用で、書き込みのメソッドは
+// 置かない（書き込みは UserRepository）。
+type UserQuery interface {
+	// GetActiveUserByEmail は、指定された email の、discard されていない
+	// ユーザーを、そのパスワードの digest とともに返す。
 	GetActiveUserByEmail(ctx context.Context, email string) (UserCredentials, error)
+	// GetActiveUserByID は、指定された id の、discard されていないユーザーを
+	// 返す。
 	GetActiveUserByID(ctx context.Context, id int64) (domain.User, error)
+}
+
+// UserRepository は、auth とユーザー管理の use case 向けの consumer 側の
+// 書き込みの契約である。実装は storage のエラーを domain のエラーに対応させる。
+// CreateUser と UpdateUserProfile は email の unique violation に対して
+// （wrap された）domain.ErrEmailTaken を返し、UpdateUserProfile と DiscardUser は、
+// active な（discard されていない）ユーザーが一致しないとき（wrap された）
+// domain.ErrUserNotFound を返す。書き込み専用で、読み取りのメソッドは
+// 置かない（読み取りは UserQuery）。
+type UserRepository interface {
+	// CreateUser は新しいユーザーを永続化して返す。
+	CreateUser(ctx context.Context, params CreateUserParams) (domain.User, error)
+	// UpdateUserProfile は、id の、まだ kept なユーザーに changes の存在する
+	// フィールドを atomic に適用し、保存されたユーザーを返す。存在する
+	// フィールドがゼロ個なら単なる lookup になる
+	// （200 の no-op、Rails parity）。この lookup は repository の実装の内部で
+	// 行われ、usecase が読み取りを repository に依頼することはない。
+	UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (domain.User, error)
+	// DiscardUser はユーザーを soft delete し（hard DELETE は決して行わない）、
+	// 導出された burger の stats の整合性を保つ。
+	DiscardUser(ctx context.Context, id int64) error
 }
 
 // PasswordHasher はパスワードのハッシュ化と検証を行う。
@@ -54,16 +78,18 @@ type TokenVerifier interface {
 }
 
 // Auth は signup、login、トークン認証の use case を実装する。
-// 認証に関する判断は HTTP handler ではなく、ここにある。
+// 認証に関する判断は HTTP handler ではなく、ここにある。読み取りは query、
+// 書き込みは repo だけを通す。
 type Auth struct {
-	users    UserRepository
+	query    UserQuery
+	repo     UserRepository
 	hasher   PasswordHasher
 	issuer   TokenIssuer
 	verifier TokenVerifier
 }
 
-func NewAuth(users UserRepository, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
-	return &Auth{users: users, hasher: hasher, issuer: issuer, verifier: verifier}
+func NewAuth(query UserQuery, repo UserRepository, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
+	return &Auth{query: query, repo: repo, hasher: hasher, issuer: issuer, verifier: verifier}
 }
 
 // SignupInput は signup use case の入力である。PasswordConfirmation は
@@ -106,7 +132,7 @@ func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, stri
 	if err != nil {
 		return domain.User{}, "", fmt.Errorf("hash password: %w", err)
 	}
-	user, err := a.users.CreateUser(ctx, CreateUserParams{
+	user, err := a.repo.CreateUser(ctx, CreateUserParams{
 		Username:       input.Username,
 		Email:          input.Email,
 		PasswordDigest: digest,
@@ -136,7 +162,7 @@ const dummyPasswordDigest = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJ
 // ともにそのユーザーを返す。未知の email と誤ったパスワードは、どちらも
 // domain.ErrInvalidCredentials を返す。
 func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, string, error) {
-	creds, err := a.users.GetActiveUserByEmail(ctx, email)
+	creds, err := a.query.GetActiveUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			// hash の比較を 1 回分あえて消費して、未知の email の経路が
@@ -166,7 +192,7 @@ func (a *Auth) AuthenticateToken(ctx context.Context, rawToken string) (domain.U
 	if err != nil {
 		return domain.User{}, domain.ErrUnauthenticated
 	}
-	user, err := a.users.GetActiveUserByID(ctx, userID)
+	user, err := a.query.GetActiveUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			return domain.User{}, domain.ErrUnauthenticated

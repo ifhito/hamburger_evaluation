@@ -23,8 +23,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// userRepoFake の usecase.UsersRepository の半分（auth の半分は auth_test.go に
-// ある）で、本物の repository のエラーの対応づけを再現している。
+// userRepoFake の usecase.UserRepository の書き込みの半分（読み取りの半分と型の
+// 宣言は auth_test.go にある）で、本物の repository のエラーの対応づけを再現
+// している。
 
 func (f *userRepoFake) UpdateUserProfile(_ context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
 	if f.err != nil {
@@ -75,7 +76,7 @@ func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) stri
 	reviewRepo := newReviewRepoFake()
 	router := handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}, &shopRepoFake{}),
 		usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(repo, hasherFake{}), nil)
+		usecase.NewUsers(repo, repo, hasherFake{}), nil)
 	token := func(id int64) string {
 		t.Helper()
 		tok, err := codec.Issue(id)
@@ -598,14 +599,15 @@ func TestUsersRequireAuth(t *testing.T) {
 func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	t.Helper()
 	conn, _ := dbtest.New(t)
+	userQuery := query.NewUserQuery(conn)
 	userRepo := repository.NewUserRepository(conn)
 	hasher := infra.BcryptPasswordHasher{}
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	auth := usecase.NewAuth(userRepo, hasher, codec, codec)
+	auth := usecase.NewAuth(userQuery, userRepo, hasher, codec, codec)
 	router := handler.NewRouter(conn, auth,
 		usecase.NewShops(query.NewShopQuery(conn), repository.NewShopRepository(conn)),
 		usecase.NewReviews(query.NewReviewQuery(conn), repository.NewReviewRepository(conn), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userRepo, hasher), nil)
+		usecase.NewUsers(userQuery, userRepo, hasher), nil)
 	return conn, router
 }
 

@@ -12,13 +12,35 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// fakeUserRepo は、手書きの usecase.UserRepository の test double である。
+// fakeUserQuery は、手書きの usecase.UserQuery の test double である。
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
-type fakeUserRepo struct {
-	createUser func(ctx context.Context, params usecase.CreateUserParams) (domain.User, error)
+type fakeUserQuery struct {
 	getByEmail func(ctx context.Context, email string) (usecase.UserCredentials, error)
 	getByID    func(ctx context.Context, id int64) (domain.User, error)
+}
+
+func (f *fakeUserQuery) GetActiveUserByEmail(ctx context.Context, email string) (usecase.UserCredentials, error) {
+	if f.getByEmail == nil {
+		panic("unexpected GetActiveUserByEmail call")
+	}
+	return f.getByEmail(ctx, email)
+}
+
+func (f *fakeUserQuery) GetActiveUserByID(ctx context.Context, id int64) (domain.User, error) {
+	if f.getByID == nil {
+		panic("unexpected GetActiveUserByID call")
+	}
+	return f.getByID(ctx, id)
+}
+
+// fakeUserRepo は、手書きの usecase.UserRepository（書き込み）の test double
+// である。未設定の振る舞いは panic するので、想定外の呼び出し、特にテスト対象の
+// フローの外での書き込みに対して、テストは fail-loud する。
+type fakeUserRepo struct {
+	createUser    func(ctx context.Context, params usecase.CreateUserParams) (domain.User, error)
+	updateProfile func(ctx context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error)
+	discard       func(ctx context.Context, id int64) error
 }
 
 func (f *fakeUserRepo) CreateUser(ctx context.Context, params usecase.CreateUserParams) (domain.User, error) {
@@ -28,18 +50,18 @@ func (f *fakeUserRepo) CreateUser(ctx context.Context, params usecase.CreateUser
 	return f.createUser(ctx, params)
 }
 
-func (f *fakeUserRepo) GetActiveUserByEmail(ctx context.Context, email string) (usecase.UserCredentials, error) {
-	if f.getByEmail == nil {
-		panic("unexpected GetActiveUserByEmail call")
+func (f *fakeUserRepo) UpdateUserProfile(ctx context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
+	if f.updateProfile == nil {
+		panic("unexpected UpdateUserProfile call")
 	}
-	return f.getByEmail(ctx, email)
+	return f.updateProfile(ctx, id, changes)
 }
 
-func (f *fakeUserRepo) GetActiveUserByID(ctx context.Context, id int64) (domain.User, error) {
-	if f.getByID == nil {
-		panic("unexpected GetActiveUserByID call")
+func (f *fakeUserRepo) DiscardUser(ctx context.Context, id int64) error {
+	if f.discard == nil {
+		panic("unexpected DiscardUser call")
 	}
-	return f.getByID(ctx, id)
+	return f.discard(ctx, id)
 }
 
 // fakeHasher は digest に決定的な印を付けるので、テストは本物の bcrypt の
@@ -190,7 +212,7 @@ func TestAuthSignupValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// validation が失敗したとき、repository にもハッシュ化にも到達してはならない。
 			hasher := &recordingHasher{}
-			auth := usecase.NewAuth(&fakeUserRepo{}, hasher, fakeIssuer{}, fakeVerifier{})
+			auth := usecase.NewAuth(&fakeUserQuery{}, &fakeUserRepo{}, hasher, fakeIssuer{}, fakeVerifier{})
 			_, _, err := auth.Signup(context.Background(), tt.input)
 			assertValidationError(t, err, tt.wantMsgs)
 			if hasher.hashCalls != 0 {
@@ -209,7 +231,7 @@ func TestAuthSignup(t *testing.T) {
 				return domain.User{ID: 1, Username: params.Username, Email: params.Email, Admin: params.Admin}, nil
 			},
 		}
-		auth := usecase.NewAuth(repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+		auth := usecase.NewAuth(&fakeUserQuery{}, repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 
 		user, token, err := auth.Signup(context.Background(), usecase.SignupInput{
 			Username:             "alice",
@@ -244,7 +266,7 @@ func TestAuthSignup(t *testing.T) {
 				return domain.User{ID: 2, Username: params.Username, Email: params.Email}, nil
 			},
 		}
-		auth := usecase.NewAuth(repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+		auth := usecase.NewAuth(&fakeUserQuery{}, repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Signup(context.Background(), usecase.SignupInput{
 			Username: "alice",
 			Email:    "a@example.com",
@@ -261,7 +283,7 @@ func TestAuthSignup(t *testing.T) {
 				return domain.User{}, fmt.Errorf("create user: %w", domain.ErrEmailTaken)
 			},
 		}
-		auth := usecase.NewAuth(repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+		auth := usecase.NewAuth(&fakeUserQuery{}, repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Signup(context.Background(), usecase.SignupInput{
 			Username: "alice",
 			Email:    "a@example.com",
@@ -277,7 +299,7 @@ func TestAuthSignup(t *testing.T) {
 				return domain.User{}, repoErr
 			},
 		}
-		auth := usecase.NewAuth(repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+		auth := usecase.NewAuth(&fakeUserQuery{}, repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Signup(context.Background(), usecase.SignupInput{
 			Username: "alice",
 			Email:    "a@example.com",
@@ -291,7 +313,7 @@ func TestAuthSignup(t *testing.T) {
 
 func TestAuthLogin(t *testing.T) {
 	activeUser := domain.User{ID: 7, Username: "alice", Email: "a@example.com"}
-	repo := &fakeUserRepo{
+	query := &fakeUserQuery{
 		getByEmail: func(_ context.Context, email string) (usecase.UserCredentials, error) {
 			if email != "a@example.com" {
 				return usecase.UserCredentials{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
@@ -299,7 +321,7 @@ func TestAuthLogin(t *testing.T) {
 			return usecase.UserCredentials{User: activeUser, PasswordDigest: "digest(Password123!)"}, nil
 		},
 	}
-	auth := usecase.NewAuth(repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+	auth := usecase.NewAuth(query, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 
 	tests := []struct {
 		name      string
@@ -338,12 +360,12 @@ func TestAuthLogin(t *testing.T) {
 	// password でも digest が一致すれば login できる。
 	for _, weak := range []string{"weakpw", "a"} {
 		t.Run(fmt.Sprintf("強度ルールを満たさない password %q のユーザーでも login できる", weak), func(t *testing.T) {
-			weakRepo := &fakeUserRepo{
+			weakQuery := &fakeUserQuery{
 				getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
 					return usecase.UserCredentials{User: activeUser, PasswordDigest: "digest(" + weak + ")"}, nil
 				},
 			}
-			auth := usecase.NewAuth(weakRepo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+			auth := usecase.NewAuth(weakQuery, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 			user, token, err := auth.Login(context.Background(), "a@example.com", weak)
 			if err != nil {
 				t.Fatalf("Login returned error: %v", err)
@@ -358,13 +380,13 @@ func TestAuthLogin(t *testing.T) {
 		// タイミングのサイドチャネル対策：Compare の呼び出しがなければ、
 		// 未知の email の経路は誤ったパスワードの経路より測定できるほど
 		// 速く返り、email の列挙を許してしまう。
-		notFound := &fakeUserRepo{
+		notFound := &fakeUserQuery{
 			getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
 				return usecase.UserCredentials{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
 			},
 		}
 		hasher := &recordingHasher{}
-		auth := usecase.NewAuth(notFound, hasher, fakeIssuer{}, fakeVerifier{})
+		auth := usecase.NewAuth(notFound, &fakeUserRepo{}, hasher, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Login(context.Background(), "b@example.com", "Password123!")
 		if !errors.Is(err, domain.ErrInvalidCredentials) {
 			t.Fatalf("Login error = %v, want %v", err, domain.ErrInvalidCredentials)
@@ -376,12 +398,12 @@ func TestAuthLogin(t *testing.T) {
 
 	t.Run("repository の失敗は invalid credentials にならずそのまま伝播する", func(t *testing.T) {
 		repoErr := errors.New("connection lost")
-		failing := &fakeUserRepo{
+		failing := &fakeUserQuery{
 			getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
 				return usecase.UserCredentials{}, repoErr
 			},
 		}
-		auth := usecase.NewAuth(failing, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+		auth := usecase.NewAuth(failing, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Login(context.Background(), "a@example.com", "Password123!")
 		if !errors.Is(err, repoErr) || errors.Is(err, domain.ErrInvalidCredentials) {
 			t.Fatalf("Login error = %v, want wrapped %v", err, repoErr)
@@ -391,10 +413,10 @@ func TestAuthLogin(t *testing.T) {
 
 func TestAuthAuthenticateToken(t *testing.T) {
 	activeUser := domain.User{ID: 7, Username: "alice", Email: "a@example.com"}
-	repo := &fakeUserRepo{
+	query := &fakeUserQuery{
 		getByID: func(_ context.Context, id int64) (domain.User, error) {
 			if id != activeUser.ID {
-				// 未知のユーザーと discard 済みのユーザーは、repository の
+				// 未知のユーザーと discard 済みのユーザーは、query の
 				// 境界ではどちらも "not found" になる。
 				return domain.User{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
 			}
@@ -414,7 +436,7 @@ func TestAuthAuthenticateToken(t *testing.T) {
 			return 0, errors.New("invalid token")
 		}
 	}}
-	auth := usecase.NewAuth(repo, fakeHasher{}, fakeIssuer{}, verifier)
+	auth := usecase.NewAuth(query, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, verifier)
 
 	tests := []struct {
 		name    string
@@ -445,12 +467,12 @@ func TestAuthAuthenticateToken(t *testing.T) {
 
 	t.Run("repository の失敗は unauthenticated にならずそのまま伝播する", func(t *testing.T) {
 		repoErr := errors.New("connection lost")
-		failing := &fakeUserRepo{
+		failing := &fakeUserQuery{
 			getByID: func(context.Context, int64) (domain.User, error) {
 				return domain.User{}, repoErr
 			},
 		}
-		auth := usecase.NewAuth(failing, fakeHasher{}, fakeIssuer{}, verifier)
+		auth := usecase.NewAuth(failing, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, verifier)
 		_, err := auth.AuthenticateToken(context.Background(), "valid-active")
 		if !errors.Is(err, repoErr) || errors.Is(err, domain.ErrUnauthenticated) {
 			t.Fatalf("AuthenticateToken error = %v, want wrapped %v", err, repoErr)

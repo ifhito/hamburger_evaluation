@@ -8,7 +8,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// ProfileChanges は、UsersRepository.UpdateUserProfile の、任意のカラム限定の
+// ProfileChanges は、UserRepository.UpdateUserProfile の、任意のカラム限定の
 // プロフィール更新を保持する。nil のフィールドは変更されない。パスワードは、
 // CreateUserParams と同様にハッシュ化済みの状態で渡される。repository が平文を
 // 目にすることはない。
@@ -18,42 +18,24 @@ type ProfileChanges struct {
 	PasswordDigest *string
 }
 
-// UsersRepository は、ユーザー管理の use case 向けの consumer 側の永続化の
-// 契約である。実装は storage のエラーを domain のエラーに対応させる。
-// lookup と書き込みは、active な（discard されていない）ユーザーが一致しない
-// とき（wrap された）domain.ErrUserNotFound を返し、UpdateUserProfile は
-// email の unique violation に対して（wrap された）domain.ErrEmailTaken を
-// 返す。
-type UsersRepository interface {
-	// GetActiveUserByID は、指定された id の、discard されていないユーザーを
-	// 返す。
-	GetActiveUserByID(ctx context.Context, id int64) (domain.User, error)
-	// UpdateUserProfile は、id の、まだ kept なユーザーに changes の存在する
-	// フィールドを atomic に適用し、保存されたユーザーを返す。存在する
-	// フィールドがゼロ個なら単なる lookup になる
-	// （200 の no-op、Rails parity）。
-	UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (domain.User, error)
-	// DiscardUser はユーザーを soft delete し（hard DELETE は決して行わない）、
-	// 導出された burger の stats の整合性を保つ。
-	DiscardUser(ctx context.Context, id int64) error
-}
-
 // Users は、ユーザー管理の use case を実装する。viewer から見えるビューでの
 // 詳細、および本人のみが行えるプロフィールの更新とアカウントの削除である。
+// 読み取りは query、書き込みは repo だけを通す。
 type Users struct {
-	repo   UsersRepository
+	query  UserQuery
+	repo   UserRepository
 	hasher PasswordHasher
 }
 
-func NewUsers(repo UsersRepository, hasher PasswordHasher) *Users {
-	return &Users{repo: repo, hasher: hasher}
+func NewUsers(query UserQuery, repo UserRepository, hasher PasswordHasher) *Users {
+	return &Users{query: query, repo: repo, hasher: hasher}
 }
 
 // Get は、discard されていないユーザー 1 人を、viewer（nil = 匿名）から見える
 // ビューにして返す。存在しないユーザーと discard 済みのユーザーは、どちらも
 // domain.ErrUserNotFound になる。
 func (s *Users) Get(ctx context.Context, viewer *domain.User, id int64) (domain.UserProfile, error) {
-	user, err := s.repo.GetActiveUserByID(ctx, id)
+	user, err := s.query.GetActiveUserByID(ctx, id)
 	if err != nil {
 		return domain.UserProfile{}, fmt.Errorf("get user: %w", err)
 	}
@@ -114,7 +96,7 @@ func (in UpdateUserInput) validate() []string {
 // （422）、そしてカラム限定の書き込みの順である。すでに使われている email は、
 // signup と同様に *domain.ValidationError として返される。
 func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, input UpdateUserInput) (domain.User, error) {
-	target, err := s.repo.GetActiveUserByID(ctx, targetID)
+	target, err := s.query.GetActiveUserByID(ctx, targetID)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("update user: %w", err)
 	}
@@ -146,7 +128,7 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, 
 // なくても同じ）、domain の本人管理ルール（403）、そして discard の順で
 // 行い、hard DELETE は決して行わない。
 func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID int64) error {
-	target, err := s.repo.GetActiveUserByID(ctx, targetID)
+	target, err := s.query.GetActiveUserByID(ctx, targetID)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}

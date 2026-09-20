@@ -31,6 +31,7 @@ func TestUserRepository(t *testing.T) {
 	conn, _ := dbtest.New(t)
 
 	repo := repository.NewUserRepository(conn)
+	userQuery := query.NewUserQuery(conn)
 
 	created, err := repo.CreateUser(ctx, usecase.CreateUserParams{
 		Username:       "alice",
@@ -50,7 +51,7 @@ func TestUserRepository(t *testing.T) {
 	}
 
 	t.Run("GetActiveUserByEmail は user と digest を返す", func(t *testing.T) {
-		creds, err := repo.GetActiveUserByEmail(ctx, "alice@example.com")
+		creds, err := userQuery.GetActiveUserByEmail(ctx, "alice@example.com")
 		if err != nil {
 			t.Fatalf("GetActiveUserByEmail returned error: %v", err)
 		}
@@ -63,7 +64,7 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("GetActiveUserByID は user を返す", func(t *testing.T) {
-		user, err := repo.GetActiveUserByID(ctx, created.ID)
+		user, err := userQuery.GetActiveUserByID(ctx, created.ID)
 		if err != nil {
 			t.Fatalf("GetActiveUserByID returned error: %v", err)
 		}
@@ -73,10 +74,10 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("存在しない email と id は ErrUserNotFound になる", func(t *testing.T) {
-		if _, err := repo.GetActiveUserByEmail(ctx, "nobody@example.com"); !errors.Is(err, domain.ErrUserNotFound) {
+		if _, err := userQuery.GetActiveUserByEmail(ctx, "nobody@example.com"); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Fatalf("GetActiveUserByEmail error = %v, want %v", err, domain.ErrUserNotFound)
 		}
-		if _, err := repo.GetActiveUserByID(ctx, created.ID+1000); !errors.Is(err, domain.ErrUserNotFound) {
+		if _, err := userQuery.GetActiveUserByID(ctx, created.ID+1000); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Fatalf("GetActiveUserByID error = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})
@@ -97,10 +98,10 @@ func TestUserRepository(t *testing.T) {
 		if _, err := conn.Exec(ctx, "UPDATE users SET discarded_at = now() WHERE id = $1", created.ID); err != nil {
 			t.Fatalf("discard user: %v", err)
 		}
-		if _, err := repo.GetActiveUserByEmail(ctx, "alice@example.com"); !errors.Is(err, domain.ErrUserNotFound) {
+		if _, err := userQuery.GetActiveUserByEmail(ctx, "alice@example.com"); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Fatalf("GetActiveUserByEmail error = %v, want %v", err, domain.ErrUserNotFound)
 		}
-		if _, err := repo.GetActiveUserByID(ctx, created.ID); !errors.Is(err, domain.ErrUserNotFound) {
+		if _, err := userQuery.GetActiveUserByID(ctx, created.ID); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Fatalf("GetActiveUserByID error = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})
@@ -118,6 +119,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	ctx := context.Background()
 	conn, _ := dbtest.New(t)
 	repo := repository.NewUserRepository(conn)
+	userQuery := query.NewUserQuery(conn)
 	reviewRepo := repository.NewReviewRepository(conn)
 	reviewQuery := query.NewReviewQuery(conn)
 	shopQuery := query.NewShopQuery(conn)
@@ -242,7 +244,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if discardedAt == nil {
 			t.Fatal("users.discarded_at is NULL, want a timestamp")
 		}
-		if _, err := repo.GetActiveUserByID(ctx, victim); !errors.Is(err, domain.ErrUserNotFound) {
+		if _, err := userQuery.GetActiveUserByID(ctx, victim); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("GetActiveUserByID after discard = %v, want %v", err, domain.ErrUserNotFound)
 		}
 		// Rails parity：victim の review 自体は kept のままである。非表示化は

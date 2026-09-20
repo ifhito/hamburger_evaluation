@@ -38,13 +38,21 @@ type fakeRecord struct {
 	discarded bool
 }
 
-// userRepoFake は in-memory の usecase.UserRepository である。err を設定すると
-// すべての操作がその err で失敗する（500 の経路を駆動する）。
+// userRepoFake は in-memory の usecase.UserQuery かつ usecase.UserRepository
+// である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
+// よう 1 つの型に保つ（読み書きの分離は usecase の引数型がコンパイル時に
+// 保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
+// 駆動する）。
 type userRepoFake struct {
 	seq   int64
 	users map[int64]*fakeRecord
 	err   error
 }
+
+var (
+	_ usecase.UserQuery      = (*userRepoFake)(nil)
+	_ usecase.UserRepository = (*userRepoFake)(nil)
+)
 
 func newUserRepoFake() *userRepoFake { return &userRepoFake{users: map[int64]*fakeRecord{}} }
 
@@ -104,7 +112,7 @@ func (f *userRepoFake) seed(username, email, password string) domain.User {
 func newAuthKit() (*userRepoFake, *usecase.Auth, *infra.JWTCodec) {
 	repo := newUserRepoFake()
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	return repo, usecase.NewAuth(repo, hasherFake{}, codec, codec), codec
+	return repo, usecase.NewAuth(repo, repo, hasherFake{}, codec, codec), codec
 }
 
 // newTestRouter は、db の health か routing の挙動だけを必要とするテスト向けの
@@ -122,9 +130,10 @@ func newTestRouter(t *testing.T, p handler.Pinger) http.Handler {
 func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.Handler {
 	t.Helper()
 	reviewRepo := newReviewRepoFake()
+	users := newUserRepoFake()
 	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}, &shopRepoFake{}),
 		usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(newUserRepoFake(), hasherFake{}), nil)
+		usecase.NewUsers(users, users, hasherFake{}), nil)
 }
 
 // do は router に対して 1 件の request を in-process で実行し、recorder を

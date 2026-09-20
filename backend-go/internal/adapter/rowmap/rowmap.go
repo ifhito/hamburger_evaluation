@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
@@ -69,5 +70,16 @@ func ShopReviewBurger(id int64, name string, averageRating pgtype.Float8, review
 		ReviewCount:   reviewCount.Int64,
 		WeightedScore: weightedScore.Float64,
 		Confidence:    confidence.Float64,
+	}
+}
+
+// User は sqlc の行を domain のエンティティに変換し、password digest
+// と、ストレージ専用のカラムを落とす。
+func User(row sqlcgen.User) domain.User {
+	return domain.User{
+		ID:       row.ID,
+		Username: row.Username,
+		Email:    row.Email,
+		Admin:    row.Admin,
 	}
 }

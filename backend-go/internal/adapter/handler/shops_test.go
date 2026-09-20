@@ -104,7 +104,7 @@ func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, alic
 	reviewRepo := newReviewRepoFake()
 	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo, repo),
 			usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-			usecase.NewUsers(users, hasherFake{}), nil),
+			usecase.NewUsers(users, users, hasherFake{}), nil),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID
 }
 

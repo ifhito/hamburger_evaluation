@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -20,11 +21,12 @@ const usersEmailUniqueConstraint = "users_email_key"
 // pgUniqueViolation は SQLSTATE 23505 である。
 const pgUniqueViolation = "23505"
 
-// UserRepository は、sqlc 生成のクエリ上で usecase.UserRepository を実装する。
-// ストレージの詳細（sqlc の行、pgtype、pg のエラーコード）はこの境界の内側に
-// とどまり、呼び出し側には domain の型とエラーしか見えない。S8 の書き込み
+// UserRepository は、sqlc 生成のクエリ上で usecase.UserRepository（書き込み）を
+// 実装する。ストレージの詳細（sqlc の行、pgtype、pg のエラーコード）はこの境界の
+// 内側にとどまり、呼び出し側には domain の型とエラーしか見えない。S8 の書き込み
 // （プロフィールの更新、user の discard）はトランザクションで行われるので、
-// 接続は ReviewRepository のものと同様に Begin できなければならない。
+// 接続は ReviewRepository のものと同様に Begin できなければならない。読み取りは
+// adapter/query の UserQuery が担う。
 type UserRepository struct {
 	db beginnerDBTX
 	q  *sqlcgen.Queries
@@ -35,10 +37,7 @@ func NewUserRepository(db beginnerDBTX) *UserRepository {
 	return &UserRepository{db: db, q: sqlcgen.New(db)}
 }
 
-var (
-	_ usecase.UserRepository  = (*UserRepository)(nil)
-	_ usecase.UsersRepository = (*UserRepository)(nil)
-)
+var _ usecase.UserRepository = (*UserRepository)(nil)
 
 // CreateUser は新しい user を insert して返す。email カラムでの unique
 // violation は domain.ErrEmailTaken に対応づけられる。
@@ -52,34 +51,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, params usecase.CreateUs
 	if err != nil {
 		return domain.User{}, fmt.Errorf("create user: %w", mapUserWriteError(err))
 	}
-	return toDomainUser(row), nil
-}
-
-// GetActiveUserByEmail は、指定された email を持つ discard されていない
-// user をその password digest とともに返す。または domain.ErrUserNotFound を
-// 返す。
-func (r *UserRepository) GetActiveUserByEmail(ctx context.Context, email string) (usecase.UserCredentials, error) {
-	row, err := r.q.GetActiveUserByEmail(ctx, email)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return usecase.UserCredentials{}, fmt.Errorf("get active user by email: %w", domain.ErrUserNotFound)
-		}
-		return usecase.UserCredentials{}, fmt.Errorf("get active user by email: %w", err)
-	}
-	return usecase.UserCredentials{User: toDomainUser(row), PasswordDigest: row.PasswordDigest}, nil
-}
-
-// GetActiveUserByID は、指定された id を持つ discard されていない user を
-// 返す。または domain.ErrUserNotFound を返す。
-func (r *UserRepository) GetActiveUserByID(ctx context.Context, id int64) (domain.User, error) {
-	row, err := r.q.GetActiveUserByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.User{}, fmt.Errorf("get active user by id: %w", domain.ErrUserNotFound)
-		}
-		return domain.User{}, fmt.Errorf("get active user by id: %w", err)
-	}
-	return toDomainUser(row), nil
+	return rowmap.User(row), nil
 }
 
 // UpdateUserProfile は、changes のうち指定されているフィールドを、id の、
@@ -92,7 +64,7 @@ func (r *UserRepository) GetActiveUserByID(ctx context.Context, id int64) (domai
 // 参照するだけである（200 の no-op、Rails parity）。
 func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
 	if changes.Username == nil && changes.Email == nil && changes.PasswordDigest == nil {
-		return r.GetActiveUserByID(ctx, id)
+		return r.activeUserByID(ctx, id)
 	}
 	var row sqlcgen.User
 	err := withTx(ctx, r.db, "update user profile", func(q *sqlcgen.Queries) error {
@@ -120,7 +92,7 @@ func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, change
 	if err != nil {
 		return domain.User{}, err
 	}
-	return toDomainUser(row), nil
+	return rowmap.User(row), nil
 }
 
 // DiscardUser は user を soft delete し（users.discarded_at に時刻を刻み、
@@ -170,13 +142,17 @@ func mapUserWriteError(err error) error {
 	return err
 }
 
-// toDomainUser は sqlc の行を domain のエンティティに変換し、password digest
-// と、ストレージ専用のカラムを落とす。
-func toDomainUser(row sqlcgen.User) domain.User {
-	return domain.User{
-		ID:       row.ID,
-		Username: row.Username,
-		Email:    row.Email,
-		Admin:    row.Admin,
+// activeUserByID は、指定された id を持つ discard されていない user を返す。
+// または domain.ErrUserNotFound を返す。UpdateUserProfile の no-op（変更する
+// フィールドがゼロ個の場合）のための、書き込みの内部の lookup であり、
+// usecase.UserRepository には含まれない（読み取りは usecase.UserQuery）。
+func (r *UserRepository) activeUserByID(ctx context.Context, id int64) (domain.User, error) {
+	row, err := r.q.GetActiveUserByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, fmt.Errorf("get active user by id: %w", domain.ErrUserNotFound)
+		}
+		return domain.User{}, fmt.Errorf("get active user by id: %w", err)
 	}
+	return rowmap.User(row), nil
 }

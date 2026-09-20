@@ -58,8 +58,10 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	defer pool.Close()
 
 	jwtCodec := infra.NewJWTCodec(cfg.JWTSecret, cfg.JWTTTL)
+	userQuery := query.NewUserQuery(pool)
 	userRepo := repository.NewUserRepository(pool)
 	auth := usecase.NewAuth(
+		userQuery,
 		userRepo,
 		infra.BcryptPasswordHasher{},
 		jwtCodec,
@@ -83,7 +85,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 
 	shops := usecase.NewShops(query.NewShopQuery(pool), repository.NewShopRepository(pool))
 	reviews := usecase.NewReviews(query.NewReviewQuery(pool), repository.NewReviewRepository(pool), photos)
-	users := usecase.NewUsers(userRepo, infra.BcryptPasswordHasher{})
+	users := usecase.NewUsers(userQuery, userRepo, infra.BcryptPasswordHasher{})
 
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users, photoFiles), ready)
 }
