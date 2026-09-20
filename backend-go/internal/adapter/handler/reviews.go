@@ -304,14 +304,19 @@ func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewLis
 // handleListReviews は GET /reviews を処理する：active な shop の burger の
 // review の、公開されたトップレベルの JSON 配列で、任意で rating/keyword/
 // shop_id/user_id のフィルタにより絞り込まれ、新しい順で、ページネーションされる。
-// OptionalAuth の viewer は、ここでは絞り込みに関与しない。
+// OptionalAuth の viewer は、ここでは絞り込みに関与しない。filter と
+// page / per_page のどちらも不正な場合は、filter の 422 が先に返る。
 func handleListReviews(reviews *usecase.Reviews) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		filter, ok := reviewListFilter(w, r)
 		if !ok {
 			return
 		}
-		list, err := reviews.List(r.Context(), filter, queryInt(r, "page"), queryInt(r, "per_page"))
+		page, perPage, ok := pageParams(w, r)
+		if !ok {
+			return
+		}
+		list, err := reviews.List(r.Context(), filter, page, perPage)
 		if err != nil {
 			log.Printf("reviews: list: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")

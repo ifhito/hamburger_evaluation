@@ -28,16 +28,18 @@ type fakeStoredReview struct {
 // EXISTS を再現するもので、SQL 自体は repository の統合テストが扱う）。err を
 // 設定するとすべての操作が失敗する（500 の経路）。listFilters は ListReviews が
 // 受け取った filter を呼び出し順に記録する（handler が usecase に渡した値と、
-// 呼ばれなかったことの検証用）。
+// 呼ばれなかったことの検証用）。lastLimit / lastOffset は最後の呼び出しの
+// 引数である。
 type reviewRepoFake struct {
-	shops       map[int64]domain.Shop
-	links       map[int64][]int64 // shopID -> 紐づく burger の id
-	burgers     map[int64]domain.ShopReviewBurger
-	usernames   map[int64]string
-	seq         int64
-	reviews     map[int64]*fakeStoredReview
-	err         error
-	listFilters []usecase.ReviewListFilter
+	shops                 map[int64]domain.Shop
+	links                 map[int64][]int64 // shopID -> 紐づく burger の id
+	burgers               map[int64]domain.ShopReviewBurger
+	usernames             map[int64]string
+	seq                   int64
+	reviews               map[int64]*fakeStoredReview
+	err                   error
+	listFilters           []usecase.ReviewListFilter
+	lastLimit, lastOffset int32
 }
 
 func newReviewRepoFake() *reviewRepoFake {
@@ -65,6 +67,7 @@ func (f *reviewRepoFake) detailFor(review domain.Review) domain.ReviewDetail {
 
 func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
 	f.listFilters = append(f.listFilters, filter)
+	f.lastLimit, f.lastOffset = limit, offset
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -573,9 +576,9 @@ func TestListReviews(t *testing.T) {
 		if got := rec.Body.String(); got != `[]` {
 			t.Errorf("far page = %s, want []", got)
 		}
-		// 数値でない値と大きすぎる値は、エラーにならず fallback / clamp される
-		// （正確な clamp の値は usecase のテストで固定されている）。
-		rec = do(router, http.MethodGet, "/reviews?page=abc&per_page=9999", "", "")
+		// 範囲外の整数（page=0）と大きすぎる値は、エラーにならず fallback / clamp
+		// される（正確な clamp の値は usecase のテストで固定されている）。
+		rec = do(router, http.MethodGet, "/reviews?page=0&per_page=9999", "", "")
 		if rec.Code != http.StatusOK {
 			t.Errorf("clamped request status = %d, want 200 (body %s)", rec.Code, rec.Body)
 		}
