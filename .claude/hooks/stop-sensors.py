@@ -2,8 +2,8 @@
 """Fast stop sensors for Claude Code, Hermes, and Codex sessions.
 
 The script is intentionally conservative: it always checks git hygiene and
-secret paths, then runs area-specific checks only when backend/frontend source
-files changed in this working tree.
+secret paths, then runs area-specific checks only when Go API (backend-go/) or
+frontend source files changed in this working tree.
 """
 from __future__ import annotations
 
@@ -18,34 +18,8 @@ SECRET_MARKERS = (
     ".env",
     ".env.",
     "secrets/",
-    "backend/.kamal/secrets",
-    "backend/config/master.key",
 )
-BACKEND_PREFIXES = ("backend/app/", "backend/config/", "backend/db/", "backend/lib/", "backend/spec/", "backend/Gemfile", "backend/Gemfile.lock")
 FRONTEND_PREFIXES = ("frontend/src/", "frontend/package.json", "frontend/pnpm-lock.yaml", "frontend/vite.config", "frontend/tsconfig", "frontend/eslint")
-ARCHITECTURE_BOUNDARY_PREFIXES = (
-    "backend/app/controllers/",
-    "backend/app/jobs/",
-    "backend/app/domain/",
-)
-ARCHITECTURE_FORBIDDEN_PATTERNS = (
-    ".find(",
-    ".find_by(",
-    ".where(",
-    ".joins(",
-    ".includes(",
-    ".create(",
-    ".create!(",
-    ".save(",
-    ".save!(",
-    ".update(",
-    ".update!(",
-    ".destroy(",
-    ".destroy!(",
-    ".discard(",
-    ".discard!(",
-    ".upsert(",
-)
 GO_PREFIXES = ("backend-go/",)
 # クリーンアーキテクチャの内向き依存ルール: domain/usecase から外側への import を禁止
 GO_BOUNDARY_RULES = (
@@ -107,25 +81,6 @@ def staged_paths() -> list[str]:
 
 def is_out_of_scope_staged(path: str) -> bool:
     return path in OUT_OF_SCOPE_STAGED_FILES or path.startswith(OUT_OF_SCOPE_STAGED_PREFIXES)
-
-
-def architecture_boundary_violations(paths: list[str]) -> list[str]:
-    violations: list[str] = []
-    for path in paths:
-        if not path.startswith(ARCHITECTURE_BOUNDARY_PREFIXES):
-            continue
-        file_path = ROOT / path
-        if not file_path.is_file():
-            continue
-        for index, line in enumerate(file_path.read_text(errors="ignore").splitlines(), start=1):
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                continue
-            for pattern in ARCHITECTURE_FORBIDDEN_PATTERNS:
-                if pattern in stripped:
-                    violations.append(f"{path}:{index}: contains `{pattern}`")
-                    break
-    return violations
 
 
 def go_boundary_violations(paths: list[str]) -> list[str]:
@@ -228,31 +183,10 @@ def main() -> int:
         print("usecase reads go through *Query interfaces; only writes go through *Repository interfaces.")
         failures.append("go query/repository split sensor failed")
 
-    architecture_violations = architecture_boundary_violations(paths)
-    if architecture_violations:
-        print("Backend architecture boundary violations found in changed files:")
-        for violation in architecture_violations:
-            print(f"- {violation}")
-        print("Move persistence access to query/repository/service boundaries before finishing.")
-        failures.append("backend architecture boundary sensor failed")
-
     if run(["git", "diff", "--check"]) != 0:
         failures.append("git diff --check failed")
 
-    backend_changed = any(p.startswith(BACKEND_PREFIXES) for p in paths)
     frontend_changed = any(p.startswith(FRONTEND_PREFIXES) for p in paths)
-
-    if backend_changed:
-        backend = ROOT / "backend"
-        for cmd in (
-            ["docker", "compose", "run", "--rm", "-e", "RAILS_ENV=test", "api", "bundle", "exec", "rspec"],
-            ["docker", "compose", "run", "--rm", "api", "bin/rubocop", "-f", "github"],
-            ["docker", "compose", "run", "--rm", "api", "bin/brakeman", "--no-pager"],
-        ):
-            if run(cmd, backend) != 0:
-                failures.append("backend sensor failed: " + " ".join(cmd))
-    else:
-        print("backend sensors skipped: no backend source changes detected")
 
     if frontend_changed:
         frontend = ROOT / "frontend"

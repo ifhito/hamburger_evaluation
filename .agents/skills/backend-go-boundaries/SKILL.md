@@ -65,7 +65,6 @@ backend-go/
     `Create*` / `Update*` / `Discard*`。書き込みが更新後の行(`RETURNING`)を返すのは
     よいが、読み取りのメソッドを置いてはならない。
   - usecase が repository を呼ぶのは**書き込みのときだけ**。読み取りは必ず Query を通す。
-    (Rails 版の「読み取りは `queries/`、書き込み(CUD)だけ `repositories/`」と同じ責務分割。)
   - 書き込みの内部で必要な読み取り(例: 同一トランザクション内のロック取得)は、
     adapter の repository の実装の内部に閉じる。
 - `handler` はリクエストのデコード/バリデーション、ユースケース呼び出し、
