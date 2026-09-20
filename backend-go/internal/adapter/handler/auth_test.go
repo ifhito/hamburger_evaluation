@@ -209,6 +209,18 @@ func TestSignupErrors(t *testing.T) {
 			wantBody:   `{"errors":["Username can't be blank","Email can't be blank","Password can't be blank"]}`,
 		},
 		{
+			name:       "形式が不正な email は Email is invalid で 422 を返す",
+			body:       `{"username":"eve","email":"abc","password":"Password123!"}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantBody:   `{"errors":["Email is invalid"]}`,
+		},
+		{
+			name:       "表示名つきの email も Email is invalid で 422 を返す",
+			body:       `{"username":"eve","email":"Eve <eve@example.com>","password":"Password123!"}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantBody:   `{"errors":["Email is invalid"]}`,
+		},
+		{
 			name:       "確認用パスワードが一致しないと 422 を返す",
 			body:       `{"username":"eve","email":"eve@example.com","password":"Password123!","password_confirmation":"other"}`,
 			wantStatus: http.StatusUnprocessableEntity,

@@ -10,4 +10,3 @@ export default meta
 type Story = StoryObj<typeof Input>
 
 export const Default: Story = { args: { id: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com' } }
-export const WithError: Story = { args: { id: 'email', label: 'Email', error: 'Invalid email address', type: 'email' } }

@@ -20,12 +20,7 @@ export default function AdminShopEditPage() {
   const shop = shops?.find((s) => s.id === shopId);
 
   const { update } = useUpdateShop(shopId);
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useShopForm();
+  const { register, handleSubmit, reset } = useShopForm();
 
   useEffect(() => {
     if (shop) reset({ name: shop.name });
@@ -63,7 +58,6 @@ export default function AdminShopEditPage() {
           id="name"
           label={t("shops.new.name")}
           type="text"
-          error={errors.name?.message}
           {...register("name")}
         />
         <div className={styles.actions}>

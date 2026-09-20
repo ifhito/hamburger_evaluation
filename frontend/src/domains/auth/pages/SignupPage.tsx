@@ -14,7 +14,7 @@ export default function SignupPage() {
   const { t } = useTranslation();
   const { signup } = useAuth();
   const navigate = useNavigate();
-  const { register, handleSubmit, formState: { errors } } = useSignupForm();
+  const { register, handleSubmit } = useSignupForm();
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -39,7 +39,6 @@ export default function SignupPage() {
           id="username"
           label={t("auth.signup.username")}
           autoComplete="username"
-          error={errors.username?.message}
           {...register("username")}
         />
         <Input
@@ -47,7 +46,6 @@ export default function SignupPage() {
           label={t("auth.signup.email")}
           type="email"
           autoComplete="email"
-          error={errors.email?.message}
           {...register("email")}
         />
         <Input
@@ -56,7 +54,6 @@ export default function SignupPage() {
           type="password"
           autoComplete="new-password"
           hint={t("auth.passwordHint")}
-          error={errors.password?.message}
           {...register("password")}
         />
         <Input
@@ -64,7 +61,6 @@ export default function SignupPage() {
           label={t("auth.signup.confirmPassword")}
           type="password"
           autoComplete="new-password"
-          error={errors.passwordConfirmation?.message}
           {...register("passwordConfirmation")}
         />
         <Button type="submit" isLoading={isLoading}>

@@ -458,6 +458,11 @@ func TestUpdateUser(t *testing.T) {
 				wantBody: `{"errors":["Email can't be blank"]}`,
 			},
 			{
+				name:     "形式が不正な email は検証エラーになる",
+				body:     `{"user":{"email":"abc"}}`,
+				wantBody: `{"errors":["Email is invalid"]}`,
+			},
+			{
 				name:     "確認用パスワードの不一致は検証エラーになる",
 				body:     `{"user":{"password":"NewPassw0rd!","password_confirmation":"other"}}`,
 				wantBody: `{"errors":["Password confirmation doesn't match Password"]}`,
