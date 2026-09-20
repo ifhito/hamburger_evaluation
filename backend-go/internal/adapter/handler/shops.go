@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -72,14 +73,18 @@ func viewerPtr(r *http.Request) *domain.User {
 	return nil
 }
 
+// integerPattern は、page / per_page が整数として正しい構文（符号は省略可、
+// あとは ASCII の数字だけ）であることを判定する。桁数は問わない。
+var integerPattern = regexp.MustCompile(`^[+-]?[0-9]+$`)
+
 // pageParams は一覧 endpoint の page / per_page の query parameter を整数として
 // パースする。空の値と省略は 0（デフォルトへのフォールバックを示す usecase の
-// マーカー）であり、エラーではない。int の範囲を超える整数（strconv.ErrRange）は
-// 整数として扱い、Atoi が返す clamp 済みの値（math.MaxInt / math.MinInt）を
-// そのまま渡す（補正は usecase の clampPage が行う）。それ以外の整数でない値が
-// あれば、不正な引数のメッセージ（両方不正なら page、per_page の順で両方）を
-// 並べた 422 を書き込み済みで false を返すので、呼び出し側は何も書かずに
-// return する。
+// マーカー）であり、エラーではない。桁あふれする整数を含め、`[+-]?[0-9]+` の形の
+// 値が整数である。int の範囲を超える整数は、Atoi が返す clamp 済みの値
+// （math.MaxInt / math.MinInt）をそのまま渡す（補正は usecase の clampPage が
+// 行う）。形が合わない値があれば、不正な引数のメッセージ（両方不正なら page、
+// per_page の順で両方）を並べた 422 を書き込み済みで false を返すので、呼び出し
+// 側は何も書かずに return する。
 func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok bool) {
 	var msgs []string
 	parse := func(name, msg string) int {
@@ -87,11 +92,11 @@ func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok b
 		if raw == "" {
 			return 0
 		}
-		n, err := strconv.Atoi(raw)
-		if err != nil && !errors.Is(err, strconv.ErrRange) {
+		if !integerPattern.MatchString(raw) {
 			msgs = append(msgs, msg)
 			return 0
 		}
+		n, _ := strconv.Atoi(raw) // 構文は検証済みなので、エラーは範囲外だけである。そのとき Atoi は clamp 済みの値を返す
 		return n
 	}
 	page = parse("page", "Page must be an integer")
