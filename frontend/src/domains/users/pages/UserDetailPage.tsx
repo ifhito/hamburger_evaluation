@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
-import { useUser } from "../hooks/useUser";
+import { isValidUserId, useUser } from "../hooks/useUser";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { formatDate } from "../../../lib/date";
 import { Button } from "../../../components/Button";
@@ -16,7 +16,7 @@ export default function UserDetailPage() {
 
   const userId = Number(id);
   // /users/abc(NaN)や 0 以下・安全でない整数など不正な id では、user も reviews も取得しない
-  const isValidId = Number.isSafeInteger(userId) && userId > 0;
+  const isValidId = isValidUserId(userId);
   // 認証状態の復元前は authUser が null でも token は localStorage にあり得る。閲覧者が確定してから取得する
   const {
     data: user,
