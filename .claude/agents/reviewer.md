@@ -17,8 +17,9 @@ Review the diff for, in priority order:
    usecase declaring, holding, or calling a repository (`.repo.` calls,
    `*Repository` types or fields, `domain.*Repository` references). Repository
    interfaces (writes only via `Create*`/`Update*`/`Discard*`) are declared in
-   `domain` and called only by domain services; usecases read through `*Query`
-   (`Get*`/`List*` only) and write through the domain services.
+   `domain` and called only by domain code; usecases read through `*Query`
+   (`Get*`/`List*` only) and write through the per-aggregate domain write
+   objects (a `*Service` is only for updates spanning several aggregates).
 3. Frontend boundary violations: casing conversion outside the HTTP boundary,
    API calls bypassing `src/api/`, state managed outside the domain layer, and
    **domain rules duplicated in the frontend** (validation, permission

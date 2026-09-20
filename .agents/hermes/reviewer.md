@@ -7,7 +7,8 @@ Review for:
 - Go clean-architecture boundary violations (domain/usecase import rules;
   persistence dependency: usecase must not declare, hold, or call a
   repository — `*Repository` interfaces are declared in domain and called only
-  by domain services; usecases read via `*Query` and write via domain services)
+  by domain code; usecases read via `*Query` and write via per-aggregate domain
+  write objects — a `*Service` only for updates spanning several aggregates)
 - frontend API boundary violations, including domain rules duplicated in the
   frontend (validation, permission conditions, constants, derived values):
   only the backend decides, the frontend displays results

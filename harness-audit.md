@@ -140,7 +140,7 @@ frontend/src/components    shared UI components
 - 認証は、独自 JWT Bearer token を使っている。
 - Backend の API payload は snake_case、frontend のコードは camelCase であり、変換は HTTP 境界(`frontend/src/api/client/buildApiClient.ts`)で行われる。
 - Backend はクリーンアーキテクチャ(handler → usecase → domain)で、依存は内側にのみ向く。`domain` は標準ライブラリだけを import する。
-- 読み取りの `*Query` は usecase 側で宣言し、書き込みの `*Repository` は domain が宣言する。repository を呼ぶのは domain のサービスだけで、usecase は repository に依存しない(`.agents/skills/backend-go-boundaries`)。
+- 読み取りの `*Query` は usecase 側で宣言し、書き込みの `*Repository` は domain が宣言する。repository を呼べるのは domain のコードだけ(単一集約の書き込みは集約ごとの書き込みオブジェクト。`*Service` は集約を跨ぐ更新だけ)で、usecase は repository に依存しない(`.agents/skills/backend-go-boundaries`)。
 - ドメインのルールの判断は backend の `domain` だけが持つ。frontend は入力・説明・表示・サーバーのエラーの表示だけを行い、検証・権限の条件・定数・導出を複製しない(`.agents/skills/frontend-spa-boundaries`)。
 - sqlc の生成コードは手で編集せず、`db/queries/` を変更して再生成する。ドメインの形と DB の形は別々に設計する(`.agents/skills/db-design`)。
 - コード内の文章(コメント、Go の doc コメント、テスト名)は日本語で書く。PR の本文も日本語で、固定のセクション構成に従う(`.agents/skills/pr-template`)。
