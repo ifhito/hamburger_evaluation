@@ -66,7 +66,7 @@ backend-go/
 ### 実装ルール
 
 - `domain` に `net/http`・`database/sql`・`pgx`・`usecase`・`adapter` の依存を持ち込まない。
-- 読み取りの `*Query` は `usecase` 側で宣言し、`adapter/query` が実装する。書き込みの `*Repository` は `domain` が宣言し、`adapter/repository` が実装する。repository を呼ぶのは `domain` のサービスだけで、`usecase` は repository に依存しない(読み取りは `*Query`、書き込みは domain のサービスを通す)。
+- 読み取りの `*Query` は `usecase` 側で宣言し、`adapter/query` が実装する。書き込みの `*Repository` は `domain` が宣言し、`adapter/repository` が実装する。repository を呼べるのは `domain` のコードだけで、`usecase` は repository に依存しない(読み取りは `*Query`、書き込みは domain の集約ごとの書き込みオブジェクトを通す。`*Service` は複数の集約を跨ぐ更新だけに使う)。
 - 認可の判断は handler ではなく usecase / domain に置く。
 - ドメインのルール(検証・権限・導出)の判断は backend の `domain` だけが持つ。frontend は入力・説明・表示・サーバーのエラーの表示だけを行い、ルールを複製しない。
 - sqlc の行構造体や `pgx` の型を `adapter/` の外に出さない。ドメインの形と DB の形は別々に設計する。

@@ -64,7 +64,7 @@ Frame ステップは受け入れ条件を直接取り込み、完了の定義�
 - 権限の出し分けや「最終ページか」の判定が必要な要件は、backend が値を返す仕様にする
   (frontend に判断を再計算させない)。
 - 永続化の要件は、usecase が repository を呼ぶ形で書かない(読み取りは `*Query`、書き込みは
-  domain のサービス。`backend-go-boundaries` を参照)。
+  domain の書き込みオブジェクト。`backend-go-boundaries` を参照)。
 
 ## 受け入れ条件のルール
 

@@ -70,8 +70,8 @@ backend-go/
 
 - `domain` は stdlib のみを import する。`net/http` も `database/sql` も
   `pgx` も、`usecase`/`adapter` からの import も禁止。domain は、書き込みの契約である
-  `*Repository` の interface と、それを呼ぶ `*Service`(`ShopService` / `ReviewService` /
-  `UserService`)を持つ。
+  `*Repository` の interface と、それを呼ぶ集約ごとの書き込みオブジェクト(`Shops` / `Reviews` /
+  `Users`。自分の集約の `*Repository` だけを持つ)を持つ。
 - `usecase` は `domain`、stdlib、および**副作用のない純粋な内部ライブラリ**
   (例: 画像のデコード/リサイズを行う `internal/photo`。DB・HTTP・ファイル I/O に
   依存しないもの)だけを import する。`adapter/*` や `net/http`・`database/sql`・`pgx` は
@@ -81,9 +81,14 @@ backend-go/
   - `*Repository`(例: `ShopRepository`): **domain が宣言する書き込み専用**の interface。
     メソッド名は `Create*` / `Update*` / `Discard*`。書き込みが更新後の行(`RETURNING`)を
     返すのはよいが、読み取りのメソッドを置いてはならない。
-  - **repository を呼ぶのは domain のサービスだけ**。usecase は repository を宣言も保持も
-    呼び出しもせず、読み取りは `*Query`、書き込みは domain のサービス(`ShopService` など)を
-    通す。組み立て(`cmd/api/main.go`)は「repository → domain のサービス → usecase」の順に行う。
+  - **repository を呼べるのは domain のコードだけ**(`*Service` に限らない)。usecase と
+    handler は repository を宣言も保持も呼び出しもせず、読み取りは `*Query`、書き込みは
+    domain の書き込みオブジェクト(`domain.Shops` など)を通す。組み立て(`cmd/api/main.go`)は
+    「repository → 書き込みオブジェクト → usecase」の順に行う。
+  - **単一の集約だけを更新する書き込みに `*Service` を使わない**(集約の書き込みオブジェクトが担う)。
+    domain の `*Service` は、複数の集約を跨ぐ更新の手順だけに使う。書き込みオブジェクトは、自分の
+    集約の repository だけを持ち、公開メソッドは 8 個まで、読み取り・認可・外部 I/O は持たない
+    (業務の判断はエンティティ・値オブジェクトへ)。
   - 書き込みの内部で必要な読み取り(例: 同一トランザクション内のロック取得)は、
     adapter の repository の実装の内部に閉じる。
 - `handler` はリクエストのデコード/バリデーション、ユースケース呼び出し、
@@ -146,7 +151,7 @@ backend-go/
 ## テスト
 
 - 全体をテーブル駆動テストで書く。
-- `usecase`: 手書きのフェイク(`*Query` のフェイクと、domain のサービスに渡す `*Repository` の
+- `usecase`: 手書きのフェイク(`*Query` のフェイクと、domain の書き込みオブジェクトに渡す `*Repository` の
   フェイク。テストファイル内の小さな構造体 — モックフレームワークは使わない)によるユニットテスト。
 - `handler`: フェイクのユースケースを使い、ルーターに対して `net/http/httptest` でテスト。
 - `adapter/query`・`adapter/repository`: `docker compose` で実際の PostgreSQL に対する
@@ -162,7 +167,7 @@ backend-go/
 5. ルーターや DI フレームワークを導入する — stdlib の採用は偶然ではなく意思決定。
 6. コメントやテスト名を英語で書く(上記の例外を除き日本語で書く)。
 7. usecase が repository を宣言・保持・呼び出す(`.repo.` の呼び出し、`*Repository` の型・
-   フィールド、`domain.*Repository` の参照)。書き込みは domain のサービスを通す。
+   フィールド、`domain.*Repository` の参照)。書き込みは domain の書き込みオブジェクトを通す。
 8. `*Repository` に `Get*` / `List*` を足す、`*Query` に `Create*` / `Update*` /
    `Discard*` を足す(読み取りと書き込みを同じインターフェースに混ぜる)。
 9. ドメインのルールの判断を、handler や frontend に置く・複製する(検証・権限・導出)。

@@ -24,7 +24,7 @@
      backend の `domain` だけが持ち、frontend は backend が返した値とサーバーのエラーを表示する。
    - usecase が repository を宣言・保持・呼び出していないか(`.repo.` の呼び出し、`*Repository` の
      型・フィールド、`domain.*Repository` の参照)。読み取りは `*Query`、書き込みは domain の
-     サービスを通す。
+     書き込みオブジェクトを通す。
 
 ## シークレットのパス
 

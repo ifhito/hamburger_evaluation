@@ -29,9 +29,10 @@ GO_BOUNDARY_RULES = (
     ("backend-go/internal/usecase/", ('"net/http"', "database/sql", "pgx", "/adapter/")),
 )
 # repository は domain からだけ使う(S15 / #46 の規約):
-# - *Repository の interface(書き込み専用)は domain が宣言し、呼ぶのは domain のサービスだけ
+# - *Repository の interface(書き込み専用)は domain が宣言し、呼べるのは domain のコードだけ
+#   (単一集約の書き込みは集約ごとの書き込みオブジェクト。*Service は集約を跨ぐ更新だけ)
 # - usecase は repository を宣言も保持も呼び出しもしない。読み取りは usecase が宣言する *Query、
-#   書き込みは domain のサービスを通す
+#   書き込みは domain の書き込みオブジェクトを通す
 # interface のメソッド名は、*Query が Get*/List* だけ、*Repository が Create*/Update*/Discard* だけ
 GO_INTERFACE_START_RE = re.compile(r"^type\s+(\w+)\s+interface\s*\{", re.M)
 GO_ALLOWED_PREFIXES = {"Query": ("Get", "List"), "Repository": ("Create", "Update", "Discard")}
@@ -154,7 +155,7 @@ def go_query_repository_violations(paths: list[str]) -> list[str]:
                         )
         if not in_usecase:
             continue
-        # usecase は repository を宣言も保持も呼び出しもしない(repository は domain のサービスからだけ使う)
+        # usecase は repository を宣言も保持も呼び出しもしない(repository は domain のコードからだけ使う)
         for match in GO_REPOSITORY_TYPE_RE.finditer(text):
             line = text[: match.start()].count("\n") + 1
             violations.append(f"{path}:{line}: usecase declares {match.group(1)} (repository types belong to domain)")
@@ -163,9 +164,9 @@ def go_query_repository_violations(paths: list[str]) -> list[str]:
             if GO_DOT_IMPORT_RE.match(code):
                 violations.append(f"{path}:{index}: dot import hides repository references (do not use it in usecase)")
             for ref in GO_REPOSITORY_REF_RE.finditer(code):
-                violations.append(f"{path}:{index}: usecase references {ref.group(1)}.{ref.group(2)} (writes go through domain services)")
+                violations.append(f"{path}:{index}: usecase references {ref.group(1)}.{ref.group(2)} (writes go through domain write objects)")
             if GO_REPO_CALL_RE.search(code):
-                violations.append(f"{path}:{index}: usecase calls a repository (writes go through domain services)")
+                violations.append(f"{path}:{index}: usecase calls a repository (writes go through domain write objects)")
     return violations
 
 
@@ -218,7 +219,7 @@ def main() -> int:
             print(f"- {violation}")
         print(
             "Repositories are used only from domain: *Repository interfaces (Create*/Update*/Discard* only) live in domain "
-            "and are called only by domain services; usecase reads via *Query (Get*/List* only) and writes via domain services."
+            "and are called only by domain code; usecase reads via *Query (Get*/List* only) and writes via domain write objects (per-aggregate; *Service only for cross-aggregate updates)."
         )
         failures.append("go query/repository split sensor failed")
 

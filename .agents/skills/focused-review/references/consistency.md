@@ -33,8 +33,8 @@
    複製は、片方だけ直したときに食い違う。
 10. **repository への依存** — usecase が repository を宣言・保持・呼び出している(`.repo.` の
     呼び出し、`*Repository` の型・フィールド、`domain.*Repository` の参照)。repository は
-    domain のサービスからだけ使い、usecase は読み取りを `*Query`、書き込みを domain の
-    サービスで行う。
+    domain のコードからだけ使い、usecase は読み取りを `*Query`、書き込みを domain の
+    書き込みオブジェクト(跨ぐ更新だけ `*Service`)で行う。
 
 ## 指摘しないもの
 
