@@ -197,7 +197,7 @@ func TestShopRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("GetShopWithCreator は null の creator と moderation note をマッピングする", func(t *testing.T) {
+	t.Run("GetShopWithCreator は creator が null で moderation note がある shop をマッピングする", func(t *testing.T) {
 		detail, err := repo.GetShopWithCreator(ctx, golfRejected)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)

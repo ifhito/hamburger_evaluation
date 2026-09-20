@@ -219,7 +219,7 @@ func TestBurgerStatsAverageRating(t *testing.T) {
 		{name: "MRI 境界の 169 ÷ 40 は 4.23 に丸められる", ratings: append(repeatRatings(4.0, 31), repeatRatings(5.0, 9)...), want: 4.23},
 		// (4.0+4.25)/2 = 4.125（厳密に表現可能）-> 4.13：Ruby は half を
 		// 偶数丸め（4.12）ではなく、0 から遠ざかる方向へ丸める。
-		{name: "half は 0 から遠ざかる方向に丸められる", ratings: []float64{4.0, 4.25}, want: 4.13},
+		{name: "ちょうど中間の値 (half) は 0 から遠ざかる方向に丸められる", ratings: []float64{4.0, 4.25}, want: 4.13},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

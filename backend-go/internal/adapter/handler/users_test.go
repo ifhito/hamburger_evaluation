@@ -299,7 +299,7 @@ func TestDeleteUser(t *testing.T) {
 		}
 	})
 
-	t.Run("自分自身の削除は 204 を返し、トークンを無効にし、index から消える", func(t *testing.T) {
+	t.Run("自分自身を削除すると 204 を返し、トークンが無効になり、index から消える", func(t *testing.T) {
 		router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodDelete, "/users/1", "", aliceAuth)
 		if rec.Code != http.StatusNoContent {

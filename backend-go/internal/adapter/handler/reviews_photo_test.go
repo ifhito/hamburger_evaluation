@@ -225,7 +225,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 		}
 	})
 
-	t.Run("multipart の rating 0 は JSON と同じ検証メッセージになる", func(t *testing.T) {
+	t.Run("multipart の rating が数値でない場合は JSON の rating 0 と同じ検証メッセージで 422 になる", func(t *testing.T) {
 		body, contentType := multipartBody(t, map[string]string{
 			"rating":    "not-a-number",
 			"comment":   "ok",

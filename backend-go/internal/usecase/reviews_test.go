@@ -363,7 +363,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("burger_id も使える burger_name もない場合は書き込みせずに ValidationError を返す", func(t *testing.T) {
+	t.Run("burger_id がなく burger_name も空か空白のみなら、書き込みせずに ValidationError を返す", func(t *testing.T) {
 		for name, burgerName := range map[string]string{"burger_name が未指定": "", "burger_name が空白のみ": "  \t "} {
 			t.Run(name, func(t *testing.T) {
 				repo := &fakeReviewRepo{getShop: getShop} // すべての書き込みは未設定：呼び出しは panic する
@@ -531,7 +531,7 @@ func TestReviewsDelete(t *testing.T) {
 		}
 	})
 
-	t.Run("discard の競合が起きたときは repository の not-found がそのまま返る", func(t *testing.T) {
+	t.Run("discard の競合が起きたときは repository の ErrReviewNotFound が返る", func(t *testing.T) {
 		repo := &fakeReviewRepo{
 			getReview: getReview,
 			discardReview: func(_ context.Context, _ int64) error {

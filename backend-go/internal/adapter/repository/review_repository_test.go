@@ -176,7 +176,7 @@ func TestReviewRepository(t *testing.T) {
 			{name: "keyword の LIKE メタ文字はリテラルとして一致する", filter: usecase.ReviewListFilter{Keyword: "%"}, want: []int64{}},
 			{name: "keyword が非表示の review にしか一致しない場合は空になる", filter: usecase.ReviewListFilter{Keyword: "only"}, want: []int64{}},
 			{name: "shop_id は shops_burgers の link をたどる", filter: usecase.ReviewListFilter{ShopID: int64p(active2)}, want: []int64{rTie1, rOld}},
-			{name: "shop_id はその shop の burger をすべて残す", filter: usecase.ReviewListFilter{ShopID: int64p(active1)}, want: []int64{rTie2, rTie1, rOld}},
+			{name: "shop_id で絞り込んでも、その shop の burger の review はすべて残る", filter: usecase.ReviewListFilter{ShopID: int64p(active1)}, want: []int64{rTie2, rTie1, rOld}},
 			{name: "存在しない shop_id は空になる", filter: usecase.ReviewListFilter{ShopID: int64p(99999)}, want: []int64{}},
 			{name: "filter は AND で組み合わされる", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: int64p(active2)}, want: []int64{rOld}},
 			{name: "AND の組み合わせが一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []int64{}},
@@ -198,7 +198,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("shop_id の filter は絞り込み対象の shop 自体が active であることを要求する", func(t *testing.T) {
+	t.Run("shop_id の filter は、指定された shop 自体が active であることを要求する", func(t *testing.T) {
 		// active と pending の「両方」の shop に link された burger：その
 		// review は（active な link 経由で）フィードに含まれるが、pending な
 		// shop で絞り込むと何も返してはならない。これは Rails の、status を
@@ -468,7 +468,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		return created, burger
 	}
 
-	t.Run("shop 内に既存の名前があれば、insert 前の stats のまま再利用される", func(t *testing.T) {
+	t.Run("shop 内に同名の burger があれば再利用し、戻り値の burger は insert 前の stats を持つ", func(t *testing.T) {
 		created, burger := mustNamedCreate(t, shopA, "Cheese")
 		if burger.ID != cheese {
 			t.Fatalf("burger id = %d, want the existing Cheese %d", burger.ID, cheese)
@@ -956,7 +956,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 	})
 
-	t.Run("discard 済みの review は ErrReviewNotFound になる", func(t *testing.T) {
+	t.Run("discard 済みの review への UpdateReviewContentAndPhotoKey は ErrReviewNotFound になり、変更は残らない", func(t *testing.T) {
 		if err := repo.DiscardReview(ctx, created.ID); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}

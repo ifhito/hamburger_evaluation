@@ -240,7 +240,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("DiscardUser は user に discard 時刻を刻み、その user の burger の stats を再計算する", func(t *testing.T) {
+	t.Run("DiscardUser は user に discard 時刻を刻み、その user が review した burger の stats を再計算する", func(t *testing.T) {
 		if got := requireConsistentStats(ctx, t, conn, shared); got.ReviewCount != 2 {
 			t.Fatalf("shared stats before discard = %+v, want count 2", got)
 		}

@@ -19,7 +19,7 @@ func TestValidateReviewContent(t *testing.T) {
 		want    []string // nil = 有効
 	}{
 		{name: "有効な入力は検証を通る", rating: 4, comment: "Tasty"},
-		{name: "境界値の rating 1 と 5 は有効", rating: 1, comment: "ok"},
+		{name: "境界値の rating 1 は有効", rating: 1, comment: "ok"},
 		{name: "rating 5 は有効", rating: 5, comment: "ok"},
 		{name: "rating 0 は検証エラーになる", rating: 0, comment: "ok", want: []string{"Rating must be in 1..5"}},
 		{name: "rating 6 は検証エラーになる", rating: 6, comment: "ok", want: []string{"Rating must be in 1..5"}},

@@ -327,7 +327,7 @@ func TestCreateReview(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 review 可否のルール: rejected は全員 403、pending は作成者と admin のみ投稿できる", func(t *testing.T) {
+	t.Run("AC2 review 可否のルール: rejected は全員 403、pending は creator と admin のみ投稿できる", func(t *testing.T) {
 		router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(1))
 		post := func(auth string, shopID int64) *doResult {
 			body := fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d,"burger_id":%d}}`, shopID, cheeseBurgerID)
@@ -340,9 +340,9 @@ func TestCreateReview(t *testing.T) {
 			shopID   int64
 			wantCode int
 		}{
-			{name: "作成者が rejected な shop に投稿すると 403 になる", auth: aliceAuth, shopID: rejectedShopID, wantCode: http.StatusForbidden},
+			{name: "pending な shop の creator が rejected な shop に投稿すると 403 になる", auth: aliceAuth, shopID: rejectedShopID, wantCode: http.StatusForbidden},
 			{name: "admin が rejected な shop に投稿すると 403 になる", auth: adminAuth, shopID: rejectedShopID, wantCode: http.StatusForbidden},
-			{name: "作成者が自分の pending な shop に投稿すると 201 になる", auth: aliceAuth, shopID: pendingShopID, wantCode: http.StatusCreated},
+			{name: "creator が自分の pending な shop に投稿すると 201 になる", auth: aliceAuth, shopID: pendingShopID, wantCode: http.StatusCreated},
 			{name: "他のユーザーが pending な shop に投稿すると 403 になる", auth: bobAuth, shopID: pendingShopID, wantCode: http.StatusForbidden},
 			{name: "admin が pending な shop に投稿すると 201 になる", auth: adminAuth, shopID: pendingShopID, wantCode: http.StatusCreated},
 		}
@@ -571,7 +571,7 @@ func TestListReviews(t *testing.T) {
 		}
 	})
 
-	t.Run("repository が失敗すると 500 を返す", func(t *testing.T) {
+	t.Run("repository の失敗は 500 を返す", func(t *testing.T) {
 		failRepo := newReviewRepoFake()
 		failRepo.err = fmt.Errorf("db down")
 		failRouter, _, _, _ := newReviewsRouter(t, failRepo)

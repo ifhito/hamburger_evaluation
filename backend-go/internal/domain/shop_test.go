@@ -107,7 +107,7 @@ func TestNewShopSubmission(t *testing.T) {
 	})
 
 	for _, name := range []string{"", "   ", "\t\n"} {
-		t.Run("空白の名前 "+name+" は検証エラーになる", func(t *testing.T) {
+		t.Run("空または空白のみの名前 "+name+" は検証エラーになる", func(t *testing.T) {
 			_, err := domain.NewShopSubmission(name, 7)
 			var vErr *domain.ValidationError
 			if !errors.As(err, &vErr) {

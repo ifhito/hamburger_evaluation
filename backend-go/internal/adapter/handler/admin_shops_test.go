@@ -131,7 +131,7 @@ func TestCreateShop(t *testing.T) {
 		})
 	}
 
-	t.Run("作成した pending な shop は作成者の一覧には出るが匿名の一覧には出ない", func(t *testing.T) {
+	t.Run("作成した pending な shop は creator の一覧には出るが匿名の一覧には出ない", func(t *testing.T) {
 		router, aliceAuth, _, _ := newShopsRouter(t, seedShops(1))
 		if rec := do(router, http.MethodPost, "/shops", `{"shop":{"name":"New Shack"}}`, aliceAuth); rec.Code != http.StatusCreated {
 			t.Fatalf("create status = %d (body %s)", rec.Code, rec.Body)
