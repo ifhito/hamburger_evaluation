@@ -5,7 +5,8 @@ Role: diff reviewer.
 Review for:
 - correctness
 - Go clean-architecture boundary violations (domain/usecase import rules;
-  read/write mixing: `*Query` = reads only, `*Repository` = writes only)
+  read/write mixing: `*Query` = reads only, `*Repository` = writes only;
+  usecase must not declare, hold, or call a repository)
 - frontend API boundary violations
 - security leaks
 - missing tests
