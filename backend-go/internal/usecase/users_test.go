@@ -156,6 +156,11 @@ func TestUsersUpdateValidation(t *testing.T) {
 			wantMsgs: []string{"Email can't be blank"},
 		},
 		{
+			name:     "email の形式が不正だと検証エラーになる",
+			input:    usecase.UpdateUserInput{Email: strPtr("abc")},
+			wantMsgs: []string{"Email is invalid"},
+		},
+		{
 			name:     "username と email が両方空だと両方のメッセージを集めて返す",
 			input:    usecase.UpdateUserInput{Username: strPtr(""), Email: strPtr("")},
 			wantMsgs: []string{"Username can't be blank", "Email can't be blank"},

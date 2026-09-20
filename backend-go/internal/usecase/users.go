@@ -80,16 +80,16 @@ func (in UpdateUserInput) passwordPresent() bool {
 }
 
 // validate は Rails parity の full message を返す。valid なら空である。
-// メッセージは username、email、password（domain.ValidatePassword）、
-// confirmation の順に並ぶ。パスワードを変更しない入力（nil と ""）には
-// 強度ルールを適用しない。
+// メッセージは username、email（domain.ValidateEmail）、password
+// （domain.ValidatePassword）、confirmation の順に並ぶ。email を送らない入力（nil）
+// と、パスワードを変更しない入力（nil と ""）には、それぞれの規則を適用しない。
 func (in UpdateUserInput) validate() []string {
 	var msgs []string
 	if in.Username != nil && *in.Username == "" {
 		msgs = append(msgs, "Username can't be blank")
 	}
-	if in.Email != nil && *in.Email == "" {
-		msgs = append(msgs, "Email can't be blank")
+	if in.Email != nil {
+		msgs = append(msgs, domain.ValidateEmail(*in.Email)...)
 	}
 	if in.passwordPresent() {
 		msgs = append(msgs, domain.ValidatePassword(*in.Password)...)
