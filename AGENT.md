@@ -102,7 +102,7 @@ docker compose run --rm sqlc generate
 - React Router
 - SWR
 - Jotai
-- react-hook-form + Zod
+- react-hook-form(入力の検証は backend。frontend は 422 のメッセージを表示する)
 - axios
 - ESLint
 - Vitest

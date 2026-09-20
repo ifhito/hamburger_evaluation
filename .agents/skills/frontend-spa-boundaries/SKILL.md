@@ -15,7 +15,7 @@ metadata:
 ## 概要
 
 `frontend/` 配下のフロントエンド変更にはこのスキルを使う。SPA は React、
-TypeScript、Vite、SWR、Jotai、react-hook-form、Zod を使い、axios による
+TypeScript、Vite、SWR、Jotai、react-hook-form を使い、axios による
 ケーシング変換を HTTP 境界で行う。
 
 ## 使いどころ

@@ -40,7 +40,7 @@
 - フレームワーク / ランタイム: React 19 + Vite 6。
 - ルーター: React Router 6。
 - 状態 / データ: Jotai, SWR。
-- フォーム / バリデーション: react-hook-form + Zod。
+- フォーム: react-hook-form(入力の検証はしない。backend の 422 メッセージを表示する)。
 - HTTP: camelcase / snakecase の境界変換を行う axios。
 - パッケージマネージャー: pnpm 10。
 - テストランナー: Vitest。

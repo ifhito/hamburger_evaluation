@@ -10,7 +10,7 @@ React 19 + TypeScript + Vite で構成された SPA です。Go API を呼び出
 - React Router v6
 - SWR (データフェッチ)
 - Jotai (認証状態グローバル管理)
-- react-hook-form + Zod (フォームバリデーション)
+- react-hook-form (フォーム状態。入力の検証は backend が行い、422 のメッセージを表示する)
 - axios (camelcase-keys / snakecase-keys で HTTP 境界の命名変換)
 - ESLint + typescript-eslint
 - Vitest (ユニットテスト)
@@ -31,7 +31,7 @@ src/
 ├── domains/
 │   ├── auth/
 │   │   ├── api/          # authApiClient.ts
-│   │   ├── hooks/        # useAuthForm.ts (Zod + react-hook-form)
+│   │   ├── hooks/        # useAuthForm.ts (react-hook-form)
 │   │   ├── pages/        # SigninPage / SignupPage / SignoutPage
 │   │   ├── AuthProvider.tsx  # Context + useAuth hook
 │   │   ├── storage.ts    # localStorage 操作

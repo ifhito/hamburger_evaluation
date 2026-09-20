@@ -7,7 +7,7 @@ React SPA は `frontend/` にあり、pnpm を使う。
 - React 19 + TypeScript + Vite
 - サーバー状態に SWR
 - クライアント状態に Jotai
-- react-hook-form + Zod
+- react-hook-form(入力の検証は backend。frontend は 422 のメッセージを表示する)
 - リクエストは snake_case、レスポンスは camelCase に変換する axios
 - ESLint、TypeScript strict、Vitest
 

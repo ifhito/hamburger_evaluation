@@ -38,15 +38,6 @@
   cursor: pointer;
 }
 
-.fieldError {
-  border-color: var(--color-error);
-}
-
-.errorText {
-  font-size: 0.75rem;
-  color: var(--color-error);
-}
-
 .hintText {
   font-size: 0.75rem;
   color: var(--color-text-muted);

@@ -393,6 +393,45 @@ func TestUsersUpdateChanges(t *testing.T) {
 	}
 }
 
+// TestUsersUpdateEmailRule は、email の形式の規則が「新しく設定するとき」だけ判定される
+// ことを固定する。規則ができる前の、形式が合わない email を持つ既存ユーザーが、
+// 同じ値を含めた更新で 422 になって締め出されてはならない。
+func TestUsersUpdateEmailRule(t *testing.T) {
+	legacy := domain.User{ID: usersViewer.ID, Username: "legacy", Email: "legacy-without-at"}
+	tests := []struct {
+		name     string
+		email    string
+		wantMsgs []string // 空なら更新が通る
+	}{
+		{"現在の値と同じ email(形式が合わない既存の値)はそのまま更新できる", legacy.Email, nil},
+		{"別の不正な email に変えようとすると検証エラーになる", "still-not-an-email", []string{"Email is invalid"}},
+		{"有効な email には変えられる", "fixed@example.com", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &fakeUsersRepo{
+				getByID: activeUsersByID(legacy),
+				updateProfile: func(context.Context, int64, usecase.ProfileChanges) (domain.User, error) {
+					return legacy, nil
+				},
+			}
+			_, err := usecase.NewUsers(repo, fakeHasher{}).Update(
+				context.Background(), legacy, legacy.ID, usecase.UpdateUserInput{Email: strPtr(tt.email)},
+			)
+			if len(tt.wantMsgs) == 0 {
+				if err != nil {
+					t.Fatalf("Update returned error: %v", err)
+				}
+				return
+			}
+			var vErr *domain.ValidationError
+			if !errors.As(err, &vErr) || !slices.Equal(vErr.Messages, tt.wantMsgs) {
+				t.Errorf("error = %v, want validation messages %q", err, tt.wantMsgs)
+			}
+		})
+	}
+}
+
 // profileChangesString は、失敗時に読みやすいよう、ポインタのフィールドを
 // 文字列に整形する。
 func profileChangesString(c usecase.ProfileChanges) string {

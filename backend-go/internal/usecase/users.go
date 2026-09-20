@@ -81,14 +81,17 @@ func (in UpdateUserInput) passwordPresent() bool {
 
 // validate は Rails parity の full message を返す。valid なら空である。
 // メッセージは username、email（domain.ValidateEmail）、password
-// （domain.ValidatePassword）、confirmation の順に並ぶ。email を送らない入力（nil）
-// と、パスワードを変更しない入力（nil と ""）には、それぞれの規則を適用しない。
-func (in UpdateUserInput) validate() []string {
+// （domain.ValidatePassword）、confirmation の順に並ぶ。email を送らない入力（nil）、
+// 現在の値と同じ email を送る入力、パスワードを変更しない入力（nil と ""）には、
+// それぞれの規則を適用しない。email の形式の規則は、新しく設定するときだけ判定する
+// （規則ができる前の、形式が合わない email を持つ既存ユーザーが、同じ値を含めた
+// 更新で 422 になって締め出されないため）。
+func (in UpdateUserInput) validate(currentEmail string) []string {
 	var msgs []string
 	if in.Username != nil && *in.Username == "" {
 		msgs = append(msgs, "Username can't be blank")
 	}
-	if in.Email != nil {
+	if in.Email != nil && *in.Email != currentEmail {
 		msgs = append(msgs, domain.ValidateEmail(*in.Email)...)
 	}
 	if in.passwordPresent() {
@@ -121,7 +124,7 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, 
 	if !viewer.Manages(target.ID) {
 		return domain.User{}, domain.ErrForbidden
 	}
-	if msgs := input.validate(); len(msgs) > 0 {
+	if msgs := input.validate(target.Email); len(msgs) > 0 {
 		return domain.User{}, &domain.ValidationError{Messages: msgs}
 	}
 	changes := ProfileChanges{Username: input.Username, Email: input.Email}
