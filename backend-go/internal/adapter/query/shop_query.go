@@ -92,20 +92,13 @@ func (r *ShopQuery) ListShopReviews(ctx context.Context, shopID int64) ([]domain
 	}
 	reviews := make([]domain.ShopReview, 0, len(rows))
 	for _, row := range rows {
+		burger := rowmap.ShopReviewBurger(row.BurgerID, row.BurgerName, row.AverageRating, row.ReviewCount, row.WeightedScore, row.Confidence)
 		review := domain.ShopReview{
 			ID:        row.ID,
 			Rating:    int(row.Rating),
 			CreatedAt: row.CreatedAt.Time,
 			User:      &domain.UserRef{ID: row.UserID, Username: row.UserUsername},
-			Burger: &domain.ShopReviewBurger{
-				ID:   row.BurgerID,
-				Name: row.BurgerName,
-				// stats 行がまだ存在しないことがある。その場合はゼロ値になる。
-				AverageRating: row.AverageRating.Float64,
-				ReviewCount:   row.ReviewCount.Int64,
-				WeightedScore: row.WeightedScore.Float64,
-				Confidence:    row.Confidence.Float64,
-			},
+			Burger:    &burger,
 		}
 		if row.Comment.Valid {
 			comment := row.Comment.String

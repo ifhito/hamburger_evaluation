@@ -121,8 +121,9 @@ func newTestRouter(t *testing.T, p handler.Pinger) http.Handler {
 // である。
 func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.Handler {
 	t.Helper()
+	reviewRepo := newReviewRepoFake()
 	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}, &shopRepoFake{}),
-		usecase.NewReviews(newReviewRepoFake(), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(newUserRepoFake(), hasherFake{}), nil)
 }
 

@@ -82,7 +82,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	}
 
 	shops := usecase.NewShops(query.NewShopQuery(pool), repository.NewShopRepository(pool))
-	reviews := usecase.NewReviews(repository.NewReviewRepository(pool), photos)
+	reviews := usecase.NewReviews(query.NewReviewQuery(pool), repository.NewReviewRepository(pool), photos)
 	users := usecase.NewUsers(userRepo, infra.BcryptPasswordHasher{})
 
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users, photoFiles), ready)

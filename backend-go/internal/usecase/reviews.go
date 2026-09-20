@@ -13,12 +13,13 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
 
-// ReviewRepository は review 向けの consumer 側の永続化の契約である。
+// ReviewQuery は review 向けの consumer 側の読み取りの契約である。
 // 実装は SQL の詳細（EXISTS による active な shop のフィルタ、smallint の
 // status のエンコード、soft delete の述語）を自分の内部に留め、一致する行が
 // ないときは wrap した domain の sentinel（ErrReviewNotFound、
-// ErrShopNotFound、ErrBurgerNotFound）を返す。
-type ReviewRepository interface {
+// ErrShopNotFound、ErrBurgerNotFound）を返す。読み取り専用で、書き込みの
+// メソッドは置かない（書き込みは ReviewRepository）。
+type ReviewQuery interface {
 	// ListReviews は、burger が少なくとも 1 つの active な shop で提供されて
 	// いる、discard されていない review（author が discard 済みの user である
 	// review も除く）を返す。filter で絞り込み、author、burger、stats を
@@ -36,6 +37,14 @@ type ReviewRepository interface {
 	// いるときに限り、stats つき（まだ計算されていなければゼロ）の burger を
 	// 返し、そうでなければ（wrap された）domain.ErrBurgerNotFound を返す。
 	GetShopBurger(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error)
+}
+
+// ReviewRepository は review 向けの consumer 側の書き込みの契約である。
+// 実装は書き込みの SQL の詳細（カラム限定の書き込み、burger_stats の再計算）を
+// 自分の内部に留め、一致する行がないときは（wrap された）
+// domain.ErrReviewNotFound を返す。書き込み専用で、読み取りのメソッドは
+// 置かない（読み取りは ReviewQuery）。
+type ReviewRepository interface {
 	// CreateReview は、新しい（validate 済みの）review を永続化し、生成された
 	// id と created_at つきで返す。この書き込みは、同一 transaction 内で
 	// burger の burger_stats も再計算する（issue #15、S7）。
@@ -100,8 +109,10 @@ type ReviewListFilter struct {
 
 // Reviews は review の use case を実装する。公開フィードと詳細、および
 // author に限定された create/edit/delete であり、review ごとに任意で 1 枚の
-// 写真を photos 経由で保存する（S10）。
+// 写真を photos 経由で保存する（S10）。読み取りは query、書き込みは repo だけを
+// 通す。
 type Reviews struct {
+	query  ReviewQuery
 	repo   ReviewRepository
 	photos PhotoStorage
 }
@@ -110,18 +121,18 @@ type Reviews struct {
 // ならない（本番では disk か S3、テストでは fake）。どのリクエスト経路も
 // それを dereference しうる（photoURL、deletePhotoBestEffort）ので、nil の
 // storage は、リクエストの途中で panic するのではなく、ここで fail-loud する。
-func NewReviews(repo ReviewRepository, photos PhotoStorage) *Reviews {
+func NewReviews(query ReviewQuery, repo ReviewRepository, photos PhotoStorage) *Reviews {
 	if photos == nil {
 		panic("usecase.NewReviews: nil PhotoStorage")
 	}
-	return &Reviews{repo: repo, photos: photos}
+	return &Reviews{query: query, repo: repo, photos: photos}
 }
 
 // List は、filter で絞り込んだ公開 review フィードを返す。ページネーションは
 // clampPage に従い、Shops.List と同じフォールバック規則で行う。
 func (s *Reviews) List(ctx context.Context, filter ReviewListFilter, page, perPage int) ([]domain.ReviewDetail, error) {
 	limit, offset := clampPage(page, perPage)
-	reviews, err := s.repo.ListReviews(ctx, filter, limit, offset)
+	reviews, err := s.query.ListReviews(ctx, filter, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list reviews: %w", err)
 	}
@@ -135,7 +146,7 @@ func (s *Reviews) List(ctx context.Context, filter ReviewListFilter, page, perPa
 // discard 済みの review、author が discard 済みの user である review は、
 // いずれも domain.ErrReviewNotFound を返す。
 func (s *Reviews) Get(ctx context.Context, id int64) (domain.ReviewDetail, error) {
-	detail, err := s.repo.GetReview(ctx, id)
+	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("get review: %w", err)
 	}
@@ -158,7 +169,7 @@ func (s *Reviews) Get(ctx context.Context, id int64) (domain.ReviewDetail, error
 // したばかりの blob を best-effort で削除するので、リクエストより長く残る
 // 孤立ファイルはない。
 func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burgerID int64, burgerName string, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
-	shop, err := s.repo.GetShop(ctx, shopID)
+	shop, err := s.query.GetShop(ctx, shopID)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
 	}
@@ -167,7 +178,7 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	}
 	var burger domain.ShopReviewBurger
 	if burgerID > 0 {
-		if burger, err = s.repo.GetShopBurger(ctx, shopID, burgerID); err != nil {
+		if burger, err = s.query.GetShopBurger(ctx, shopID, burgerID); err != nil {
 			return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
 		}
 	} else if err := domain.ValidateBurgerName(burgerName); err != nil {
@@ -213,7 +224,7 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 // nil の upload は content だけの書き込みを行い、photo_key には触れない
 // （写真を削除する経路はない）。
 func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
-	detail, err := s.repo.GetReview(ctx, id)
+	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
@@ -250,7 +261,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 // 行い、hard DELETE は決して行わない。写真の blob があれば、discard が
 // 成功した後に best-effort で削除される（S10）。
 func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) error {
-	detail, err := s.repo.GetReview(ctx, id)
+	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete review: %w", err)
 	}

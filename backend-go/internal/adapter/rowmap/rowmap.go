@@ -57,3 +57,17 @@ func Shop(id int64, name string, status int16, note pgtype.Text, creatorID pgtyp
 	}
 	return shop, nil
 }
+
+// ShopReviewBurger は、stats つき burger の sqlc のカラムを domain の
+// ペイロードに変換する。stats のカラムは LEFT JOIN 由来で NULL になりうる。
+func ShopReviewBurger(id int64, name string, averageRating pgtype.Float8, reviewCount pgtype.Int8, weightedScore, confidence pgtype.Float8) domain.ShopReviewBurger {
+	return domain.ShopReviewBurger{
+		ID:   id,
+		Name: name,
+		// stats 行がまだ存在しないことがある。その場合はゼロ値になる。
+		AverageRating: averageRating.Float64,
+		ReviewCount:   reviewCount.Int64,
+		WeightedScore: weightedScore.Float64,
+		Confidence:    confidence.Float64,
+	}
+}

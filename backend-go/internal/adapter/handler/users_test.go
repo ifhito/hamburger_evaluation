@@ -72,8 +72,9 @@ func (f *userRepoFake) DiscardUser(_ context.Context, id int64) error {
 func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) string) {
 	t.Helper()
 	repo, auth, codec := newAuthKit()
+	reviewRepo := newReviewRepoFake()
 	router := handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}, &shopRepoFake{}),
-		usecase.NewReviews(newReviewRepoFake(), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(repo, hasherFake{}), nil)
 	token := func(id int64) string {
 		t.Helper()
@@ -603,7 +604,7 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	auth := usecase.NewAuth(userRepo, hasher, codec, codec)
 	router := handler.NewRouter(conn, auth,
 		usecase.NewShops(query.NewShopQuery(conn), repository.NewShopRepository(conn)),
-		usecase.NewReviews(repository.NewReviewRepository(conn), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewReviews(query.NewReviewQuery(conn), repository.NewReviewRepository(conn), storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(userRepo, hasher), nil)
 	return conn, router
 }

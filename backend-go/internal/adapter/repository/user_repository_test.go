@@ -119,6 +119,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	conn, _ := dbtest.New(t)
 	repo := repository.NewUserRepository(conn)
 	reviewRepo := repository.NewReviewRepository(conn)
+	reviewQuery := query.NewReviewQuery(conn)
 	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, $3, $4) RETURNING id`
@@ -279,7 +280,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	t.Run("読み取り経路は discard 済みの user の kept な review を隠す", func(t *testing.T) {
 		// フィード：alice の review だけが残り、表示される stats は再計算された
 		// burger_stats の行（count 1）と一致する。
-		feed, err := reviewRepo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
+		feed, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -293,13 +294,13 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 		// 詳細：discard 済みの author の review は、存在しない review と
 		// 区別がつかない。alice の review には引き続き到達できる。
-		if _, err := reviewRepo.GetReview(ctx, victimShared.ID); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := reviewQuery.GetReview(ctx, victimShared.ID); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("GetReview(victim shared) = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if _, err := reviewRepo.GetReview(ctx, victimSolo.ID); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := reviewQuery.GetReview(ctx, victimSolo.ID); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("GetReview(victim solo) = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if _, err := reviewRepo.GetReview(ctx, aliceShared.ID); err != nil {
+		if _, err := reviewQuery.GetReview(ctx, aliceShared.ID); err != nil {
 			t.Errorf("GetReview(alice) returned error: %v", err)
 		}
 		// shop の review：alice の review だけが一覧に載る。
