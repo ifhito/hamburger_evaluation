@@ -84,7 +84,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `DELETE /reviews/:id` — レビューを削除する (認証必須)
 
 **写真**
-- `GET /photos/*` — ディスクに保存されたレビュー写真を配信する (認証不要。ディレクトリの path は 404)。`PHOTO_STORAGE` が `disk` (デフォルト) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
+- `GET /photos/*` — ディスクに保存されたレビュー写真を配信する (認証不要。末尾が `/` のディレクトリ path は一覧せず 404、末尾 `/` なしは 301 で `/` 付きへ転送されてから 404)。`PHOTO_STORAGE` が `disk` (デフォルト) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 
 **ユーザー**
 - `GET /users` — 全ユーザーの一覧を取得する
