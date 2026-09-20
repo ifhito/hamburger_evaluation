@@ -72,12 +72,12 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (認証必須)
 
 **店舗**
-- `GET /shops` — 店舗の一覧を取得する
+- `GET /shops` — 店舗の一覧を取得する (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される)
 - `GET /shops/:id` — 店舗を 1 件取得する
 - `POST /shops` — 店舗を投稿する (認証必須)
 
 **レビュー**
-- `GET /reviews` — 全レビューの一覧を取得する (省略可能な `user_id` クエリで、そのユーザーの公開レビューだけに絞り込める)
+- `GET /reviews` — 全レビューの一覧を取得する (省略可能な `user_id` クエリで、そのユーザーの公開レビューだけに絞り込める。`page` / `per_page` の扱いは `GET /shops` と同じ)
 - `GET /reviews/:id` — レビューを 1 件取得する
 - `POST /reviews` — レビューを作成する (認証必須)
 - `PUT /reviews/:id` — レビューを更新する (認証必須)

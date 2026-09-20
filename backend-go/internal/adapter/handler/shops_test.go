@@ -20,14 +20,20 @@ import (
 // domain の記述子そのもの（vis.CanView）を通して適用されるので、そのルールを
 // ここで再実装してはいない。keyword のマッチングは単純な case-fold の
 // 部分文字列一致である（メタ文字のセマンティクスは repository の統合テストが
-// 扱う）。err を設定するとすべての操作が失敗する（500 の経路）。
+// 扱う）。err を設定するとすべての操作が失敗する（500 の経路）。listCalls は
+// ListShops が呼ばれた回数、lastLimit / lastOffset は最後の呼び出しの引数である
+// （handler が usecase に渡した値と、呼ばれなかったことの検証用）。
 type shopRepoFake struct {
-	shops   []domain.ShopDetail // Reviews は未設定。下の reviews 経由で提供される
-	reviews map[int64][]domain.ShopReview
-	err     error
+	shops                 []domain.ShopDetail // Reviews は未設定。下の reviews 経由で提供される
+	reviews               map[int64][]domain.ShopReview
+	err                   error
+	listCalls             int
+	lastLimit, lastOffset int32
 }
 
 func (f *shopRepoFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
+	f.listCalls++
+	f.lastLimit, f.lastOffset = limit, offset
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -151,8 +157,8 @@ func TestListShops(t *testing.T) {
 }
 
 // TestListShopsParams は HTTP レベルで keyword による絞り込みと pagination の
-// fallback を扱う：数値でない値はエラーにならずデフォルト値に fallback し、
-// 範囲外の page は空配列を返す。
+// fallback を扱う：範囲外の整数はエラーにならずデフォルト値に fallback し、
+// 範囲外の page は空配列を返す（整数でない値の 422 は pagination_test.go が扱う）。
 func TestListShopsParams(t *testing.T) {
 	repo := seedShops(1)
 	router, _, adminAuth, _ := newShopsRouter(t, repo)
@@ -180,8 +186,8 @@ func TestListShopsParams(t *testing.T) {
 			wantBody:   `[{"id":2,"name":"Alice Pending","status":"pending"}]`,
 		},
 		{
-			name:     "数値でない page と per_page はデフォルト値に fallback する",
-			query:    "?page=abc&per_page=xyz",
+			name:     "範囲外の page と per_page はデフォルト値に fallback する",
+			query:    "?page=0&per_page=0",
 			wantBody: `[{"id":1,"name":"Active Diner","status":"active"}]`,
 		},
 		{

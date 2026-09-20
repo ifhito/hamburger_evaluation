@@ -72,24 +72,47 @@ func viewerPtr(r *http.Request) *domain.User {
 	return nil
 }
 
-// queryInt は指定された名前の query parameter を int としてパースし、
-// 存在しない、または数値でない場合は 0（デフォルトへのフォールバックを示す
-// usecase のマーカー）を返す。
-func queryInt(r *http.Request, name string) int {
-	n, err := strconv.Atoi(r.URL.Query().Get(name))
-	if err != nil {
-		return 0
+// pageParams は一覧 endpoint の page / per_page の query parameter を整数として
+// パースする。空の値と省略は 0（デフォルトへのフォールバックを示す usecase の
+// マーカー）であり、エラーではない。int の範囲を超える整数（strconv.ErrRange）は
+// 整数として扱い、Atoi が返す clamp 済みの値（math.MaxInt / math.MinInt）を
+// そのまま渡す（補正は usecase の clampPage が行う）。それ以外の整数でない値が
+// あれば、不正な引数のメッセージ（両方不正なら page、per_page の順で両方）を
+// 並べた 422 を書き込み済みで false を返すので、呼び出し側は何も書かずに
+// return する。
+func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok bool) {
+	var msgs []string
+	parse := func(name, msg string) int {
+		raw := r.URL.Query().Get(name)
+		if raw == "" {
+			return 0
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil && !errors.Is(err, strconv.ErrRange) {
+			msgs = append(msgs, msg)
+			return 0
+		}
+		return n
 	}
-	return n
+	page = parse("page", "Page must be an integer")
+	perPage = parse("per_page", "Per page must be an integer")
+	if len(msgs) > 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: msgs})
+		return 0, 0, false
+	}
+	return page, perPage, true
 }
 
 // handleListShops は GET /shops を処理する：（存在する場合の）viewer から
 // 見える shop のトップレベルの JSON 配列で、keyword で絞り込まれ、
-// ページネーションされる。
+// ページネーションされる。page / per_page が整数でなければ 422 である。
 func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		list, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"),
-			queryInt(r, "page"), queryInt(r, "per_page"))
+		page, perPage, ok := pageParams(w, r)
+		if !ok {
+			return
+		}
+		list, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"), page, perPage)
 		if err != nil {
 			log.Printf("shops: list: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
