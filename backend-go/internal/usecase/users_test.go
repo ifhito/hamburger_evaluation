@@ -49,7 +49,7 @@ func selfProfile(u domain.User) domain.UserProfile {
 func TestUsersGet(t *testing.T) {
 	admin := domain.User{ID: 3, Username: "root", Email: "root@example.com", Admin: true}
 	query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther, admin)}
-	users := usecase.NewUsers(query, &fakeUserRepo{}, fakeHasher{})
+	users := newUsers(query, &fakeUserRepo{}, fakeHasher{})
 
 	tests := []struct {
 		name   string
@@ -96,7 +96,7 @@ func TestUsersGet(t *testing.T) {
 // （未設定の updateProfile は、到達すれば panic する）。
 func TestUsersUpdateCheckOrder(t *testing.T) {
 	query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
-	users := usecase.NewUsers(query, &fakeUserRepo{}, fakeHasher{})
+	users := newUsers(query, &fakeUserRepo{}, fakeHasher{})
 
 	if _, err := users.Update(context.Background(), usersViewer, 999, usecase.UpdateUserInput{}); !errors.Is(err, domain.ErrUserNotFound) {
 		t.Errorf("unknown target error = %v, want %v", err, domain.ErrUserNotFound)
@@ -190,7 +190,7 @@ func TestUsersUpdateValidation(t *testing.T) {
 			// （未設定の updateProfile は、到達すれば panic する）。
 			hasher := &recordingHasher{}
 			query := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
-			_, err := usecase.NewUsers(query, &fakeUserRepo{}, hasher).Update(context.Background(), usersViewer, usersViewer.ID, tt.input)
+			_, err := newUsers(query, &fakeUserRepo{}, hasher).Update(context.Background(), usersViewer, usersViewer.ID, tt.input)
 			assertValidationError(t, err, tt.wantMsgs)
 			if hasher.hashCalls != 0 {
 				t.Errorf("Hash calls = %d, want 0 (validation failure must not hash)", hasher.hashCalls)
@@ -226,22 +226,22 @@ func TestPasswordRuleParity(t *testing.T) {
 	for _, tt := range passwords {
 		t.Run(tt.name, func(t *testing.T) {
 			signupRepo := &fakeUserRepo{
-				createUser: func(_ context.Context, params usecase.CreateUserParams) (domain.User, error) {
+				createUser: func(_ context.Context, params domain.CreateUserParams) (domain.User, error) {
 					return domain.User{ID: 1, Username: params.Username, Email: params.Email}, nil
 				},
 			}
-			_, _, signupErr := usecase.NewAuth(&fakeUserQuery{}, signupRepo, fakeHasher{}, fakeIssuer{}, fakeVerifier{}).Signup(
+			_, _, signupErr := newAuth(&fakeUserQuery{}, signupRepo, fakeHasher{}, fakeIssuer{}, fakeVerifier{}).Signup(
 				context.Background(),
 				usecase.SignupInput{Username: "alice", Email: "a@example.com", Password: tt.password},
 			)
 
 			updateQuery := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
 			updateRepo := &fakeUserRepo{
-				updateProfile: func(context.Context, int64, usecase.ProfileChanges) (domain.User, error) {
+				updateProfile: func(context.Context, int64, domain.ProfileChanges) (domain.User, error) {
 					return usersViewer, nil
 				},
 			}
-			_, updateErr := usecase.NewUsers(updateQuery, updateRepo, fakeHasher{}).Update(
+			_, updateErr := newUsers(updateQuery, updateRepo, fakeHasher{}).Update(
 				context.Background(), usersViewer, usersViewer.ID,
 				usecase.UpdateUserInput{Password: strPtr(tt.password)},
 			)
@@ -280,27 +280,27 @@ func TestUsersUpdateChanges(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       usecase.UpdateUserInput
-		wantChanges usecase.ProfileChanges
+		wantChanges domain.ProfileChanges
 	}{
 		{
 			name:        "空の入力は何も変更しない更新になる",
 			input:       usecase.UpdateUserInput{},
-			wantChanges: usecase.ProfileChanges{},
+			wantChanges: domain.ProfileChanges{},
 		},
 		{
 			name:        "username だけの入力では他のフィールドは nil のままになる",
 			input:       usecase.UpdateUserInput{Username: strPtr("alice2")},
-			wantChanges: usecase.ProfileChanges{Username: strPtr("alice2")},
+			wantChanges: domain.ProfileChanges{Username: strPtr("alice2")},
 		},
 		{
 			name:        "空文字列の password は存在しない扱いで、digest の変更もエラーもない",
 			input:       usecase.UpdateUserInput{Password: strPtr("")},
-			wantChanges: usecase.ProfileChanges{},
+			wantChanges: domain.ProfileChanges{},
 		},
 		{
 			name:        "空の password と空の confirmation でも何も変更しない",
 			input:       usecase.UpdateUserInput{Password: strPtr(""), PasswordConfirmation: strPtr("")},
-			wantChanges: usecase.ProfileChanges{},
+			wantChanges: domain.ProfileChanges{},
 		},
 		{
 			name: "強度ルールを満たす password はハッシュ化される",
@@ -308,12 +308,12 @@ func TestUsersUpdateChanges(t *testing.T) {
 				Password:             strPtr("NewPassw0rd!"),
 				PasswordConfirmation: strPtr("NewPassw0rd!"),
 			},
-			wantChanges: usecase.ProfileChanges{PasswordDigest: strPtr("digest(NewPassw0rd!)")},
+			wantChanges: domain.ProfileChanges{PasswordDigest: strPtr("digest(NewPassw0rd!)")},
 		},
 		{
 			name:  "全フィールドを同時に更新できる",
 			input: usecase.UpdateUserInput{Username: strPtr("alice2"), Email: strPtr("alice2@example.com"), Password: strPtr("NewPassw0rd!")},
-			wantChanges: usecase.ProfileChanges{
+			wantChanges: domain.ProfileChanges{
 				Username:       strPtr("alice2"),
 				Email:          strPtr("alice2@example.com"),
 				PasswordDigest: strPtr("digest(NewPassw0rd!)"),
@@ -323,17 +323,17 @@ func TestUsersUpdateChanges(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotID int64
-			var gotChanges usecase.ProfileChanges
+			var gotChanges domain.ProfileChanges
 			stored := domain.User{ID: usersViewer.ID, Username: "stored", Email: "stored@example.com"}
 			query := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
 			repo := &fakeUserRepo{
-				updateProfile: func(_ context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
+				updateProfile: func(_ context.Context, id int64, changes domain.ProfileChanges) (domain.User, error) {
 					gotID, gotChanges = id, changes
 					return stored, nil
 				},
 			}
 			hasher := &recordingHasher{}
-			got, err := usecase.NewUsers(query, repo, hasher).Update(context.Background(), usersViewer, usersViewer.ID, tt.input)
+			got, err := newUsers(query, repo, hasher).Update(context.Background(), usersViewer, usersViewer.ID, tt.input)
 			if err != nil {
 				t.Fatalf("Update returned error: %v", err)
 			}
@@ -360,7 +360,7 @@ func TestUsersUpdateChanges(t *testing.T) {
 
 // profileChangesString は、失敗時に読みやすいよう、ポインタのフィールドを
 // 文字列に整形する。
-func profileChangesString(c usecase.ProfileChanges) string {
+func profileChangesString(c domain.ProfileChanges) string {
 	deref := func(p *string) string {
 		if p == nil {
 			return "<nil>"
@@ -376,11 +376,11 @@ func profileChangesString(c usecase.ProfileChanges) string {
 func TestUsersUpdateEmailTaken(t *testing.T) {
 	query := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
 	repo := &fakeUserRepo{
-		updateProfile: func(context.Context, int64, usecase.ProfileChanges) (domain.User, error) {
+		updateProfile: func(context.Context, int64, domain.ProfileChanges) (domain.User, error) {
 			return domain.User{}, fmt.Errorf("update user profile: email: %w", domain.ErrEmailTaken)
 		},
 	}
-	_, err := usecase.NewUsers(query, repo, fakeHasher{}).Update(context.Background(), usersViewer, usersViewer.ID,
+	_, err := newUsers(query, repo, fakeHasher{}).Update(context.Background(), usersViewer, usersViewer.ID,
 		usecase.UpdateUserInput{Email: strPtr("bob@example.com")})
 	assertValidationError(t, err, []string{"Email has already been taken"})
 }
@@ -391,14 +391,14 @@ func TestUsersUpdateEmailTaken(t *testing.T) {
 func TestUsersDelete(t *testing.T) {
 	t.Run("未知の target は所有者でなくても ErrUserNotFound を返す", func(t *testing.T) {
 		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
-		if err := usecase.NewUsers(query, &fakeUserRepo{}, fakeHasher{}).Delete(context.Background(), usersViewer, 999); !errors.Is(err, domain.ErrUserNotFound) {
+		if err := newUsers(query, &fakeUserRepo{}, fakeHasher{}).Delete(context.Background(), usersViewer, 999); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("error = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})
 
 	t.Run("他人の target は discard せずに ErrForbidden を返す", func(t *testing.T) {
 		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
-		if err := usecase.NewUsers(query, &fakeUserRepo{}, fakeHasher{}).Delete(context.Background(), usersViewer, usersOther.ID); !errors.Is(err, domain.ErrForbidden) {
+		if err := newUsers(query, &fakeUserRepo{}, fakeHasher{}).Delete(context.Background(), usersViewer, usersOther.ID); !errors.Is(err, domain.ErrForbidden) {
 			t.Errorf("error = %v, want %v", err, domain.ErrForbidden)
 		}
 	})
@@ -409,7 +409,7 @@ func TestUsersDelete(t *testing.T) {
 		repo := &fakeUserRepo{
 			discard: func(_ context.Context, id int64) error { discarded = id; return nil },
 		}
-		if err := usecase.NewUsers(query, repo, fakeHasher{}).Delete(context.Background(), usersViewer, usersViewer.ID); err != nil {
+		if err := newUsers(query, repo, fakeHasher{}).Delete(context.Background(), usersViewer, usersViewer.ID); err != nil {
 			t.Fatalf("Delete returned error: %v", err)
 		}
 		if discarded != usersViewer.ID {

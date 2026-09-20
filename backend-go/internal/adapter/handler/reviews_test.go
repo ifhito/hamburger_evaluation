@@ -24,7 +24,7 @@ type fakeStoredReview struct {
 }
 
 // reviewRepoFake は in-memory の usecase.ReviewQuery かつ
-// usecase.ReviewRepository である。in-memory の fake は共有 DB の代役なので、
+// domain.ReviewRepository である。in-memory の fake は共有 DB の代役なので、
 // 読み書きで状態を共有するよう 1 つの型に保つ（読み書きの分離は usecase の
 // 引数型がコンパイル時に保証する）。active な shop の feed の filter は、seed
 // された shops と links から導出される（SQL の EXISTS を再現するもので、SQL
@@ -45,8 +45,8 @@ type reviewRepoFake struct {
 }
 
 var (
-	_ usecase.ReviewQuery      = (*reviewRepoFake)(nil)
-	_ usecase.ReviewRepository = (*reviewRepoFake)(nil)
+	_ usecase.ReviewQuery     = (*reviewRepoFake)(nil)
+	_ domain.ReviewRepository = (*reviewRepoFake)(nil)
 )
 
 func newReviewRepoFake() *reviewRepoFake {
@@ -307,9 +307,9 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Hand
 	}
 	photoDir = t.TempDir()
 	shopRepo := &shopRepoFake{}
-	router = handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, shopRepo),
-		usecase.NewReviews(repo, repo, storage.NewDisk(photoDir, "/photos")),
-		usecase.NewUsers(users, users, hasherFake{}), handler.PhotoFileServer(photoDir))
+	router = handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, domain.NewShopService(shopRepo)),
+		usecase.NewReviews(repo, domain.NewReviewService(repo), storage.NewDisk(photoDir, "/photos")),
+		usecase.NewUsers(users, domain.NewUserService(users), hasherFake{}), handler.PhotoFileServer(photoDir))
 	return router, photoDir, token(alice.ID), token(bob.ID), token(admin.ID)
 }
 

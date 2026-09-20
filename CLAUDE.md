@@ -50,18 +50,18 @@ hamburger_evaluation/
 
 クリーンアーキテクチャ (handler → usecase → domain) を採用しています。依存は内側にのみ向き、認可の判断は handler ではなく usecase / domain に置きます。
 
-永続化は読み取りと書き込みで分ける。usecase は読み取りに `*Query`(メソッド名は `Get*` / `List*` のみ)、書き込みに `*Repository`(`Create*` / `Update*` / `Discard*` のみ)を使い、Query に書き込みを、Repository に読み取りを置かない。usecase が repository を呼ぶのは書き込みのときだけで、読み取りは必ず Query を通す。adapter は読み取りを `internal/adapter/query`、書き込みを `internal/adapter/repository` が実装し、sqlc の行 → domain の写像のうち、query と repository の両方が使うものは `internal/adapter/rowmap` に 1 か所にまとめる(片側だけが使う写像はその側に置く)。書き込みの内部で必要な読み取り(トランザクション内のロック取得など)は repository の実装の内部に閉じる。
+永続化は読み取りと書き込みで分け、repository は domain からだけ使う。usecase は読み取りに `*Query`(usecase が宣言。メソッド名は `Get*` / `List*` のみ)を使い、書き込みは domain のサービス(`domain.ShopService` / `ReviewService` / `UserService`)を通す。usecase は repository を宣言も保持も呼び出しもしない。repository の interface(`*Repository`。`Create*` / `Update*` / `Discard*` のみの書き込み専用)は domain が宣言し、それを呼ぶのは domain のサービスだけである。Query に書き込みを、Repository に読み取りを置かない。adapter は読み取りを `internal/adapter/query`、書き込みを `internal/adapter/repository` が実装し、sqlc の行 → domain の写像のうち、query と repository の両方が使うものは `internal/adapter/rowmap` に 1 か所にまとめる(片側だけが使う写像はその側に置く)。書き込みの内部で必要な読み取り(トランザクション内のロック取得など)は repository の実装の内部に閉じる。組み立て(`cmd/api/main.go`)は「repository → domain のサービス → usecase」の順に行う。
 
 ```text
 backend-go/
 ├── cmd/api/main.go     # composition root: 設定、DB プール、配線、サーバ
 ├── internal/
-│   ├── domain/         # エンティティ、値オブジェクト、ドメインエラー(標準ライブラリのみ)
-│   ├── usecase/        # アプリケーションのユースケース + 永続化のインターフェース(利用側で宣言)
+│   ├── domain/         # エンティティ、値オブジェクト、ドメインエラー、書き込みの窓口(*Repository の interface と、それを呼ぶ *Service)。標準ライブラリのみ
+│   ├── usecase/        # アプリケーションのユースケース + 読み取りの *Query(利用側で宣言)。repository には依存しない
 │   └── adapter/
 │       ├── handler/    # net/http のハンドラ、DTO、ルーティング、middleware
 │       ├── query/      # usecase の *Query(読み取り専用)を sqlc で実装
-│       ├── repository/ # usecase の *Repository(書き込み専用)を sqlc で実装
+│       ├── repository/ # domain の *Repository(書き込み専用)を sqlc で実装
 │       │   └── sqlcgen/  # sqlc の生成コード。手で編集しない
 │       ├── rowmap/     # query と repository が共有する、sqlc の行 → domain の写像
 │       └── infra/      # DB プール、JWT、パスワードハッシュ、設定
@@ -74,7 +74,7 @@ backend-go/
 ### Backend 設計ルール
 
 - `domain` は標準ライブラリのみを import する。`net/http`・`database/sql`・`pgx`・`usecase`・`adapter` は import しない。
-- 永続化のインターフェースは `usecase` 側で宣言し、`adapter/repository` が実装する。
+- 読み取りの `*Query` は `usecase` 側で宣言し、`adapter/query` が実装する。書き込みの `*Repository` は `domain` が宣言し、`adapter/repository` が実装する。repository を呼ぶのは `domain` のサービスだけで、`usecase` は repository に依存しない。
 - sqlc の行構造体や `pgx` の型を `adapter/` の外に出さない。ドメインの形と DB の形は別々に設計する。
 - `sqlcgen/` は手で編集しない。`db/queries/` を変更して再生成する。
 - API の JSON は snake_case を使う。

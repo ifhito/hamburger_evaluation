@@ -12,7 +12,7 @@ import (
 // domain.ShopVisibility にある）、smallint の status のエンコードを自分の
 // 内部に留め、id に一致する shop がないときは（wrap された）
 // domain.ErrShopNotFound を返す。読み取り専用で、書き込みのメソッドは
-// 置かない（書き込みは ShopRepository）。
+// 置かない（書き込みは domain.ShopService を通す）。
 type ShopQuery interface {
 	// ListShops は、keyword に一致する見える shop を、name、次に id の順で
 	// 返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別
@@ -31,33 +31,16 @@ type ShopQuery interface {
 	ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
 }
 
-// ShopRepository は shops 向けの consumer 側の書き込みの契約である。
-// 実装は smallint の status のエンコードを自分の内部に留め、id に一致する
-// shop がないときは（wrap された）domain.ErrShopNotFound を返す。書き込み
-// 専用で、読み取りのメソッドは置かない（読み取りは ShopQuery）。
-type ShopRepository interface {
-	// CreateShop は新しい shop を永続化し、生成された id つきで返す。
-	CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error)
-	// UpdateShopName は、id の shop の name だけを永続化し、保存された行を
-	// 返す。カラム限定なので、並行する status の変更が古いスナップショットで
-	// 元に戻されることは決してない。
-	UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error)
-	// UpdateShopStatus は、id の shop の status と moderation note だけを
-	// 永続化し、保存された行を返す。カラム限定なので、並行する rename が
-	// 古いスナップショットで元に戻されることは決してない。
-	UpdateShopStatus(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error)
-}
-
 // Shops は shop の use case を実装する。公開の一覧と詳細、ユーザーによる
 // 投稿、そして admin による moderation である。読み取りは query、書き込みは
-// repo だけを通す。
+// domain のサービスだけを通し、repository には依存しない。
 type Shops struct {
-	query ShopQuery
-	repo  ShopRepository
+	query   ShopQuery
+	service *domain.ShopService
 }
 
-func NewShops(query ShopQuery, repo ShopRepository) *Shops {
-	return &Shops{query: query, repo: repo}
+func NewShops(query ShopQuery, service *domain.ShopService) *Shops {
+	return &Shops{query: query, service: service}
 }
 
 // List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
@@ -100,7 +83,7 @@ func (s *Shops) Create(ctx context.Context, viewer domain.User, name string) (do
 	if err != nil {
 		return domain.ShopDetail{}, err
 	}
-	created, err := s.repo.CreateShop(ctx, shop)
+	created, err := s.service.Create(ctx, shop)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("create shop: %w", err)
 	}
@@ -154,7 +137,7 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int6
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}
-	updated, err := s.repo.UpdateShopName(ctx, id, name)
+	updated, err := s.service.UpdateName(ctx, id, name)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}
@@ -194,7 +177,7 @@ func (s *Shops) moderate(ctx context.Context, id int64, transition func(domain.S
 		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
 	}
 	next := transition(detail.Shop)
-	updated, err := s.repo.UpdateShopStatus(ctx, id, next.Status, next.ModerationNote)
+	updated, err := s.service.UpdateStatus(ctx, id, next.Status, next.ModerationNote)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
 	}

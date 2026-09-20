@@ -38,7 +38,7 @@ type fakeRecord struct {
 	discarded bool
 }
 
-// userRepoFake は in-memory の usecase.UserQuery かつ usecase.UserRepository
+// userRepoFake は in-memory の usecase.UserQuery かつ domain.UserRepository
 // である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
 // よう 1 つの型に保つ（読み書きの分離は usecase の引数型がコンパイル時に
 // 保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
@@ -50,13 +50,13 @@ type userRepoFake struct {
 }
 
 var (
-	_ usecase.UserQuery      = (*userRepoFake)(nil)
-	_ usecase.UserRepository = (*userRepoFake)(nil)
+	_ usecase.UserQuery     = (*userRepoFake)(nil)
+	_ domain.UserRepository = (*userRepoFake)(nil)
 )
 
 func newUserRepoFake() *userRepoFake { return &userRepoFake{users: map[int64]*fakeRecord{}} }
 
-func (f *userRepoFake) CreateUser(_ context.Context, p usecase.CreateUserParams) (domain.User, error) {
+func (f *userRepoFake) CreateUser(_ context.Context, p domain.CreateUserParams) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err
 	}
@@ -96,7 +96,7 @@ func (f *userRepoFake) GetActiveUserByID(_ context.Context, id int64) (domain.Us
 // seed は、password に対する hasherFake の digest を持つ active なユーザーを
 // 保存する。
 func (f *userRepoFake) seed(username, email, password string) domain.User {
-	user, err := f.CreateUser(context.Background(), usecase.CreateUserParams{
+	user, err := f.CreateUser(context.Background(), domain.CreateUserParams{
 		Username:       username,
 		Email:          email,
 		PasswordDigest: "digest:" + password,
@@ -112,7 +112,7 @@ func (f *userRepoFake) seed(username, email, password string) domain.User {
 func newAuthKit() (*userRepoFake, *usecase.Auth, *infra.JWTCodec) {
 	repo := newUserRepoFake()
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	return repo, usecase.NewAuth(repo, repo, hasherFake{}, codec, codec), codec
+	return repo, usecase.NewAuth(repo, domain.NewUserService(repo), hasherFake{}, codec, codec), codec
 }
 
 // newTestRouter は、db の health か routing の挙動だけを必要とするテスト向けの
@@ -132,9 +132,9 @@ func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.
 	reviewRepo := newReviewRepoFake()
 	users := newUserRepoFake()
 	shopRepo := &shopRepoFake{}
-	return handler.NewRouter(p, auth, usecase.NewShops(shopRepo, shopRepo),
-		usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(users, users, hasherFake{}), nil)
+	return handler.NewRouter(p, auth, usecase.NewShops(shopRepo, domain.NewShopService(shopRepo)),
+		usecase.NewReviews(reviewRepo, domain.NewReviewService(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(users, domain.NewUserService(users), hasherFake{}), nil)
 }
 
 // do は router に対して 1 件の request を in-process で実行し、recorder を

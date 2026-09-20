@@ -8,16 +8,6 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// CreateUserParams は、新しいユーザーとして永続化するフィールドを保持する。
-// パスワードはハッシュ化済みの状態で渡される。repository が平文を目にする
-// ことはない。
-type CreateUserParams struct {
-	Username       string
-	Email          string
-	PasswordDigest string
-	Admin          bool
-}
-
 // UserCredentials は、ログインのチェックのために、domain のユーザーと
 // そのパスワードの digest を組にしたものである。digest は意図的に
 // domain.User 上には決して置かれない。
@@ -30,7 +20,7 @@ type UserCredentials struct {
 // 契約である。実装は storage のエラーを domain のエラーに対応させ、active な
 // （discard されていない）ユーザーが一致しないとき（wrap された）
 // domain.ErrUserNotFound を返す。読み取り専用で、書き込みのメソッドは
-// 置かない（書き込みは UserRepository）。
+// 置かない（書き込みは domain.UserService を通す）。
 type UserQuery interface {
 	// GetActiveUserByEmail は、指定された email の、discard されていない
 	// ユーザーを、そのパスワードの digest とともに返す。
@@ -38,29 +28,6 @@ type UserQuery interface {
 	// GetActiveUserByID は、指定された id の、discard されていないユーザーを
 	// 返す。
 	GetActiveUserByID(ctx context.Context, id int64) (domain.User, error)
-}
-
-// UserRepository は、auth とユーザー管理の use case 向けの consumer 側の
-// 書き込みの契約である。実装は storage のエラーを domain のエラーに対応させる。
-// CreateUser と UpdateUserProfile は email の unique violation に対して
-// （wrap された）domain.ErrEmailTaken を返し、UpdateUserProfile と DiscardUser は、
-// active な（discard されていない）ユーザーが一致しないとき（wrap された）
-// domain.ErrUserNotFound を返す。書き込み専用で、読み取りのメソッドは
-// 置かない（読み取りは UserQuery）。
-type UserRepository interface {
-	// CreateUser は新しいユーザーを永続化して返す。
-	CreateUser(ctx context.Context, params CreateUserParams) (domain.User, error)
-	// UpdateUserProfile は、id の、まだ kept なユーザーに changes の存在する
-	// フィールドを atomic に適用し、保存されたユーザーを返す。存在する
-	// フィールドがゼロ個なら単なる lookup になる
-	// （200 の no-op、Rails parity）。存在するフィールドがゼロ個のときの
-	// lookup は repository の実装の内部で行われる。usecase が呼ぶのは書き込みの
-	// メソッドだけで、変更が空でも UpdateUserProfile を呼び、その戻り値を応答に
-	// する（usecase は読み取りのメソッドを repository に持たない）。
-	UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (domain.User, error)
-	// DiscardUser はユーザーを soft delete し（hard DELETE は決して行わない）、
-	// 導出された burger の stats の整合性を保つ。
-	DiscardUser(ctx context.Context, id int64) error
 }
 
 // PasswordHasher はパスワードのハッシュ化と検証を行う。
@@ -81,17 +48,17 @@ type TokenVerifier interface {
 
 // Auth は signup、login、トークン認証の use case を実装する。
 // 認証に関する判断は HTTP handler ではなく、ここにある。読み取りは query、
-// 書き込みは repo だけを通す。
+// 書き込みは domain のサービスだけを通し、repository には依存しない。
 type Auth struct {
 	query    UserQuery
-	repo     UserRepository
+	users    *domain.UserService
 	hasher   PasswordHasher
 	issuer   TokenIssuer
 	verifier TokenVerifier
 }
 
-func NewAuth(query UserQuery, repo UserRepository, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
-	return &Auth{query: query, repo: repo, hasher: hasher, issuer: issuer, verifier: verifier}
+func NewAuth(query UserQuery, users *domain.UserService, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
+	return &Auth{query: query, users: users, hasher: hasher, issuer: issuer, verifier: verifier}
 }
 
 // SignupInput は signup use case の入力である。PasswordConfirmation は
@@ -134,7 +101,7 @@ func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, stri
 	if err != nil {
 		return domain.User{}, "", fmt.Errorf("hash password: %w", err)
 	}
-	user, err := a.repo.CreateUser(ctx, CreateUserParams{
+	user, err := a.users.Create(ctx, domain.CreateUserParams{
 		Username:       input.Username,
 		Email:          input.Email,
 		PasswordDigest: digest,

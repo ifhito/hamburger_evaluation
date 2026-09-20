@@ -14,7 +14,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// strPtr は、usecase.ProfileChanges のフィールド用に、s へのポインタを返す。
+// strPtr は、domain.ProfileChanges のフィールド用に、s へのポインタを返す。
 func strPtr(s string) *string { return &s }
 
 // TestUserRepository は、repository を実際の PostgreSQL に対して検証する。
@@ -33,7 +33,7 @@ func TestUserRepository(t *testing.T) {
 	repo := repository.NewUserRepository(conn)
 	userQuery := query.NewUserQuery(conn)
 
-	created, err := repo.CreateUser(ctx, usecase.CreateUserParams{
+	created, err := repo.CreateUser(ctx, domain.CreateUserParams{
 		Username:       "alice",
 		Email:          "alice@example.com",
 		PasswordDigest: "digest-alice",
@@ -83,7 +83,7 @@ func TestUserRepository(t *testing.T) {
 	})
 
 	t.Run("email が重複すると ErrEmailTaken になる", func(t *testing.T) {
-		_, err := repo.CreateUser(ctx, usecase.CreateUserParams{
+		_, err := repo.CreateUser(ctx, domain.CreateUserParams{
 			Username:       "alice2",
 			Email:          "alice@example.com",
 			PasswordDigest: "digest-alice2",
@@ -153,7 +153,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	victimSolo := mustCreateReview(ctx, t, reviewRepo, 5, "only mine", victim, solo)
 
 	t.Run("UpdateUserProfile は指定されたフィールドだけを更新する", func(t *testing.T) {
-		updated, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{Username: strPtr("bobby")})
+		updated, err := repo.UpdateUserProfile(ctx, bob, domain.ProfileChanges{Username: strPtr("bobby")})
 		if err != nil {
 			t.Fatalf("UpdateUserProfile returned error: %v", err)
 		}
@@ -171,7 +171,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("UpdateUserProfile は複数のフィールドを 1 つのトランザクションで更新する", func(t *testing.T) {
-		updated, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{
+		updated, err := repo.UpdateUserProfile(ctx, bob, domain.ProfileChanges{
 			Email:          strPtr("bobby@example.com"),
 			PasswordDigest: strPtr("digest-bobby"),
 		})
@@ -191,7 +191,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("UpdateUserProfile は変更が 0 件なら現在の user を返す", func(t *testing.T) {
-		user, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{})
+		user, err := repo.UpdateUserProfile(ctx, bob, domain.ProfileChanges{})
 		if err != nil {
 			t.Fatalf("UpdateUserProfile returned error: %v", err)
 		}
@@ -201,7 +201,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("UpdateUserProfile で使用済みの email を指定すると ErrEmailTaken になり rollback される", func(t *testing.T) {
-		_, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{
+		_, err := repo.UpdateUserProfile(ctx, bob, domain.ProfileChanges{
 			Username: strPtr("sneaky"),
 			Email:    strPtr("alice@example.com"),
 		})
@@ -220,10 +220,10 @@ func TestUserRepositoryManagement(t *testing.T) {
 
 	t.Run("UpdateUserProfile で存在しない id と discard 済みの id は ErrUserNotFound になる", func(t *testing.T) {
 		for name, id := range map[string]int64{"unknown": 99999, "discarded": ghost} {
-			if _, err := repo.UpdateUserProfile(ctx, id, usecase.ProfileChanges{Username: strPtr("x")}); !errors.Is(err, domain.ErrUserNotFound) {
+			if _, err := repo.UpdateUserProfile(ctx, id, domain.ProfileChanges{Username: strPtr("x")}); !errors.Is(err, domain.ErrUserNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrUserNotFound)
 			}
-			if _, err := repo.UpdateUserProfile(ctx, id, usecase.ProfileChanges{}); !errors.Is(err, domain.ErrUserNotFound) {
+			if _, err := repo.UpdateUserProfile(ctx, id, domain.ProfileChanges{}); !errors.Is(err, domain.ErrUserNotFound) {
 				t.Errorf("%s (zero changes): error = %v, want %v", name, err, domain.ErrUserNotFound)
 			}
 		}

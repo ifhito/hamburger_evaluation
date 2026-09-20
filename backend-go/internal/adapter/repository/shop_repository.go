@@ -11,10 +11,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// ShopRepository は、sqlc 生成のクエリ上で usecase.ShopRepository を実装する。
+// ShopRepository は、sqlc 生成のクエリ上で domain.ShopRepository を実装する。
 // 書き込み（作成、name の更新、status の更新）だけを担い、読み取りは
 // adapter/query の ShopQuery が担う。smallint の status コードと
 // domain.ShopStatus との対応づけは rowmap にある。
@@ -27,7 +26,7 @@ func NewShopRepository(db sqlcgen.DBTX) *ShopRepository {
 	return &ShopRepository{q: sqlcgen.New(db)}
 }
 
-var _ usecase.ShopRepository = (*ShopRepository)(nil)
+var _ domain.ShopRepository = (*ShopRepository)(nil)
 
 // CreateShop は（検証済みの）shop を insert し、生成された id を持つ shop を
 // 返す。

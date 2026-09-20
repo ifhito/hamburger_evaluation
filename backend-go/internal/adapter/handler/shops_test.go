@@ -16,7 +16,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// shopRepoFake は in-memory の usecase.ShopQuery かつ usecase.ShopRepository
+// shopRepoFake は in-memory の usecase.ShopQuery かつ domain.ShopRepository
 // である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
 // よう 1 つの型に保つ（読み書きの分離は usecase の引数型がコンパイル時に
 // 保証する）。可視性は domain の記述子そのもの（vis.CanView）を通して適用
@@ -35,8 +35,8 @@ type shopRepoFake struct {
 }
 
 var (
-	_ usecase.ShopQuery      = (*shopRepoFake)(nil)
-	_ usecase.ShopRepository = (*shopRepoFake)(nil)
+	_ usecase.ShopQuery     = (*shopRepoFake)(nil)
+	_ domain.ShopRepository = (*shopRepoFake)(nil)
 )
 
 func (f *shopRepoFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
@@ -102,9 +102,9 @@ func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, alic
 		t.Fatalf("issue admin token: %v", err)
 	}
 	reviewRepo := newReviewRepoFake()
-	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo, repo),
-			usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-			usecase.NewUsers(users, users, hasherFake{}), nil),
+	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo, domain.NewShopService(repo)),
+			usecase.NewReviews(reviewRepo, domain.NewReviewService(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
+			usecase.NewUsers(users, domain.NewUserService(users), hasherFake{}), nil),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID
 }
 

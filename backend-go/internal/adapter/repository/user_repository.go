@@ -11,7 +11,6 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 // usersEmailUniqueConstraint は、db/migrations/000001_create_users.up.sql の
@@ -21,7 +20,7 @@ const usersEmailUniqueConstraint = "users_email_key"
 // pgUniqueViolation は SQLSTATE 23505 である。
 const pgUniqueViolation = "23505"
 
-// UserRepository は、sqlc 生成のクエリ上で usecase.UserRepository（書き込み）を
+// UserRepository は、sqlc 生成のクエリ上で domain.UserRepository（書き込み）を
 // 実装する。ストレージの詳細（sqlc の行、pgtype、pg のエラーコード）はこの境界の
 // 内側にとどまり、呼び出し側には domain の型とエラーしか見えない。S8 の書き込み
 // （プロフィールの更新、user の discard）はトランザクションで行われるので、
@@ -37,11 +36,11 @@ func NewUserRepository(db beginnerDBTX) *UserRepository {
 	return &UserRepository{db: db, q: sqlcgen.New(db)}
 }
 
-var _ usecase.UserRepository = (*UserRepository)(nil)
+var _ domain.UserRepository = (*UserRepository)(nil)
 
 // CreateUser は新しい user を insert して返す。email カラムでの unique
 // violation は domain.ErrEmailTaken に対応づけられる。
-func (r *UserRepository) CreateUser(ctx context.Context, params usecase.CreateUserParams) (domain.User, error) {
+func (r *UserRepository) CreateUser(ctx context.Context, params domain.CreateUserParams) (domain.User, error) {
 	row, err := r.q.CreateUser(ctx, sqlcgen.CreateUserParams{
 		Email:          params.Email,
 		Username:       params.Username,
@@ -62,7 +61,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, params usecase.CreateUs
 // トランザクションは rollback されるので、一部のフィールドだけが適用される
 // ことはない）。指定されたフィールドがゼロ個の場合は、現在の user を単純に
 // 参照するだけである（200 の no-op、Rails parity）。
-func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
+func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, changes domain.ProfileChanges) (domain.User, error) {
 	if changes.Username == nil && changes.Email == nil && changes.PasswordDigest == nil {
 		return r.activeUserByID(ctx, id)
 	}
@@ -145,7 +144,7 @@ func mapUserWriteError(err error) error {
 // activeUserByID は、指定された id を持つ discard されていない user を返す。
 // または domain.ErrUserNotFound を返す。UpdateUserProfile の no-op（変更する
 // フィールドがゼロ個の場合）のための、書き込みの内部の lookup であり、
-// usecase.UserRepository には含まれない（読み取りは usecase.UserQuery）。
+// domain.UserRepository には含まれない（読み取りは usecase.UserQuery）。
 func (r *UserRepository) activeUserByID(ctx context.Context, id int64) (domain.User, error) {
 	row, err := r.q.GetActiveUserByID(ctx, id)
 	if err != nil {

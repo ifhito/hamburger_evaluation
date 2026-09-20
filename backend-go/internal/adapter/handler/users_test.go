@@ -23,12 +23,12 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// userRepoFake は in-memory の usecase.UserQuery かつ usecase.UserRepository で
+// userRepoFake は in-memory の usecase.UserQuery かつ domain.UserRepository で
 // ある（型の宣言と読み取りのメソッドは auth_test.go にある）。この位置には書き込み
 // 側の UpdateUserProfile / DiscardUser が定義されており、本物の repository の
 // エラーの対応づけを再現している。
 
-func (f *userRepoFake) UpdateUserProfile(_ context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
+func (f *userRepoFake) UpdateUserProfile(_ context.Context, id int64, changes domain.ProfileChanges) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err
 	}
@@ -76,9 +76,9 @@ func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) stri
 	repo, auth, codec := newAuthKit()
 	reviewRepo := newReviewRepoFake()
 	shopRepo := &shopRepoFake{}
-	router := handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, shopRepo),
-		usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(repo, repo, hasherFake{}), nil)
+	router := handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, domain.NewShopService(shopRepo)),
+		usecase.NewReviews(reviewRepo, domain.NewReviewService(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(repo, domain.NewUserService(repo), hasherFake{}), nil)
 	token := func(id int64) string {
 		t.Helper()
 		tok, err := codec.Issue(id)
@@ -605,11 +605,11 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	userRepo := repository.NewUserRepository(conn)
 	hasher := infra.BcryptPasswordHasher{}
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	auth := usecase.NewAuth(userQuery, userRepo, hasher, codec, codec)
+	auth := usecase.NewAuth(userQuery, domain.NewUserService(userRepo), hasher, codec, codec)
 	router := handler.NewRouter(conn, auth,
-		usecase.NewShops(query.NewShopQuery(conn), repository.NewShopRepository(conn)),
-		usecase.NewReviews(query.NewReviewQuery(conn), repository.NewReviewRepository(conn), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userQuery, userRepo, hasher), nil)
+		usecase.NewShops(query.NewShopQuery(conn), domain.NewShopService(repository.NewShopRepository(conn))),
+		usecase.NewReviews(query.NewReviewQuery(conn), domain.NewReviewService(repository.NewReviewRepository(conn)), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(userQuery, domain.NewUserService(userRepo), hasher), nil)
 	return conn, router
 }
 

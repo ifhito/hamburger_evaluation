@@ -20,6 +20,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -58,11 +59,13 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	defer pool.Close()
 
 	jwtCodec := infra.NewJWTCodec(cfg.JWTSecret, cfg.JWTTTL)
+	// 書き込みは、repository を domain のサービスで包んで usecase に渡す。
+	// usecase は repository に依存せず、repository を呼ぶのは domain のサービスだけである。
 	userQuery := query.NewUserQuery(pool)
-	userRepo := repository.NewUserRepository(pool)
+	userService := domain.NewUserService(repository.NewUserRepository(pool))
 	auth := usecase.NewAuth(
 		userQuery,
-		userRepo,
+		userService,
 		infra.BcryptPasswordHasher{},
 		jwtCodec,
 		jwtCodec,
@@ -83,9 +86,9 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		photoFiles = handler.PhotoFileServer(cfg.PhotoDiskDir)
 	}
 
-	shops := usecase.NewShops(query.NewShopQuery(pool), repository.NewShopRepository(pool))
-	reviews := usecase.NewReviews(query.NewReviewQuery(pool), repository.NewReviewRepository(pool), photos)
-	users := usecase.NewUsers(userQuery, userRepo, infra.BcryptPasswordHasher{})
+	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShopService(repository.NewShopRepository(pool)))
+	reviews := usecase.NewReviews(query.NewReviewQuery(pool), domain.NewReviewService(repository.NewReviewRepository(pool)), photos)
+	users := usecase.NewUsers(userQuery, userService, infra.BcryptPasswordHasher{})
 
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users, photoFiles), ready)
 }

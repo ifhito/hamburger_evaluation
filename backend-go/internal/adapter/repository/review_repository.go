@@ -12,10 +12,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// ReviewRepository は、sqlc 生成のクエリ上で usecase.ReviewRepository を
+// ReviewRepository は、sqlc 生成のクエリ上で domain.ReviewRepository を
 // 実装する。書き込み（create、edit、discard）だけを担い、読み取りは
 // adapter/query の ReviewQuery が担う。soft delete の述語（discarded_at IS NULL）は
 // SQL 側にあり、認可ルール自体は domain パッケージにある。すべての書き込みは、
@@ -30,7 +29,7 @@ func NewReviewRepository(db beginnerDBTX) *ReviewRepository {
 	return &ReviewRepository{db: db}
 }
 
-var _ usecase.ReviewRepository = (*ReviewRepository)(nil)
+var _ domain.ReviewRepository = (*ReviewRepository)(nil)
 
 // CreateReview は（検証済みの）review を insert し、生成された id と
 // created_at を持つ review を返す。insert と burger_stats の再計算は 1 つの

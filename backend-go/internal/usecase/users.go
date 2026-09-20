@@ -8,27 +8,18 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// ProfileChanges は、UserRepository.UpdateUserProfile の、任意のカラム限定の
-// プロフィール更新を保持する。nil のフィールドは変更されない。パスワードは、
-// CreateUserParams と同様にハッシュ化済みの状態で渡される。repository が平文を
-// 目にすることはない。
-type ProfileChanges struct {
-	Username       *string
-	Email          *string
-	PasswordDigest *string
-}
-
 // Users は、ユーザー管理の use case を実装する。viewer から見えるビューでの
 // 詳細、および本人のみが行えるプロフィールの更新とアカウントの削除である。
-// 読み取りは query、書き込みは repo だけを通す。
+// 読み取りは query、書き込みは domain のサービスだけを通し、repository には
+// 依存しない。
 type Users struct {
 	query  UserQuery
-	repo   UserRepository
+	users  *domain.UserService
 	hasher PasswordHasher
 }
 
-func NewUsers(query UserQuery, repo UserRepository, hasher PasswordHasher) *Users {
-	return &Users{query: query, repo: repo, hasher: hasher}
+func NewUsers(query UserQuery, users *domain.UserService, hasher PasswordHasher) *Users {
+	return &Users{query: query, users: users, hasher: hasher}
 }
 
 // Get は、discard されていないユーザー 1 人を、viewer（nil = 匿名）から見える
@@ -106,7 +97,7 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, 
 	if msgs := input.validate(); len(msgs) > 0 {
 		return domain.User{}, &domain.ValidationError{Messages: msgs}
 	}
-	changes := ProfileChanges{Username: input.Username, Email: input.Email}
+	changes := domain.ProfileChanges{Username: input.Username, Email: input.Email}
 	if input.passwordPresent() {
 		digest, err := s.hasher.Hash(*input.Password)
 		if err != nil {
@@ -114,7 +105,7 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, 
 		}
 		changes.PasswordDigest = &digest
 	}
-	updated, err := s.repo.UpdateUserProfile(ctx, targetID, changes)
+	updated, err := s.users.UpdateProfile(ctx, targetID, changes)
 	if err != nil {
 		if errors.Is(err, domain.ErrEmailTaken) {
 			return domain.User{}, &domain.ValidationError{Messages: []string{"Email has already been taken"}}
@@ -135,7 +126,7 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID int64) 
 	if !viewer.Manages(target.ID) {
 		return domain.ErrForbidden
 	}
-	if err := s.repo.DiscardUser(ctx, targetID); err != nil {
+	if err := s.users.Discard(ctx, targetID); err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}
 	return nil
