@@ -1,5 +1,8 @@
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# pnpm を固定する。pnpm@latest は現在 12.5.1 に解決され、未承認のビルドスクリプト (esbuild) を
+# ERR_PNPM_IGNORED_BUILDS のエラーにして pnpm install が失敗するため。
+# 10.34.5 で install と build の成功を確認済み。
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 WORKDIR /app
 
 FROM base AS deps
