@@ -102,7 +102,7 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 		{name: "PATCH /reviews は 405 を返し Allow は GET, POST になる", method: http.MethodPatch, path: "/reviews", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
 		{name: "PATCH /reviews/1 は 405 を返し Allow は DELETE, GET, PUT になる", method: http.MethodPatch, path: "/reviews/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, GET, PUT"},
 		{name: "POST /users は 405 を返し Allow は GET になる", method: http.MethodPost, path: "/users", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
-		{name: "GET /users/1 は 405 を返し Allow は DELETE, PUT になる", method: http.MethodGet, path: "/users/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, PUT"},
+		{name: "POST /users/1 は 405 を返し Allow は DELETE, GET, PUT になる", method: http.MethodPost, path: "/users/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, GET, PUT"},
 		{name: "GET /admin/shops/1/approve は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/admin/shops/1/approve", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 	}
 	for _, tt := range tests {

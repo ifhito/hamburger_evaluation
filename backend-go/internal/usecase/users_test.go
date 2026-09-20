@@ -68,22 +68,124 @@ func activeUsersByID(users ...domain.User) func(context.Context, int64) (domain.
 	}
 }
 
-func TestUsersList(t *testing.T) {
-	want := []domain.User{usersViewer, usersOther}
-	repo := &fakeUsersRepo{list: func(context.Context) ([]domain.User, error) { return want, nil }}
-	got, err := usecase.NewUsers(repo, fakeHasher{}).List(context.Background())
-	if err != nil {
-		t.Fatalf("List returned error: %v", err)
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("List = %+v, want %+v", got, want)
-	}
+// boolPtr は、UserProfile.Admin の期待値用に、b へのポインタを返す。
+func boolPtr(b bool) *bool { return &b }
 
+// publicProfile は、u の公開ビュー（email と admin は nil）を返す。
+func publicProfile(u domain.User) domain.UserProfile {
+	return domain.UserProfile{ID: u.ID, Username: u.Username}
+}
+
+// selfProfile は、u の本人ビュー（email と admin を含む）を返す。
+func selfProfile(u domain.User) domain.UserProfile {
+	return domain.UserProfile{ID: u.ID, Username: u.Username, Email: strPtr(u.Email), Admin: boolPtr(u.Admin)}
+}
+
+// TestUsersList は、一覧が viewer ごとのビューで返ることを固定する。
+// email と admin が入るのは viewer 本人の要素だけで、匿名にも、他人にも、
+// admin の viewer にも、他人の要素の email と admin は渡らない。
+func TestUsersList(t *testing.T) {
+	admin := domain.User{ID: 3, Username: "root", Email: "root@example.com", Admin: true}
+	stored := []domain.User{usersViewer, usersOther, admin}
+	repo := &fakeUsersRepo{list: func(context.Context) ([]domain.User, error) { return stored, nil }}
+	users := usecase.NewUsers(repo, fakeHasher{})
+
+	tests := []struct {
+		name   string
+		viewer *domain.User
+		want   []domain.UserProfile
+	}{
+		{
+			name:   "匿名の viewer には全要素を公開ビューで返す",
+			viewer: nil,
+			want:   []domain.UserProfile{publicProfile(usersViewer), publicProfile(usersOther), publicProfile(admin)},
+		},
+		{
+			name:   "一般ユーザーの viewer には自分の要素だけ本人ビューで返す",
+			viewer: &usersViewer,
+			want:   []domain.UserProfile{selfProfile(usersViewer), publicProfile(usersOther), publicProfile(admin)},
+		},
+		{
+			name:   "admin の viewer にも自分の要素だけ本人ビューで返し、他人の email と admin は返さない",
+			viewer: &admin,
+			want:   []domain.UserProfile{publicProfile(usersViewer), publicProfile(usersOther), selfProfile(admin)},
+		},
+		{
+			name:   "一覧に含まれない viewer には全要素を公開ビューで返す",
+			viewer: &domain.User{ID: 99, Username: "carol", Email: "carol@example.com", Admin: true},
+			want:   []domain.UserProfile{publicProfile(usersViewer), publicProfile(usersOther), publicProfile(admin)},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := users.List(context.Background(), tt.viewer)
+			if err != nil {
+				t.Fatalf("List returned error: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("List = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestUsersListError は、repository のエラーが wrap されて返ることを固定する。
+func TestUsersListError(t *testing.T) {
 	repoErr := errors.New("db down")
 	failing := &fakeUsersRepo{list: func(context.Context) ([]domain.User, error) { return nil, repoErr }}
-	if _, err := usecase.NewUsers(failing, fakeHasher{}).List(context.Background()); !errors.Is(err, repoErr) {
+	got, err := usecase.NewUsers(failing, fakeHasher{}).List(context.Background(), &usersViewer)
+	if !errors.Is(err, repoErr) {
 		t.Fatalf("List error = %v, want wrapped %v", err, repoErr)
 	}
+	if got != nil {
+		t.Errorf("List = %+v, want nil on error", got)
+	}
+}
+
+// TestUsersGet は、詳細が viewer ごとのビューで返ることと、存在しない
+// ユーザーと discard 済みのユーザーが ErrUserNotFound になることを固定する。
+func TestUsersGet(t *testing.T) {
+	admin := domain.User{ID: 3, Username: "root", Email: "root@example.com", Admin: true}
+	repo := &fakeUsersRepo{getByID: activeUsersByID(usersViewer, usersOther, admin)}
+	users := usecase.NewUsers(repo, fakeHasher{})
+
+	tests := []struct {
+		name   string
+		viewer *domain.User
+		id     int64
+		want   domain.UserProfile
+	}{
+		{name: "匿名の viewer には公開ビューを返す", viewer: nil, id: usersViewer.ID, want: publicProfile(usersViewer)},
+		{name: "他人の viewer には公開ビューを返す", viewer: &usersOther, id: usersViewer.ID, want: publicProfile(usersViewer)},
+		{name: "本人の viewer には本人ビューを返す", viewer: &usersViewer, id: usersViewer.ID, want: selfProfile(usersViewer)},
+		{name: "admin の viewer にも他人の email と admin は返さない", viewer: &admin, id: usersViewer.ID, want: publicProfile(usersViewer)},
+		{name: "admin の本人の viewer には admin が true の本人ビューを返す", viewer: &admin, id: admin.ID, want: selfProfile(admin)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := users.Get(context.Background(), tt.viewer, tt.id)
+			if err != nil {
+				t.Fatalf("Get returned error: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("Get = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("存在しないユーザーと discard 済みのユーザーは viewer によらず ErrUserNotFound になる", func(t *testing.T) {
+		// fake は activeUsersByID に含まれない id（discard 済みを含む）に対して、
+		// repository と同じく wrap した ErrUserNotFound を返す。
+		for _, viewer := range []*domain.User{nil, &usersViewer, &admin} {
+			got, err := users.Get(context.Background(), viewer, 999)
+			if !errors.Is(err, domain.ErrUserNotFound) {
+				t.Errorf("Get error = %v, want %v", err, domain.ErrUserNotFound)
+			}
+			if !reflect.DeepEqual(got, domain.UserProfile{}) {
+				t.Errorf("Get = %+v, want the zero profile on error", got)
+			}
+		}
+	})
 }
 
 // TestUsersUpdateCheckOrder は、issue #16 AC2 の find-then-authorize の順序を

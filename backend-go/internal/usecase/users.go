@@ -42,8 +42,9 @@ type UsersRepository interface {
 	DiscardUser(ctx context.Context, id int64) error
 }
 
-// Users は、ユーザー管理の use case を実装する。公開の index と、本人のみが
-// 行えるプロフィールの更新およびアカウントの削除である。
+// Users は、ユーザー管理の use case を実装する。viewer から見えるビューでの
+// 一覧と詳細、および本人のみが行えるプロフィールの更新とアカウントの削除
+// である。
 type Users struct {
 	repo   UsersRepository
 	hasher PasswordHasher
@@ -53,13 +54,30 @@ func NewUsers(repo UsersRepository, hasher PasswordHasher) *Users {
 	return &Users{repo: repo, hasher: hasher}
 }
 
-// List は kept なユーザーをすべて id の昇順で返す。
-func (s *Users) List(ctx context.Context) ([]domain.User, error) {
+// List は kept なユーザーをすべて id の昇順で、viewer（nil = 匿名）から見える
+// ビューにして返す（ページネーションなし）。Email と Admin は viewer 本人の
+// 要素にだけ入る（domain.User.ProfileFor）。
+func (s *Users) List(ctx context.Context, viewer *domain.User) ([]domain.UserProfile, error) {
 	users, err := s.repo.ListActiveUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
 	}
-	return users, nil
+	profiles := make([]domain.UserProfile, 0, len(users))
+	for _, u := range users {
+		profiles = append(profiles, u.ProfileFor(viewer))
+	}
+	return profiles, nil
+}
+
+// Get は、discard されていないユーザー 1 人を、viewer（nil = 匿名）から見える
+// ビューにして返す。存在しないユーザーと discard 済みのユーザーは、どちらも
+// domain.ErrUserNotFound になる。
+func (s *Users) Get(ctx context.Context, viewer *domain.User, id int64) (domain.UserProfile, error) {
+	user, err := s.repo.GetActiveUserByID(ctx, id)
+	if err != nil {
+		return domain.UserProfile{}, fmt.Errorf("get user: %w", err)
+	}
+	return user.ProfileFor(viewer), nil
 }
 
 // UpdateUserInput はプロフィール更新の入力である。すべてのフィールドは任意で

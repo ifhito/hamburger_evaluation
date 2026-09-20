@@ -87,7 +87,8 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `GET /photos/*` — ディスクに保存されたレビュー写真を配信する (認証不要。末尾が `/` のディレクトリ path は一覧せず 404、末尾 `/` なしは 301 で `/` 付きへ転送されてから 404)。`PHOTO_STORAGE` が `disk` (デフォルト) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 
 **ユーザー**
-- `GET /users` — 全ユーザーの一覧を取得する
+- `GET /users` — ユーザーの全件を公開情報 (id・username) だけで取得する (認証は任意。id 昇順。ログイン中の viewer 自身の要素にだけ email・admin を含む)
+- `GET /users/:id` — ユーザーを 1 人取得する (認証は任意。存在しない・退会済み・整数でない id は同一の 404。本人が閲覧したときだけ email・admin を含む)
 - `PUT /users/:id` — ユーザーを更新する (認証必須。本人のみ、usecase で強制)
 - `DELETE /users/:id` — ユーザーを削除する (認証必須。本人のみ、usecase で強制)
 
