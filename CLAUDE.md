@@ -67,9 +67,9 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `GET /up` — ヘルスチェック (DB ping)
 
 **認証**
-- `POST /signup` — アカウントを作成する (username、email、password)
+- `POST /signup` — アカウントを作成する (username、email、password。password_confirmation は任意で、送った場合は password と不一致なら 422)
 - `POST /login` — 認証して JWT トークンを受け取る
-- `POST /logout` — 現在のセッションを無効化する (認証必須)
+- `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (認証必須)
 
 **店舗**
 - `GET /shops` — 店舗の一覧を取得する
@@ -82,6 +82,9 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `POST /reviews` — レビューを作成する (認証必須)
 - `PUT /reviews/:id` — レビューを更新する (認証必須)
 - `DELETE /reviews/:id` — レビューを削除する (認証必須)
+
+**写真**
+- `GET /photos/*` — ディスクに保存されたレビュー写真を配信する (認証不要。ディレクトリの path は 404)。`PHOTO_STORAGE` が `disk` (デフォルト) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 
 **ユーザー**
 - `GET /users` — 全ユーザーの一覧を取得する
@@ -121,6 +124,7 @@ app/
   providers/
   styles/
 pages/
+  shop-list/ shop-detail/
   review-list/
   review-detail/
   review-new/
@@ -128,12 +132,12 @@ pages/
   signup/ signin/ signout/
   user-detail/ user-update/
 shared/
-  ui/            # Button, Input, Textarea, RatingSelect
+  ui/            # Button, ErrorMessage, Input, Layout, RatingSelect, Textarea
   lib/
     api.ts       # API クライアント
     date.ts
-    types/
-      review.ts
+    hooks/       # データ取得・フォーム・変更系のフック
+    types/       # snake_case のワイヤー型 (api, auth, review, shop, user)
 ```
 
 ## データベーススキーマ
@@ -144,7 +148,7 @@ shared/
 - **shops** — name、モデレーションステータス (pending/active/rejected)、moderation_note、作成者 FK
 - **burgers** — 結合テーブルを介して店舗に紐づくバーガー
 - **shops_burgers** *(結合テーブル)* — shop_id (FK)、burger_id (FK)
-- **reviews** — rating、comment、user FK、burger FK
+- **reviews** — rating、comment、user FK、burger FK、photo_key (写真の保存キー。任意)、soft delete (discarded_at)
 - **burger_stats** — バーガーごとのレビュー由来の集計
 
 ### リレーションシップ
