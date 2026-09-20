@@ -181,11 +181,6 @@ pnpm run build
 .env.*
 backend-go/.env
 backend-go/.env.*
-backend/.env
-backend/.env.*
-backend/.kamal/secrets
-backend/.kamal/secrets/**
-backend/config/master.key
 frontend/.env
 frontend/.env.*
 secrets/**
