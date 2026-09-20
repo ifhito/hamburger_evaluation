@@ -77,7 +77,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `POST /shops` — 店舗を投稿する (認証必須)
 
 **レビュー**
-- `GET /reviews` — 全レビューの一覧を取得する
+- `GET /reviews` — 全レビューの一覧を取得する (省略可能な `user_id` クエリで、そのユーザーの公開レビューだけに絞り込める)
 - `GET /reviews/:id` — レビューを 1 件取得する
 - `POST /reviews` — レビューを作成する (認証必須)
 - `PUT /reviews/:id` — レビューを更新する (認証必須)

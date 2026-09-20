@@ -145,14 +145,16 @@ WHERE r.discarded_at IS NULL
       JOIN shops fs ON fs.id = fsb.shop_id AND fs.status = 1
       WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = $3::bigint
   ))
+  AND ($4::bigint IS NULL OR r.user_id = $4::bigint)
 ORDER BY r.created_at DESC, r.id DESC
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListPublicReviewsParams struct {
 	FilterRating   pgtype.Int8
 	CommentPattern pgtype.Text
 	FilterShopID   pgtype.Int8
+	FilterUserID   pgtype.Int8
 	PageOffset     int32
 	PageLimit      int32
 }
@@ -180,8 +182,8 @@ type ListPublicReviewsRow struct {
 // 複数の active な shop に紐づく burger でも、ちょうど 1 行だけが返るように
 // するためである。u.discarded_at フィルタは、discard 済みの user の
 // （まだ kept な）review をフィードから隠す（S8）。
-// 3 つの narg フィルタは Rails の ReviewQuery に対応する
-// （NULL = 未指定、AND で結合される）：
+// 4 つの narg フィルタ（NULL = 未指定、AND で結合される）のうち、
+// filter_user_id 以外は Rails の ReviewQuery に対応する：
 // filter_rating は rating の完全一致である（範囲外の値が smallint 列で
 // オーバーフローせず、比較結果が false になるよう bigint にしている）。
 // comment_pattern は comment に対する、あらかじめエスケープ済みの ILIKE
@@ -192,11 +194,16 @@ type ListPublicReviewsRow struct {
 // EXISTS を使う。フィルタ対象の shop 自身も active（status 1）でなければ
 // ならない。これは shop フィルタが status を考慮しなかった Rails より厳しく、
 // フィードの EXISTS に既にある active な shop のルールとも一貫している。
+// filter_user_id は、その user が書いた review だけを残す（本 API の拡張で、
+// Rails の ReviewQuery にはない）。公開ルール（discard 済みの review・user の
+// 除外と active な shop の EXISTS）はそのまま維持され、このフィルタは絞り込みだけを
+// 行う。公開の範囲を広げることはない。
 func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsParams) ([]ListPublicReviewsRow, error) {
 	rows, err := q.db.Query(ctx, listPublicReviews,
 		arg.FilterRating,
 		arg.CommentPattern,
 		arg.FilterShopID,
+		arg.FilterUserID,
 		arg.PageOffset,
 		arg.PageLimit,
 	)

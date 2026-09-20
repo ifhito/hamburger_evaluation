@@ -26,15 +26,18 @@ type fakeStoredReview struct {
 // reviewRepoFake は in-memory の usecase.ReviewRepository である。active な
 // shop の feed の filter は、seed された shops と links から導出される（SQL の
 // EXISTS を再現するもので、SQL 自体は repository の統合テストが扱う）。err を
-// 設定するとすべての操作が失敗する（500 の経路）。
+// 設定するとすべての操作が失敗する（500 の経路）。listFilters は ListReviews が
+// 受け取った filter を呼び出し順に記録する（handler が usecase に渡した値と、
+// 呼ばれなかったことの検証用）。
 type reviewRepoFake struct {
-	shops     map[int64]domain.Shop
-	links     map[int64][]int64 // shopID -> 紐づく burger の id
-	burgers   map[int64]domain.ShopReviewBurger
-	usernames map[int64]string
-	seq       int64
-	reviews   map[int64]*fakeStoredReview
-	err       error
+	shops       map[int64]domain.Shop
+	links       map[int64][]int64 // shopID -> 紐づく burger の id
+	burgers     map[int64]domain.ShopReviewBurger
+	usernames   map[int64]string
+	seq         int64
+	reviews     map[int64]*fakeStoredReview
+	err         error
+	listFilters []usecase.ReviewListFilter
 }
 
 func newReviewRepoFake() *reviewRepoFake {
@@ -61,6 +64,7 @@ func (f *reviewRepoFake) detailFor(review domain.Review) domain.ReviewDetail {
 }
 
 func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
+	f.listFilters = append(f.listFilters, filter)
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -75,7 +79,8 @@ func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewLis
 	}
 	// この filter は SQL の narg の述語を再現する：rating の完全一致、comment
 	// に対する大文字小文字を区別しないリテラルな部分文字列一致、
-	// shops_burgers の link（正確な SQL は repository の統合テストが扱う）。
+	// shops_burgers の link、author の一致（正確な SQL は repository の
+	// 統合テストが扱う）。
 	matches := func(review domain.Review) bool {
 		if filter.Rating != nil && review.Rating != *filter.Rating {
 			return false
@@ -87,6 +92,9 @@ func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewLis
 		// SQL と同様に、filter の shop 自体が active でなければならない。
 		if filter.ShopID != nil && (f.shops[*filter.ShopID].Status != domain.ShopStatusActive ||
 			!slices.Contains(f.links[*filter.ShopID], review.BurgerID)) {
+			return false
+		}
+		if filter.UserID != nil && review.AuthorID != *filter.UserID {
 			return false
 		}
 		return true
@@ -584,14 +592,14 @@ func TestListReviews(t *testing.T) {
 	})
 }
 
-// TestListReviewsFilters は GET /reviews の rating/keyword/shop_id の query
-// filter（Rails ReviewQuery parity）を扱う：各 filter 単独、それらの AND 結合、
-// 一致なしの場合の `[]`（決して null ではない）、空の値が未指定として
-// 扱われること、そして整数でない rating/shop_id に対する fail-loud な 422
-// （Rails の、黙って 0 に cast する挙動からの意図的な乖離）。
+// TestListReviewsFilters は GET /reviews の rating/keyword/shop_id/user_id の
+// query filter（user_id 以外は Rails ReviewQuery parity）を扱う：各 filter 単独、
+// それらの AND 結合、一致なしの場合の `[]`（決して null ではない）、空の値が
+// 未指定として扱われること、そして整数でない rating/shop_id/user_id に対する
+// fail-loud な 422（Rails の、黙って 0 に cast する挙動からの意図的な乖離）。
 func TestListReviewsFilters(t *testing.T) {
 	repo := seedReviewWorld(1)
-	router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+	router, aliceAuth, bobAuth, _ := newReviewsRouter(t, repo)
 	// review 1：rating 4 の "On cheese"（Cheese、active な shop）。review 2：
 	// rating 4 の "On plain"（Plain、pending のみ、feed からは隠される）。
 	seedFeed(t, router, aliceAuth)
@@ -602,10 +610,18 @@ func TestListReviewsFilters(t *testing.T) {
 	if rec := do(router, http.MethodPost, "/reviews", body, aliceAuth); rec.Code != http.StatusCreated {
 		t.Fatalf("seed veggie post: status = %d (body %s)", rec.Code, rec.Body)
 	}
+	// review 4：bob（id 2）が Cheese（active な shop）に投稿した rating 3 の
+	// "Bob was here"。他の rating/keyword の検証には影響せず、user_id の絞り込みで
+	// alice の review と区別される。
+	body = fmt.Sprintf(`{"review":{"rating":3,"comment":"Bob was here","shop_id":%d,"burger_id":%d}}`, activeShopID, cheeseBurgerID)
+	if rec := do(router, http.MethodPost, "/reviews", body, bobAuth); rec.Code != http.StatusCreated {
+		t.Fatalf("seed bob post: status = %d (body %s)", rec.Code, rec.Body)
+	}
 	const (
 		onCheese = `"On cheese"` // comment で review を識別する
 		onPlain  = `"On plain"`  // （id は user/burger の id と衝突する）
 		smoky    = `"Smoky veggie dream"`
+		bobs     = `"Bob was here"`
 	)
 
 	get := func(t *testing.T, query string, want, absent []string) {
@@ -641,12 +657,37 @@ func TestListReviewsFilters(t *testing.T) {
 		get(t, fmt.Sprintf("?shop_id=%d", active2ShopID), []string{onCheese, smoky}, nil)
 	})
 
+	t.Run("user_id はその user の公開 review だけを残す", func(t *testing.T) {
+		// alice（id 1）の pending な shop だけの review（onPlain）は、user_id を
+		// 指定しても公開ルールにより現れない。
+		get(t, "?user_id=1", []string{smoky, onCheese}, []string{bobs, onPlain})
+		get(t, "?user_id=2", []string{bobs}, []string{smoky, onCheese, onPlain})
+	})
+
+	t.Run("user_id は整数として usecase に渡される", func(t *testing.T) {
+		repo.listFilters = nil
+		get(t, "?user_id=42", nil, nil)
+		if len(repo.listFilters) != 1 || repo.listFilters[0].UserID == nil || *repo.listFilters[0].UserID != 42 {
+			t.Errorf("filters = %+v, want exactly one with UserID 42", repo.listFilters)
+		}
+	})
+
+	t.Run("空の user_id は未指定として usecase に渡される", func(t *testing.T) {
+		repo.listFilters = nil
+		get(t, "?user_id=", []string{smoky, onCheese, bobs}, []string{onPlain})
+		if len(repo.listFilters) != 1 || repo.listFilters[0].UserID != nil {
+			t.Errorf("filters = %+v, want exactly one with nil UserID", repo.listFilters)
+		}
+	})
+
 	t.Run("filter は AND で結合される", func(t *testing.T) {
 		get(t, fmt.Sprintf("?shop_id=%d&rating=5&keyword=veggie", active2ShopID), []string{smoky}, []string{onCheese})
+		get(t, "?user_id=1&rating=4", []string{onCheese}, []string{smoky, bobs})
+		get(t, "?user_id=2&rating=4", nil, []string{onCheese, smoky, bobs})
 	})
 
 	t.Run("一致なしは null ではなく空の JSON 配列を返す", func(t *testing.T) {
-		for _, query := range []string{"?rating=2", "?keyword=zzz", "?shop_id=999", "?rating=5&keyword=cheese"} {
+		for _, query := range []string{"?rating=2", "?keyword=zzz", "?shop_id=999", "?user_id=999", "?rating=5&keyword=cheese"} {
 			rec := do(router, http.MethodGet, "/reviews"+query, "", "")
 			if rec.Code != http.StatusOK || rec.Body.String() != `[]` {
 				t.Errorf("GET /reviews%s = %d %s, want 200 []", query, rec.Code, rec.Body)
@@ -655,10 +696,10 @@ func TestListReviewsFilters(t *testing.T) {
 	})
 
 	t.Run("空の filter 値は未指定として扱われる", func(t *testing.T) {
-		get(t, "?rating=&keyword=&shop_id=", []string{smoky, onCheese}, []string{onPlain})
+		get(t, "?rating=&keyword=&shop_id=&user_id=", []string{smoky, onCheese}, []string{onPlain})
 	})
 
-	t.Run("整数でない rating と shop_id は 422 で明示的に失敗する", func(t *testing.T) {
+	t.Run("整数でない rating と shop_id と user_id は 422 で明示的に失敗し、usecase を呼ばない", func(t *testing.T) {
 		tests := []struct {
 			query    string
 			wantBody string
@@ -666,7 +707,16 @@ func TestListReviewsFilters(t *testing.T) {
 			{query: "?rating=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
 			{query: "?rating=4.5", wantBody: `{"errors":["Rating must be an integer"]}`},
 			{query: "?shop_id=abc", wantBody: `{"errors":["Shop id must be an integer"]}`},
+			{query: "?user_id=abc", wantBody: `{"errors":["User id must be an integer"]}`},
+			{query: "?user_id=1.5", wantBody: `{"errors":["User id must be an integer"]}`},
+			// int64 を超える値も整数として受け付けない。
+			{query: "?user_id=9223372036854775808", wantBody: `{"errors":["User id must be an integer"]}`},
+			// パースの順序は rating、shop_id、user_id である。
+			{query: "?rating=abc&shop_id=abc&user_id=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
+			{query: "?shop_id=abc&user_id=abc", wantBody: `{"errors":["Shop id must be an integer"]}`},
+			{query: "?rating=4&shop_id=1&user_id=abc", wantBody: `{"errors":["User id must be an integer"]}`},
 		}
+		repo.listFilters = nil
 		for _, tt := range tests {
 			rec := do(router, http.MethodGet, "/reviews"+tt.query, "", "")
 			if rec.Code != http.StatusUnprocessableEntity {
@@ -676,6 +726,9 @@ func TestListReviewsFilters(t *testing.T) {
 			if got := rec.Body.String(); got != tt.wantBody {
 				t.Errorf("GET /reviews%s body = %s, want %s", tt.query, got, tt.wantBody)
 			}
+		}
+		if len(repo.listFilters) != 0 {
+			t.Errorf("ListReviews was called %d times, want 0 for invalid filters", len(repo.listFilters))
 		}
 	})
 }
