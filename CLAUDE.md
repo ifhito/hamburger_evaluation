@@ -136,6 +136,7 @@ shared/
   lib/
     api.ts       # API クライアント
     date.ts
+    password.ts  # パスワード規則の検証 (backend-go/internal/domain/password.go と同じ規則の複製。変更時は両方を直す)
     hooks/       # データ取得・フォーム・変更系のフック
     types/       # snake_case のワイヤー型 (api, auth, review, shop, user)
 ```

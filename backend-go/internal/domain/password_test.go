@@ -37,8 +37,6 @@ func TestValidatePassword(t *testing.T) {
 	}{
 		// 1. 有効
 		{name: "有効: 英字・数字・記号を含む 9 バイト", password: "Passw0rd!", bytes: 9, want: nil},
-		{name: "有効: ちょうど 8 バイト", password: "Abcdef1!", bytes: 8, want: nil},
-		{name: "有効: ちょうど 72 バイト", password: pw72, bytes: 72, want: nil},
 
 		// 2. 文字種が足りない 6 パターン（長さは満たすので文字種メッセージだけ）
 		{name: "文字種: 英字だけ", password: "abcdefgh", bytes: 8, want: []string{msgKinds}},
@@ -67,9 +65,6 @@ func TestValidatePassword(t *testing.T) {
 		{name: "空白を含んでいても他が満たされていれば有効", password: "Pass w0rd!", bytes: 10, want: nil},
 		{name: "改行は記号に数えない", password: "Passw0rd\n", bytes: 9, want: []string{msgKinds}},
 		{name: "改行を含んでいても記号があれば有効", password: "Passw0rd!\n", bytes: 10, want: nil},
-		{name: "タブは記号に数えない", password: "Passw0rd\t", bytes: 9, want: []string{msgKinds}},
-		{name: "DEL(0x7F) は記号に数えない", password: "Passw0rd\x7f", bytes: 9, want: []string{msgKinds}},
-		{name: "NUL は記号に数えない", password: "Passw0rd\x00", bytes: 9, want: []string{msgKinds}},
 
 		// 7. 非 ASCII
 		{name: "非 ASCII: 日本語と数字と記号だけ（半角英字なし）は文字種エラー", password: "あいう123!!", want: []string{msgKinds}},
@@ -78,7 +73,7 @@ func TestValidatePassword(t *testing.T) {
 		{name: "非 ASCII: 半角の英字・数字・記号が 1 つずつあれば全角が混ざっても有効", password: "Ａ1a!ｂｃ", want: nil},
 
 		// 8. バイト長と文字数の混同を防ぐ
-		{name: "バイト長: 4 文字でも 6 バイトなら too short", password: "あ1a!", bytes: 6, want: []string{msgShort}},
+		{name: "バイト長: 5 文字でも 9 バイトあれば too short にならない", password: "ああa1!", bytes: 9, want: nil},
 		{name: "バイト長: 72 バイト（23 文字 + 3 文字）は有効", password: a23 + "a1!", bytes: 72, want: nil},
 		{name: "バイト長: 73 バイト（23 文字 + 4 文字）は too long のみ", password: a23 + "a1!!", bytes: 73, want: []string{msgLong}},
 		{name: "バイト長: 72 バイトでも英数記号がなければ文字種エラーのみ", password: a24, bytes: 72, want: []string{msgKinds}},
@@ -97,6 +92,9 @@ func TestValidatePassword(t *testing.T) {
 				got := domain.ValidatePassword(tt.password)
 				if !slices.Equal(got, tt.want) {
 					t.Errorf("%d 回目: ValidatePassword(%q) = %q, want %q", i+1, tt.password, got, tt.want)
+				} else if tt.want == nil && got != nil {
+					// slices.Equal は nil と空スライスを区別しないので、「有効なら nil を返す」契約はここで固定する。
+					t.Errorf("%d 回目: ValidatePassword(%q) = %#v, want nil", i+1, tt.password, got)
 				}
 			}
 		})
@@ -169,6 +167,37 @@ func TestValidatePasswordCharKindBoundaries(t *testing.T) {
 				if got := domain.ValidatePassword(c.password); !slices.Equal(got, c.want) {
 					t.Errorf("%s を供給する検証: ValidatePassword(%q) = %q, want %q", c.kind, c.password, got, c.want)
 				}
+			}
+		})
+	}
+}
+
+// TestValidatePasswordCharKindPosition は、ある種別をちょうど 1 文字だけが供給するとき、
+// その文字が先頭・中間・末尾のどこにあっても有効と判定されることを固定する。
+// TestValidatePasswordCharKindBoundaries は対象の文字を必ず末尾に足すため、走査が先頭の
+// 1 バイトを飛ばす退行（`i := 1`）はそちらでは検出できない。
+func TestValidatePasswordCharKindPosition(t *testing.T) {
+	tests := []struct {
+		name     string
+		password string
+	}{
+		{name: "先頭: 英字がその 1 文字だけ", password: "Z1234!@#"},
+		{name: "先頭: 数字がその 1 文字だけ", password: "5abcd!@#"},
+		{name: "先頭: 記号がその 1 文字だけ", password: "!abcd123"},
+		{name: "中間: 英字がその 1 文字だけ", password: "123a!456"},
+		{name: "中間: 数字がその 1 文字だけ", password: "abc5!def"},
+		{name: "中間: 記号がその 1 文字だけ", password: "abc!1def"},
+		{name: "末尾: 英字がその 1 文字だけ", password: "1234!@#z"},
+		{name: "末尾: 数字がその 1 文字だけ", password: "abcd!@#9"},
+		{name: "末尾: 記号がその 1 文字だけ", password: "abcdef1!"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if len(tt.password) != domain.MinPasswordBytes {
+				t.Fatalf("テストデータの誤り: len(%q) = %d, want %d バイト", tt.password, len(tt.password), domain.MinPasswordBytes)
+			}
+			if got := domain.ValidatePassword(tt.password); len(got) != 0 {
+				t.Errorf("ValidatePassword(%q) = %q, want 有効（nil）", tt.password, got)
 			}
 		})
 	}

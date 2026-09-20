@@ -4,6 +4,7 @@ import "fmt"
 
 const (
 	// MinPasswordBytes はパスワードの最小バイト数である。
+	// frontend の PASSWORD_MIN_BYTES にも複製があるので、変えるときは両方を直す。
 	MinPasswordBytes = 8
 	// MaxPasswordBytes はパスワードの最大バイト数である。bcrypt の入力上限（72 バイト）に合わせる。
 	MaxPasswordBytes = 72
@@ -15,6 +16,9 @@ const (
 // 長さは文字数ではなくバイト数で数える（bcrypt の入力上限に合わせるため）。
 // 空文字列は "can't be blank" だけを返す。それ以外は該当する違反を
 // 「短い → 長い → 文字種」の順にすべて返す。メッセージは API の外部契約なので英語のまま。
+//
+// この規則は frontend/src/shared/lib/password.ts にも複製がある（クライアント側の即時検証用）。
+// 定数・メッセージ・文字種・順序を変えるときは両方を直す。
 func ValidatePassword(password string) []string {
 	if password == "" {
 		return []string{"Password can't be blank"}
