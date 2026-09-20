@@ -208,7 +208,7 @@ func writeMultipartReadError(w http.ResponseWriter, err error) {
 }
 
 // newReviewResponse は domain の payload を、shop detail の reviews と共有する
-// wire 形状（frontend の Review、snake_case）に対応させる。
+// wire 形状（frontend の Review、domains/reviews/api/types.ts。ワイヤ上は snake_case）に対応させる。
 func newReviewResponse(detail domain.ReviewDetail) shopReviewResponse {
 	resp := shopReviewResponse{
 		ID:        detail.ID,

@@ -17,7 +17,7 @@ const (
 // 空文字列は "can't be blank" だけを返す。それ以外は該当する違反を
 // 「短い → 長い → 文字種」の順にすべて返す。メッセージは API の外部契約なので英語のまま。
 //
-// この規則は frontend/src/shared/lib/password.ts にも複製がある（クライアント側の即時検証用）。
+// この規則は frontend/src/lib/password.ts にも複製がある（クライアント側の即時検証用）。
 // 定数・メッセージ・文字種・順序を変えるときは両方を直す。
 func ValidatePassword(password string) []string {
 	if password == "" {
