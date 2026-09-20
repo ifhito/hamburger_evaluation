@@ -12,7 +12,7 @@ export interface SignupRequest {
   password_confirmation: string
 }
 
-// Go authUserResponse: signup and login share the same body.
+// Go authUserResponse: signup と login は同じ body を共有する。
 export interface SignupResponse {
   id: number
   username: string

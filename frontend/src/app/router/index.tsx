@@ -17,14 +17,14 @@ import UserUpdatePage from '../../pages/user-update'
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/shops" replace /> },
 
-  // Public routes
+  // 公開ルート
   { path: '/shops', element: <ShopListPage /> },
   { path: '/shops/:id', element: <ShopDetailPage /> },
   { path: '/reviews', element: <ReviewListPage /> },
   { path: '/reviews/:id', element: <ReviewDetailPage /> },
   { path: '/users/:id', element: <UserDetailPage /> },
 
-  // Guest-only routes
+  // ゲスト専用ルート
   {
     element: <GuestRoute />,
     children: [
@@ -33,7 +33,7 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // Protected routes
+  // 保護されたルート
   {
     element: <ProtectedRoute />,
     children: [

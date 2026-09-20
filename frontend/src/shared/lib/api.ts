@@ -27,7 +27,7 @@ export const removeToken = (): void => localStorage.removeItem('token')
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { headers: optHeaders, ...restOptions } = options ?? {}
-  // For FormData bodies the browser must set Content-Type itself (multipart boundary).
+  // FormData の body ではブラウザ自身が Content-Type を設定しなければならない（multipart boundary）。
   const baseHeaders: Record<string, string> =
     restOptions.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }
   const res = await fetch(`${BASE_URL}${path}`, {

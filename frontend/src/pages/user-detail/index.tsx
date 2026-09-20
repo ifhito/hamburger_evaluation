@@ -14,7 +14,7 @@ export default function UserDetailPage() {
 
   const userId = Number(id)
   const user = users?.find((u) => u.id === userId)
-  // Client-side filter since no /users/:id/reviews endpoint exists yet
+  // /users/:id/reviews エンドポイントがまだ存在しないため、クライアント側でフィルタする
   const userReviews = allReviews?.filter((r) => r.user?.id === userId)
   const isOwner = authUser?.id === userId
 

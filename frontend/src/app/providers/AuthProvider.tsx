@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Restore from localStorage on mount
+  // マウント時に localStorage から復元する
   useEffect(() => {
     const storedToken = getToken()
     if (storedToken && !isTokenExpired(storedToken)) {
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedUser) {
         try {
           const parsed = JSON.parse(storedUser) as AuthUser
-          // Older stored users may lack admin; keep it a real boolean.
+          // 古い保存済みユーザーには admin が無い場合がある。admin を本物の boolean に保つ。
           setUser({ ...parsed, admin: Boolean(parsed.admin) })
           setTokenState(storedToken)
         } catch {
@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authApi.logout()
     } catch {
-      // Ignore errors — clear local state regardless
+      // エラーは無視し、いずれにせよローカルの状態をクリアする
     }
     removeToken()
     localStorage.removeItem('auth_user')

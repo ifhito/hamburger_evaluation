@@ -6,7 +6,7 @@ import { router } from './router'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60, // 1 minute
+      staleTime: 1000 * 60, // 1 分
       retry: 1,
     },
   },
