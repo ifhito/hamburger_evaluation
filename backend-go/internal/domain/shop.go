@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // ShopStatus is the API-facing shop status string. Storage encodes it as
 // a smallint; that mapping lives at the repository/domain boundary.
@@ -19,6 +22,44 @@ type Shop struct {
 	Status         ShopStatus
 	ModerationNote *string
 	CreatorID      *int64
+}
+
+// ValidateShopName enforces the Rails presence validation on the shop
+// name: a blank or whitespace-only name yields the exact Rails full
+// message inside a *ValidationError.
+func ValidateShopName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return &ValidationError{Messages: []string{"Name can't be blank"}}
+	}
+	return nil
+}
+
+// NewShopSubmission builds a user-submitted shop: the name is validated,
+// the status starts pending (Rails ShopStatus.initial), there is no
+// moderation note yet, and the submitting user is recorded as creator.
+func NewShopSubmission(name string, creatorID int64) (Shop, error) {
+	if err := ValidateShopName(name); err != nil {
+		return Shop{}, err
+	}
+	return Shop{Name: name, Status: ShopStatusPending, CreatorID: &creatorID}, nil
+}
+
+// Approve is the moderation transition to active. Like Rails ShopStatus,
+// it is an unconditional value transition from any current status —
+// re-approving a rejected shop is allowed — and it clears the moderation
+// note, which only ever explains a rejection.
+func (s Shop) Approve() Shop {
+	s.Status = ShopStatusActive
+	s.ModerationNote = nil
+	return s
+}
+
+// Reject is the moderation transition to rejected, from any current
+// status. The optional note replaces the previous one (nil clears it).
+func (s Shop) Reject(note *string) Shop {
+	s.Status = ShopStatusRejected
+	s.ModerationNote = note
+	return s
 }
 
 // ShopVisibility is the filter descriptor derived from a viewer. A shop

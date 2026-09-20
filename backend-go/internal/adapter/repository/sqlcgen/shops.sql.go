@@ -230,6 +230,56 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 	return items, nil
 }
 
+const listShopsForModeration = `-- name: ListShopsForModeration :many
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+       u.username AS creator_username
+FROM shops s
+LEFT JOIN users u ON u.id = s.creator_id
+WHERE $1::smallint IS NULL
+   OR s.status = $1::smallint
+ORDER BY s.created_at DESC, s.id DESC
+`
+
+type ListShopsForModerationRow struct {
+	ID              int64
+	Name            string
+	Status          int16
+	ModerationNote  pgtype.Text
+	CreatorID       pgtype.Int8
+	CreatorUsername pgtype.Text
+}
+
+// Admin moderation list: every shop with its creator, newest first
+// (id desc breaks created_at ties for a deterministic order).
+// status_code is the smallint status filter, NULL for all statuses; the
+// string-to-smallint mapping lives in the repository.
+func (q *Queries) ListShopsForModeration(ctx context.Context, statusCode pgtype.Int2) ([]ListShopsForModerationRow, error) {
+	rows, err := q.db.Query(ctx, listShopsForModeration, statusCode)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListShopsForModerationRow
+	for rows.Next() {
+		var i ListShopsForModerationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
+			&i.ModerationNote,
+			&i.CreatorID,
+			&i.CreatorUsername,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateShop = `-- name: UpdateShop :one
 UPDATE shops
 SET name = $2,
@@ -254,6 +304,69 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 		arg.Status,
 		arg.ModerationNote,
 	)
+	var i Shop
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ModerationNote,
+		&i.CreatorID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateShopName = `-- name: UpdateShopName :one
+UPDATE shops
+SET name = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
+`
+
+type UpdateShopNameParams struct {
+	ID   int64
+	Name string
+}
+
+// Column-scoped rename: touches only name so a concurrent status change
+// (approve/reject) is never reverted from a stale snapshot.
+func (q *Queries) UpdateShopName(ctx context.Context, arg UpdateShopNameParams) (Shop, error) {
+	row := q.db.QueryRow(ctx, updateShopName, arg.ID, arg.Name)
+	var i Shop
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ModerationNote,
+		&i.CreatorID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateShopStatus = `-- name: UpdateShopStatus :one
+UPDATE shops
+SET status = $2,
+    moderation_note = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
+`
+
+type UpdateShopStatusParams struct {
+	ID             int64
+	Status         int16
+	ModerationNote pgtype.Text
+}
+
+// Column-scoped moderation transition: touches only status and
+// moderation_note so a concurrent rename is never reverted from a stale
+// snapshot.
+func (q *Queries) UpdateShopStatus(ctx context.Context, arg UpdateShopStatusParams) (Shop, error) {
+	row := q.db.QueryRow(ctx, updateShopStatus, arg.ID, arg.Status, arg.ModerationNote)
 	var i Shop
 	err := row.Scan(
 		&i.ID,
