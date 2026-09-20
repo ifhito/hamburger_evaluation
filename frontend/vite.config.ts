@@ -2,9 +2,9 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
-  // '.' = the frontend dir (vite's cwd); avoids needing @types/node for process.cwd().
+  // '.' は frontend ディレクトリ(vite の cwd)。process.cwd() のために @types/node を入れずに済ませる。
   const env = loadEnv(mode, '.', '')
-  // Dev-only proxy target for /api; defaults to the Go API on the host.
+  // 開発時だけ使う /api のプロキシ先。既定はホスト上の Go API。
   const proxyTarget = env.VITE_API_PROXY_TARGET ?? 'http://host.docker.internal:8080'
   return {
     plugins: [react()],
@@ -16,6 +16,13 @@ export default defineConfig(({ mode }) => {
           target: proxyTarget,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
+          configure: (proxy) => {
+            // バックエンドのコンテナが落ちているとき、index.html にフォールバックせず JSON のエラーを返す。
+            proxy.on('error', (_err, _req, res) => {
+              res.writeHead(503, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ error: 'Backend service unavailable' }))
+            })
+          },
         },
       },
     },

@@ -1,0 +1,20 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 480px;
+}
+
+.notice {
+  padding: 0.75rem 1rem;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  color: #9a3412;
+  font-size: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
