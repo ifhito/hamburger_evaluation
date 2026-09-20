@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -160,14 +161,32 @@ func TestUsersUpdateValidation(t *testing.T) {
 			wantMsgs: []string{"Username can't be blank", "Email can't be blank"},
 		},
 		{
-			name:     "72 バイトを超える password は検証エラーになる",
-			input:    usecase.UpdateUserInput{Password: strPtr(strings.Repeat("a", 73))},
+			// 文字種は満たす 73 バイトにして、too long だけが出ることを見る。
+			name:     "72 バイトを超える password は too long だけの検証エラーになる",
+			input:    usecase.UpdateUserInput{Password: strPtr("Aa1!" + strings.Repeat("x", 69))},
 			wantMsgs: []string{"Password is too long (maximum is 72 characters)"},
+		},
+		{
+			// 強度ルール（domain.ValidatePassword）が PUT /users/{id} に適用されていることを示す代表例。
+			// 全パターンと境界の網羅は domain のテストが担う。
+			name:     "弱い password は短さと文字種の 2 件の検証エラーになる",
+			input:    usecase.UpdateUserInput{Password: strPtr("abc123")},
+			wantMsgs: []string{"Password is too short (minimum is 8 characters)", "Password must include letters, numbers and symbols"},
+		},
+		{
+			name:     "記号のない 8 バイトの password は文字種だけの検証エラーになる",
+			input:    usecase.UpdateUserInput{Password: strPtr("abcd1234")},
+			wantMsgs: []string{"Password must include letters, numbers and symbols"},
+		},
+		{
+			name:     "日本語と数字と記号だけの password は文字種の検証エラーになる",
+			input:    usecase.UpdateUserInput{Password: strPtr("あいう123!!")},
+			wantMsgs: []string{"Password must include letters, numbers and symbols"},
 		},
 		{
 			name: "confirmation が一致しないと検証エラーになる",
 			input: usecase.UpdateUserInput{
-				Password:             strPtr("newpassword1"),
+				Password:             strPtr("NewPassw0rd!"),
 				PasswordConfirmation: strPtr("other"),
 			},
 			wantMsgs: []string{"Password confirmation doesn't match Password"},
@@ -177,14 +196,110 @@ func TestUsersUpdateValidation(t *testing.T) {
 			input:    usecase.UpdateUserInput{PasswordConfirmation: strPtr("stray")},
 			wantMsgs: []string{"Password confirmation doesn't match Password"},
 		},
+		{
+			// API の外部契約であるメッセージの順序（username → email → password → confirmation）を固定する。
+			name: "複数の違反があるとき username、email、password、confirmation の順に返す",
+			input: usecase.UpdateUserInput{
+				Username:             strPtr(""),
+				Email:                strPtr(""),
+				Password:             strPtr("abc123"),
+				PasswordConfirmation: strPtr("other"),
+			},
+			wantMsgs: []string{
+				"Username can't be blank",
+				"Email can't be blank",
+				"Password is too short (minimum is 8 characters)",
+				"Password must include letters, numbers and symbols",
+				"Password confirmation doesn't match Password",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// validation が失敗したとき、repository にもハッシュ化にも到達してはならない
+			// （未設定の updateProfile は、到達すれば panic する）。
+			hasher := &recordingHasher{}
 			repo := &fakeUsersRepo{getByID: activeUsersByID(usersViewer)}
-			_, err := usecase.NewUsers(repo, fakeHasher{}).Update(context.Background(), usersViewer, usersViewer.ID, tt.input)
+			_, err := usecase.NewUsers(repo, hasher).Update(context.Background(), usersViewer, usersViewer.ID, tt.input)
 			assertValidationError(t, err, tt.wantMsgs)
+			if hasher.hashCalls != 0 {
+				t.Errorf("Hash calls = %d, want 0 (validation failure must not hash)", hasher.hashCalls)
+			}
 		})
 	}
+}
+
+// TestPasswordRuleParity は、signup と PUT /users/{id} が同じ password を同じ
+// メッセージで判定することを固定する（片方だけ規則が変わる drift の検知）。
+// 空文字列は signup では blank エラー、update では「変更なし」で意図的に
+// 異なるので、この表には含めない（TestUsersUpdateChanges が別に固定する）。
+func TestPasswordRuleParity(t *testing.T) {
+	passwords := []struct {
+		name     string
+		password string
+	}{
+		{"強い password", "Password123!"},
+		{"ちょうど 8 バイトの強い password", "Abcdef1!"},
+		{"短く記号がない password", "abc123"},
+		{"1 文字", "a"},
+		{"7 バイトで文字種は満たす password", "Abcde1!"},
+		{"英字だけ", "abcdefgh"},
+		{"数字だけ", "12345678"},
+		{"記号だけ", "!@#$%^&*"},
+		{"記号のない英数字", "abcd1234"},
+		{"日本語と数字と記号だけ", "あいう123!!"},
+		{"半角スペースだけ", "        "},
+		{"ちょうど 72 バイトの強い password", "Aa1!" + strings.Repeat("x", 68)},
+		{"73 バイトの強い password", "Aa1!" + strings.Repeat("x", 69)},
+		{"73 バイトで文字種も足りない password", strings.Repeat("a", 73)},
+	}
+	for _, tt := range passwords {
+		t.Run(tt.name, func(t *testing.T) {
+			signupRepo := &fakeUserRepo{
+				createUser: func(_ context.Context, params usecase.CreateUserParams) (domain.User, error) {
+					return domain.User{ID: 1, Username: params.Username, Email: params.Email}, nil
+				},
+			}
+			_, _, signupErr := usecase.NewAuth(signupRepo, fakeHasher{}, fakeIssuer{}, fakeVerifier{}).Signup(
+				context.Background(),
+				usecase.SignupInput{Username: "alice", Email: "a@example.com", Password: tt.password},
+			)
+
+			updateRepo := &fakeUsersRepo{
+				getByID: activeUsersByID(usersViewer),
+				updateProfile: func(context.Context, int64, usecase.ProfileChanges) (domain.User, error) {
+					return usersViewer, nil
+				},
+			}
+			_, updateErr := usecase.NewUsers(updateRepo, fakeHasher{}).Update(
+				context.Background(), usersViewer, usersViewer.ID,
+				usecase.UpdateUserInput{Password: strPtr(tt.password)},
+			)
+
+			signupMsgs, updateMsgs := passwordMessages(t, signupErr), passwordMessages(t, updateErr)
+			if !slices.Equal(signupMsgs, updateMsgs) {
+				t.Errorf("signup messages = %q, update messages = %q, want identical", signupMsgs, updateMsgs)
+			}
+			// どちらも domain の規則そのものに従っていること。
+			if want := domain.ValidatePassword(tt.password); !slices.Equal(signupMsgs, want) {
+				t.Errorf("messages = %q, want domain.ValidatePassword result %q", signupMsgs, want)
+			}
+		})
+	}
+}
+
+// passwordMessages は、err から検証エラーのメッセージを取り出す。
+// err が nil（検証を通った）なら nil を返し、検証エラー以外なら失敗させる。
+func passwordMessages(t *testing.T, err error) []string {
+	t.Helper()
+	if err == nil {
+		return nil
+	}
+	var vErr *domain.ValidationError
+	if !errors.As(err, &vErr) {
+		t.Fatalf("error = %v (%T), want nil or *domain.ValidationError", err, err)
+	}
+	return vErr.Messages
 }
 
 // TestUsersUpdateChanges は、repository に届くものを固定する。存在しない
@@ -218,20 +333,20 @@ func TestUsersUpdateChanges(t *testing.T) {
 			wantChanges: usecase.ProfileChanges{},
 		},
 		{
-			name: "存在する password はハッシュ化される",
+			name: "強度ルールを満たす password はハッシュ化される",
 			input: usecase.UpdateUserInput{
-				Password:             strPtr("newpassword1"),
-				PasswordConfirmation: strPtr("newpassword1"),
+				Password:             strPtr("NewPassw0rd!"),
+				PasswordConfirmation: strPtr("NewPassw0rd!"),
 			},
-			wantChanges: usecase.ProfileChanges{PasswordDigest: strPtr("digest(newpassword1)")},
+			wantChanges: usecase.ProfileChanges{PasswordDigest: strPtr("digest(NewPassw0rd!)")},
 		},
 		{
 			name:  "全フィールドを同時に更新できる",
-			input: usecase.UpdateUserInput{Username: strPtr("alice2"), Email: strPtr("alice2@example.com"), Password: strPtr("newpassword1")},
+			input: usecase.UpdateUserInput{Username: strPtr("alice2"), Email: strPtr("alice2@example.com"), Password: strPtr("NewPassw0rd!")},
 			wantChanges: usecase.ProfileChanges{
 				Username:       strPtr("alice2"),
 				Email:          strPtr("alice2@example.com"),
-				PasswordDigest: strPtr("digest(newpassword1)"),
+				PasswordDigest: strPtr("digest(NewPassw0rd!)"),
 			},
 		},
 	}
@@ -247,9 +362,18 @@ func TestUsersUpdateChanges(t *testing.T) {
 					return stored, nil
 				},
 			}
-			got, err := usecase.NewUsers(repo, fakeHasher{}).Update(context.Background(), usersViewer, usersViewer.ID, tt.input)
+			hasher := &recordingHasher{}
+			got, err := usecase.NewUsers(repo, hasher).Update(context.Background(), usersViewer, usersViewer.ID, tt.input)
 			if err != nil {
 				t.Fatalf("Update returned error: %v", err)
+			}
+			// password を変更しない入力（nil と ""）は強度を検証せず、ハッシュ化もしない。
+			wantHashCalls := 0
+			if tt.wantChanges.PasswordDigest != nil {
+				wantHashCalls = 1
+			}
+			if hasher.hashCalls != wantHashCalls {
+				t.Errorf("Hash calls = %d, want %d", hasher.hashCalls, wantHashCalls)
 			}
 			if got != stored {
 				t.Errorf("Update = %+v, want the stored user %+v", got, stored)

@@ -129,11 +129,11 @@ func userObjectID(t *testing.T, obj map[string]any) int64 {
 func newSeededUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) string) {
 	t.Helper()
 	repo, router, token := newUsersRouter(t)
-	repo.seed("alice", "alice@example.com", "password123")
-	ghost := repo.seed("ghost", "ghost@example.com", "password123")
+	repo.seed("alice", "alice@example.com", "Password123!")
+	ghost := repo.seed("ghost", "ghost@example.com", "Password123!")
 	repo.users[ghost.ID].discarded = true
-	repo.seed("bob", "bob@example.com", "password123")
-	root := repo.seed("root", "root@example.com", "password123")
+	repo.seed("bob", "bob@example.com", "Password123!")
+	root := repo.seed("root", "root@example.com", "Password123!")
 	repo.users[root.ID].user.Admin = true
 	return repo, router, token
 }
@@ -300,7 +300,7 @@ func TestGetUser(t *testing.T) {
 // 404 になる（405 や Allow ヘッダーで存在を示さない）。
 func TestUsersIndexIsNotFound(t *testing.T) {
 	repo, router, token := newUsersRouter(t)
-	alice := repo.seed("alice", "alice@example.com", "password123")
+	alice := repo.seed("alice", "alice@example.com", "Password123!")
 
 	unknown := do(router, http.MethodGet, "/nope", "", "")
 	if unknown.Code != http.StatusNotFound || unknown.Body.String() != `{"error":"not found"}` {
@@ -358,8 +358,8 @@ func TestUpdateUser(t *testing.T) {
 	setup := func(t *testing.T) (*userRepoFake, http.Handler, string, string) {
 		t.Helper()
 		repo, router, token := newUsersRouter(t)
-		alice := repo.seed("alice", "alice@example.com", "password123")
-		bob := repo.seed("bob", "bob@example.com", "password123")
+		alice := repo.seed("alice", "alice@example.com", "Password123!")
+		bob := repo.seed("bob", "bob@example.com", "Password123!")
 		return repo, router, token(alice.ID), token(bob.ID)
 	}
 
@@ -425,8 +425,19 @@ func TestUpdateUser(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		if got := repo.users[1].digest; got != "digest:password123" {
-			t.Errorf("stored digest = %q, want the untouched %q", got, "digest:password123")
+		if got := repo.users[1].digest; got != "digest:Password123!" {
+			t.Errorf("stored digest = %q, want the untouched %q", got, "digest:Password123!")
+		}
+	})
+
+	t.Run("強度ルールを満たす password は 200 を返し、ハッシュ化した digest が保存される", func(t *testing.T) {
+		repo, router, aliceAuth, _ := setup(t)
+		rec := do(router, http.MethodPut, "/users/1", `{"user":{"password":"NewPassw0rd!","password_confirmation":"NewPassw0rd!"}}`, aliceAuth)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
+		}
+		if got := repo.users[1].digest; got != "digest:NewPassw0rd!" {
+			t.Errorf("stored digest = %q, want %q", got, "digest:NewPassw0rd!")
 		}
 	})
 
@@ -448,13 +459,24 @@ func TestUpdateUser(t *testing.T) {
 			},
 			{
 				name:     "確認用パスワードの不一致は検証エラーになる",
-				body:     `{"user":{"password":"newpassword1","password_confirmation":"other"}}`,
+				body:     `{"user":{"password":"NewPassw0rd!","password_confirmation":"other"}}`,
 				wantBody: `{"errors":["Password confirmation doesn't match Password"]}`,
 			},
 			{
-				name:     "72 bytes を超える password は検証エラーになる",
-				body:     fmt.Sprintf(`{"user":{"password":%q}}`, strings.Repeat("a", 73)),
+				// 文字種は満たす 73 バイトにして、too long だけが出ることを見る。
+				name:     "72 bytes を超える password は too long だけの検証エラーになる",
+				body:     fmt.Sprintf(`{"user":{"password":%q}}`, "Aa1!"+strings.Repeat("x", 69)),
 				wantBody: `{"errors":["Password is too long (maximum is 72 characters)"]}`,
+			},
+			{
+				name:     "弱いパスワード（短く記号なし）は 2 件のメッセージ付きで検証エラーになる",
+				body:     `{"user":{"password":"abc123"}}`,
+				wantBody: `{"errors":["Password is too short (minimum is 8 characters)","Password must include letters, numbers and symbols"]}`,
+			},
+			{
+				name:     "記号のない 8 バイトのパスワードは文字種のメッセージだけの検証エラーになる",
+				body:     `{"user":{"password":"abcd1234"}}`,
+				wantBody: `{"errors":["Password must include letters, numbers and symbols"]}`,
 			},
 		}
 		for _, tt := range tests {
@@ -488,8 +510,8 @@ func TestDeleteUser(t *testing.T) {
 	setup := func(t *testing.T) (http.Handler, string, string) {
 		t.Helper()
 		repo, router, token := newUsersRouter(t)
-		alice := repo.seed("alice", "alice@example.com", "password123")
-		bob := repo.seed("bob", "bob@example.com", "password123")
+		alice := repo.seed("alice", "alice@example.com", "Password123!")
+		bob := repo.seed("bob", "bob@example.com", "Password123!")
 		return router, token(alice.ID), token(bob.ID)
 	}
 
@@ -537,7 +559,7 @@ func TestDeleteUser(t *testing.T) {
 // RequireAuth が緩んでいないことを確かめる。
 func TestUsersRequireAuth(t *testing.T) {
 	repo, router, _ := newUsersRouter(t)
-	repo.seed("alice", "alice@example.com", "password123")
+	repo.seed("alice", "alice@example.com", "Password123!")
 	const unauthorized = `{"error":"Unauthorized"}`
 
 	tests := []struct {
@@ -598,19 +620,39 @@ func signupUser(t *testing.T, router http.Handler, username, email, password str
 	return user.ID, "Bearer " + user.Token
 }
 
+// loginAs は POST /login を email と password で実行する。
+func loginAs(router http.Handler, email, password string) *httptest.ResponseRecorder {
+	return do(router, http.MethodPost, "/login", fmt.Sprintf(`{"email":%q,"password":%q}`, email, password), "")
+}
+
 // TestUsersPasswordChangeIntegration は AC6 をエンドツーエンドで扱う：
-// PUT /users/{id} によるパスワードの更新後は、古いパスワードではもう
-// ログインできず（401）、新しいパスワードではログインできる（200）。
+// 弱いパスワードへの PUT /users/{id} は 422 で拒否され、旧パスワードのまま
+// ログインできる。規則を満たすパスワードへの更新後は、古いパスワードでは
+// もうログインできず（401）、新しいパスワードではログインできる（200）。
 // 本物の bcrypt、本物の JWT、本物の PostgreSQL を使う。
 func TestUsersPasswordChangeIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed integration test in short mode")
 	}
+	const (
+		oldPassword = "OldPassw0rd!"
+		newPassword = "NewPassw0rd!"
+	)
 	_, router := newUsersIntegrationKit(t)
-	id, bearer := signupUser(t, router, "alice", "alice@example.com", "oldpassword1")
+	id, bearer := signupUser(t, router, "alice", "alice@example.com", oldPassword)
+	path := fmt.Sprintf("/users/%d", id)
 
-	body := `{"user":{"password":"newpassword1","password_confirmation":"newpassword1"}}`
-	rec := do(router, http.MethodPut, fmt.Sprintf("/users/%d", id), body, bearer)
+	weak := do(router, http.MethodPut, path, `{"user":{"password":"abc123","password_confirmation":"abc123"}}`, bearer)
+	wantWeak := `{"errors":["Password is too short (minimum is 8 characters)","Password must include letters, numbers and symbols"]}`
+	if weak.Code != http.StatusUnprocessableEntity || weak.Body.String() != wantWeak {
+		t.Fatalf("weak update = %d %s, want 422 %s", weak.Code, weak.Body, wantWeak)
+	}
+	if kept := loginAs(router, "alice@example.com", oldPassword); kept.Code != http.StatusOK {
+		t.Errorf("old-password login after rejected update = %d, want 200 (body %s)", kept.Code, kept.Body)
+	}
+
+	body := fmt.Sprintf(`{"user":{"password":%q,"password_confirmation":%q}}`, newPassword, newPassword)
+	rec := do(router, http.MethodPut, path, body, bearer)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
@@ -619,13 +661,45 @@ func TestUsersPasswordChangeIntegration(t *testing.T) {
 		t.Errorf("update body = %s, want %s", got, want)
 	}
 
-	old := do(router, http.MethodPost, "/login", `{"email":"alice@example.com","password":"oldpassword1"}`, "")
+	old := loginAs(router, "alice@example.com", oldPassword)
 	if old.Code != http.StatusUnauthorized || old.Body.String() != `{"error":"Invalid email or password"}` {
 		t.Errorf("old-password login = %d %s, want the Rails-parity 401", old.Code, old.Body)
 	}
-	fresh := do(router, http.MethodPost, "/login", `{"email":"alice@example.com","password":"newpassword1"}`, "")
+	fresh := loginAs(router, "alice@example.com", newPassword)
 	if fresh.Code != http.StatusOK {
 		t.Errorf("new-password login = %d, want 200 (body %s)", fresh.Code, fresh.Body)
+	}
+}
+
+// TestLoginLegacyWeakPasswordIntegration は、旧ルールで作られたアカウントを
+// 締め出さないことを本物の bcrypt・PostgreSQL・router で固定する。login は
+// 強度を検証しない（Story #38 AC9 / R4）ので、signup を経由せず弱い password の
+// digest を直接 INSERT したユーザーでも、/login は token 付きで 200 を返す。
+func TestLoginLegacyWeakPasswordIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed integration test in short mode")
+	}
+	const weak = "weakpw"
+	conn, router := newUsersIntegrationKit(t)
+	digest, err := infra.BcryptPasswordHasher{}.Hash(weak)
+	if err != nil {
+		t.Fatalf("hash legacy password: %v", err)
+	}
+	if _, err := conn.Exec(context.Background(),
+		`INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3)`,
+		"legacy@example.com", "legacy", digest); err != nil {
+		t.Fatalf("insert legacy user: %v", err)
+	}
+
+	rec := loginAs(router, "legacy@example.com", weak)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("legacy login = %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	if user := decodeAuthUser(t, rec.Body.Bytes()); user.Username != "legacy" || user.Token == "" {
+		t.Errorf("legacy login body = %+v, want the legacy user with a token", user)
+	}
+	if wrong := loginAs(router, "legacy@example.com", "wrongpw"); wrong.Code != http.StatusUnauthorized {
+		t.Errorf("legacy login with a wrong password = %d, want 401", wrong.Code)
 	}
 }
 
@@ -640,9 +714,9 @@ func TestUsersProfileViewsIntegration(t *testing.T) {
 	ctx := context.Background()
 	conn, router := newUsersIntegrationKit(t)
 
-	aliceID, aliceAuth := signupUser(t, router, "alice", "alice@example.com", "password123")
-	bobID, bobAuth := signupUser(t, router, "bob", "bob@example.com", "password123")
-	rootID, rootAuth := signupUser(t, router, "root", "root@example.com", "password123")
+	aliceID, aliceAuth := signupUser(t, router, "alice", "alice@example.com", "Password123!")
+	bobID, bobAuth := signupUser(t, router, "bob", "bob@example.com", "Password123!")
+	rootID, rootAuth := signupUser(t, router, "root", "root@example.com", "Password123!")
 	if _, err := conn.Exec(ctx, `UPDATE users SET admin = true WHERE id = $1`, rootID); err != nil {
 		t.Fatalf("promote root: %v", err)
 	}
@@ -734,8 +808,8 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	ctx := context.Background()
 	conn, router := newUsersIntegrationKit(t)
 
-	aliceID, aliceAuth := signupUser(t, router, "alice", "alice@example.com", "password123")
-	bobID, bobAuth := signupUser(t, router, "bob", "bob@example.com", "password123")
+	aliceID, aliceAuth := signupUser(t, router, "alice", "alice@example.com", "Password123!")
+	bobID, bobAuth := signupUser(t, router, "bob", "bob@example.com", "Password123!")
 
 	// 承認済みの（active な）shop 1 件が 2 つの burger を提供し、直接 seed
 	// している。moderation はこのシナリオの範囲外である。

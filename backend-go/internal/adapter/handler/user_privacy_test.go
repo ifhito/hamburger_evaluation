@@ -81,10 +81,10 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 
 	// X は admin の作成者・投稿者、Y は一般の投稿者（pending の shop の作成者）、
 	// Z は何も投稿しない一般の viewer、root は moderation 用の admin である。
-	xID, xAuth := signupUser(t, router, "xavier", xEmail, "password123")
-	_, yAuth := signupUser(t, router, "yuki", yEmail, "password123")
-	_, zAuth := signupUser(t, router, "zoe", zEmail, "password123")
-	rootID, rootAuth := signupUser(t, router, "root", rootEmail, "password123")
+	xID, xAuth := signupUser(t, router, "xavier", xEmail, "Password123!")
+	_, yAuth := signupUser(t, router, "yuki", yEmail, "Password123!")
+	_, zAuth := signupUser(t, router, "zoe", zEmail, "Password123!")
+	rootID, rootAuth := signupUser(t, router, "root", rootEmail, "Password123!")
 	for _, id := range []int64{xID, rootID} {
 		if _, err := conn.Exec(ctx, `UPDATE users SET admin = true WHERE id = $1`, id); err != nil {
 			t.Fatalf("promote user %d: %v", id, err)

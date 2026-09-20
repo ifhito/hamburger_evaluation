@@ -66,10 +66,6 @@ func NewAuth(users UserRepository, hasher PasswordHasher, issuer TokenIssuer, ve
 	return &Auth{users: users, hasher: hasher, issuer: issuer, verifier: verifier}
 }
 
-// maxPasswordBytes は bcrypt の 72 バイトという入力上限を再現する。この上限は
-// Rails の has_secure_password も強制している。
-const maxPasswordBytes = 72
-
 // SignupInput は signup use case の入力である。PasswordConfirmation は
 // 任意であり（リクエストにそのフィールドがなかった場合は nil）、存在する
 // ときは、Rails の has_secure_password に合わせて Password と等しくなければ
@@ -82,6 +78,8 @@ type SignupInput struct {
 }
 
 // validate は Rails parity の full message を返す。valid なら空である。
+// メッセージは username、email、password（domain.ValidatePassword）、
+// confirmation の順に並ぶ。
 func (in SignupInput) validate() []string {
 	var msgs []string
 	if in.Username == "" {
@@ -90,12 +88,7 @@ func (in SignupInput) validate() []string {
 	if in.Email == "" {
 		msgs = append(msgs, "Email can't be blank")
 	}
-	if in.Password == "" {
-		msgs = append(msgs, "Password can't be blank")
-	}
-	if len(in.Password) > maxPasswordBytes {
-		msgs = append(msgs, "Password is too long (maximum is 72 characters)")
-	}
+	msgs = append(msgs, domain.ValidatePassword(in.Password)...)
 	if in.PasswordConfirmation != nil && *in.PasswordConfirmation != in.Password {
 		msgs = append(msgs, "Password confirmation doesn't match Password")
 	}

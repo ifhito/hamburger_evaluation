@@ -55,6 +55,7 @@ export default function SignupPage() {
           label={t("auth.signup.password")}
           type="password"
           autoComplete="new-password"
+          hint={t("auth.passwordHint")}
           error={errors.password?.message}
           {...register("password")}
         />

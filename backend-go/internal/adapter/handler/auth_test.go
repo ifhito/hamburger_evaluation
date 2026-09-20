@@ -3,6 +3,7 @@ package handler_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -163,7 +164,7 @@ func TestSignupThenLogout(t *testing.T) {
 	router := newTestRouterWith(t, okPinger, auth)
 
 	rec := do(router, http.MethodPost, "/signup",
-		`{"username":"alice","email":"alice@example.com","password":"password123","password_confirmation":"password123"}`, "")
+		`{"username":"alice","email":"alice@example.com","password":"Password123!","password_confirmation":"Password123!"}`, "")
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("signup status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 	}
@@ -196,8 +197,8 @@ func TestSignupErrors(t *testing.T) {
 	}{
 		{
 			name:       "AC2 使用済みの email は 422 を返す",
-			setup:      func(repo *userRepoFake) { repo.seed("bob", "bob@example.com", "password123") },
-			body:       `{"username":"bob2","email":"bob@example.com","password":"password123"}`,
+			setup:      func(repo *userRepoFake) { repo.seed("bob", "bob@example.com", "Password123!") },
+			body:       `{"username":"bob2","email":"bob@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Email has already been taken"]}`,
 		},
@@ -209,13 +210,36 @@ func TestSignupErrors(t *testing.T) {
 		},
 		{
 			name:       "確認用パスワードが一致しないと 422 を返す",
-			body:       `{"username":"eve","email":"eve@example.com","password":"password123","password_confirmation":"other"}`,
+			body:       `{"username":"eve","email":"eve@example.com","password":"Password123!","password_confirmation":"other"}`,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Password confirmation doesn't match Password"]}`,
 		},
 		{
+			name:       "弱いパスワード（短く記号なし）は 2 件のメッセージ付きで 422 を返す",
+			body:       `{"username":"eve","email":"eve@example.com","password":"abc123"}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantBody:   `{"errors":["Password is too short (minimum is 8 characters)","Password must include letters, numbers and symbols"]}`,
+		},
+		{
+			name:       "パスワードが空だと blank のメッセージだけで 422 を返す",
+			body:       `{"username":"eve","email":"eve@example.com","password":""}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantBody:   `{"errors":["Password can't be blank"]}`,
+		},
+		{
+			name:       "記号のない 8 バイトのパスワードは文字種のメッセージだけで 422 を返す",
+			body:       `{"username":"eve","email":"eve@example.com","password":"abcd1234"}`,
+			wantStatus: http.StatusUnprocessableEntity,
+			wantBody:   `{"errors":["Password must include letters, numbers and symbols"]}`,
+		},
+		{
+			name:       "規則を満たす強いパスワードは 201 を返す",
+			body:       `{"username":"eve","email":"eve@example.com","password":"Abcdef1!"}`,
+			wantStatus: http.StatusCreated,
+		},
+		{
 			name:       "未知の余分なフィールドは無視される",
-			body:       `{"username":"carol","email":"carol@example.com","password":"password123","future_field":true}`,
+			body:       `{"username":"carol","email":"carol@example.com","password":"Password123!","future_field":true}`,
 			wantStatus: http.StatusCreated,
 		},
 		{
@@ -233,7 +257,7 @@ func TestSignupErrors(t *testing.T) {
 		{
 			name:       "repository の失敗は 500 を返す",
 			setup:      func(repo *userRepoFake) { repo.err = io.ErrUnexpectedEOF },
-			body:       `{"username":"dan","email":"dan@example.com","password":"password123"}`,
+			body:       `{"username":"dan","email":"dan@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusInternalServerError,
 			wantBody:   `{"error":"internal server error"}`,
 		},
@@ -267,7 +291,7 @@ func TestLogin(t *testing.T) {
 	}{
 		{
 			name:       "AC3 正しい認証情報は token 付きで 200 を返す",
-			body:       `{"email":"alice@example.com","password":"password123"}`,
+			body:       `{"email":"alice@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -278,7 +302,7 @@ func TestLogin(t *testing.T) {
 		},
 		{
 			name:       "未知の email は同じ 401 を返す",
-			body:       `{"email":"nobody@example.com","password":"password123"}`,
+			body:       `{"email":"nobody@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusUnauthorized,
 			wantBody:   `{"error":"Invalid email or password"}`,
 		},
@@ -297,7 +321,7 @@ func TestLogin(t *testing.T) {
 		{
 			name:       "repository の失敗は 500 を返す",
 			setup:      func(repo *userRepoFake) { repo.err = io.ErrUnexpectedEOF },
-			body:       `{"email":"alice@example.com","password":"password123"}`,
+			body:       `{"email":"alice@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusInternalServerError,
 			wantBody:   `{"error":"internal server error"}`,
 		},
@@ -305,7 +329,7 @@ func TestLogin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo, auth, _ := newAuthKit()
-			seeded := repo.seed("alice", "alice@example.com", "password123")
+			seeded := repo.seed("alice", "alice@example.com", "Password123!")
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
@@ -330,14 +354,36 @@ func TestLogin(t *testing.T) {
 	}
 }
 
+// TestLoginLegacyWeakPassword は、旧ルールで作られたアカウントを締め出さない
+// ことを固定する。login は強度を検証しない（Story #38 AC9 / R4）ので、
+// 現行の規則を満たさない弱いパスワードのユーザーでも、digest が一致すれば
+// token 付きで 200 を返す。
+func TestLoginLegacyWeakPassword(t *testing.T) {
+	for _, weak := range []string{"weakpw", "a"} {
+		t.Run(fmt.Sprintf("強度ルールを満たさない password %q のユーザーでも login できる", weak), func(t *testing.T) {
+			repo, auth, _ := newAuthKit()
+			seeded := repo.seed("legacy", "legacy@example.com", weak)
+			body := fmt.Sprintf(`{"email":"legacy@example.com","password":%q}`, weak)
+			rec := do(newTestRouterWith(t, okPinger, auth), http.MethodPost, "/login", body, "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
+			}
+			user := decodeAuthUser(t, rec.Body.Bytes())
+			if user.ID != seeded.ID || user.Token == "" {
+				t.Errorf("login body = %+v, want the seeded user with a token", user)
+			}
+		})
+	}
+}
+
 // TestRequireAuth は、保護された POST /logout ルートに対する AC4 と AC5 を
 // 扱う：トークンの欠落、Bearer 以外、改ざん、secret 違い、期限切れのトークン、
 // 未知のユーザーのトークン、discard 済みのユーザーのトークンは、いずれも
 // 正確な Rails parity の 401 body を返し、有効なトークンは通る。
 func TestRequireAuth(t *testing.T) {
 	repo, auth, codec := newAuthKit()
-	alice := repo.seed("alice", "alice@example.com", "password123")
-	discarded := repo.seed("gone", "gone@example.com", "password123")
+	alice := repo.seed("alice", "alice@example.com", "Password123!")
+	discarded := repo.seed("gone", "gone@example.com", "Password123!")
 	repo.users[discarded.ID].discarded = true
 
 	validToken, err := codec.Issue(alice.ID)
@@ -402,7 +448,7 @@ func TestRequireAuth(t *testing.T) {
 // 500 を返す。
 func TestRequireAuthInfraFailure(t *testing.T) {
 	repo, auth, codec := newAuthKit()
-	alice := repo.seed("alice", "alice@example.com", "password123")
+	alice := repo.seed("alice", "alice@example.com", "Password123!")
 	token, err := codec.Issue(alice.ID)
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
@@ -423,7 +469,7 @@ func TestRequireAuthInfraFailure(t *testing.T) {
 // viewer を request context に入れる。
 func TestOptionalAuth(t *testing.T) {
 	repo, auth, codec := newAuthKit()
-	alice := repo.seed("alice", "alice@example.com", "password123")
+	alice := repo.seed("alice", "alice@example.com", "Password123!")
 	token, err := codec.Issue(alice.ID)
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
@@ -471,7 +517,7 @@ func TestOptionalAuth(t *testing.T) {
 // 拒否せず、下流の handler は匿名のまま実行される。
 func TestOptionalAuthInfraFailure(t *testing.T) {
 	repo, auth, codec := newAuthKit()
-	alice := repo.seed("alice", "alice@example.com", "password123")
+	alice := repo.seed("alice", "alice@example.com", "Password123!")
 	token, err := codec.Issue(alice.ID)
 	if err != nil {
 		t.Fatalf("issue token: %v", err)

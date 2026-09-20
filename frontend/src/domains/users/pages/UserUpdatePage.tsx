@@ -33,6 +33,7 @@ export default function UserUpdatePage() {
     if (username !== authUser?.username) data.username = username;
     if (email !== authUser?.email) data.email = email;
     if (password) {
+      // 空のときは変更しない。規則の判定は backend だけが持ち、違反はサーバーの 422 のメッセージで表示する
       data.password = password;
       data.passwordConfirmation = passwordConfirmation;
     }
@@ -97,6 +98,7 @@ export default function UserUpdatePage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
+          hint={t("auth.passwordHint")}
         />
         <Input
           id="passwordConfirmation"
