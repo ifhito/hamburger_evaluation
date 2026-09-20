@@ -17,7 +17,6 @@ import {
   setStoredUser,
   removeStoredUser,
 } from "./storage";
-import { userApiClient } from "../users/api/userApiClient";
 import type { AuthUser, LoginRequest, SignupRequest } from "./types";
 
 interface AuthContextValue {
@@ -47,15 +46,6 @@ function isTokenExpired(token: string): boolean {
   return Date.now() / 1000 > payload.exp;
 }
 
-async function fetchUserById(userId: number): Promise<AuthUser | null> {
-  try {
-    const res = await userApiClient.get<AuthUser[]>("/users");
-    return res.data.find((u) => u.id === userId) ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useAtom(authUserAtom);
   const [token, setTokenAtom] = useAtom(authTokenAtom);
@@ -66,7 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (storedToken && !isTokenExpired(storedToken)) {
       const storedUser = getStoredUser() as AuthUser | null;
       if (storedUser) {
-        setUser(storedUser);
+        // 古い保存ユーザーには admin がないことがあるため、必ず boolean にそろえる。
+        setUser({ ...storedUser, admin: Boolean(storedUser.admin) });
         setTokenAtom(storedToken);
       } else {
         removeToken();
@@ -96,11 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authApi.login(data);
       setToken(res.token);
       setTokenAtom(res.token);
-      const payload = decodeJwtPayload(res.token);
-      const userId = payload.user_id as number;
-      const fetchedUser = await fetchUserById(userId);
-      setUser(fetchedUser);
-      if (fetchedUser) setStoredUser(fetchedUser);
+      const authUser: AuthUser = { id: res.id, username: res.username, email: res.email, admin: res.admin };
+      setUser(authUser);
+      setStoredUser(authUser);
     },
     [setUser, setTokenAtom]
   );

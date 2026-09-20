@@ -41,6 +41,50 @@ func (q *Queries) DeleteShopBurger(ctx context.Context, arg DeleteShopBurgerPara
 	return err
 }
 
+const getShopBurgerByNameWithStats = `-- name: GetShopBurgerByNameWithStats :one
+SELECT b.id, b.name,
+       bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
+FROM burgers b
+JOIN shops_burgers sb ON sb.burger_id = b.id
+LEFT JOIN burger_stats bs ON bs.burger_id = b.id
+WHERE sb.shop_id = $1 AND b.name = $2
+ORDER BY b.id
+LIMIT 1
+`
+
+type GetShopBurgerByNameWithStatsParams struct {
+	ShopID int64
+	Name   string
+}
+
+type GetShopBurgerByNameWithStatsRow struct {
+	ID            int64
+	Name          string
+	ReviewCount   pgtype.Int8
+	AverageRating pgtype.Float8
+	WeightedScore pgtype.Float8
+	Confidence    pgtype.Float8
+}
+
+// The shop's burger with the given exact name (the burger_name review
+// submission lookup, mirroring Rails' shop.burgers.find_by(name:)), with
+// its stats (NULLs when none calculated yet) — the find side of
+// find-or-create. Nothing enforces name uniqueness within a shop, so the
+// lowest id wins deterministically.
+func (q *Queries) GetShopBurgerByNameWithStats(ctx context.Context, arg GetShopBurgerByNameWithStatsParams) (GetShopBurgerByNameWithStatsRow, error) {
+	row := q.db.QueryRow(ctx, getShopBurgerByNameWithStats, arg.ShopID, arg.Name)
+	var i GetShopBurgerByNameWithStatsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ReviewCount,
+		&i.AverageRating,
+		&i.WeightedScore,
+		&i.Confidence,
+	)
+	return i, err
+}
+
 const getShopBurgerWithStats = `-- name: GetShopBurgerWithStats :one
 SELECT b.id, b.name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence

@@ -25,6 +25,5 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface LoginResponse {
-  token: string;
-}
+// Go の authUserResponse: signup と login は同じ本文を返す。
+export type LoginResponse = SignupResponse;

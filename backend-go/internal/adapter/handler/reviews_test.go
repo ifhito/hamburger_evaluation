@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,7 +58,7 @@ func (f *reviewRepoFake) detailFor(review domain.Review) domain.ReviewDetail {
 	}
 }
 
-func (f *reviewRepoFake) ListReviews(_ context.Context, limit, offset int32) ([]domain.ReviewDetail, error) {
+func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -70,9 +71,27 @@ func (f *reviewRepoFake) ListReviews(_ context.Context, limit, offset int32) ([]
 			activeBurgers[burgerID] = true
 		}
 	}
+	// The filter mirrors the SQL narg predicates: exact rating, literal
+	// case-insensitive comment substring, shops_burgers link (the exact SQL
+	// is covered by the repository integration tests).
+	matches := func(review domain.Review) bool {
+		if filter.Rating != nil && review.Rating != *filter.Rating {
+			return false
+		}
+		if filter.Keyword != "" && (review.Comment == nil ||
+			!strings.Contains(strings.ToLower(*review.Comment), strings.ToLower(filter.Keyword))) {
+			return false
+		}
+		// Like the SQL, the filter shop must itself be active.
+		if filter.ShopID != nil && (f.shops[*filter.ShopID].Status != domain.ShopStatusActive ||
+			!slices.Contains(f.links[*filter.ShopID], review.BurgerID)) {
+			return false
+		}
+		return true
+	}
 	var out []domain.Review
 	for _, rec := range f.reviews {
-		if !rec.discarded && activeBurgers[rec.review.BurgerID] {
+		if !rec.discarded && activeBurgers[rec.review.BurgerID] && matches(rec.review) {
 			out = append(out, rec.review)
 		}
 	}
@@ -130,6 +149,35 @@ func (f *reviewRepoFake) CreateReview(_ context.Context, review domain.Review) (
 	review.CreatedAt = reviewBaseTime.Add(time.Duration(f.seq) * time.Minute)
 	f.reviews[review.ID] = &fakeStoredReview{review: review}
 	return review, nil
+}
+
+func (f *reviewRepoFake) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
+	if f.err != nil {
+		return domain.Review{}, domain.ShopReviewBurger{}, f.err
+	}
+	var burger domain.ShopReviewBurger
+	found := false
+	for _, burgerID := range f.links[shopID] {
+		// Lowest id wins, mirroring the SQL's ORDER BY b.id LIMIT 1.
+		if b := f.burgers[burgerID]; b.Name == burgerName && (!found || b.ID < burger.ID) {
+			burger, found = b, true
+		}
+	}
+	if !found {
+		var next int64 = 1
+		for id := range f.burgers {
+			next = max(next, id+1)
+		}
+		burger = domain.ShopReviewBurger{ID: next, Name: burgerName}
+		f.burgers[next] = burger
+		f.links[shopID] = append(f.links[shopID], next)
+	}
+	review.BurgerID = burger.ID
+	created, err := f.CreateReview(ctx, review)
+	if err != nil {
+		return domain.Review{}, domain.ShopReviewBurger{}, err
+	}
+	return created, burger, nil
 }
 
 func (f *reviewRepoFake) UpdateReviewContent(_ context.Context, id int64, rating int, comment string) (domain.Review, error) {
@@ -298,6 +346,82 @@ func TestCreateReview(t *testing.T) {
 		}
 	})
 
+	t.Run("burger_name reuses the shop's burger of that name (S6 P3-1)", func(t *testing.T) {
+		repo := seedReviewWorld(1)
+		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"Tasty","shop_id":%d,"burger_name":"Cheese"}}`, activeShopID)
+		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
+		}
+		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","user":{"id":1,"username":"alice"},` +
+			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
+		if got := rec.Body.String(); got != want {
+			t.Errorf("body = %s, want the existing Cheese burger %s", got, want)
+		}
+		if len(repo.burgers) != 2 {
+			t.Errorf("burgers = %d, want no new burger for an existing name", len(repo.burgers))
+		}
+	})
+
+	t.Run("unknown burger_name creates the burger and its link (S6 P3-1)", func(t *testing.T) {
+		repo := seedReviewWorld(1)
+		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+		body := fmt.Sprintf(`{"review":{"rating":5,"comment":"New","shop_id":%d,"burger_name":"Veggie"}}`, activeShopID)
+		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
+		}
+		// The created burger (fake id 7) carries zero stats.
+		want := `{"id":1,"rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","user":{"id":1,"username":"alice"},` +
+			`"burger":{"id":7,"name":"Veggie","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}`
+		if got := rec.Body.String(); got != want {
+			t.Errorf("body = %s, want the created burger %s", got, want)
+		}
+		if !slices.Contains(repo.links[activeShopID], int64(7)) {
+			t.Errorf("links = %v, want the new burger linked to shop %d", repo.links[activeShopID], activeShopID)
+		}
+	})
+
+	t.Run("a positive burger_id wins over burger_name", func(t *testing.T) {
+		repo := seedReviewWorld(1)
+		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"Both","shop_id":%d,"burger_id":%d,"burger_name":"Veggie"}}`,
+			activeShopID, cheeseBurgerID)
+		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
+		}
+		want := `{"id":1,"rating":4,"comment":"Both","created_at":"2024-06-01T12:01:00Z","user":{"id":1,"username":"alice"},` +
+			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
+		if got := rec.Body.String(); got != want {
+			t.Errorf("body = %s, want the burger_id burger %s", got, want)
+		}
+		if len(repo.burgers) != 2 {
+			t.Errorf("burgers = %d, want no burger created when burger_id wins", len(repo.burgers))
+		}
+	})
+
+	t.Run("neither burger_id nor a usable burger_name returns 422", func(t *testing.T) {
+		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+		bodies := map[string]string{
+			"neither field":         fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d}}`, activeShopID),
+			"whitespace-only name":  fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d,"burger_name":"  "}}`, activeShopID),
+			"burger_id 0 and blank": fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d,"burger_id":0,"burger_name":""}}`, activeShopID),
+		}
+		for name, body := range bodies {
+			t.Run(name, func(t *testing.T) {
+				rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
+				if rec.Code != http.StatusUnprocessableEntity {
+					t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
+				}
+				if got, want := rec.Body.String(), `{"errors":["Burger name can't be blank"]}`; got != want {
+					t.Errorf("body = %s, want %s", got, want)
+				}
+			})
+		}
+	})
+
 	t.Run("AC4 validation failures return 422 with the exact messages", func(t *testing.T) {
 		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
 		post := func(rating int, comment string) *doResult {
@@ -424,6 +548,101 @@ func TestListReviews(t *testing.T) {
 		rec := do(failRouter, http.MethodGet, "/reviews", "", "")
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusInternalServerError, rec.Body)
+		}
+	})
+}
+
+// TestListReviewsFilters covers the GET /reviews rating/keyword/shop_id
+// query filters (Rails ReviewQuery parity): each filter alone, their AND
+// combination, a no-match `[]` (never null), empty values counting as
+// absent, and the fail-loud 422 for non-integer rating/shop_id (a
+// deliberate divergence from Rails' silent cast-to-0).
+func TestListReviewsFilters(t *testing.T) {
+	repo := seedReviewWorld(1)
+	router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+	// Review 1: rating 4 "On cheese" (Cheese, active shops); review 2:
+	// rating 4 "On plain" (Plain, pending-only, hidden from the feed).
+	seedFeed(t, router, aliceAuth)
+	// Review 3: rating 5 "Smoky veggie dream" on a new Veggie burger (fake
+	// id 7) linked only to the second active shop.
+	body := fmt.Sprintf(`{"review":{"rating":5,"comment":"Smoky veggie dream","shop_id":%d,"burger_name":"Veggie"}}`, active2ShopID)
+	if rec := do(router, http.MethodPost, "/reviews", body, aliceAuth); rec.Code != http.StatusCreated {
+		t.Fatalf("seed veggie post: status = %d (body %s)", rec.Code, rec.Body)
+	}
+	const (
+		onCheese = `"On cheese"` // the comments identify the reviews
+		onPlain  = `"On plain"`  // (ids collide with user/burger ids)
+		smoky    = `"Smoky veggie dream"`
+	)
+
+	get := func(t *testing.T, query string, want, absent []string) {
+		t.Helper()
+		rec := do(router, http.MethodGet, "/reviews"+query, "", "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /reviews%s status = %d, want 200 (body %s)", query, rec.Code, rec.Body)
+		}
+		for _, comment := range want {
+			if !strings.Contains(rec.Body.String(), comment) {
+				t.Errorf("GET /reviews%s = %s, want the %s review", query, rec.Body, comment)
+			}
+		}
+		for _, comment := range absent {
+			if strings.Contains(rec.Body.String(), comment) {
+				t.Errorf("GET /reviews%s = %s, the %s review must be filtered out", query, rec.Body, comment)
+			}
+		}
+	}
+
+	t.Run("rating filters to the exact rating", func(t *testing.T) {
+		get(t, "?rating=5", []string{smoky}, []string{onCheese, onPlain})
+		get(t, "?rating=4", []string{onCheese}, []string{smoky, onPlain})
+	})
+
+	t.Run("keyword matches the comment case-insensitively", func(t *testing.T) {
+		get(t, "?keyword=SMOKY", []string{smoky}, []string{onCheese})
+		get(t, "?keyword=On+cheese", []string{onCheese}, []string{smoky})
+	})
+
+	t.Run("shop_id keeps only that shop's burgers' reviews", func(t *testing.T) {
+		get(t, fmt.Sprintf("?shop_id=%d", activeShopID), []string{onCheese}, []string{smoky})
+		get(t, fmt.Sprintf("?shop_id=%d", active2ShopID), []string{onCheese, smoky}, nil)
+	})
+
+	t.Run("filters combine with AND", func(t *testing.T) {
+		get(t, fmt.Sprintf("?shop_id=%d&rating=5&keyword=veggie", active2ShopID), []string{smoky}, []string{onCheese})
+	})
+
+	t.Run("no match returns the empty JSON array, never null", func(t *testing.T) {
+		for _, query := range []string{"?rating=2", "?keyword=zzz", "?shop_id=999", "?rating=5&keyword=cheese"} {
+			rec := do(router, http.MethodGet, "/reviews"+query, "", "")
+			if rec.Code != http.StatusOK || rec.Body.String() != `[]` {
+				t.Errorf("GET /reviews%s = %d %s, want 200 []", query, rec.Code, rec.Body)
+			}
+		}
+	})
+
+	t.Run("empty filter values count as absent", func(t *testing.T) {
+		get(t, "?rating=&keyword=&shop_id=", []string{smoky, onCheese}, []string{onPlain})
+	})
+
+	t.Run("non-integer rating and shop_id fail loudly with 422", func(t *testing.T) {
+		tests := []struct {
+			query    string
+			wantBody string
+		}{
+			{query: "?rating=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
+			{query: "?rating=4.5", wantBody: `{"errors":["Rating must be an integer"]}`},
+			{query: "?shop_id=abc", wantBody: `{"errors":["Shop id must be an integer"]}`},
+		}
+		for _, tt := range tests {
+			rec := do(router, http.MethodGet, "/reviews"+tt.query, "", "")
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Errorf("GET /reviews%s status = %d, want 422 (body %s)", tt.query, rec.Code, rec.Body)
+				continue
+			}
+			if got := rec.Body.String(); got != tt.wantBody {
+				t.Errorf("GET /reviews%s body = %s, want %s", tt.query, got, tt.wantBody)
+			}
 		}
 	})
 }

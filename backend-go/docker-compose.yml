@@ -18,8 +18,7 @@ services:
       DATABASE_URL: postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable
       # The api fails loudly at boot when JWT_SECRET is unset; export it
       # before `docker compose up` (e.g. `export JWT_SECRET=...`).
-      # For tokens issued by the Rails backend to remain valid, JWT_SECRET
-      # must equal the Rails secret_key_base.
+      # JWT_SECRET must be set; tokens are signed and verified with this secret.
       JWT_SECRET: ${JWT_SECRET:-}
       GOMEMLIMIT: 920MiB
     mem_limit: 1g
@@ -43,6 +42,24 @@ services:
         "-path", "/migrations",
         "-database", "${MIGRATE_DATABASE_URL:-postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable}",
       ]
+
+  # Usage: docker compose run --rm seed   (after `migrate up`)
+  # Idempotent dev fixtures (admin + alice/bob/charlie, shops, burgers,
+  # reviews, burger_stats); see cmd/seed/main.go. Target another database
+  # with DATABASE_URL=... docker compose run --rm seed
+  seed:
+    build: .
+    profiles: ["tools"]
+    command: ["go", "run", "./cmd/seed"]
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable}
 
   # Usage: docker compose run --rm sqlc generate
   sqlc:

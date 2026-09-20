@@ -33,7 +33,7 @@ export default function ReviewEditPage() {
 
   useEffect(() => {
     if (review) {
-      reset({ rating: review.rating, comment: review.comment });
+      reset({ rating: review.rating, comment: review.comment ?? "" });
     }
   }, [review, reset]);
 

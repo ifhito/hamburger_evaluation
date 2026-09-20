@@ -47,7 +47,7 @@ export default function UserUpdatePage() {
         id: updated.id,
         username: updated.username,
         email: updated.email,
-        admin: authUser?.admin ?? false,
+        admin: updated.admin,
       });
       void navigate(`/users/${id}`);
     } catch (e) {

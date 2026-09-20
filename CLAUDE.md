@@ -14,11 +14,11 @@ Hamburger Evaluation は、ハンバーガーのレビューと評価を行う W
 - プロフィールの更新・削除;
 - レビューから算出されるバーガー統計の閲覧。
 
-リポジトリは Rails API の backend と React SPA の frontend に分かれています。
+リポジトリは Go API の backend と React SPA の frontend に分かれています。
 
 ```text
 hamburger_evaluation/
-├── backend/    # Ruby on Rails 8 API
+├── backend-go/ # Go API (net/http + sqlc + PostgreSQL 16)
 ├── frontend/   # React 19 + TypeScript + Vite
 ├── memory/     # プロジェクトメモ
 ├── plan/       # 計画ドキュメント
@@ -32,112 +32,144 @@ hamburger_evaluation/
 ## 重要な作業ルール
 
 - 振る舞いを変更する前に、既存のコード・テスト・ドキュメントを確認する。
-- シークレット、トークン、認証情報、Rails / JWT のシークレット値を記録しない。
-- Backend の検証は、ホストの Ruby ではなく Docker Compose 経由で実行しなければならない。
+- シークレット、トークン、認証情報、JWT のシークレット値を記録しない。
 - 明示的に依頼されない限り、無関係なファイルや未追跡ファイルを commit しない。
 - このリポジトリには未追跡の `SETUP.md` や `plans/*.md` が存在することがあり、無関係な commit にはデフォルトで含めない。
 - commit する前に、status と diff を注意深く確認する。
 
-## Backend
+## Backend (`backend-go/`)
 
 ### 技術スタック
 
-- Ruby 3.3.10
-- Rails 8 API mode
-- PostgreSQL 16
+- Go 1.22+ (標準 `net/http` のルーティング。Web フレームワークも ORM も使わない)
+- PostgreSQL 16 (pgx)
+- sqlc (SQL からの型安全なコード生成)
 - JWT 認証
-- Pundit による認可
-- パラメータ DTO と値オブジェクトのための dry-struct / dry-types
-- RSpec / FactoryBot / SimpleCov
-- RuboCop
-- Brakeman
 
 ### アーキテクチャ
 
-Backend は、Rails の慣習に近い形を保ちつつ、軽量な DDD と依存性逆転を採用しています。
+クリーンアーキテクチャ (handler → usecase → domain) を採用しています。依存は内側にのみ向き、認可の判断は handler ではなく usecase / domain に置きます。
 
 ```text
-backend/app/
-├── controllers/    # HTTP 境界: 認証、policy チェック、パラメータ、service 呼び出し
-├── domain/         # ドメインロジック / 値オブジェクト。ActiveRecord への直接依存なし
-├── parameters/     # dry-struct による入力 DTO
-├── queries/        # 読み取り / query 境界。読み取り経路の where/includes/find
-├── repositories/   # 永続化境界。CUD と ActiveRecord の詳細
-├── services/       # アプリケーションのユースケース
-├── jobs/           # 非同期処理。model の参照は repository 経由にする
-├── policies/       # Pundit policy
-├── serializers/    # JSON serializer
-└── models/         # ActiveRecord model。できる限り薄く保つ
+backend-go/
+├── cmd/api/main.go     # composition root: 設定、DB プール、配線、サーバ
+├── internal/
+│   ├── domain/         # エンティティ、値オブジェクト、ドメインエラー(標準ライブラリのみ)
+│   ├── usecase/        # アプリケーションのユースケース + 永続化のインターフェース(利用側で宣言)
+│   └── adapter/
+│       ├── handler/    # net/http のハンドラ、DTO、ルーティング、middleware
+│       ├── repository/ # usecase のインターフェースを sqlc で実装
+│       │   └── sqlcgen/  # sqlc の生成コード。手で編集しない
+│       └── infra/      # DB プール、JWT、パスワードハッシュ、設定
+├── db/
+│   ├── migrations/     # SQL マイグレーション
+│   └── queries/        # sqlc のクエリ(*.sql)
+└── sqlc.yaml
 ```
 
 ### Backend 設計ルール
 
-- `backend/app/domain` に ActiveRecord への直接依存を持ち込まない。
-- controller と job から model の永続化呼び出しを直接行うことを避ける。
-  - そこで `.find`, `.where`, `.includes`, `.find_by`, `.save`, `.update!`, `.discard`, `.upsert` を直接使うことを避ける。
-  - 読み取りは `queries/` へ、永続化操作は `repositories/` へ移す。
-- Service はユースケースを表現し、永続化の詳細は repository に委譲する。
-- 軽量な Rails 流の依存性注入は許容される。
-  - 例: `repository: Reviews::ReviewRepository.new`
-- 必要性が明確でない限り、完全な DI コンテナや厳格な port / interface 層を導入しない。
+- `domain` は標準ライブラリのみを import する。`net/http`・`database/sql`・`pgx`・`usecase`・`adapter` は import しない。
+- 永続化のインターフェースは `usecase` 側で宣言し、`adapter/repository` が実装する。
+- sqlc の行構造体や `pgx` の型を `adapter/` の外に出さない。ドメインの形と DB の形は別々に設計する。
+- `sqlcgen/` は手で編集しない。`db/queries/` を変更して再生成する。
+- API の JSON は snake_case を使う。
+- 詳細は `.agents/skills/backend-go-boundaries` と `.agents/skills/db-design` を参照する。
+
+### Backend の前提
+
+- **:8080** で待ち受け、ヘルスチェックは `GET /up`。
+- 専用の Postgres を使う (ホストのポートは 5433)。
+- 認証は **JWT**。ログイン時にトークンを返し、以降は `Authorization: Bearer <token>` で送る。`JWT_SECRET` が未設定だと起動時にエラーで落ちる(fail-loud)ため、`docker compose up` の前に export する。
 
 ### Backend コマンド
 
-以下は `backend/` から実行します。
-
 ```bash
-# backend を起動
-cd backend
-docker compose up --build
-
-# フルテストスイート。compose のデフォルトが異なる場合があるため RAILS_ENV=test が必須。
-cd backend
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
-
-# RuboCop
-cd backend
-docker compose run --rm api bin/rubocop -f github
-
-# Brakeman
-cd backend
-docker compose run --rm api bin/brakeman --no-pager
-```
-
-SimpleCov は最低カバレッジを強制します。一部の spec のみを実行した場合、カバレッジが全体のしきい値を下回っているという理由だけで失敗することがあります。テストの失敗として扱う前に、フルスイートで確認してください。
-
-## Backend (Go)
-
-- `backend-go/` — Go (1.22+) API using **net/http + sqlc + pgx** with clean architecture (handler → usecase → domain)
-- Runs with its own dedicated Postgres (host port 5433) so it does not collide with the Rails stack
-
-```bash
-# Start (serves on :8080; health check at GET /up)
+# 起動 (:8080 で待ち受け。ヘルスチェックは GET /up)
 cd backend-go
 docker compose up --build
 ```
 
 ```bash
-# Validation (gofmt / go vet / go build / go test), run from the repo root
+# 検証 (gofmt / go vet / go build / go test)。リポジトリのルートから実行
 .agents/skills/backend-go-change-validation/scripts/go-checks.sh
 ```
 
 ```bash
-# Migrations — by default they target the dev DB; override with MIGRATE_DATABASE_URL
+# マイグレーション。既定では開発用 DB が対象。MIGRATE_DATABASE_URL で上書きできる
 cd backend-go
 docker compose run --rm migrate up
 docker compose run --rm migrate down -all
 ```
 
 ```bash
-# Regenerate sqlc code — must produce zero diff under internal/adapter/repository/sqlcgen
+# 冪等な開発用フィクスチャを投入 (admin + alice/bob/charlie、ショップ、バーガー、
+# レビュー、burger_stats)。`migrate up` の後に実行。DATABASE_URL で上書きできる
+cd backend-go
+docker compose run --rm seed
+```
+
+```bash
+# sqlc の再生成。internal/adapter/repository/sqlcgen に差分が出てはならない
 cd backend-go
 docker compose run --rm sqlc generate
 ```
 
 ```bash
-# DB acceptance tests (compose db service must be up; tests skip silently without TEST_DATABASE_URL)
+# DB の受け入れテスト (compose の db サービスが起動していること。
+# TEST_DATABASE_URL がないとテストは黙ってスキップされる)
 cd backend-go
 TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=disable' go test ./db/...
+```
+
+### エンドポイント
+
+**ヘルスチェック**
+- `GET /up` — ヘルスチェック (DB への ping)
+
+**認証**
+- `POST /signup` — アカウント作成 (username, email, password)
+- `POST /login` — 認証して JWT トークンを受け取る
+- `POST /logout` — 現在のセッションを無効化 (要認証)
+
+**ショップ**
+- `GET /shops` — ショップ一覧
+- `GET /shops/:id` — ショップ 1 件の取得
+- `POST /shops` — ショップの申請 (要認証)
+
+**レビュー**
+- `GET /reviews` — レビュー一覧
+- `GET /reviews/:id` — レビュー 1 件の取得
+- `POST /reviews` — レビューの投稿 (要認証)
+- `PUT /reviews/:id` — レビューの更新 (要認証)
+- `DELETE /reviews/:id` — レビューの削除 (要認証)
+
+**ユーザー**
+- `GET /users` — ユーザー一覧
+- `PUT /users/:id` — ユーザーの更新 (要認証。本人のみ。usecase で判定)
+- `DELETE /users/:id` — ユーザーの削除 (要認証。本人のみ。usecase で判定)
+
+**管理者** (要認証。管理者のみ許可する判定は usecase で行う)
+- `GET /admin/shops` — モデレーション用のショップ一覧
+- `PUT /admin/shops/:id` — ショップの更新
+- `POST /admin/shops/:id/approve` — 申請されたショップの承認
+- `POST /admin/shops/:id/reject` — 申請されたショップの却下
+
+### データベーススキーマ
+
+`backend-go/db/migrations/` のマイグレーションで定義された 6 つのテーブル:
+
+- **users** — id, email, username, password_digest, admin フラグ, 論理削除 (discarded_at)
+- **shops** — name, モデレーション状態 (pending / active / rejected), moderation_note, 申請者への FK
+- **burgers** — 中間テーブル経由でショップに紐づくバーガー
+- **shops_burgers** *(中間テーブル)* — shop_id (FK), burger_id (FK)
+- **reviews** — rating, comment, user への FK, burger への FK
+- **burger_stats** — バーガーごとの、レビュー由来の集計値
+
+```text
+users    1 ──0..* reviews
+burgers  1 ──0..* reviews
+shops   *──────* burgers  (shops_burgers 経由)
 ```
 
 ## Frontend
@@ -166,6 +198,11 @@ frontend/src/
 ├── states/       # グローバル state
 └── components/   # 共通 UI コンポーネント
 ```
+
+### API の接続先
+
+- ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる。
+- 開発時は Vite の proxy が `/api` を Go API へ転送する。転送先の既定は `http://host.docker.internal:8080` で、`VITE_API_PROXY_TARGET` で変更できる。
 
 ### Frontend コマンド
 
@@ -197,37 +234,17 @@ pnpm run build
 
 - Backend の API は snake_case を使う。
 - Frontend のコードは camelCase を使う。
-- casing の変換は HTTP 境界の責務とする。
-- 認証は `devise_token_auth` ではなく、独自実装の JWT Bearer token を使う。
+- casing の変換は HTTP 境界 (`frontend/src/api/client/buildApiClient.ts`) の責務とする。
+- 認証は独自実装の JWT Bearer token を使う。
 - 認証が必要なリクエストは `Authorization: Bearer <token>` を送信すること。
-
-主なエンドポイント:
-
-```text
-POST   /signup
-POST   /login
-POST   /logout
-GET    /shops
-GET    /shops/:id
-GET    /reviews
-GET    /reviews/:id
-POST   /reviews
-PUT    /reviews/:id
-DELETE /reviews/:id
-GET    /users
-PUT    /users/:id
-DELETE /users/:id
-```
 
 ## 品質ゲート
 
 Backend の変更では、通常は次を実行する:
 
 ```bash
-cd backend
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
-docker compose run --rm api bin/rubocop -f github
-docker compose run --rm api bin/brakeman --no-pager
+.agents/skills/backend-go-change-validation/scripts/go-checks.sh
+cd backend-go && docker compose run --rm sqlc generate   # db/queries/ を変更したとき
 ```
 
 Frontend の変更では、通常は次を実行する:
