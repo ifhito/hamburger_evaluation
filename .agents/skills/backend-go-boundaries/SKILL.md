@@ -58,13 +58,15 @@ backend-go/
 - `usecase` は `domain`、stdlib、および**副作用のない純粋な内部ライブラリ**
   (例: 画像のデコード/リサイズを行う `internal/photo`。DB・HTTP・ファイル I/O に
   依存しないもの)だけを import する。`adapter/*` や `net/http`・`database/sql`・`pgx` は
-  import しない。永続化のインターフェースは `usecase` 側で宣言する
-  (利用側で宣言する Go の慣習)。**読み取りと書き込みでインターフェースを分ける**:
-  - `*Query`(例: `ShopQuery`): **読み取り専用**。メソッド名は `Get*` / `List*`。
-  - `*Repository`(例: `ShopRepository`): **書き込み専用**。メソッド名は
+  import しない。**読み取りと書き込みで、依存する先を分ける**:
+  - 読み取り: `usecase` が宣言する `*Query`(例: `ShopQuery`。利用側で宣言する Go の慣習)を通す。
+    **読み取り専用**で、メソッド名は `Get*` / `List*`。
+  - 書き込み: **domain のサービス**(例: `domain.ShopService`)を通す。repository の
+    インターフェース(`*Repository`。例: `ShopRepository`)は **domain が宣言し、
+    呼ぶのは domain のサービスだけ**。**書き込み専用**で、メソッド名は
     `Create*` / `Update*` / `Discard*`。書き込みが更新後の行(`RETURNING`)を返すのは
     よいが、読み取りのメソッドを置いてはならない。
-  - usecase が repository を呼ぶのは**書き込みのときだけ**。読み取りは必ず Query を通す。
+  - **usecase は repository を呼ばない**(宣言も、保持も、呼び出しもしない)。
   - 書き込みの内部で必要な読み取り(例: 同一トランザクション内のロック取得)は、
     adapter の repository の実装の内部に閉じる。
 - `handler` はリクエストのデコード/バリデーション、ユースケース呼び出し、
@@ -91,7 +93,7 @@ backend-go/
 - **日本語にするもの**: コメント(`//`、`/* */`、`--`、`#`)、Go の doc コメント、
   テスト名(`t.Run("…")` の文字列)。
 - Go の doc コメントは慣習どおり**識別子名で始める**(godoc/linter 互換):
-  `// ShopRepository はショップの永続化契約(利用側で宣言)。` のように「識別子名 + は/を」で書く。
+  `// ShopQuery はショップの読み取りの契約(利用側で宣言)。` のように「識別子名 + は/を」で書く。
 - タグは保持し本文だけ日本語にする: `// TODO(S7): 統計の再計算を呼ぶ`。
 - 技術用語(fail-loud、tx、ctx、race、N+1 など)は無理に訳さず原語のままでよい。
 - **英語のままにするもの**:
@@ -143,11 +145,13 @@ backend-go/
 6. コメントやテスト名を英語で書く(上記の例外を除き日本語で書く)。
 7. `*Repository` に `Get*` / `List*` を足す、`*Query` に `Create*` / `Update*` /
    `Discard*` を足す(読み取りと書き込みを同じインターフェースに混ぜる)。
+8. usecase が repository を宣言・保持・呼び出しする(書き込みは domain のサービスを通す)。
 
 ## 検証チェックリスト
 
 - [ ] `domain` と `usecase` に外向きの import(adapter/infra/pgx/net-http)がない。
-- [ ] usecase の `*Repository` に読み取り(`Get*` / `List*`)が、`*Query` に書き込みがない。
+- [ ] usecase が repository を宣言・保持・呼び出ししていない(書き込みは domain のサービス経由)。
+      domain の `*Repository` に読み取り(`Get*` / `List*`)が、usecase の `*Query` に書き込みがない。
       `usecase` が import する内部ライブラリは、副作用のない純粋なものに限られる。
 - [ ] `db/queries/` を変更した場合、sqlc の出力を再生成しコミットした。
 - [ ] 変更したエンドポイントについて、レスポンス JSON をフロントエンドの API 型と突き合わせた。

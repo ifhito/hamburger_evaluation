@@ -13,10 +13,11 @@ Review the diff for, in priority order:
 2. Go clean-architecture violations (`backend-go/`): outward imports in
    domain/usecase (net/http, database/sql, pgx, adapter packages), hand-edited
    sqlc-generated code, business rules in handlers, response JSON diverging
-   from the frontend API types, and read/write mixing in usecase-declared
-   interfaces (`*Query` = reads only via `Get*`/`List*`; `*Repository` =
-   writes only via `Create*`/`Update*`/`Discard*`; usecases call a repository
-   only to write).
+   from the frontend API types, read/write mixing in interfaces (`*Query` =
+   reads only via `Get*`/`List*`, declared in usecase; `*Repository` = writes
+   only via `Create*`/`Update*`/`Discard*`, declared in domain), and any
+   usecase that declares, holds, or calls a repository (writes go through
+   domain services).
 3. Frontend boundary violations: casing conversion outside the HTTP boundary,
    API calls bypassing `src/api/`, state managed outside the domain layer.
 4. Security: secret-like paths (`.env*`, `secrets/`, key files), missing

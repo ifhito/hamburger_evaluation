@@ -182,7 +182,7 @@ def main() -> int:
         print("usecase Query/Repository split violations found in changed files:")
         for violation in query_violations:
             print(f"- {violation}")
-        print("usecase reads go through *Query interfaces; only writes go through *Repository interfaces.")
+        print("usecase reads go through *Query interfaces and writes through domain services; usecase never declares, holds, or calls a repository.")
         failures.append("go query/repository split sensor failed")
 
     if run(["git", "diff", "--check"]) != 0:
