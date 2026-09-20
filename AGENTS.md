@@ -47,8 +47,11 @@ cd backend-go && docker compose run --rm sqlc generate
 - Backend はクリーンアーキテクチャ(handler → usecase → domain)を守り、`domain` は標準ライブラリだけを import する。
   なぜ: 評価ロジックや値オブジェクトを HTTP や DB 永続化の詳細から分離するため。
 
-- usecase は、永続化を読むときは `*Query`、書くときは `*Repository` を通す。詳細は `.agents/skills/backend-go-boundaries` を参照する。
-  なぜ: 読み取りは query、書き込みは repository に分けて、usecase から永続化の詳細を切り離して境界を保つため。
+- usecase は repository に依存しない。永続化を読むときは `*Query`(usecase が宣言)、書くときは domain のサービス(`*Repository` の interface は domain が宣言し、呼ぶのは domain のサービスだけ)を通す。詳細は `.agents/skills/backend-go-boundaries` を参照する。
+  なぜ: 読み取りは query、書き込みは domain のサービス経由に分けて、usecase から永続化の詳細を切り離して境界を保つため。
+
+- ドメインのルール(何が有効か、誰に何が許されるか、導出)の判断は backend の `domain` だけが持つ。frontend は入力・説明・表示・サーバーのエラーの表示だけを行い、検証・権限の条件・定数・導出を複製しない。詳細は `.agents/skills/frontend-spa-boundaries` を参照する。
+  なぜ: 複製は、片方だけ直したときに食い違い、二重管理になるため。
 
 - sqlc の生成コード(`sqlcgen/`)は手で編集せず、`db/queries/` を変更して再生成する。
   なぜ: SQL と生成コードの食い違いを防ぐため。

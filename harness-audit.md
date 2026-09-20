@@ -112,11 +112,13 @@ Backend の境界:
 
 ```text
 backend-go/cmd/api                        composition root: 設定、DB プール、配線、サーバ
-backend-go/internal/domain                エンティティ / 値オブジェクト / ドメインエラー。標準ライブラリのみ
-backend-go/internal/usecase               ユースケースと永続化のインターフェース(利用側で宣言)
+backend-go/internal/domain                エンティティ / 値オブジェクト / ドメインエラー / 書き込みの *Repository の interface と、それを呼ぶ *Service。標準ライブラリのみ
+backend-go/internal/usecase               ユースケースと読み取りの *Query(利用側で宣言)。repository には依存しない
 backend-go/internal/adapter/handler       net/http のハンドラ、DTO、ルーティング、middleware
-backend-go/internal/adapter/repository    usecase のインターフェースを sqlc で実装
+backend-go/internal/adapter/query         usecase の *Query(読み取り)を sqlc で実装
+backend-go/internal/adapter/repository    domain の *Repository(書き込み)を sqlc で実装
 backend-go/internal/adapter/repository/sqlcgen   sqlc の生成コード。手で編集しない
+backend-go/internal/adapter/rowmap        sqlc の行 → domain の写像(query と repository で共有)
 backend-go/internal/adapter/infra         DB プール、JWT、パスワードハッシュ、設定
 backend-go/db/migrations                  SQL マイグレーション
 backend-go/db/queries                     sqlc のクエリ
@@ -138,7 +140,8 @@ frontend/src/components    shared UI components
 - 認証は、独自 JWT Bearer token を使っている。
 - Backend の API payload は snake_case、frontend のコードは camelCase であり、変換は HTTP 境界(`frontend/src/api/client/buildApiClient.ts`)で行われる。
 - Backend はクリーンアーキテクチャ(handler → usecase → domain)で、依存は内側にのみ向く。`domain` は標準ライブラリだけを import する。
-- 永続化のインターフェースは usecase 側で宣言する。読み取りは `*Query`、書き込みは `*Repository` に分ける(`.agents/skills/backend-go-boundaries`)。
+- 読み取りの `*Query` は usecase 側で宣言し、書き込みの `*Repository` は domain が宣言する。repository を呼ぶのは domain のサービスだけで、usecase は repository に依存しない(`.agents/skills/backend-go-boundaries`)。
+- ドメインのルールの判断は backend の `domain` だけが持つ。frontend は入力・説明・表示・サーバーのエラーの表示だけを行い、検証・権限の条件・定数・導出を複製しない(`.agents/skills/frontend-spa-boundaries`)。
 - sqlc の生成コードは手で編集せず、`db/queries/` を変更して再生成する。ドメインの形と DB の形は別々に設計する(`.agents/skills/db-design`)。
 - コード内の文章(コメント、Go の doc コメント、テスト名)は日本語で書く。PR の本文も日本語で、固定のセクション構成に従う(`.agents/skills/pr-template`)。
 - 既存の未追跡の `SETUP.md` と `plans/*.md` は、明示的に求められない限り commit してはならない。
@@ -169,7 +172,7 @@ pnpm run build
 `.claude/hooks/stop-sensors.py`(`Stop` フックで実行される)の sensor:
 
 - 常に確認するもの: `git status`、秘密情報らしいパスが作業ツリーにないこと、対象外のパス(`plans/`、`memory/`、`plan/`、`SETUP.md`)が stage されていないこと(`AGENT_ALLOW_OUT_OF_SCOPE_STAGED=1` で解除できる)、`git diff --check`。
-- `backend-go/` に変更があるとき: `domain` と `usecase` から `net/http`・`database/sql`・`pgx`・`adapter` への import がないこと、usecase の永続化インターフェースで読み取りと書き込みが混ざっていないこと(Query / Repository の分割)、`gofmt` / `go vet` / `go build` / `go test`。
+- `backend-go/` に変更があるとき: `domain` と `usecase` から `net/http`・`database/sql`・`pgx`・`adapter` への import がないこと、usecase が repository を宣言・保持しておらず、`domain.*Repository` を参照していないこと、usecase の `*Query` が `Get*` / `List*` だけ、domain の `*Repository` が `Create*` / `Update*` / `Discard*` だけであること、`gofmt` / `go vet` / `go build` / `go test`。
 - `frontend/` のソースや設定に変更があるとき: `type-check` / `lint` / `test` / `build`。
 
 ## 9. セキュリティ関連ファイル

@@ -25,7 +25,7 @@ metadata:
 | レンズ | 差分がこれに触れるなら読む | リファレンス |
 |------|---------------------------|-----------|
 | Fail loud | エラーハンドリング、外部呼び出し、パース、非同期処理 | `references/fail-loud.md` |
-| Consistency | 書き込み、トランザクション、マイグレーション、派生データ | `references/consistency.md` |
+| Consistency | 書き込み、トランザクション、マイグレーション、派生データ、frontend と backend のルールの重複、usecase から repository への依存 | `references/consistency.md` |
 | Concurrency | goroutine、チャネル、共有状態、キャッシュ | `references/concurrency.md` |
 | Performance | クエリ、一覧エンドポイント、データを回すループ、UI のフェッチ | `references/performance.md` |
 | Resources | バッファ、キャッシュ、プール、goroutine のライフサイクル、長時間処理 | `references/resources.md` |
