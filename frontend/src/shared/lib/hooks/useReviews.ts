@@ -13,6 +13,8 @@ export function useReviews(params?: ReviewListParams) {
     initialPageParam: 1,
     getNextPageParam: (lastPage, _allPages, lastPageParam) =>
       lastPage.length < PER_PAGE ? undefined : lastPageParam + 1,
-    select: (data) => data.pages.flat(),
+    // offset ページングではページ間の新規投稿で前ページ末尾が次ページに再登場するため、id で重複を除く
+    // (先頭出現の位置を保つ。削除で 1 件飛ぶ場合は解消できない既知の制約)
+    select: (data) => [...new Map(data.pages.flat().map((r) => [r.id, r])).values()],
   })
 }
