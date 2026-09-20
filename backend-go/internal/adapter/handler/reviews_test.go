@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
@@ -537,7 +538,7 @@ func TestListReviews(t *testing.T) {
 		if got := rec.Body.String(); got == "" || len(got) < 2 || got[0] != '[' {
 			t.Fatalf("body = %s, want a JSON array", got)
 		}
-		if want := fmt.Sprintf(`"id":%d`, plainReviewID); containsJSONID(rec.Body.String(), plainReviewID) {
+		if want := fmt.Sprintf(`"id":%d`, plainReviewID); containsJSONID(t, rec.Body.String(), plainReviewID) {
 			t.Errorf("body %s unexpectedly contains %s", rec.Body.String(), want)
 		}
 	})
@@ -553,11 +554,11 @@ func TestListReviews(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d (body %s)", rec.Code, rec.Body)
 		}
-		if got := rec.Body.String(); !containsJSONID(got, 3) {
+		if got := rec.Body.String(); !containsJSONID(t, got, 3) {
 			t.Errorf("first page = %s, want the newest review (id 3)", got)
 		}
 		rec = do(router, http.MethodGet, "/reviews?per_page=1&page=2", "", "")
-		if got := rec.Body.String(); !containsJSONID(got, cheeseReviewID) {
+		if got := rec.Body.String(); !containsJSONID(t, got, cheeseReviewID) {
 			t.Errorf("second page = %s, want review %d", got, cheeseReviewID)
 		}
 		rec = do(router, http.MethodGet, "/reviews?per_page=1&page=99", "", "")
@@ -679,12 +680,20 @@ func TestListReviewsFilters(t *testing.T) {
 	})
 }
 
-// containsJSONID は、body に `"id":<id>,` という並びが含まれているかどうかを返す。
-// review の id に限らず、埋め込まれた user や burger の id にも一致する。
-func containsJSONID(body string, id int64) bool {
-	needle := fmt.Sprintf(`"id":%d,`, id)
-	for i := 0; i+len(needle) <= len(body); i++ {
-		if body[i:i+len(needle)] == needle {
+// containsJSONID は、body（review の JSON 配列）の要素のうち、最上位の id が
+// 引数の id と一致するものがあるかどうかを返す。埋め込まれた user や burger の
+// id には一致しない。body が JSON 配列として解釈できない場合は、「含まれない」
+// 系の検査が空振りで通ってしまわないよう、テストを失敗させる。
+func containsJSONID(t *testing.T, body string, id int64) bool {
+	t.Helper()
+	var reviews []struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(body), &reviews); err != nil {
+		t.Fatalf("body is not a JSON array of reviews: %v (body %s)", err, body)
+	}
+	for _, r := range reviews {
+		if r.ID == id {
 			return true
 		}
 	}
@@ -831,7 +840,7 @@ func TestDeleteReview(t *testing.T) {
 		if detail := do(router, http.MethodGet, path, "", ""); detail.Code != http.StatusNotFound {
 			t.Errorf("detail after delete = %d, want 404", detail.Code)
 		}
-		if list := do(router, http.MethodGet, "/reviews", "", ""); containsJSONID(list.Body.String(), cheeseReviewID) {
+		if list := do(router, http.MethodGet, "/reviews", "", ""); containsJSONID(t, list.Body.String(), cheeseReviewID) {
 			t.Errorf("feed after delete still contains review %d: %s", cheeseReviewID, list.Body)
 		}
 		if again := do(router, http.MethodDelete, path, "", aliceAuth); again.Code != http.StatusNotFound {
