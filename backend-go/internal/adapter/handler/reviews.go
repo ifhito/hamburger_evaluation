@@ -80,7 +80,8 @@ func isMultipart(r *http.Request) bool {
 }
 
 // decodeReviewMultipart は multipart の body を r.MultipartReader 経由で
-// ストリーミングする。生のアップロードを丸ごとバッファすることはない。
+// ストリーミングし、body 全体を一度にバッファすることはない（ただし photo
+// part は photo.Process が cap までの全量をメモリに読み込む）。
 // name が "photo" の part は 5 MiB の cap の下で photo.Process により検証・
 // 正規化される。それ以外の part は、名前が未知であっても readTextPart で
 // フィールドごとの小さな cap の下に text として読み取られ、既知の名前
@@ -316,8 +317,8 @@ func handleListReviews(reviews *usecase.Reviews) http.HandlerFunc {
 }
 
 // handleGetReview は GET /reviews/{id} を処理する：author、burger、stats を
-// 伴う review、または未知、discard 済み、数値でない id に対する
-// 統一された 404。
+// 伴う review、または未知の id、discard 済みの review、author が discard 済みの
+// user である review、数値でない id に対する統一された 404。
 func handleGetReview(reviews *usecase.Reviews) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := reviewIDPathValue(w, r)

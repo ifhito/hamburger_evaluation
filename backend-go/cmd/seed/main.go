@@ -266,8 +266,9 @@ func seedReview(ctx context.Context, tx pgx.Tx, userID, burgerID int64, rating i
 	return nil
 }
 
-// recalculateBurgerStats は、1 つの burger の stats 行を、その kept な review
-// から再計算して upsert する。repository の recalculateBurgerStats を再現して
+// recalculateBurgerStats は、1 つの burger の stats 行を、その burger の kept な
+// review のうち author（user）が discard されていないものから再計算して
+// upsert する。repository の recalculateBurgerStats を再現して
 // おり、db/queries/burger_stats.sql と同じ SQL、同じ純粋な domain の
 // calculator を使うので、seed された stats はアプリが保存するものと一致する。
 // FOR UPDATE ロックはない。seed は 1 回限りのツールで、同時に書き込むものが

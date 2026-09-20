@@ -26,8 +26,8 @@ var (
 	// であり、隠された shop の存在が漏れないようにしている。
 	ErrShopNotFound = errors.New("shop not found")
 	// ErrReviewNotFound は、lookup に一致する discard されていない review が
-	// ないことを表す。存在しない review と soft delete 済みの review は
-	// 意図的に同一である。
+	// ないことを表す。存在しない review、soft delete 済みの review、author が
+	// discard 済みの user である review は意図的に同一である。
 	ErrReviewNotFound = errors.New("review not found")
 	// ErrBurgerNotFound は、指定された shop の中に lookup に一致する burger が
 	// ないことを表す（未知の burger と別の shop の burger は意図的に同一で

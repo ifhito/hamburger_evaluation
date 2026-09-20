@@ -193,8 +193,9 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	}, nil
 }
 
-// Update は review の rating と comment を編集する。load（存在しない review
-// と discard 済みの review はどちらも 404）、domain の所有権ルール（403。
+// Update は review の rating と comment を編集する。load（存在しない review、
+// discard 済みの review、author が discard 済みの user である review は
+// いずれも 404）、domain の所有権ルール（403。
 // issue #14 AC3、admin でも通らない）、content の validation（422）、
 // そしてカラム限定の書き込みの順で行う。保存された行は load した detail に
 // マージされるので、レスポンスは再取得なしで author、burger、stats を持つ。
