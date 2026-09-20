@@ -123,43 +123,6 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 	return i, err
 }
 
-const listActiveUsers = `-- name: ListActiveUsers :many
-SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
-WHERE discarded_at IS NULL
-ORDER BY id
-`
-
-// user の一覧：kept な user すべて、id の昇順。LIMIT/OFFSET はない。
-// Rails parity：一覧は kept な user をすべて、ページネーションなしで返す。
-func (q *Queries) ListActiveUsers(ctx context.Context) ([]User, error) {
-	rows, err := q.db.Query(ctx, listActiveUsers)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []User
-	for rows.Next() {
-		var i User
-		if err := rows.Scan(
-			&i.ID,
-			&i.Email,
-			&i.Username,
-			&i.PasswordDigest,
-			&i.Admin,
-			&i.DiscardedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const updateUserEmail = `-- name: UpdateUserEmail :one
 UPDATE users
 SET email = $2,

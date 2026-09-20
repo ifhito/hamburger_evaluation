@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
-import { useUsers } from "../hooks/useUsers";
+import { isValidUserId, useUser } from "../hooks/useUser";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { formatDate } from "../../../lib/date";
 import { Button } from "../../../components/Button";
@@ -12,10 +12,19 @@ import styles from "./userDetail.module.css";
 export default function UserDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  const { user: authUser } = useAuth();
-  const { data: users, isLoading: usersLoading, error: usersError } = useUsers();
+  const { user: authUser, isLoading: authLoading } = useAuth();
 
   const userId = Number(id);
+  // /users/abc(NaN)や 0 以下・安全でない整数など不正な id では、user も reviews も取得しない
+  const isValidId = isValidUserId(userId);
+  // 認証状態の復元前は authUser が null でも token は localStorage にあり得る。閲覧者が確定してから取得する
+  const {
+    data: user,
+    isLoading: userLoading,
+    error: userError,
+  } = useUser(userId, authUser?.id ?? null, { enabled: !authLoading });
+  // 不正な id のまま呼ぶと user_id=NaN が 422 になり、レビューの読み込みエラーが余計に出る。
+  // かといって user_id を外して呼ぶと全件のフィードが他人のレビューとして出てしまうため、不正な id では取得自体を止める
   const {
     data: userReviews,
     isLoading: reviewsLoading,
@@ -23,22 +32,22 @@ export default function UserDetailPage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useReviews({ userId });
-  const user = users?.find((u) => u.id === userId);
+  } = useReviews({ userId }, { enabled: isValidId });
   const isOwner = authUser?.id === userId;
 
   return (
     <Layout title={user ? t("users.detail.namedProfile", { name: user.username }) : t("users.detail.profileTitle")}>
-      {(usersLoading || reviewsLoading) && (
+      {(userLoading || reviewsLoading) && (
         <p className={styles.muted}>{t("users.detail.loading")}</p>
       )}
-      {usersError && <ErrorMessage message={t("users.detail.loadError")} />}
+      {(!isValidId || userError) && <ErrorMessage message={t("users.detail.loadError")} />}
 
       {user && (
         <div className={styles.profile}>
           <div className={styles.profileCard}>
             <h2 className={styles.username}>{user.username}</h2>
-            <p className={styles.email}>{user.email}</p>
+            {/* email は API が本人の閲覧時だけ返す。isOwner ではなく API の返却有無で出し分ける */}
+            {user.email && <p className={styles.email}>{user.email}</p>}
           </div>
           {isOwner && (
             <Link to={`/users/${userId}/edit`} className={styles.editLink}>

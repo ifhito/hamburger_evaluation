@@ -76,17 +76,24 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *use
 				http.MethodDelete: RequireAuth(auth),
 			},
 		},
-		// user の一覧は公開である（Rails parity、認証はまったくなし）。
-		// account の編集と削除にはログインが必要で、本人のみというルール
-		// 自体は usecase にある（ErrForbidden）。
-		{path: "/users", methods: map[string]http.HandlerFunc{http.MethodGet: handleListUsers(users)}},
+		// user の詳細は匿名でも使える（path 単位は OptionalAuth）。ただし email と
+		// admin が入るのは本人が閲覧したときだけで、その判断は domain
+		// （User.ProfileFor）にある。account の編集と削除にはログインが必要で
+		// （PUT/DELETE だけ methodMiddleware で RequireAuth）、本人のみという
+		// ルール自体は usecase にある（ErrForbidden）。user の一覧は提供しない
+		// ので "/users" は登録せず、catch-all の 404 になる。
 		{
 			path: "/users/{id}",
 			methods: map[string]http.HandlerFunc{
+				http.MethodGet:    handleGetUser(users),
 				http.MethodPut:    handleUpdateUser(users),
 				http.MethodDelete: handleDeleteUser(users),
 			},
-			middleware: RequireAuth(auth),
+			middleware: OptionalAuth(auth),
+			methodMiddleware: map[string]func(http.Handler) http.Handler{
+				http.MethodPut:    RequireAuth(auth),
+				http.MethodDelete: RequireAuth(auth),
+			},
 		},
 		// moderation の endpoint：RequireAuth は認証だけを行い、
 		// admin かどうかの判断自体は usecase にある（ErrForbidden）。

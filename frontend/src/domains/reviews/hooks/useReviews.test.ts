@@ -74,4 +74,16 @@ describe("getKey", () => {
     // "per_page=20" が "page=2" を部分一致で含むため、文字列ではなくクエリのパラメータ単位で比べる
     expect(new URLSearchParams(key?.split("?")[1]).get("page")).toBe("2");
   });
+
+  it("enabled が false のときは、先頭ページも次ページも null を返して取得を止める", () => {
+    const disabled = getKey({ userId: 2 }, false);
+
+    expect(disabled(0, null)).toBeNull();
+    expect(disabled(1, page(1, PER_PAGE))).toBeNull();
+  });
+
+  it("enabled を省略した場合と true の場合は、これまでどおりキーを返す", () => {
+    expect(getKey({ userId: 2 })(0, null)).toBe("/reviews?user_id=2&page=1&per_page=20");
+    expect(getKey({ userId: 2 }, true)(0, null)).toBe("/reviews?user_id=2&page=1&per_page=20");
+  });
 });

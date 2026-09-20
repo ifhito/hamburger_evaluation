@@ -82,20 +82,6 @@ func (r *UserRepository) GetActiveUserByID(ctx context.Context, id int64) (domai
 	return toDomainUser(row), nil
 }
 
-// ListActiveUsers はすべての kept な user を id の昇順で返す（pagination
-// なし。Rails parity：index はすべての kept な user を返す）。
-func (r *UserRepository) ListActiveUsers(ctx context.Context) ([]domain.User, error) {
-	rows, err := r.q.ListActiveUsers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list active users: %w", err)
-	}
-	users := make([]domain.User, 0, len(rows))
-	for _, row := range rows {
-		users = append(users, toDomainUser(row))
-	}
-	return users, nil
-}
-
 // UpdateUserProfile は、changes のうち指定されているフィールドを、id の、
 // まだ kept な user に 1 つのトランザクションで適用する。各フィールドは
 // それぞれ専用のカラム単位の UPDATE で更新し、保存された user を返す。

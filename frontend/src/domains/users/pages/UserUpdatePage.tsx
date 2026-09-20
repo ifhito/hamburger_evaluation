@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
-import { useUpdateUser, useDeleteUser } from "../hooks/useUsers";
+import { useUpdateUser, useDeleteUser } from "../hooks/useUserMutations";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";

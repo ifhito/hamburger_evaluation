@@ -11,15 +11,17 @@ import (
 )
 
 // userNotFoundMessage は、存在しない user、discard 済みの user、および
-// 数値でない user の id に共通の 404 body であり、soft delete 済みの
-// account が一度も存在しなかったものと区別できないようにする。
+// 数値でない user の id に共通の 404 body（GET/PUT/DELETE /users/{id}）であり、
+// soft delete 済みの account が一度も存在しなかったものと区別できないように
+// する。
 const userNotFoundMessage = "User not found"
 
-// userResponse は、GET /users（配列の要素）と PUT /users/{id}（単一の
-// オブジェクト）の、token を含まない user の JSON 形式である：issue #16 の
-// 仕様（「user 形 + admin フラグ」、issue が引用する frontend の契約の
+// userResponse は、PUT /users/{id} の、token を含まない user の JSON 形式である：
+// issue #16 の仕様（「user 形 + admin フラグ」、issue が引用する frontend の契約の
 // レスポンス形状）に従った {id, username, email, admin} であり、
-// authUserResponse から token を除いたものである。
+// authUserResponse から token を除いたものである。PUT は本人だけが成功する
+// ので、email と admin を常に含めてよい。他人にも返りうる GET の user は
+// userProfileResponse を使う。
 type userResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -29,6 +31,24 @@ type userResponse struct {
 
 func newUserResponse(user domain.User) userResponse {
 	return userResponse{ID: user.ID, Username: user.Username, Email: user.Email, Admin: user.Admin}
+}
+
+// userProfileResponse は、GET /users/{id} の user の JSON 形式である。公開ビューは
+// {id, username} で、本人が閲覧したときだけ {id, username, email, admin} になる。
+// Email と Admin は pointer + omitempty で、他人・匿名では nil としてキーごと
+// 省かれる（null にはならない）。admin=false は非 nil の pointer なので、本人
+// ビューでは "admin":false として出力される。
+type userProfileResponse struct {
+	ID       int64   `json:"id"`
+	Username string  `json:"username"`
+	Email    *string `json:"email,omitempty"`
+	Admin    *bool   `json:"admin,omitempty"`
+}
+
+// newUserProfileResponse は domain.UserProfile を JSON 形式に写すだけである。
+// 何を見せるかの判断は domain（User.ProfileFor）が済ませている。
+func newUserProfileResponse(profile domain.UserProfile) userProfileResponse {
+	return userProfileResponse{ID: profile.ID, Username: profile.Username, Email: profile.Email, Admin: profile.Admin}
 }
 
 // updateUserRequest は PUT /users/{id} の {"user":{...}} ラッパーである。
@@ -78,21 +98,22 @@ func writeUserError(w http.ResponseWriter, op string, err error) {
 	}
 }
 
-// handleListUsers は GET /users を処理する：kept な user の、公開（認証なし）
-// のトップレベルの JSON 配列で、id の昇順である。
-func handleListUsers(users *usecase.Users) http.HandlerFunc {
+// handleGetUser は GET /users/{id} を処理する：（存在する場合の）viewer から
+// 見える user 1 人のビュー、または存在しない・discard 済み・数値でない id に
+// 対する統一された 404。認証は任意（OptionalAuth）で、email と admin が入る
+// のは viewer 本人が閲覧したときだけである。
+func handleGetUser(users *usecase.Users) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		list, err := users.List(r.Context())
-		if err != nil {
-			log.Printf("users: list: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal server error")
+		id, ok := userIDPathValue(w, r)
+		if !ok {
 			return
 		}
-		resp := make([]userResponse, 0, len(list)) // nil ではない：[] として marshal される
-		for _, user := range list {
-			resp = append(resp, newUserResponse(user))
+		profile, err := users.Get(r.Context(), viewerPtr(r), id)
+		if err != nil {
+			writeUserError(w, "get", err)
+			return
 		}
-		writeJSON(w, http.StatusOK, resp)
+		writeJSON(w, http.StatusOK, newUserProfileResponse(profile))
 	}
 }
 

@@ -16,17 +16,9 @@ import (
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeUsersRepo struct {
-	list          func(ctx context.Context) ([]domain.User, error)
 	getByID       func(ctx context.Context, id int64) (domain.User, error)
 	updateProfile func(ctx context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error)
 	discard       func(ctx context.Context, id int64) error
-}
-
-func (f *fakeUsersRepo) ListActiveUsers(ctx context.Context) ([]domain.User, error) {
-	if f.list == nil {
-		panic("unexpected ListActiveUsers call")
-	}
-	return f.list(ctx)
 }
 
 func (f *fakeUsersRepo) GetActiveUserByID(ctx context.Context, id int64) (domain.User, error) {
@@ -68,22 +60,63 @@ func activeUsersByID(users ...domain.User) func(context.Context, int64) (domain.
 	}
 }
 
-func TestUsersList(t *testing.T) {
-	want := []domain.User{usersViewer, usersOther}
-	repo := &fakeUsersRepo{list: func(context.Context) ([]domain.User, error) { return want, nil }}
-	got, err := usecase.NewUsers(repo, fakeHasher{}).List(context.Background())
-	if err != nil {
-		t.Fatalf("List returned error: %v", err)
+// boolPtr は、UserProfile.Admin の期待値用に、b へのポインタを返す。
+func boolPtr(b bool) *bool { return &b }
+
+// publicProfile は、u の公開ビュー（email と admin は nil）を返す。
+func publicProfile(u domain.User) domain.UserProfile {
+	return domain.UserProfile{ID: u.ID, Username: u.Username}
+}
+
+// selfProfile は、u の本人ビュー（email と admin を含む）を返す。
+func selfProfile(u domain.User) domain.UserProfile {
+	return domain.UserProfile{ID: u.ID, Username: u.Username, Email: strPtr(u.Email), Admin: boolPtr(u.Admin)}
+}
+
+// TestUsersGet は、詳細が viewer ごとのビューで返ることと、存在しない
+// ユーザーと discard 済みのユーザーが ErrUserNotFound になることを固定する。
+func TestUsersGet(t *testing.T) {
+	admin := domain.User{ID: 3, Username: "root", Email: "root@example.com", Admin: true}
+	repo := &fakeUsersRepo{getByID: activeUsersByID(usersViewer, usersOther, admin)}
+	users := usecase.NewUsers(repo, fakeHasher{})
+
+	tests := []struct {
+		name   string
+		viewer *domain.User
+		id     int64
+		want   domain.UserProfile
+	}{
+		{name: "匿名の viewer には公開ビューを返す", viewer: nil, id: usersViewer.ID, want: publicProfile(usersViewer)},
+		{name: "他人の viewer には公開ビューを返す", viewer: &usersOther, id: usersViewer.ID, want: publicProfile(usersViewer)},
+		{name: "本人の viewer には本人ビューを返す", viewer: &usersViewer, id: usersViewer.ID, want: selfProfile(usersViewer)},
+		{name: "admin の viewer にも他人の email と admin は返さない", viewer: &admin, id: usersViewer.ID, want: publicProfile(usersViewer)},
+		{name: "admin の本人の viewer には admin が true の本人ビューを返す", viewer: &admin, id: admin.ID, want: selfProfile(admin)},
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("List = %+v, want %+v", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := users.Get(context.Background(), tt.viewer, tt.id)
+			if err != nil {
+				t.Fatalf("Get returned error: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("Get = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 
-	repoErr := errors.New("db down")
-	failing := &fakeUsersRepo{list: func(context.Context) ([]domain.User, error) { return nil, repoErr }}
-	if _, err := usecase.NewUsers(failing, fakeHasher{}).List(context.Background()); !errors.Is(err, repoErr) {
-		t.Fatalf("List error = %v, want wrapped %v", err, repoErr)
-	}
+	t.Run("存在しないユーザーと discard 済みのユーザーは viewer によらず ErrUserNotFound になる", func(t *testing.T) {
+		// fake は activeUsersByID に含まれない id（discard 済みを含む）に対して、
+		// repository と同じく wrap した ErrUserNotFound を返す。
+		for _, viewer := range []*domain.User{nil, &usersViewer, &admin} {
+			got, err := users.Get(context.Background(), viewer, 999)
+			if !errors.Is(err, domain.ErrUserNotFound) {
+				t.Errorf("Get error = %v, want %v", err, domain.ErrUserNotFound)
+			}
+			if !reflect.DeepEqual(got, domain.UserProfile{}) {
+				t.Errorf("Get = %+v, want the zero profile on error", got)
+			}
+		}
+	})
 }
 
 // TestUsersUpdateCheckOrder は、issue #16 AC2 の find-then-authorize の順序を

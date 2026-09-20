@@ -30,15 +30,19 @@ export function hasNextPage(pages: Review[][] | undefined): boolean {
 }
 
 // useSWRInfinite に渡すキー関数を作る。前ページが最終ページなら null を返して読み込みを止める。
-// 次ページ判定は hasNextPage に一本化している
-export function getKey(params: ReviewSearchParams | undefined) {
-  return (index: number, previous: Review[] | null): string | null =>
-    previous && !hasNextPage([previous]) ? null : buildKey(params, index + 1);
+// 次ページ判定は hasNextPage に一本化している。enabled が false なら、どのページも null を返して取得を止める
+export function getKey(params: ReviewSearchParams | undefined, enabled = true) {
+  return (index: number, previous: Review[] | null): string | null => {
+    if (!enabled) return null;
+    return previous && !hasNextPage([previous]) ? null : buildKey(params, index + 1);
+  };
 }
 
-export function useReviews(params?: ReviewSearchParams) {
+// options.enabled: 呼び出し側が取得を止められる。例: user_id が不正なとき、そのまま呼ぶと 422 になり、
+// user_id を外して呼ぶと全件が返る。未指定なら常に取得する
+export function useReviews(params?: ReviewSearchParams, options?: { enabled?: boolean }) {
   const { data, error, isLoading, size, setSize } = useSWRInfinite<Review[]>(
-    getKey(params),
+    getKey(params, options?.enabled !== false),
     async (url: string) => {
       const res = await reviewApiClient.get<Review[]>(url);
       if (!Array.isArray(res.data)) {

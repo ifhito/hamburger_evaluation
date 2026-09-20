@@ -106,7 +106,7 @@ func TestUserRepository(t *testing.T) {
 }
 
 // TestUserRepositoryManagement は、S8 の user 管理の永続化を検証する。
-// kept のみの一覧、カラム単位でトランザクションを伴うプロフィール更新、
+// 対象は、カラム単位でトランザクションを伴うプロフィール更新、
 // 同一トランザクション内での burger_stats の再計算を伴う soft delete、
 // そして、discard 済みの user の review をフィード、review の詳細、shop の
 // review から読み取り側で除外することである。
@@ -147,21 +147,6 @@ func TestUserRepositoryManagement(t *testing.T) {
 	victimShared := mustCreateReview(ctx, t, reviewRepo, 2, "meh", victim, shared)
 	aliceShared := mustCreateReview(ctx, t, reviewRepo, 4, "good", alice, shared)
 	victimSolo := mustCreateReview(ctx, t, reviewRepo, 5, "only mine", victim, solo)
-
-	t.Run("ListActiveUsers は kept の user を id 順に返す", func(t *testing.T) {
-		users, err := repo.ListActiveUsers(ctx)
-		if err != nil {
-			t.Fatalf("ListActiveUsers returned error: %v", err)
-		}
-		want := []domain.User{
-			{ID: alice, Username: "alice", Email: "alice@example.com"},
-			{ID: bob, Username: "bob", Email: "bob@example.com"},
-			{ID: victim, Username: "victim", Email: "victim@example.com"},
-		}
-		if !reflect.DeepEqual(users, want) {
-			t.Fatalf("ListActiveUsers = %+v, want %+v (ghost excluded, id ascending)", users, want)
-		}
-	})
 
 	t.Run("UpdateUserProfile は指定されたフィールドだけを更新する", func(t *testing.T) {
 		updated, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{Username: strPtr("bobby")})
