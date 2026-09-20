@@ -53,8 +53,10 @@ type UserRepository interface {
 	// UpdateUserProfile は、id の、まだ kept なユーザーに changes の存在する
 	// フィールドを atomic に適用し、保存されたユーザーを返す。存在する
 	// フィールドがゼロ個なら単なる lookup になる
-	// （200 の no-op、Rails parity）。この lookup は repository の実装の内部で
-	// 行われ、usecase が読み取りを repository に依頼することはない。
+	// （200 の no-op、Rails parity）。存在するフィールドがゼロ個のときの
+	// lookup は repository の実装の内部で行われる。usecase が呼ぶのは書き込みの
+	// メソッドだけで、変更が空でも UpdateUserProfile を呼び、その戻り値を応答に
+	// する（usecase は読み取りのメソッドを repository に持たない）。
 	UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (domain.User, error)
 	// DiscardUser はユーザーを soft delete し（hard DELETE は決して行わない）、
 	// 導出された burger の stats の整合性を保つ。

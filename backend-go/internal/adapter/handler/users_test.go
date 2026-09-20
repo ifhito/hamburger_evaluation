@@ -23,9 +23,10 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// userRepoFake の usecase.UserRepository の書き込みの半分（読み取りの半分と型の
-// 宣言は auth_test.go にある）で、本物の repository のエラーの対応づけを再現
-// している。
+// userRepoFake は in-memory の usecase.UserQuery かつ usecase.UserRepository で
+// ある（型の宣言と読み取りのメソッドは auth_test.go にある）。この位置には書き込み
+// 側の UpdateUserProfile / DiscardUser が定義されており、本物の repository の
+// エラーの対応づけを再現している。
 
 func (f *userRepoFake) UpdateUserProfile(_ context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
 	if f.err != nil {
@@ -74,7 +75,8 @@ func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) stri
 	t.Helper()
 	repo, auth, codec := newAuthKit()
 	reviewRepo := newReviewRepoFake()
-	router := handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}, &shopRepoFake{}),
+	shopRepo := &shopRepoFake{}
+	router := handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, shopRepo),
 		usecase.NewReviews(reviewRepo, reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(repo, repo, hasherFake{}), nil)
 	token := func(id int64) string {

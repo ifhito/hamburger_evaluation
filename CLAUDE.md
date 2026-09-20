@@ -17,7 +17,7 @@
 
 バックエンドは clean architecture (handler → usecase → domain) に従う。依存関係は内側に向かい、認可の判断は handler ではなく usecase/domain に置く。
 
-永続化は読み取りと書き込みで分ける。usecase は読み取りに `*Query`(メソッド名は `Get*` / `List*` のみ)、書き込みに `*Repository`(`Create*` / `Update*` / `Discard*` のみ)を使い、Query に書き込みを、Repository に読み取りを置かない。usecase が repository を呼ぶのは書き込みのときだけで、読み取りは必ず Query を通す。adapter は読み取りを `internal/adapter/query`、書き込みを `internal/adapter/repository` が実装し、sqlc の行 → domain の写像は `internal/adapter/rowmap` に 1 か所にまとめる。書き込みの内部で必要な読み取り(トランザクション内のロック取得など)は repository の実装の内部に閉じる。
+永続化は読み取りと書き込みで分ける。usecase は読み取りに `*Query`(メソッド名は `Get*` / `List*` のみ)、書き込みに `*Repository`(`Create*` / `Update*` / `Discard*` のみ)を使い、Query に書き込みを、Repository に読み取りを置かない。usecase が repository を呼ぶのは書き込みのときだけで、読み取りは必ず Query を通す。adapter は読み取りを `internal/adapter/query`、書き込みを `internal/adapter/repository` が実装し、sqlc の行 → domain の写像のうち、query と repository の両方が使うものは `internal/adapter/rowmap` に 1 か所にまとめる(片側だけが使う写像はその側に置く)。書き込みの内部で必要な読み取り(トランザクション内のロック取得など)は repository の実装の内部に閉じる。
 
 ## バックエンド (`backend-go/`)
 

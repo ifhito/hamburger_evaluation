@@ -121,7 +121,7 @@ func TestShopsListPagination(t *testing.T) {
 }
 
 // TestShopsListVisibilityDescriptor は、List が viewer から記述子を導出し、
-// それを変更せずに repository へ渡すことをアサートする。
+// それを変更せずに ShopQuery へ渡すことをアサートする。
 func TestShopsListVisibilityDescriptor(t *testing.T) {
 	admin := domain.User{ID: 5, Admin: true}
 	var got domain.ShopVisibility
@@ -281,8 +281,8 @@ func TestShopsAdminForbidden(t *testing.T) {
 	}
 }
 
-// TestShopsAdminList は moderation の一覧を扱う。既知の status は repository の
-// フィルタになり、status なしはすべてを意味し、未知の status は repository を
+// TestShopsAdminList は moderation の一覧を扱う。既知の status は ShopQuery の
+// フィルタになり、status なしはすべてを意味し、未知の status は ShopQuery を
 // 呼ばずに空の結果へ short-circuit する。
 func TestShopsAdminList(t *testing.T) {
 	admin := domain.User{ID: 2, Admin: true}

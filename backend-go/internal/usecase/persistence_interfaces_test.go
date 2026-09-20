@@ -39,6 +39,9 @@ func checkNaming(src string) (violations []string, found map[string]int, err err
 			}
 			found[suffix]++
 			for _, m := range it.Methods.List {
+				if len(m.Names) == 0 {
+					violations = append(violations, ts.Name.Name+" は interface を埋め込んでいる (Query / Repository では埋め込みを使わず、メソッドを直接宣言する)")
+				}
 				for _, id := range m.Names {
 					if !slices.ContainsFunc(prefixes, func(p string) bool { return strings.HasPrefix(id.Name, p) }) {
 						violations = append(violations, ts.Name.Name+"."+id.Name+" は "+strings.Join(prefixes, "/")+" で始まっていない")
@@ -93,6 +96,7 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		{"規約どおりなら違反なし", "package p\ntype XQuery interface{ GetX(); ListX() }\ntype XRepository interface{ CreateX(); UpdateX(); DiscardX() }", ""},
 		{"Repository に読み取りがあれば検出する", "package p\ntype XRepository interface{ CreateX(); GetX() }", "XRepository.GetX"},
 		{"Query に書き込みがあれば検出する", "package p\ntype XQuery interface{ GetX(); CreateX() }", "XQuery.CreateX"},
+		{"埋め込み interface は検出する", "package p\ntype XQuery interface{ GetX() }\ntype XRepository interface{ XQuery; CreateX() }", "XRepository"},
 		{"対象外の interface は無視する", "package p\ntype PasswordHasher interface{ Hash() }", ""},
 	}
 	for _, tc := range cases {

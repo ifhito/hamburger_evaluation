@@ -306,7 +306,8 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Hand
 		return "Bearer " + tok
 	}
 	photoDir = t.TempDir()
-	router = handler.NewRouter(okPinger, auth, usecase.NewShops(&shopRepoFake{}, &shopRepoFake{}),
+	shopRepo := &shopRepoFake{}
+	router = handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, shopRepo),
 		usecase.NewReviews(repo, repo, storage.NewDisk(photoDir, "/photos")),
 		usecase.NewUsers(users, users, hasherFake{}), handler.PhotoFileServer(photoDir))
 	return router, photoDir, token(alice.ID), token(bob.ID), token(admin.ID)

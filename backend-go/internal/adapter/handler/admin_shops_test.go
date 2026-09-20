@@ -10,8 +10,8 @@ import (
 )
 
 // shopRepoFake（shops_test.go で宣言）の moderation 用メソッド群。この fake は
-// タイムスタンプを持たないので、id desc が repository の created_at desc、
-// id desc という順序の代わりを務める。
+// タイムスタンプを持たないので、id desc が ShopQuery.ListShopsForModeration の
+// created_at desc、id desc という順序の代わりを務める。
 
 func (f *shopRepoFake) CreateShop(_ context.Context, shop domain.Shop) (domain.Shop, error) {
 	if f.err != nil {
