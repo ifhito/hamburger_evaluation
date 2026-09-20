@@ -24,7 +24,5 @@ Do not read:
 
 - `.env` / `.env.*` (in any directory)
 - `secrets/**`
-- `**/.kamal/**`
-- `**/master.key`
 
 Use `AGENTS.md` as the primary project instruction and `.agents/skills/*` as reusable project workflows.

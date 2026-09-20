@@ -1,6 +1,6 @@
 # AGENT.md
 
-このリポジトリで作業する AI エージェント向けのプロジェクトガイドです。詳細版は `AGENTS.md` も参照してください。
+このリポジトリで作業する AI エージェント向けのプロジェクトガイドです。詳細版は `AGENTS.md` も参照してください。API のエンドポイント一覧とデータベーススキーマは `CLAUDE.md` を参照してください。
 
 ## プロジェクト概要
 
@@ -12,11 +12,11 @@ Hamburger Evaluation は、ハンバーガーのレビュー・評価を投稿�
 - レビューをもとにしたバーガー統計更新
 - ユーザープロフィール更新・退会
 
-構成は Rails API の `backend/` と React SPA の `frontend/` に分かれています。
+構成は Go API の `backend-go/` と React SPA の `frontend/` に分かれています。
 
 ```text
 hamburger_evaluation/
-├── backend/    # Ruby on Rails 8 API
+├── backend-go/ # Go API (net/http + sqlc + PostgreSQL 16)
 ├── frontend/   # React 19 + TypeScript + Vite
 ├── memory/     # プロジェクトメモ
 ├── plan/       # 計画ドキュメント
@@ -27,7 +27,7 @@ hamburger_evaluation/
 
 - ユーザーとのやり取りは日本語を基本にする。
 - 変更前に既存実装・テスト・ドキュメントを確認する。
-- backend の検証はホスト Ruby ではなく Docker Compose 経由で行う。
+- backend の検証は `go-checks.sh` で行い、DB・マイグレーション・sqlc は Docker Compose 経由で行う。
 - 認証情報・秘密鍵・トークン値は記録しない。
 - 未追跡ファイルは勝手に commit しない。特に `SETUP.md` と `plans/*.md` は明示がない限り対象外にする。
 
@@ -35,63 +35,61 @@ hamburger_evaluation/
 
 ### 技術スタック
 
-- Ruby 3.3.10
-- Rails 8 API mode
-- PostgreSQL 16
+- Go 1.22+(標準 `net/http` のルーティング。Web フレームワークも ORM も使わない)
+- PostgreSQL 16(pgx)
+- sqlc(SQL からの型安全なコード生成)
 - JWT 認証
-- Pundit
-- dry-struct / dry-types
-- RSpec / FactoryBot / SimpleCov
-- RuboCop
-- Brakeman
 
 ### アーキテクチャ
 
-Rails らしさを残した軽量 DDD / 依存性逆転を採用しています。
+クリーンアーキテクチャ(handler → usecase → domain)を採用しています。依存は内側にのみ向きます。
 
 ```text
-backend/app/
-├── controllers/    # HTTP 境界。認可・パラメータ生成・Service 呼び出しに寄せる
-├── domain/         # Value Object / domain logic。ActiveRecord に直接依存しない
-├── parameters/     # dry-struct による入力 DTO
-├── queries/        # 読み取り用 query。検索・includes・where を集約
-├── repositories/   # CUD / 永続化境界。ActiveRecord 操作を集約
-├── services/       # ユースケース単位の application service
-├── jobs/           # 非同期処理。model lookup は repository 経由に寄せる
-├── policies/       # Pundit policy
-├── serializers/    # JSON serializer
-└── models/         # ActiveRecord model。ビジネスロジックは薄く保つ
+backend-go/
+├── cmd/api/main.go     # composition root: 設定、DB プール、配線、サーバ
+├── internal/
+│   ├── domain/         # エンティティ / 値オブジェクト / ドメインエラー / 書き込みの *Repository の interface と、それを呼ぶ *Service。標準ライブラリのみ
+│   ├── usecase/        # ユースケース + 読み取りの *Query(利用側で宣言)。repository には依存しない
+│   └── adapter/
+│       ├── handler/    # net/http のハンドラ、DTO、ルーティング、middleware
+│       ├── query/      # usecase の *Query(読み取り)を sqlc で実装
+│       ├── repository/ # domain の *Repository(書き込み)を sqlc で実装
+│       │   └── sqlcgen/  # sqlc の生成コード。手で編集しない
+│       ├── rowmap/     # sqlc の行 → domain の写像(query と repository で共有)
+│       └── infra/      # DB プール、JWT、パスワードハッシュ、設定
+├── db/
+│   ├── migrations/     # SQL マイグレーション
+│   └── queries/        # sqlc のクエリ(*.sql)
+└── sqlc.yaml
 ```
 
 ### 実装ルール
 
-- domain 層に `ActiveRecord`, `Review`, `Shop`, `Burger`, `User`, `BurgerStat` などの model 直依存を持ち込まない。
-- controller / job から `.find`, `.where`, `.includes`, `.find_by`, `.save`, `.update!`, `.discard` などの ActiveRecord 操作を直接呼ばない。必要なら `queries/` または `repositories/` に寄せる。
-- service はユースケースを表現し、永続化の詳細は repository に委譲する。
-- repository / query は Rails の concrete class を default 引数で注入してよい。
-  - 例: `repository: Reviews::ReviewRepository.new`
-- 厳密な DI container や port interface は、必要性が明確になるまでは導入しない。
+- `domain` に `net/http`・`database/sql`・`pgx`・`usecase`・`adapter` の依存を持ち込まない。
+- 読み取りの `*Query` は `usecase` 側で宣言し、`adapter/query` が実装する。書き込みの `*Repository` は `domain` が宣言し、`adapter/repository` が実装する。repository を呼ぶのは `domain` のサービスだけで、`usecase` は repository に依存しない(読み取りは `*Query`、書き込みは domain のサービスを通す)。
+- 認可の判断は handler ではなく usecase / domain に置く。
+- ドメインのルール(検証・権限・導出)の判断は backend の `domain` だけが持つ。frontend は入力・説明・表示・サーバーのエラーの表示だけを行い、ルールを複製しない。
+- sqlc の行構造体や `pgx` の型を `adapter/` の外に出さない。ドメインの形と DB の形は別々に設計する。
+- `sqlcgen/` は手で編集しない。`db/queries/` を変更して再生成する。
+- 詳細は `.agents/skills/backend-go-boundaries` と `.agents/skills/db-design` を参照する。
 
 ### Backend コマンド
 
-すべて `backend/` で実行します。
-
 ```bash
-# 起動
-cd backend
+# 起動(:8080 で待ち受け。ヘルスチェックは GET /up。JWT_SECRET を export しておく)
+cd backend-go
 docker compose up --build
 
-# テスト: SimpleCov 80% 以上が必須
-cd backend
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
+# 検証(gofmt / go vet / go build / go test)。リポジトリのルートから実行
+.agents/skills/backend-go-change-validation/scripts/go-checks.sh
 
-# RuboCop
-cd backend
-docker compose run --rm api bin/rubocop -f github
+# マイグレーション
+cd backend-go
+docker compose run --rm migrate up
 
-# Brakeman
-cd backend
-docker compose run --rm api bin/brakeman --no-pager
+# sqlc の再生成(internal/adapter/repository/sqlcgen に差分が出てはならない)
+cd backend-go
+docker compose run --rm sqlc generate
 ```
 
 ## Frontend
@@ -149,39 +147,19 @@ pnpm run build
 
 ## API / 認証
 
-- API は Rails 側が snake_case、frontend 側が camelCase。
-- HTTP 境界で camelCase / snake_case を変換する。
+- API は Go 側が snake_case、frontend 側が camelCase。
+- HTTP 境界(`frontend/src/api/client/buildApiClient.ts`)で camelCase / snake_case を変換する。
 - 認証は JWT Bearer token。
 - `Authorization: Bearer <token>` を前提にする。
-- `devise_token_auth` ではなく、カスタム JWT 認証を使っている。
-
-主な API:
-
-```text
-POST   /signup
-POST   /login
-POST   /logout
-GET    /shops
-GET    /shops/:id
-GET    /reviews
-GET    /reviews/:id
-POST   /reviews
-PUT    /reviews/:id
-DELETE /reviews/:id
-GET    /users
-PUT    /users/:id
-DELETE /users/:id
-```
+- 独自実装の JWT 認証を使っている。
 
 ## 品質チェック
 
 backend 変更時は原則として以下を通します。
 
 ```bash
-cd backend
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
-docker compose run --rm api bin/rubocop -f github
-docker compose run --rm api bin/brakeman --no-pager
+.agents/skills/backend-go-change-validation/scripts/go-checks.sh
+cd backend-go && docker compose run --rm sqlc generate   # db/queries/ を変更したとき
 ```
 
 frontend 変更時は原則として以下を通します。

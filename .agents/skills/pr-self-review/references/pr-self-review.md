@@ -19,8 +19,14 @@
    - backend: gofmt、go vet、go build、go test、
    - frontend: type-check、lint、test、
    - build/API 境界: frontend build。
+7. 境界の規約を確認する(差分に該当する場合):
+   - frontend にドメインのルールの判断(検証・権限の条件・定数・導出)が入っていないか。判断は
+     backend の `domain` だけが持ち、frontend は backend が返した値とサーバーのエラーを表示する。
+   - usecase が repository を宣言・保持・呼び出していないか(`.repo.` の呼び出し、`*Repository` の
+     型・フィールド、`domain.*Repository` の参照)。読み取りは `*Query`、書き込みは domain の
+     サービスを通す。
 
 ## シークレットのパス
 
-`.env*`、`secrets/**`、`**/.kamal/**`、`**/master.key` の内容は
+`.env*`、`secrets/**` の内容は
 決して読まない・含めない。
