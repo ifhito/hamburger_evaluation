@@ -269,8 +269,9 @@ func writeReviewError(w http.ResponseWriter, op string, err error) {
 // クエリフィルタをパースする（Rails ReviewQuery。user_id は本 API の拡張）。
 // 空の値は存在しないものと数える（params[:x].present?）。false は、rating、
 // shop_id、user_id のいずれかが整数でない場合の 422 が既に書き込まれたことを
-// 意味する。これは Rails からの意図的な fail-loud な乖離であり、Rails は
-// ゴミを 0 にキャストして黙って空のリストを返す。
+// 意味する。rating と shop_id については Rails からの意図的な fail-loud な
+// 乖離であり（Rails はゴミを 0 にキャストして黙って空のリストを返す）、
+// user_id は Rails に対応物がないため、同じ fail-loud の形に揃えただけである。
 func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewListFilter, bool) {
 	filter := usecase.ReviewListFilter{Keyword: r.URL.Query().Get("keyword")}
 	if raw := r.URL.Query().Get("rating"); raw != "" {

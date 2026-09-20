@@ -596,7 +596,8 @@ func TestListReviews(t *testing.T) {
 // query filter（user_id 以外は Rails ReviewQuery parity）を扱う：各 filter 単独、
 // それらの AND 結合、一致なしの場合の `[]`（決して null ではない）、空の値が
 // 未指定として扱われること、そして整数でない rating/shop_id/user_id に対する
-// fail-loud な 422（Rails の、黙って 0 に cast する挙動からの意図的な乖離）。
+// fail-loud な 422（rating/shop_id については Rails の、黙って 0 に cast する
+// 挙動からの意図的な乖離。user_id は Rails に対応物がなく同じ形に揃えている）。
 func TestListReviewsFilters(t *testing.T) {
 	repo := seedReviewWorld(1)
 	router, aliceAuth, bobAuth, _ := newReviewsRouter(t, repo)

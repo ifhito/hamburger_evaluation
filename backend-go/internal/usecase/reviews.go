@@ -73,11 +73,12 @@ type ReviewRepository interface {
 }
 
 // ReviewListFilter は、GET /reviews の省略可能なクエリフィルタを保持する。
-// Rails の ReviewQuery を再現しており、指定されたフィルタはそれぞれフィードを
-// 絞り込み、指定されたフィルタはすべて AND で組み合わされる。nil の
-// Rating/ShopID/UserID と空の Keyword は「absent」を意味する（Rails の
-// params[:x].present?）。したがって、0 や負の id/rating が指定された場合も、
-// Rails とまったく同様にフィルタとして働く（結果は空のページになる）。
+// user_id 以外は Rails の ReviewQuery を再現しており、指定されたフィルタは
+// それぞれフィードを絞り込み、指定されたフィルタはすべて AND で組み合わされる。
+// nil の Rating/ShopID/UserID と空の Keyword は「absent」を意味する（Rails の
+// params[:x].present?）。したがって、0 や負の id/rating が指定された場合も
+// フィルタとして働く（結果は空のページになる。Rating/ShopID は Rails と
+// まったく同様で、Rails に対応物のない UserID も同様に扱う）。
 type ReviewListFilter struct {
 	// Rating は rating の完全一致フィルタである（Rails の by_rating）。
 	Rating *int
