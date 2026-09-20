@@ -371,7 +371,7 @@ func TestLogin(t *testing.T) {
 // token 付きで 200 を返す。
 func TestLoginLegacyWeakPassword(t *testing.T) {
 	for _, weak := range []string{"weakpw", "a"} {
-		t.Run(weak, func(t *testing.T) {
+		t.Run(fmt.Sprintf("強度ルールを満たさない password %q のユーザーでも login できる", weak), func(t *testing.T) {
 			repo, auth, _ := newAuthKit()
 			seeded := repo.seed("legacy", "legacy@example.com", weak)
 			body := fmt.Sprintf(`{"email":"legacy@example.com","password":%q}`, weak)
