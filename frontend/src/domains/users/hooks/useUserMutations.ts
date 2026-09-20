@@ -3,12 +3,11 @@ import { userApiClient } from "../api/userApiClient";
 import type { AuthUser } from "../../auth/types";
 import type { UserUpdateInput } from "../api/types";
 
-// useUser のキー(先頭が "/users")をすべて対象にする。
-// 更新・削除の後は mutate(isUserKey, undefined) でこのキャッシュを空にする。編集ページには useUser がなく、
-// 再検証だけではプロフィールへ戻ったときに古い username / email が一瞬出てしまうため。
-// revalidate は既定のまま(false にしない)。false だと、直前の取得の重複排除の記録(dedupingInterval 内)が
-// 残り、戻ったときのマウント時の取得がスキップされて、data が空のまま止まることがある。
-// キーが配列の useUser だけが対象で、useReviews の "/reviews..." や "$inf$..." のキーには影響しない。
+// useUser が使うキャッシュのキー(["/users", id, viewerId])だけに一致する。レビュー一覧のキーには一致しない。
+// 更新・削除の後は、一致したキャッシュを mutate(isUserKey, undefined) で空にする。
+//   なぜ空にするか: 編集ページにはプロフィールを取得する useUser がないので、再取得だけでは足りない。
+//   空にしないと、プロフィールへ戻ったときに、古い名前やメールが一瞬表示されてしまう。
+//   なぜ { revalidate: false } を付けないか: 付けると、戻ったときの取得が省略されて、何も表示されないまま止まることがある。
 export function isUserKey(key: unknown): boolean {
   return Array.isArray(key) && key[0] === "/users";
 }
