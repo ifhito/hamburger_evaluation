@@ -17,8 +17,9 @@ func (u User) Manages(id int64) bool { return u.ID == id }
 
 // UserProfile は、viewer から見えるユーザーのビューである。ID と Username は
 // 誰にでも公開され、Email と Admin は本人にだけ入る（それ以外は nil）。
-// 他人や匿名に渡す API のレスポンスは、User ではなくこの型から組み立てる
-// ことで、email と admin が誤って漏れる経路を作らない。
+// 他人や匿名に渡しうる user のレスポンスは、User そのものではなく、この型
+// （または {id, username} だけの UserRef）から組み立てる。こうして email と
+// admin が誤って漏れる経路を作らない。
 type UserProfile struct {
 	ID       int64
 	Username string

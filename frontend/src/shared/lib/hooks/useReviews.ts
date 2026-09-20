@@ -7,7 +7,7 @@ const PER_PAGE = 20
 
 export function useReviews(params?: ReviewListParams, options?: { enabled?: boolean }) {
   return useInfiniteQuery({
-    // 呼び出し側が取得を止められる(例: user_id が不正なときに絞り込み無しの全件を取らない)。未指定なら常に取得する
+    // 呼び出し側が取得を止められる。例: user_id が不正なとき、そのまま呼ぶと 422 になり、user_id を外して呼ぶと全件が返る。未指定なら常に取得する
     enabled: options?.enabled,
     // page / per_page は含めない。フィルタ(params)が変わると別キーになり、先頭ページから読み直される
     queryKey: ['reviews', params],

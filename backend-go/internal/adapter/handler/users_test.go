@@ -147,7 +147,7 @@ func TestGetUser(t *testing.T) {
 		return do(router, http.MethodGet, path, "", auth)
 	}
 
-	t.Run("AC3 匿名は {id, username} のキーだけを返す", func(t *testing.T) {
+	t.Run("AC2 匿名は {id, username} のキーだけを返す", func(t *testing.T) {
 		_, router, _ := newSeededUsersRouter(t)
 		rec := get(router, "/users/1", "")
 		if rec.Code != http.StatusOK {
@@ -165,7 +165,7 @@ func TestGetUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC4 本人が閲覧すると {id, username, email, admin} を返す", func(t *testing.T) {
+	t.Run("AC3 本人が閲覧すると {id, username, email, admin} を返す", func(t *testing.T) {
 		tests := []struct {
 			name      string
 			id        int64
@@ -193,7 +193,7 @@ func TestGetUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC5 他人が閲覧すると公開ビューだけを返し email は body に現れない", func(t *testing.T) {
+	t.Run("AC4 他人が閲覧すると公開ビューだけを返し email は body に現れない", func(t *testing.T) {
 		tests := []struct {
 			name      string
 			viewerID  int64
@@ -226,7 +226,7 @@ func TestGetUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC5 認証できない Authorization では本人の id でも公開ビューだけを返す", func(t *testing.T) {
+	t.Run("認証できない Authorization では公開ビューだけを返す", func(t *testing.T) {
 		_, router, token := newSeededUsersRouter(t)
 		validAlice := strings.TrimPrefix(token(1), "Bearer ")
 		tests := []struct {
@@ -237,7 +237,7 @@ func TestGetUser(t *testing.T) {
 			{name: "不正な token で本人の id を見る", path: "/users/1", auth: "Bearer garbage"},
 			{name: "Bearer 以外の scheme で本人の id を見る", path: "/users/1", auth: "Token " + validAlice},
 			{name: "scheme のない生の token で本人の id を見る", path: "/users/1", auth: validAlice},
-			{name: "退会済みユーザーの token では alice の id も公開ビューになる", path: "/users/1", auth: token(2)},
+			{name: "退会済みユーザーの token でも 401 にならず alice は公開ビューになる", path: "/users/1", auth: token(2)},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -252,7 +252,7 @@ func TestGetUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC6 存在しない・退会済み・整数でない id は status/body/Content-Type がすべて同一の 404 になる", func(t *testing.T) {
+	t.Run("AC5 存在しない・退会済み・整数でない id は status/body/Content-Type がすべて同一の 404 になる", func(t *testing.T) {
 		const wantBody = `{"error":"User not found"}`
 		const wantContentType = "application/json; charset=utf-8"
 		paths := []string{

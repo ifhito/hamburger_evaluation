@@ -19,8 +19,9 @@ var auditForbiddenKeyParts = []string{"email", "admin", "password"}
 //   - auditForbiddenKeyParts を含むキーがどこにも存在しない
 //   - "user" / "creator" キーの null でない値は {id, username} のキーだけを持つ
 //
-// 見つかったユーザー参照の username をソートして返す。呼び出し側はこれを期待値と
-// 比較するので、走査が空振りして何も検証していないテストにはならない。
+// 見つかったユーザー参照の username を返す（順序は不定なので呼び出し側でソートする）。
+// 呼び出し側はこれを期待値と比較するので、走査が空振りして何も検証していない
+// テストにはならない。
 func auditWalk(t *testing.T, at string, v any) []string {
 	t.Helper()
 	var usernames []string
@@ -53,13 +54,12 @@ func auditWalk(t *testing.T, at string, v any) []string {
 			usernames = append(usernames, auditWalk(t, fmt.Sprintf("%s[%d]", at, i), child)...)
 		}
 	}
-	sort.Strings(usernames)
 	return usernames
 }
 
 // TestOtherEndpointsDoNotLeakUserPrivateFields は、user 以外のエンドポイント
 // （/reviews、/shops、/admin/shops）が、どの viewer に対しても email と admin を
-// 返さないことを、本物の DB と router で固定する（AC10 の監査）。他人の email を
+// 返さないことを、本物の DB と router で固定する（AC8 の監査）。他人の email を
 // 持つユーザーが作成者・投稿者として絡んだデータを用意し、レスポンスの JSON を再帰的に
 // 走査して、email/admin 系のキーが存在しないこと、body に email 文字列（"@"）が
 // 含まれないこと、ユーザー参照が {id, username} だけであることを確かめる。
@@ -239,6 +239,7 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 				}
 
 				got := auditWalk(t, "$", decoded)
+				sort.Strings(got)
 				if strings.Join(got, ",") != strings.Join(want.refs, ",") {
 					t.Errorf("user references = %v, want %v (body %s)", got, want.refs, body)
 				}
@@ -250,8 +251,8 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 // auditWant は監査テストの 1 リクエストあたりの期待値である。
 type auditWant struct {
 	status int
-	// items は、トップレベルが配列のときの要素数である。-1 は配列を期待しない
-	// （オブジェクトまたはエラー）ことを表す。
+	// items は、トップレベルが配列のときの要素数である。-1 は要素数を検証しない
+	// （オブジェクトまたはエラー応答を想定）ことを表す。
 	items int
 	// refs は、走査で見つかるべきユーザー参照の username（ソート済み）である。
 	refs []string

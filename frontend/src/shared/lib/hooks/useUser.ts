@@ -10,7 +10,7 @@ export function useUser(id: number, viewerId: number | null, options?: { enabled
   return useQuery({
     queryKey: ['users', id, viewerId],
     queryFn: () => usersApi.get(id),
-    // NaN（/users/abc）や小数の id では取得しない
-    enabled: Number.isInteger(id) && (options?.enabled ?? true),
+    // NaN（/users/abc）・小数・0 以下・安全でない整数の id では取得しない
+    enabled: Number.isSafeInteger(id) && id > 0 && (options?.enabled ?? true),
   })
 }

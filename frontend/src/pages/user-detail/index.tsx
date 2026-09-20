@@ -12,13 +12,14 @@ export default function UserDetailPage() {
   const { user: authUser, isLoading: authLoading } = useAuth()
 
   const userId = Number(id)
-  // /users/abc（NaN）など不正な id では user も reviews も取得しない
-  const isValidId = Number.isInteger(userId)
+  // /users/abc（NaN）や 0 以下・安全でない整数など不正な id では user も reviews も取得しない
+  const isValidId = Number.isSafeInteger(userId) && userId > 0
   // 認証状態の復元前は authUser が null でも token は localStorage にあり得る。閲覧者が確定してから取得する
   const { data: user, isLoading: userLoading, error: userError } = useUser(userId, authUser?.id ?? null, {
     enabled: !authLoading,
   })
-  // user_id を省略すると全件フィードになり他人のレビューをこのユーザーのものとして表示してしまうため、不正 id では取得自体を止める
+  // 不正な id のまま呼ぶと user_id=NaN が 422 になり "Failed to load reviews." が余計に出る。
+  // かといって user_id を外して呼ぶと全件フィードが他人のレビューとして出てしまうため、不正 id では取得自体を止める
   const {
     data: reviews,
     isLoading: reviewsLoading,
