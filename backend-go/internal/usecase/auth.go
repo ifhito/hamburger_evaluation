@@ -20,7 +20,7 @@ type UserCredentials struct {
 // 契約である。実装は storage のエラーを domain のエラーに対応させ、active な
 // （discard されていない）ユーザーが一致しないとき（wrap された）
 // domain.ErrUserNotFound を返す。読み取り専用で、書き込みのメソッドは
-// 置かない（書き込みは domain.UserService を通す）。
+// 置かない（書き込みは domain.Users を通す）。
 type UserQuery interface {
 	// GetActiveUserByEmail は、指定された email の、discard されていない
 	// ユーザーを、そのパスワードの digest とともに返す。
@@ -48,16 +48,17 @@ type TokenVerifier interface {
 
 // Auth は signup、login、トークン認証の use case を実装する。
 // 認証に関する判断は HTTP handler ではなく、ここにある。読み取りは query、
-// 書き込みは domain のサービスだけを通し、repository には依存しない。
+// 書き込みは domain の書き込みオブジェクト（domain.Users）だけを通し、repository には
+// 依存しない。
 type Auth struct {
 	query    UserQuery
-	users    *domain.UserService
+	users    *domain.Users
 	hasher   PasswordHasher
 	issuer   TokenIssuer
 	verifier TokenVerifier
 }
 
-func NewAuth(query UserQuery, users *domain.UserService, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
+func NewAuth(query UserQuery, users *domain.Users, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
 	return &Auth{query: query, users: users, hasher: hasher, issuer: issuer, verifier: verifier}
 }
 

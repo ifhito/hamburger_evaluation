@@ -59,13 +59,13 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	defer pool.Close()
 
 	jwtCodec := infra.NewJWTCodec(cfg.JWTSecret, cfg.JWTTTL)
-	// 書き込みは、repository を domain のサービスで包んで usecase に渡す。
-	// usecase は repository に依存せず、repository を呼ぶのは domain のサービスだけである。
+	// 書き込みは、repository を domain の書き込みオブジェクトで包んで usecase に渡す。
+	// usecase は repository に依存せず、repository を呼ぶのは domain のコードだけである。
 	userQuery := query.NewUserQuery(pool)
-	userService := domain.NewUserService(repository.NewUserRepository(pool))
+	userWrites := domain.NewUsers(repository.NewUserRepository(pool))
 	auth := usecase.NewAuth(
 		userQuery,
-		userService,
+		userWrites,
 		infra.BcryptPasswordHasher{},
 		jwtCodec,
 		jwtCodec,
@@ -86,9 +86,9 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		photoFiles = handler.PhotoFileServer(cfg.PhotoDiskDir)
 	}
 
-	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShopService(repository.NewShopRepository(pool)))
-	reviews := usecase.NewReviews(query.NewReviewQuery(pool), domain.NewReviewService(repository.NewReviewRepository(pool)), photos)
-	users := usecase.NewUsers(userQuery, userService, infra.BcryptPasswordHasher{})
+	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)))
+	reviews := usecase.NewReviews(query.NewReviewQuery(pool), domain.NewReviews(repository.NewReviewRepository(pool)), photos)
+	users := usecase.NewUsers(userQuery, userWrites, infra.BcryptPasswordHasher{})
 
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users, photoFiles), ready)
 }

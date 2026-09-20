@@ -12,7 +12,7 @@ import (
 // domain.ShopVisibility にある）、smallint の status のエンコードを自分の
 // 内部に留め、id に一致する shop がないときは（wrap された）
 // domain.ErrShopNotFound を返す。読み取り専用で、書き込みのメソッドは
-// 置かない（書き込みは domain.ShopService を通す）。
+// 置かない（書き込みは domain.Shops を通す）。
 type ShopQuery interface {
 	// ListShops は、keyword に一致する見える shop を、name、次に id の順で
 	// 返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別
@@ -33,14 +33,14 @@ type ShopQuery interface {
 
 // Shops は shop の use case を実装する。公開の一覧と詳細、ユーザーによる
 // 投稿、そして admin による moderation である。読み取りは query、書き込みは
-// domain のサービスだけを通し、repository には依存しない。
+// domain の書き込みオブジェクト（domain.Shops）だけを通し、repository には依存しない。
 type Shops struct {
-	query   ShopQuery
-	service *domain.ShopService
+	query ShopQuery
+	shops *domain.Shops
 }
 
-func NewShops(query ShopQuery, service *domain.ShopService) *Shops {
-	return &Shops{query: query, service: service}
+func NewShops(query ShopQuery, shops *domain.Shops) *Shops {
+	return &Shops{query: query, shops: shops}
 }
 
 // List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
@@ -83,7 +83,7 @@ func (s *Shops) Create(ctx context.Context, viewer domain.User, name string) (do
 	if err != nil {
 		return domain.ShopDetail{}, err
 	}
-	created, err := s.service.Create(ctx, shop)
+	created, err := s.shops.Create(ctx, shop)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("create shop: %w", err)
 	}
@@ -137,7 +137,7 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int6
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}
-	updated, err := s.service.UpdateName(ctx, id, name)
+	updated, err := s.shops.UpdateName(ctx, id, name)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}
@@ -177,7 +177,7 @@ func (s *Shops) moderate(ctx context.Context, id int64, transition func(domain.S
 		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
 	}
 	next := transition(detail.Shop)
-	updated, err := s.service.UpdateStatus(ctx, id, next.Status, next.ModerationNote)
+	updated, err := s.shops.UpdateStatus(ctx, id, next.Status, next.ModerationNote)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
 	}

@@ -84,7 +84,7 @@ func checkNoRepositoryDependency(src string) ([]string, error) {
 				if id, ok := x.X.(*ast.Ident); ok {
 					pkg = id.Name + "."
 				}
-				violations = append(violations, pkg+x.Sel.Name+" を参照している (usecase は repository に依存せず、書き込みは domain のサービスを通す)")
+				violations = append(violations, pkg+x.Sel.Name+" を参照している (usecase は repository に依存せず、書き込みは domain の書き込みオブジェクトを通す)")
 			}
 		}
 		return true
@@ -129,22 +129,32 @@ func checkImports(src string, forbidden []string) ([]string, error) {
 	return violations, nil
 }
 
-// maxServiceMethods は、domain のサービス 1 つあたりの公開メソッド数の上限である。
-// サービスが肥大化するのを防ぐ歯止めで、超えるときは、ロジックをエンティティへ移す、
-// 集約を分ける、を先に検討する(domain/doc.go のルール)。上限を上げるときは、理由を
-// レビューで示す。
-const maxServiceMethods = 8
+// maxWriteMethods は、domain の書き込みオブジェクトと Service の、1 つの型あたりの公開
+// メソッド数の上限である。肥大化を防ぐ歯止めで、超えるときは、ロジックをエンティティへ
+// 移す、集約を分ける、を先に検討する(domain/doc.go のルール)。上限を上げるときは、
+// 理由をレビューで示す。
+const maxWriteMethods = 8
 
-// checkServiceRules は、domain のサービス(名前が Service で終わる struct)が、ルールに
-// 沿っていることを確かめ、違反の説明と、見つけたサービスの数を返す。ルールは、自分の集約の
-// repository をちょうど 1 つだけ持つこと、公開メソッドが maxServiceMethods 個までであること。
-func checkServiceRules(sources map[string]string) (violations []string, services int, err error) {
-	structs := map[string]*ast.StructType{}
+// checkWriteObjectRules は、domain で repository を持つ型(*Repository 型のフィールドを持つ
+// struct と、名前が Service で終わる struct)が、ルールに沿っていることを確かめ、違反の説明と、
+// 見つけた書き込みオブジェクトと Service の数を返す。ルールは次のとおり。
+//   - 書き込みオブジェクト(Service ではない型): 自分の集約の repository をちょうど 1 つだけ持つ。
+//     名前は集約の複数形で、Shops なら ShopRepository である
+//   - Service(名前が Service で終わる型): 2 種類以上の repository だけを持つ。複数の集約を
+//     跨ぐ更新のためのもので、1 種類だけなら、その集約の書き込みオブジェクトに置く
+//   - どちらも、公開メソッドが maxWriteMethods 個まで
+func checkWriteObjectRules(sources map[string]string) (violations []string, writeObjects, services int, err error) {
+	type holder struct {
+		fields int
+		others int
+		repos  []string
+	}
+	holders := map[string]*holder{}
 	methods := map[string]int{}
 	for name, src := range sources {
 		f, perr := parser.ParseFile(token.NewFileSet(), name, src, 0)
 		if perr != nil {
-			return nil, 0, perr
+			return nil, 0, 0, perr
 		}
 		for _, decl := range f.Decls {
 			switch d := decl.(type) {
@@ -154,8 +164,28 @@ func checkServiceRules(sources map[string]string) (violations []string, services
 					if !ok {
 						continue
 					}
-					if st, ok := ts.Type.(*ast.StructType); ok && strings.HasSuffix(ts.Name.Name, "Service") {
-						structs[ts.Name.Name] = st
+					st, ok := ts.Type.(*ast.StructType)
+					if !ok {
+						continue
+					}
+					h := &holder{}
+					for _, field := range st.Fields.List {
+						n := max(1, len(field.Names))
+						h.fields += n
+						typ := field.Type
+						if star, ok := typ.(*ast.StarExpr); ok {
+							typ = star.X
+						}
+						if id, ok := typ.(*ast.Ident); ok && strings.HasSuffix(id.Name, "Repository") {
+							if !slices.Contains(h.repos, id.Name) {
+								h.repos = append(h.repos, id.Name)
+							}
+						} else {
+							h.others += n
+						}
+					}
+					if len(h.repos) > 0 || strings.HasSuffix(ts.Name.Name, "Service") {
+						holders[ts.Name.Name] = h
 					}
 				}
 			case *ast.FuncDecl:
@@ -172,28 +202,33 @@ func checkServiceRules(sources map[string]string) (violations []string, services
 			}
 		}
 	}
-	names := make([]string, 0, len(structs))
-	for name := range structs {
+	names := make([]string, 0, len(holders))
+	for name := range holders {
 		names = append(names, name)
 	}
 	slices.Sort(names)
 	for _, name := range names {
-		want := strings.TrimSuffix(name, "Service") + "Repository"
-		fields, typeOK := 0, true
-		for _, field := range structs[name].Fields.List {
-			fields += max(1, len(field.Names))
-			if id, ok := field.Type.(*ast.Ident); !ok || id.Name != want {
-				typeOK = false
+		h := holders[name]
+		if strings.HasSuffix(name, "Service") {
+			services++
+			if len(h.repos) < 2 {
+				violations = append(violations, fmt.Sprintf("%s は repository を %d 種類しか持たない (Service は複数の集約を跨ぐ更新だけに使う。1 つの集約だけを更新するなら、その集約の書き込みオブジェクトに置く)", name, len(h.repos)))
+			}
+			if h.others > 0 {
+				violations = append(violations, fmt.Sprintf("%s は repository 以外のフィールドを持っている (Service が持つのは repository だけ)", name))
+			}
+		} else {
+			writeObjects++
+			want := strings.TrimSuffix(name, "s") + "Repository"
+			if h.fields != 1 || len(h.repos) != 1 || h.repos[0] != want {
+				violations = append(violations, fmt.Sprintf("%s は %s だけをちょうど 1 つ持たなければならない (書き込みオブジェクトは自分の集約の repository だけを持つ。他の集約に触れる手順は Service に置く)", name, want))
 			}
 		}
-		if fields != 1 || !typeOK {
-			violations = append(violations, fmt.Sprintf("%s は %s だけをちょうど 1 つ持たなければならない (他の集約の repository や他の依存を持たない)", name, want))
-		}
-		if methods[name] > maxServiceMethods {
-			violations = append(violations, fmt.Sprintf("%s の公開メソッドが %d 個ある (上限 %d 個。エンティティへの移動か集約の分割を先に検討する)", name, methods[name], maxServiceMethods))
+		if methods[name] > maxWriteMethods {
+			violations = append(violations, fmt.Sprintf("%s の公開メソッドが %d 個ある (上限 %d 個。エンティティへの移動か集約の分割を先に検討する)", name, methods[name], maxWriteMethods))
 		}
 	}
-	return violations, len(names), nil
+	return violations, writeObjects, services, nil
 }
 
 // checkNoRepositoryImport は、Go のソースが repository の実装パッケージ(adapter/repository。
@@ -237,7 +272,8 @@ func productionSources(t *testing.T, dir string) map[string]string {
 // TestPersistenceInterfaceNaming は、永続化の依存の規約を固定する。
 //   - usecase は読み取りを *Query (Get*/List*) で行い、*Repository を宣言も参照もしない
 //   - repository の interface (*Repository。Create*/Update*/Discard*) は domain が宣言し、
-//     呼ぶのは domain のサービスだけである
+//     呼ぶのは domain のコードだけである(単一の集約の書き込みは集約ごとの書き込みオブジェクト、
+//     複数の集約を跨ぐ更新だけが Service)
 //   - usecase と domain は、adapter・HTTP・SQL ドライバを import しない。
 //     domain はさらに、標準ライブラリ以外(第三者・プロジェクト内)を import しない
 func TestPersistenceInterfaceNaming(t *testing.T) {
@@ -346,17 +382,18 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		}
 	})
 
-	t.Run("実際の domain のサービスがルールに沿っている", func(t *testing.T) {
-		v, services, err := checkServiceRules(productionSources(t, "../domain"))
+	t.Run("実際の domain の書き込みオブジェクトと Service がルールに沿っている", func(t *testing.T) {
+		v, writeObjects, _, err := checkWriteObjectRules(productionSources(t, "../domain"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, msg := range v {
 			t.Error(msg)
 		}
-		// 空振りで通らないよう、Shop / Review / User の 3 つのサービスが見つかることも確かめる。
-		if services < 3 {
-			t.Errorf("サービスは %d 個しか見つからない (3 個以上を期待)", services)
+		// 空振りで通らないよう、Shop / Review / User の 3 つの書き込みオブジェクトが見つかることも確かめる。
+		// Service は、複数の集約を跨ぐ更新が domain に入るまで 0 個でよい。
+		if writeObjects < 3 {
+			t.Errorf("書き込みオブジェクトは %d 個しか見つからない (3 個以上を期待)", writeObjects)
 		}
 	})
 
@@ -386,7 +423,7 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 	}{
 		{"usecase が Repository の interface を宣言していれば検出する", "package p\ntype XRepository interface{ CreateX() }", "XRepository を宣言している"},
 		{"usecase が domain.XRepository を参照していれば検出する", "package p\nimport \"domain\"\ntype S struct{ repo domain.XRepository }", "domain.XRepository を参照している"},
-		{"domain のサービスの参照は許す", "package p\nimport \"domain\"\ntype S struct{ svc *domain.XService }", ""},
+		{"domain の書き込みオブジェクトの参照は許す", "package p\nimport \"domain\"\ntype S struct{ writes *domain.Xs }", ""},
 		{"別名の import でも XRepository の参照を検出する", "package p\nimport d \"domain\"\ntype S struct{ repo d.XRepository }", "d.XRepository を参照している"},
 		{"struct で Repository を宣言していても検出する", "package p\ntype XRepository struct{}", "XRepository を宣言している"},
 		{"dot import を検出する", "package p\nimport . \"domain\"", "dot import している"},
@@ -403,26 +440,32 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		})
 	}
 
-	serviceSrc := func(methods int) string {
-		s := "package p\ntype XService struct{ repo XRepository }\n"
+	writeObjectSrc := func(methods int) string {
+		s := "package p\ntype Xs struct{ repo XRepository }\n"
 		for i := 0; i < methods; i++ {
-			s += fmt.Sprintf("func (s *XService) M%d() {}\n", i)
+			s += fmt.Sprintf("func (s *Xs) M%d() {}\n", i)
 		}
 		return s
 	}
-	serviceCases := []struct {
+	writeObjectCases := []struct {
 		name, src, want string
 	}{
-		{"自分の repository を 1 つだけ持てば違反なし", serviceSrc(1), ""},
-		{"公開メソッドが上限ちょうどなら違反なし", serviceSrc(maxServiceMethods), ""},
-		{"公開メソッドが上限を超えれば検出する", serviceSrc(maxServiceMethods + 1), "公開メソッドが"},
-		{"別の集約の repository を持てば検出する", "package p\ntype XService struct{ repo YRepository }", "XRepository だけをちょうど 1 つ"},
-		{"フィールドが 2 つあれば検出する", "package p\ntype XService struct {\n\trepo XRepository\n\tother YRepository\n}", "XRepository だけをちょうど 1 つ"},
-		{"依存を持たないサービスも検出する", "package p\ntype XService struct{}", "XRepository だけをちょうど 1 つ"},
+		{"書き込みオブジェクトが自分の repository を 1 つだけ持てば違反なし", writeObjectSrc(1), ""},
+		{"公開メソッドが上限ちょうどなら違反なし", writeObjectSrc(maxWriteMethods), ""},
+		{"公開メソッドが上限を超えれば検出する", writeObjectSrc(maxWriteMethods + 1), "公開メソッドが"},
+		{"書き込みオブジェクトが別の集約の repository を持てば検出する", "package p\ntype Xs struct{ repo YRepository }", "XRepository だけをちょうど 1 つ"},
+		{"書き込みオブジェクトが repository を 2 種類持てば検出する", "package p\ntype Xs struct {\n\trepo XRepository\n\tother YRepository\n}", "XRepository だけをちょうど 1 つ"},
+		{"書き込みオブジェクトが repository 以外を持てば検出する", "package p\ntype Xs struct {\n\trepo XRepository\n\tn int\n}", "XRepository だけをちょうど 1 つ"},
+		{"1 種類の repository だけを持つ Service を検出する", "package p\ntype XService struct{ repo XRepository }", "Service は複数の集約を跨ぐ更新だけに使う"},
+		{"repository を持たない Service も検出する", "package p\ntype XService struct{}", "repository を 0 種類しか持たない"},
+		{"同じ repository を 2 フィールドで持つ Service も 1 種類として検出する", "package p\ntype XService struct {\n\ta XRepository\n\tb XRepository\n}", "repository を 1 種類しか持たない"},
+		{"2 種類の repository を持つ Service は違反なし", "package p\ntype XYService struct {\n\tx XRepository\n\ty YRepository\n}", ""},
+		{"Service が repository 以外を持てば検出する", "package p\ntype XYService struct {\n\tx XRepository\n\ty YRepository\n\tn int\n}", "repository 以外のフィールド"},
+		{"repository を持たない通常の struct は対象外", "package p\ntype Shop struct{ Name string }", ""},
 	}
-	for _, tc := range serviceCases {
+	for _, tc := range writeObjectCases {
 		t.Run(tc.name, func(t *testing.T) {
-			v, _, err := checkServiceRules(map[string]string{"src.go": tc.src})
+			v, _, _, err := checkWriteObjectRules(map[string]string{"src.go": tc.src})
 			if err != nil {
 				t.Fatal(err)
 			}

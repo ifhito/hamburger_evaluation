@@ -10,15 +10,15 @@ import (
 
 // Users は、ユーザー管理の use case を実装する。viewer から見えるビューでの
 // 詳細、および本人のみが行えるプロフィールの更新とアカウントの削除である。
-// 読み取りは query、書き込みは domain のサービスだけを通し、repository には
-// 依存しない。
+// 読み取りは query、書き込みは domain の書き込みオブジェクト（domain.Users）だけを
+// 通し、repository には依存しない。
 type Users struct {
 	query  UserQuery
-	users  *domain.UserService
+	users  *domain.Users
 	hasher PasswordHasher
 }
 
-func NewUsers(query UserQuery, users *domain.UserService, hasher PasswordHasher) *Users {
+func NewUsers(query UserQuery, users *domain.Users, hasher PasswordHasher) *Users {
 	return &Users{query: query, users: users, hasher: hasher}
 }
 

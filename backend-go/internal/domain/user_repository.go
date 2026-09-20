@@ -23,8 +23,8 @@ type ProfileChanges struct {
 }
 
 // UserRepository は、ユーザーの書き込みの契約である。domain が宣言し、呼び出すのは
-// domain の UserService だけで、usecase は呼ばない（読み取りは usecase の
-// UserQuery）。実装は storage のエラーを domain のエラーに対応させる。
+// domain のコード（書き込みオブジェクトの Users）だけで、usecase は呼ばない
+// （読み取りは usecase の UserQuery）。実装は storage のエラーを domain のエラーに対応させる。
 // CreateUser と UpdateUserProfile は email の unique violation に対して
 // （wrap された）ErrEmailTaken を返し、UpdateUserProfile と DiscardUser は、
 // active な（discard されていない）ユーザーが一致しないとき（wrap された）
@@ -37,7 +37,7 @@ type UserRepository interface {
 	// フィールドがゼロ個なら単なる lookup になる
 	// （200 の no-op、Rails parity）。存在するフィールドがゼロ個のときの
 	// lookup は repository の実装の内部で行われる。変更が空でも
-	// UpdateUserProfile が呼ばれ、その戻り値が応答になる（UserService は
+	// UpdateUserProfile が呼ばれ、その戻り値が応答になる（Users は
 	// 読み取りのメソッドを repository に持たない）。
 	UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (User, error)
 	// DiscardUser はユーザーを soft delete し（hard DELETE は決して行わない）、
@@ -45,32 +45,34 @@ type UserRepository interface {
 	DiscardUser(ctx context.Context, id int64) error
 }
 
-// UserService はユーザーの書き込みの窓口である。UserRepository を呼ぶのは domain の
-// この型だけで、usecase は repository に依存せず、書き込みをここに任せる。
-// 現時点では repository の書き込みを 1 対 1 で包む窓口にすぎない。domain の手順が増えたときに、
-// usecase ではなくここへ置く。
-type UserService struct {
+// Users はユーザー集約の書き込みオブジェクトである。UserRepository を持つのは
+// この型だけで、usecase は repository に依存せず、ユーザーの書き込みをここに任せる。
+// ユーザーだけを更新する書き込みは、Service ではなくこの型に置く（Service は複数の
+// 集約を跨ぐ更新だけに使う。domain/doc.go を参照）。現時点では repository の
+// 書き込みを 1 対 1 で包んでいる。ユーザーに関する domain の手順が増えたときは、
+// usecase ではここへ置く。
+type Users struct {
 	repo UserRepository
 }
 
-// NewUserService は repo を使う UserService を返す。
-func NewUserService(repo UserRepository) *UserService {
-	return &UserService{repo: repo}
+// NewUsers は repo を使う Users を返す。
+func NewUsers(repo UserRepository) *Users {
+	return &Users{repo: repo}
 }
 
 // Create は新しいユーザーを永続化して返す。email が使用済みなら
 // （wrap された）ErrEmailTaken を返す。
-func (s *UserService) Create(ctx context.Context, params CreateUserParams) (User, error) {
+func (s *Users) Create(ctx context.Context, params CreateUserParams) (User, error) {
 	return s.repo.CreateUser(ctx, params)
 }
 
 // UpdateProfile は、id の、まだ kept なユーザーに changes の存在するフィールドを
 // atomic に適用し、保存されたユーザーを返す。
-func (s *UserService) UpdateProfile(ctx context.Context, id int64, changes ProfileChanges) (User, error) {
+func (s *Users) UpdateProfile(ctx context.Context, id int64, changes ProfileChanges) (User, error) {
 	return s.repo.UpdateUserProfile(ctx, id, changes)
 }
 
 // Discard はユーザーを soft delete する。
-func (s *UserService) Discard(ctx context.Context, id int64) error {
+func (s *Users) Discard(ctx context.Context, id int64) error {
 	return s.repo.DiscardUser(ctx, id)
 }

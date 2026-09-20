@@ -18,7 +18,7 @@ import (
 // status のエンコード、soft delete の述語）を自分の内部に留め、一致する行が
 // ないときは wrap した domain の sentinel（ErrReviewNotFound、
 // ErrShopNotFound、ErrBurgerNotFound）を返す。読み取り専用で、書き込みの
-// メソッドは置かない（書き込みは domain.ReviewService を通す）。
+// メソッドは置かない（書き込みは domain.Reviews を通す）。
 type ReviewQuery interface {
 	// ListReviews は、burger が少なくとも 1 つの active な shop で提供されて
 	// いる、discard されていない review（author が discard 済みの user である
@@ -68,10 +68,10 @@ type ReviewListFilter struct {
 // Reviews は review の use case を実装する。公開フィードと詳細、および
 // author に限定された create/edit/delete であり、review ごとに任意で 1 枚の
 // 写真を photos 経由で保存する（S10）。読み取りは query、書き込みは domain の
-// サービスだけを通し、repository には依存しない。
+// 書き込みオブジェクト（domain.Reviews）だけを通し、repository には依存しない。
 type Reviews struct {
 	query   ReviewQuery
-	service *domain.ReviewService
+	reviews *domain.Reviews
 	photos  PhotoStorage
 }
 
@@ -79,11 +79,11 @@ type Reviews struct {
 // ならない（本番では disk か S3、テストでは fake）。どのリクエスト経路も
 // それを dereference しうる（photoURL、deletePhotoBestEffort）ので、nil の
 // storage は、リクエストの途中で panic するのではなく、ここで fail-loud する。
-func NewReviews(query ReviewQuery, service *domain.ReviewService, photos PhotoStorage) *Reviews {
+func NewReviews(query ReviewQuery, reviews *domain.Reviews, photos PhotoStorage) *Reviews {
 	if photos == nil {
 		panic("usecase.NewReviews: nil PhotoStorage")
 	}
-	return &Reviews{query: query, service: service, photos: photos}
+	return &Reviews{query: query, reviews: reviews, photos: photos}
 }
 
 // List は、filter で絞り込んだ公開 review フィードを返す。ページネーションは
@@ -153,9 +153,9 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	}
 	var created domain.Review
 	if burgerID > 0 {
-		created, err = s.service.Create(ctx, review)
+		created, err = s.reviews.Create(ctx, review)
 	} else {
-		created, burger, err = s.service.CreateForNamedBurger(ctx, shopID, burgerName, review)
+		created, burger, err = s.reviews.CreateForNamedBurger(ctx, shopID, burgerName, review)
 	}
 	if err != nil {
 		s.deletePhotoBestEffort(ctx, review.PhotoKey)
@@ -198,7 +198,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 	}
 	var updated domain.Review
 	if newKey != nil {
-		if updated, err = s.service.UpdateContentAndPhotoKey(ctx, id, rating, comment, newKey); err != nil {
+		if updated, err = s.reviews.UpdateContentAndPhotoKey(ctx, id, rating, comment, newKey); err != nil {
 			s.deletePhotoBestEffort(ctx, newKey)
 			return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 		}
@@ -206,7 +206,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 		// なった今になってからである。それを失っても、漏れたファイルに
 		// なるだけで、review が壊れることはない。
 		s.deletePhotoBestEffort(ctx, detail.PhotoKey)
-	} else if updated, err = s.service.UpdateContent(ctx, id, rating, comment); err != nil {
+	} else if updated, err = s.reviews.UpdateContent(ctx, id, rating, comment); err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
 	detail.Review = updated
@@ -226,7 +226,7 @@ func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) erro
 	if !detail.CanBeModifiedBy(viewer) {
 		return domain.ErrForbidden
 	}
-	if err := s.service.Discard(ctx, id); err != nil {
+	if err := s.reviews.Discard(ctx, id); err != nil {
 		return fmt.Errorf("delete review: %w", err)
 	}
 	s.deletePhotoBestEffort(ctx, detail.PhotoKey)

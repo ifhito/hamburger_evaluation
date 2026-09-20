@@ -2,7 +2,7 @@
 // pgx 上の sqlc 生成コード（sqlcgen）を用いて実装する。
 //
 // 読み取りは adapter/query が担い、この package は書き込み（CUD）だけを
-// 実装する。呼び出すのは domain のサービス（domain.ShopService など）だけで、
+// 実装する。呼び出すのは domain のコード（書き込みオブジェクトの domain.Shops など）だけで、
 // usecase から直接呼ばれることはない。
 //
 // sqlc の出力は sqlcgen サブパッケージにあり、手で編集することはない。

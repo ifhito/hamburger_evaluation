@@ -41,7 +41,7 @@ type fakeRecord struct {
 // userStoreFake は in-memory の usecase.UserQuery かつ domain.UserRepository
 // である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
 // よう 1 つの型に保つ（読み書きの分離は、usecase の Query の引数型と domain の
-// サービスの引数型がコンパイル時に保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
+// 書き込みオブジェクトの引数型がコンパイル時に保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
 // 駆動する）。
 type userStoreFake struct {
 	seq   int64
@@ -112,7 +112,7 @@ func (f *userStoreFake) seed(username, email, password string) domain.User {
 func newAuthKit() (*userStoreFake, *usecase.Auth, *infra.JWTCodec) {
 	repo := newUserStoreFake()
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	return repo, usecase.NewAuth(repo, domain.NewUserService(repo), hasherFake{}, codec, codec), codec
+	return repo, usecase.NewAuth(repo, domain.NewUsers(repo), hasherFake{}, codec, codec), codec
 }
 
 // newTestRouter は、db の health か routing の挙動だけを必要とするテスト向けの
@@ -132,9 +132,9 @@ func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.
 	reviewRepo := newReviewStoreFake()
 	users := newUserStoreFake()
 	shopRepo := &shopStoreFake{}
-	return handler.NewRouter(p, auth, usecase.NewShops(shopRepo, domain.NewShopService(shopRepo)),
-		usecase.NewReviews(reviewRepo, domain.NewReviewService(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(users, domain.NewUserService(users), hasherFake{}), nil)
+	return handler.NewRouter(p, auth, usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
+		usecase.NewReviews(reviewRepo, domain.NewReviews(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(users, domain.NewUsers(users), hasherFake{}), nil)
 }
 
 // do は router に対して 1 件の request を in-process で実行し、recorder を

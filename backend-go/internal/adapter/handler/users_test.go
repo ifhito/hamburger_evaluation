@@ -76,9 +76,9 @@ func newUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(int64) str
 	repo, auth, codec := newAuthKit()
 	reviewRepo := newReviewStoreFake()
 	shopRepo := &shopStoreFake{}
-	router := handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, domain.NewShopService(shopRepo)),
-		usecase.NewReviews(reviewRepo, domain.NewReviewService(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(repo, domain.NewUserService(repo), hasherFake{}), nil)
+	router := handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
+		usecase.NewReviews(reviewRepo, domain.NewReviews(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(repo, domain.NewUsers(repo), hasherFake{}), nil)
 	token := func(id int64) string {
 		t.Helper()
 		tok, err := codec.Issue(id)
@@ -610,11 +610,11 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	userRepo := repository.NewUserRepository(conn)
 	hasher := infra.BcryptPasswordHasher{}
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	auth := usecase.NewAuth(userQuery, domain.NewUserService(userRepo), hasher, codec, codec)
+	auth := usecase.NewAuth(userQuery, domain.NewUsers(userRepo), hasher, codec, codec)
 	router := handler.NewRouter(conn, auth,
-		usecase.NewShops(query.NewShopQuery(conn), domain.NewShopService(repository.NewShopRepository(conn))),
-		usecase.NewReviews(query.NewReviewQuery(conn), domain.NewReviewService(repository.NewReviewRepository(conn)), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userQuery, domain.NewUserService(userRepo), hasher), nil)
+		usecase.NewShops(query.NewShopQuery(conn), domain.NewShops(repository.NewShopRepository(conn))),
+		usecase.NewReviews(query.NewReviewQuery(conn), domain.NewReviews(repository.NewReviewRepository(conn)), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), hasher), nil)
 	return conn, router
 }
 

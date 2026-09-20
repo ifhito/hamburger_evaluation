@@ -379,13 +379,13 @@ func TestUsersUpdateEmailRule(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &fakeUsersRepo{
-				getByID: activeUsersByID(legacy),
-				updateProfile: func(context.Context, int64, usecase.ProfileChanges) (domain.User, error) {
+			query := &fakeUserQuery{getByID: activeUsersByID(legacy)}
+			repo := &fakeUserRepo{
+				updateProfile: func(context.Context, int64, domain.ProfileChanges) (domain.User, error) {
 					return legacy, nil
 				},
 			}
-			_, err := usecase.NewUsers(repo, fakeHasher{}).Update(
+			_, err := newUsers(query, repo, fakeHasher{}).Update(
 				context.Background(), legacy, legacy.ID, usecase.UpdateUserInput{Email: strPtr(tt.email)},
 			)
 			if len(tt.wantMsgs) == 0 {
