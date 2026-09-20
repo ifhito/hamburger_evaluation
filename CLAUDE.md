@@ -128,9 +128,9 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `GET /up` — ヘルスチェック (DB への ping)
 
 **認証**
-- `POST /signup` — アカウント作成 (username, email, password)
+- `POST /signup` — アカウント作成 (username, email, password。password_confirmation は任意で、送った場合は password と不一致なら 422)
 - `POST /login` — 認証して JWT トークンを受け取る
-- `POST /logout` — 現在のセッションを無効化 (要認証)
+- `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**
 - `GET /shops` — ショップ一覧
@@ -143,6 +143,9 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `POST /reviews` — レビューの投稿 (要認証)
 - `PUT /reviews/:id` — レビューの更新 (要認証)
 - `DELETE /reviews/:id` — レビューの削除 (要認証)
+
+**写真**
+- `GET /photos/*` — ディスクに保存されたレビュー写真を配信 (認証不要。末尾が `/` のディレクトリ path は一覧せず 404、末尾 `/` なしは 301 で `/` 付きへ転送されてから 404)。`PHOTO_STORAGE` が `disk` (既定) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 
 **ユーザー**
 - `GET /users` — ユーザー一覧
@@ -163,7 +166,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - **shops** — name, モデレーション状態 (pending / active / rejected), moderation_note, 申請者への FK
 - **burgers** — 中間テーブル経由でショップに紐づくバーガー
 - **shops_burgers** *(中間テーブル)* — shop_id (FK), burger_id (FK)
-- **reviews** — rating, comment, user への FK, burger への FK
+- **reviews** — rating, comment, user への FK, burger への FK, photo_key (写真の保存キー。任意), 論理削除 (discarded_at)
 - **burger_stats** — バーガーごとの、レビュー由来の集計値
 
 ```text
