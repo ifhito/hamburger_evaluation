@@ -1,5 +1,6 @@
 import type { ApiError } from './types/api'
 import type {
+  AuthUser,
   LoginRequest,
   LoginResponse,
   SignupRequest,
@@ -103,10 +104,12 @@ export const shopsApi = {
 }
 
 export const usersApi = {
-  list(): Promise<User[]> {
-    return request('/users')
+  get(id: number): Promise<User> {
+    // token があるときだけ Bearer を付ける。本人が自分のプロフィールを開いたときに限り API が email / admin を返す。
+    return getToken() ? authRequest(`/users/${id}`) : request(`/users/${id}`)
   },
-  update(id: number, data: UserUpdateInput): Promise<User> {
+  // PUT のレスポンスは常に本人ビュー（email / admin あり）なので AuthUser を返す。
+  update(id: number, data: UserUpdateInput): Promise<AuthUser> {
     return authRequest(`/users/${id}`, { method: 'PUT', body: JSON.stringify({ user: data }) })
   },
   delete(id: number): Promise<void> {

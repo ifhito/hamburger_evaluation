@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
-import { useUsers } from '../../shared/lib/hooks/useUsers'
+import { useUser } from '../../shared/lib/hooks/useUser'
 import { useReviews } from '../../shared/lib/hooks/useReviews'
 import { formatDate } from '../../shared/lib/date'
 import { Button } from '../../shared/ui/Button'
@@ -9,10 +9,16 @@ import { Layout } from '../../shared/ui/Layout'
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { user: authUser } = useAuth()
-  const { data: users, isLoading: usersLoading, error: usersError } = useUsers()
+  const { user: authUser, isLoading: authLoading } = useAuth()
 
   const userId = Number(id)
+  // /users/abc（NaN）など不正な id では user も reviews も取得しない
+  const isValidId = Number.isInteger(userId)
+  // 認証状態の復元前は authUser が null でも token は localStorage にあり得る。閲覧者が確定してから取得する
+  const { data: user, isLoading: userLoading, error: userError } = useUser(userId, authUser?.id ?? null, {
+    enabled: !authLoading,
+  })
+  // user_id を省略すると全件フィードになり他人のレビューをこのユーザーのものとして表示してしまうため、不正 id では取得自体を止める
   const {
     data: reviews,
     isLoading: reviewsLoading,
@@ -20,20 +26,20 @@ export default function UserDetailPage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useReviews({ user_id: userId })
-  const user = users?.find((u) => u.id === userId)
+  } = useReviews({ user_id: userId }, { enabled: isValidId })
   const isOwner = authUser?.id === userId
 
   return (
     <Layout title={user ? `${user.username}'s Profile` : 'User Profile'}>
-      {(usersLoading || reviewsLoading) && <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>}
-      {usersError && <ErrorMessage message="Failed to load user." />}
+      {(userLoading || reviewsLoading) && <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>}
+      {(!isValidId || userError) && <ErrorMessage message="Failed to load user." />}
 
       {user && (
         <div style={{ marginBottom: 32 }}>
           <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: 24, background: '#fff', marginBottom: 16 }}>
             <h2 style={{ marginBottom: 8 }}>{user.username}</h2>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>{user.email}</p>
+            {/* email は API が本人の閲覧時だけ返す。isOwner ではなく API の返却有無で出し分ける */}
+            {user.email && <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>{user.email}</p>}
           </div>
           {isOwner && (
             <Link

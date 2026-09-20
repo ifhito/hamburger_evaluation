@@ -5,8 +5,10 @@ import type { ReviewListParams } from '../types/review'
 // 「返却件数が PER_PAGE 未満なら最終ページ」の判定と API へ送る per_page を一致させる
 const PER_PAGE = 20
 
-export function useReviews(params?: ReviewListParams) {
+export function useReviews(params?: ReviewListParams, options?: { enabled?: boolean }) {
   return useInfiniteQuery({
+    // 呼び出し側が取得を止められる(例: user_id が不正なときに絞り込み無しの全件を取らない)。未指定なら常に取得する
+    enabled: options?.enabled,
     // page / per_page は含めない。フィルタ(params)が変わると別キーになり、先頭ページから読み直される
     queryKey: ['reviews', params],
     queryFn: ({ pageParam }) => reviewsApi.list({ ...params, page: pageParam, per_page: PER_PAGE }),
