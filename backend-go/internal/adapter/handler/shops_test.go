@@ -76,8 +76,8 @@ func (f *shopRepoFake) ListShopReviews(_ context.Context, shopID int64) ([]domai
 func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, aliceAuth, adminAuth string, aliceID int64) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
-	alice := users.seed("alice", "alice@example.com", "password123")
-	admin := users.seed("root", "root@example.com", "password123")
+	alice := users.seed("alice", "alice@example.com", "Password123!")
+	admin := users.seed("root", "root@example.com", "Password123!")
 	users.users[admin.ID].user.Admin = true
 	aliceToken, err := codec.Issue(alice.ID)
 	if err != nil {

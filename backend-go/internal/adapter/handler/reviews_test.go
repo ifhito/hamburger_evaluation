@@ -280,9 +280,9 @@ func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, 
 func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, photoDir, aliceAuth, bobAuth, adminAuth string) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
-	alice := users.seed("alice", "alice@example.com", "password123")
-	bob := users.seed("bob", "bob@example.com", "password123")
-	admin := users.seed("root", "root@example.com", "password123")
+	alice := users.seed("alice", "alice@example.com", "Password123!")
+	bob := users.seed("bob", "bob@example.com", "Password123!")
+	admin := users.seed("root", "root@example.com", "Password123!")
 	users.users[admin.ID].user.Admin = true
 	repo.usernames[alice.ID] = "alice"
 	repo.usernames[bob.ID] = "bob"

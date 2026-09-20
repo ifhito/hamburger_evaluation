@@ -67,7 +67,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `GET /up` — ヘルスチェック (DB ping)
 
 **認証**
-- `POST /signup` — アカウントを作成する (username、email、password。password_confirmation は任意で、送った場合は password と不一致なら 422)
+- `POST /signup` — アカウントを作成する (username、email、password。password は 8〜72 バイトで、半角英字・数字・記号をそれぞれ 1 文字以上含む。`PUT /users/:id` のパスワード変更にも同じ規則を適用するが、login は強度を検証しない。password_confirmation は任意で、送った場合は password と不一致なら 422)
 - `POST /login` — 認証して JWT トークンを受け取る
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (認証必須)
 

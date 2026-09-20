@@ -4,8 +4,9 @@
 // 固定された review 群である。その後、アプリが使うのと同じ domain の
 // calculator で burger_stats を再計算するので、GET のレスポンスは整合する。
 //
-// すべての fixture のパスワードは "password123" である。これらはよく知られた
-// 開発用 fixture であり、secret ではない。docker compose で実行する：
+// すべての fixture のパスワードは "Password123!" である（signup と同じ強度ルールを
+// 満たす）。これらはよく知られた開発用 fixture であり、secret ではない。
+// docker compose で実行する：
 //
 //	docker compose run --rm migrate up
 //	docker compose run --rm seed
@@ -31,8 +32,9 @@ import (
 )
 
 // devPassword は、すべての fixture ユーザーに共通のパスワードである
-// （開発専用）。
-const devPassword = "password123"
+// （開発専用）。domain.ValidatePassword を満たす値でなければならない
+// （main_test.go が固定する）。
+const devPassword = "Password123!"
 
 func main() {
 	if err := run(context.Background()); err != nil {
