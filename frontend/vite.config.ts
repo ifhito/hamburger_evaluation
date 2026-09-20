@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   // '.' = frontend ディレクトリ（vite の cwd）。process.cwd() のために @types/node を必要としないようにする。
   const env = loadEnv(mode, '.', '')
-  // /api の dev 専用 proxy 先。デフォルトはホスト上の Go API。
+  // /api の dev 専用プロキシ先。デフォルトはホスト上の Go API。
   const proxyTarget = env.VITE_API_PROXY_TARGET ?? 'http://host.docker.internal:8080'
   return {
     plugins: [react()],

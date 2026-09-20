@@ -43,7 +43,7 @@ docker compose run --rm migrate down -all
 ```
 
 ```bash
-# 冪等な dev 用フィクスチャ (admin + alice/bob/charlie、shops、burgers、
+# 冪等な開発用 fixture (admin + alice/bob/charlie、shops、burgers、
 # reviews、burger_stats) を seed する — `migrate up` の後に実行。DATABASE_URL で上書きできる
 cd backend-go
 docker compose run --rm seed
