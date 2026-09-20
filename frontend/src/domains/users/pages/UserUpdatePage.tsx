@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useUpdateUser, useDeleteUser } from "../hooks/useUserMutations";
 import { ApiError } from "../../../api/client/buildApiClient";
-import { PASSWORD_MIN_BYTES, validatePassword } from "../../../lib/password";
+import { PASSWORD_MAX_BYTES, PASSWORD_MIN_BYTES, validatePassword } from "../../../lib/password";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -109,7 +109,7 @@ export default function UserUpdatePage() {
           }}
           autoComplete="new-password"
           error={passwordError}
-          hint={t("auth.passwordHint", { min: PASSWORD_MIN_BYTES })}
+          hint={t("auth.passwordHint", { min: PASSWORD_MIN_BYTES, max: PASSWORD_MAX_BYTES })}
         />
         <Input
           id="passwordConfirmation"

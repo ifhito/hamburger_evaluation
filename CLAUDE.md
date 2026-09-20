@@ -199,7 +199,7 @@ frontend/src/
 ├── domains/      # auth、reviews、shops、users
 ├── api/          # API クライアント / HTTP 境界
 ├── states/       # グローバル state
-├── lib/          # 共通の純粋関数 (date、i18n、password)。password.ts はパスワード規則の検証で、backend-go/internal/domain/password.go と同じ規則の複製 (変更時は両方を直す)
+├── lib/          # 共通ユーティリティ (date、i18n、password)。password.ts はパスワード規則の検証で、backend-go/internal/domain/password.go と同じ規則の複製 (変更時は両方を直す)
 └── components/   # 共通 UI コンポーネント
 ```
 
