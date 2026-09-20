@@ -1,28 +1,28 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは、本リポジトリでコードを扱う際に Claude Code (claude.ai/code) に向けたガイダンスを提供する。
 
-## Project Overview
+## プロジェクト概要
 
-A hamburger review/evaluation web app. Users can register, post reviews of burgers at specific shops, and manage their profile.
+ハンバーガーのレビュー・評価 Web アプリ。ユーザーは登録し、特定の店舗のバーガーに対するレビューを投稿し、自分のプロフィールを管理できる。
 
-## Architecture
+## アーキテクチャ
 
-Two separate sub-projects, each run via Docker:
+独立した 2 つのサブプロジェクトからなり、それぞれ Docker で実行する。
 
-| Directory | Stack | Role |
+| ディレクトリ | スタック | 役割 |
 |-----------|-------|------|
-| `backend-go/` | Go (1.22+), net/http + sqlc + pgx | REST API server |
-| `frontend/` | React (TypeScript) + Vite | SPA client |
+| `backend-go/` | Go (1.22+), net/http + sqlc + pgx | REST API サーバー |
+| `frontend/` | React (TypeScript) + Vite | SPA クライアント |
 
-The backend follows clean architecture (handler → usecase → domain): dependencies point inward, and authorization decisions live in usecase/domain, not in handlers.
+バックエンドは clean architecture (handler → usecase → domain) に従う。依存関係は内側に向かい、認可の判断は handler ではなく usecase/domain に置く。
 
-## Backend (`backend-go/`)
+## バックエンド (`backend-go/`)
 
-- Serves on **:8080**; health check at `GET /up`
-- Runs with its own dedicated Postgres (host port 5433)
-- Authentication: **JWT** — token is returned on login and must be sent as `Authorization: Bearer <token>`. The API fails loudly at boot when `JWT_SECRET` is unset; export it before `docker compose up`.
-- API JSON uses **snake_case** on the wire; the frontend uses the snake_case wire types directly end-to-end (no casing-conversion layer).
+- **:8080** で提供する。ヘルスチェックは `GET /up`
+- 専用の Postgres で動作する (ホストポートは 5433)
+- 認証: **JWT** — トークンはログイン時に返され、`Authorization: Bearer <token>` として送信しなければならない。`JWT_SECRET` が未設定の場合、API は起動時に fail-loud する。`docker compose up` の前に export すること。
+- API の JSON はワイヤー上で **snake_case** を使う。フロントエンドは snake_case のワイヤー型をエンドツーエンドでそのまま使う (ケース変換レイヤーはない)。
 
 ```bash
 # Start (serves on :8080; health check at GET /up)
@@ -61,45 +61,45 @@ cd backend-go
 TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=disable' go test ./db/...
 ```
 
-### Endpoints
+### エンドポイント
 
-**Health**
-- `GET /up` — health check (DB ping)
+**ヘルス**
+- `GET /up` — ヘルスチェック (DB ping)
 
-**Auth**
-- `POST /signup` — create account (username, email, password)
-- `POST /login` — authenticate and receive JWT token
-- `POST /logout` — invalidate current session (auth required)
+**認証**
+- `POST /signup` — アカウントを作成する (username、email、password)
+- `POST /login` — 認証して JWT トークンを受け取る
+- `POST /logout` — 現在のセッションを無効化する (認証必須)
 
-**Shops**
-- `GET /shops` — list shops
-- `GET /shops/:id` — get a single shop
-- `POST /shops` — submit a shop (auth required)
+**店舗**
+- `GET /shops` — 店舗の一覧を取得する
+- `GET /shops/:id` — 店舗を 1 件取得する
+- `POST /shops` — 店舗を投稿する (認証必須)
 
-**Reviews**
-- `GET /reviews` — list all reviews
-- `GET /reviews/:id` — get a single review
-- `POST /reviews` — create a review (auth required)
-- `PUT /reviews/:id` — update a review (auth required)
-- `DELETE /reviews/:id` — delete a review (auth required)
+**レビュー**
+- `GET /reviews` — 全レビューの一覧を取得する
+- `GET /reviews/:id` — レビューを 1 件取得する
+- `POST /reviews` — レビューを作成する (認証必須)
+- `PUT /reviews/:id` — レビューを更新する (認証必須)
+- `DELETE /reviews/:id` — レビューを削除する (認証必須)
 
-**Users**
-- `GET /users` — list all users
-- `PUT /users/:id` — update a user (auth required; self-only, enforced in usecase)
-- `DELETE /users/:id` — delete a user (auth required; self-only, enforced in usecase)
+**ユーザー**
+- `GET /users` — 全ユーザーの一覧を取得する
+- `PUT /users/:id` — ユーザーを更新する (認証必須。本人のみ、usecase で強制)
+- `DELETE /users/:id` — ユーザーを削除する (認証必須。本人のみ、usecase で強制)
 
-**Admin** (auth required; admin-only decision enforced in usecase)
-- `GET /admin/shops` — list shops for moderation
-- `PUT /admin/shops/:id` — update a shop
-- `POST /admin/shops/:id/approve` — approve a submitted shop
-- `POST /admin/shops/:id/reject` — reject a submitted shop
+**管理者** (認証必須。管理者のみという判断は usecase で強制)
+- `GET /admin/shops` — モデレーション用に店舗の一覧を取得する
+- `PUT /admin/shops/:id` — 店舗を更新する
+- `POST /admin/shops/:id/approve` — 投稿された店舗を承認する
+- `POST /admin/shops/:id/reject` — 投稿された店舗を却下する
 
-## Frontend (`frontend/`)
+## フロントエンド (`frontend/`)
 
-- Built with **Feature-Sliced Design (FSD)** — but intentionally limited to three layers only: `app`, `pages`, `shared`
-- No `features`, `entities`, or `widgets` layers — keep it small
-- Storybook is configured for component development
-- Start with plain HTML (no custom design system yet)
+- **Feature-Sliced Design (FSD)** で構築 — ただし意図的に `app`、`pages`、`shared` の 3 レイヤーのみに限定している
+- `features`、`entities`、`widgets` の各レイヤーは持たない — 小さく保つ
+- コンポーネント開発用に Storybook が設定されている
+- まずはプレーンな HTML で始める (独自のデザインシステムはまだない)
 
 ```bash
 # Start (serves on :5173)
@@ -114,7 +114,7 @@ cd frontend
 pnpm run build
 ```
 
-**Directory layout** (`src/`):
+**ディレクトリ構成** (`src/`)：
 ```
 app/
   router/        # React Router config
@@ -136,18 +136,18 @@ shared/
       review.ts
 ```
 
-## Database Schema
+## データベーススキーマ
 
-Six tables, defined by the migrations in `backend-go/db/migrations/`:
+6 つのテーブルで、`backend-go/db/migrations/` のマイグレーションで定義されている：
 
-- **users** — id, email, username, password_digest, admin flag, soft delete (discarded_at)
-- **shops** — name, moderation status (pending/active/rejected), moderation_note, creator FK
-- **burgers** — burgers linked to shops via the join table
-- **shops_burgers** *(join table)* — shop_id (FK), burger_id (FK)
-- **reviews** — rating, comment, user FK, burger FK
-- **burger_stats** — review-derived aggregates per burger
+- **users** — id、email、username、password_digest、admin フラグ、soft delete (discarded_at)
+- **shops** — name、モデレーションステータス (pending/active/rejected)、moderation_note、作成者 FK
+- **burgers** — 結合テーブルを介して店舗に紐づくバーガー
+- **shops_burgers** *(結合テーブル)* — shop_id (FK)、burger_id (FK)
+- **reviews** — rating、comment、user FK、burger FK
+- **burger_stats** — バーガーごとのレビュー由来の集計
 
-### Relationships
+### リレーションシップ
 
 ```
 users    1 ──0..* reviews
