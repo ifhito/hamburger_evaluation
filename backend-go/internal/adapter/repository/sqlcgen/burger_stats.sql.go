@@ -40,6 +40,100 @@ func (q *Queries) GetBurgerStats(ctx context.Context, burgerID int64) (BurgerSta
 	return i, err
 }
 
+const listBurgerReviewFacts = `-- name: ListBurgerReviewFacts :many
+SELECT r.rating, r.created_at, r.user_id
+FROM reviews r
+JOIN users u ON u.id = r.user_id
+WHERE r.burger_id = $1
+  AND r.discarded_at IS NULL
+  AND u.discarded_at IS NULL
+ORDER BY r.id
+`
+
+type ListBurgerReviewFactsRow struct {
+	Rating    int16
+	CreatedAt pgtype.Timestamptz
+	UserID    int64
+}
+
+// The kept reviews feeding one burger's stats: excludes discarded reviews
+// AND reviews of discarded users (issue #15 R4/AC4 — deliberately stricter
+// than Rails' burger.reviews.kept, per the story decision). No active-shop
+// filter: stats aggregate all kept reviews, mirroring Rails.
+func (q *Queries) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]ListBurgerReviewFactsRow, error) {
+	rows, err := q.db.Query(ctx, listBurgerReviewFacts, burgerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBurgerReviewFactsRow
+	for rows.Next() {
+		var i ListBurgerReviewFactsRow
+		if err := rows.Scan(&i.Rating, &i.CreatedAt, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReviewerRatings = `-- name: ListReviewerRatings :many
+SELECT r.user_id, r.rating
+FROM reviews r
+WHERE r.user_id = ANY($1::bigint[])
+  AND r.discarded_at IS NULL
+ORDER BY r.id
+`
+
+type ListReviewerRatingsRow struct {
+	UserID int64
+	Rating int16
+}
+
+// Reviewer-trust history: each reviewer's kept ratings across ALL burgers
+// (mirrors Rails user.reviews.kept).
+func (q *Queries) ListReviewerRatings(ctx context.Context, userIds []int64) ([]ListReviewerRatingsRow, error) {
+	rows, err := q.db.Query(ctx, listReviewerRatings, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReviewerRatingsRow
+	for rows.Next() {
+		var i ListReviewerRatingsRow
+		if err := rows.Scan(&i.UserID, &i.Rating); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockBurgerForStats = `-- name: LockBurgerForStats :one
+SELECT id FROM burgers
+WHERE id = $1
+FOR UPDATE
+`
+
+// Serializes burger_stats recalculation per burger. Recalculation is
+// read-all-then-overwrite, so under READ COMMITTED two concurrent
+// transactions could each read a snapshot missing the other's uncommitted
+// review and the later upsert would overwrite the stats with a stale count
+// (lost update). FOR UPDATE on the burgers row makes the second
+// transaction block here until the first commits; its next statement then
+// sees the committed review.
+func (q *Queries) LockBurgerForStats(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, lockBurgerForStats, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
 const upsertBurgerStats = `-- name: UpsertBurgerStats :one
 INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at)
 VALUES ($1, $2, $3, $4, $5, $6)
