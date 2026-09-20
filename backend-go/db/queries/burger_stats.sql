@@ -10,22 +10,23 @@ SET review_count = EXCLUDED.review_count,
 RETURNING *;
 
 -- name: LockBurgerForStats :one
--- Serializes burger_stats recalculation per burger. Recalculation is
--- read-all-then-overwrite, so under READ COMMITTED two concurrent
--- transactions could each read a snapshot missing the other's uncommitted
--- review and the later upsert would overwrite the stats with a stale count
--- (lost update). FOR UPDATE on the burgers row makes the second
--- transaction block here until the first commits; its next statement then
--- sees the committed review.
+-- burger ごとの burger_stats の再計算を直列化する。再計算は
+-- 「全件を読んでから上書きする」処理なので、READ COMMITTED では、並行する
+-- 2 つのトランザクションがそれぞれ、相手のコミット前の review が欠けた
+-- スナップショットを読み、後の upsert が古い件数で統計を上書きしてしまう
+-- 可能性がある（lost update）。burgers 行への FOR UPDATE により、
+-- 2 つ目のトランザクションはここで 1 つ目がコミットするまでブロックされる。
+-- その次の文は、その時点でコミット済みの review を見る。
 SELECT id FROM burgers
 WHERE id = $1
 FOR UPDATE;
 
 -- name: ListBurgerReviewFacts :many
--- The kept reviews feeding one burger's stats: excludes discarded reviews
--- AND reviews of discarded users (issue #15 R4/AC4 — deliberately stricter
--- than Rails' burger.reviews.kept, per the story decision). No active-shop
--- filter: stats aggregate all kept reviews, mirroring Rails.
+-- 1 つの burger の統計の元になる kept な review。discard 済みの review と、
+-- discard 済みの user の review の両方を除外する（issue #15 R4/AC4。story の
+-- 決定に従い、Rails の burger.reviews.kept よりも意図的に厳しくしている）。
+-- active な shop によるフィルタは行わない。統計はすべての kept な review を
+-- 集計する（Rails と同様）。
 SELECT r.rating, r.created_at, r.user_id
 FROM reviews r
 JOIN users u ON u.id = r.user_id
@@ -35,8 +36,8 @@ WHERE r.burger_id = $1
 ORDER BY r.id;
 
 -- name: ListReviewerRatings :many
--- Reviewer-trust history: each reviewer's kept ratings across ALL burgers
--- (mirrors Rails user.reviews.kept).
+-- reviewer trust の履歴：各 reviewer がすべての burger にわたってつけた
+-- kept な rating（Rails の user.reviews.kept に対応する）。
 SELECT r.user_id, r.rating
 FROM reviews r
 WHERE r.user_id = ANY(sqlc.arg(user_ids)::bigint[])

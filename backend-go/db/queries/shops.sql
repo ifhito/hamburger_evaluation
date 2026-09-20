@@ -8,11 +8,12 @@ SELECT * FROM shops
 WHERE id = $1;
 
 -- name: ListShops :many
--- The WHERE clause below is the SQL translation of domain.ShopVisibility
--- (view all / active / own); the rule itself lives in the domain package.
--- status 1 = active. name_pattern is a pre-escaped ILIKE pattern (or NULL
--- for no keyword filter); comparing creator_id with a NULL viewer_id is
--- never true, which is exactly the anonymous case.
+-- 以下の WHERE 句は domain.ShopVisibility
+-- （すべて閲覧 / active / 自分のもの）を SQL に翻訳したものであり、
+-- ルール自体は domain パッケージにある。status 1 = active。name_pattern は
+-- あらかじめエスケープ済みの ILIKE パターン（キーワードフィルタなしなら
+-- NULL）である。creator_id を NULL の viewer_id と比較しても決して真に
+-- ならず、これがまさに匿名の場合である。
 SELECT id, name, status, moderation_note, creator_id FROM shops
 WHERE (sqlc.arg(view_all)::boolean
        OR status = 1
@@ -22,10 +23,10 @@ ORDER BY name, id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: ListShopsForModeration :many
--- Admin moderation list: every shop with its creator, newest first
--- (id desc breaks created_at ties for a deterministic order).
--- status_code is the smallint status filter, NULL for all statuses; the
--- string-to-smallint mapping lives in the repository.
+-- admin の moderation 一覧：creator 付きのすべての shop を、新しい順に
+-- （id desc が created_at の同値を解消し、順序を決定的にする）。
+-- status_code は smallint の status フィルタで、すべての status なら NULL
+-- である。文字列から smallint への対応付けは repository にある。
 SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
        u.username AS creator_username
 FROM shops s
@@ -42,9 +43,9 @@ LEFT JOIN users u ON u.id = s.creator_id
 WHERE s.id = $1;
 
 -- name: ListShopReviews :many
--- The shop's non-discarded reviews of non-discarded users, newest first;
--- the u.discarded_at filter hides discarded users' (still kept) reviews
--- from the shop detail (S8).
+-- その shop の、discard されていない user の、discard されていない review。
+-- 新しい順。u.discarded_at フィルタは、discard 済みの user の（まだ kept な）
+-- review を shop 詳細から隠す（S8）。
 SELECT r.id, r.rating, r.comment, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
@@ -67,8 +68,8 @@ WHERE id = $1
 RETURNING *;
 
 -- name: UpdateShopName :one
--- Column-scoped rename: touches only name so a concurrent status change
--- (approve/reject) is never reverted from a stale snapshot.
+-- 列を限定した名前変更：name だけを更新するので、並行する status の変更
+-- （approve/reject）が古いスナップショットによって元に戻されることはない。
 UPDATE shops
 SET name = $2,
     updated_at = now()
@@ -76,9 +77,9 @@ WHERE id = $1
 RETURNING *;
 
 -- name: UpdateShopStatus :one
--- Column-scoped moderation transition: touches only status and
--- moderation_note so a concurrent rename is never reverted from a stale
--- snapshot.
+-- 列を限定した moderation 遷移：status と moderation_note だけを更新する
+-- ため、並行する名前変更が古いスナップショットによって元に戻される
+-- ことはない。
 UPDATE shops
 SET status = $2,
     moderation_note = $3,

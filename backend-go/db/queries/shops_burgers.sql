@@ -8,9 +8,9 @@ WHERE shop_id = $1
 ORDER BY burger_id;
 
 -- name: GetShopBurgerWithStats :one
--- The burger only when it is linked to the shop via shops_burgers, with
--- its stats (NULLs when none calculated yet) — the review submission
--- existence check and response payload in one query.
+-- shops_burgers を介してその shop に紐づいている場合に限った burger と、
+-- その統計（まだ計算されていなければ NULL）。review 投稿時の存在チェックと
+-- レスポンスの payload を 1 つのクエリで兼ねる。
 SELECT b.id, b.name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
 FROM burgers b
@@ -19,11 +19,12 @@ LEFT JOIN burger_stats bs ON bs.burger_id = b.id
 WHERE sb.shop_id = sqlc.arg(shop_id) AND b.id = sqlc.arg(burger_id);
 
 -- name: GetShopBurgerByNameWithStats :one
--- The shop's burger with the given exact name (the burger_name review
--- submission lookup, mirroring Rails' shop.burgers.find_by(name:)), with
--- its stats (NULLs when none calculated yet) — the find side of
--- find-or-create. Nothing enforces name uniqueness within a shop, so the
--- lowest id wins deterministically.
+-- その shop の burger のうち、名前が指定と完全に一致するもの
+-- （review 投稿時の burger_name による検索。Rails の
+-- shop.burgers.find_by(name:) に対応する）と、その統計
+-- （まだ計算されていなければ NULL）。find-or-create の find 側である。
+-- shop 内で名前の一意性を強制するものは何もないので、最小の id のものが
+-- 決定的に採用される。
 SELECT b.id, b.name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
 FROM burgers b
