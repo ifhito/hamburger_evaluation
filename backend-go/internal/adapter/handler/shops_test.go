@@ -123,16 +123,16 @@ func TestListShops(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name:     "AC1 anonymous sees active shops only",
+			name:     "AC1 匿名は active な shop だけが見える",
 			wantBody: `[{"id":1,"name":"Active Diner","status":"active"}]`,
 		},
 		{
-			name:       "AC2 creator additionally sees own pending shop with status",
+			name:       "AC2 creator は自分の pending な shop も status 付きで見える",
 			authHeader: aliceAuth,
 			wantBody:   `[{"id":1,"name":"Active Diner","status":"active"},{"id":2,"name":"Alice Pending","status":"pending"}]`,
 		},
 		{
-			name:       "AC3 admin sees all statuses",
+			name:       "AC3 admin はすべての status の shop が見える",
 			authHeader: adminAuth,
 			wantBody:   `[{"id":1,"name":"Active Diner","status":"active"},{"id":2,"name":"Alice Pending","status":"pending"},{"id":3,"name":"Rejected Grill","status":"rejected"}]`,
 		},
@@ -164,28 +164,28 @@ func TestListShopsParams(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name:     "keyword filters by substring",
+			name:     "keyword は部分文字列で絞り込む",
 			query:    "?keyword=diner",
 			wantBody: `[{"id":1,"name":"Active Diner","status":"active"}]`,
 		},
 		{
-			name:     "keyword with no match yields empty array",
+			name:     "keyword に一致するものがなければ空配列になる",
 			query:    "?keyword=nope",
 			wantBody: `[]`,
 		},
 		{
-			name:       "per_page=1 page=2 returns the second shop",
+			name:       "per_page=1 page=2 は 2 番目の shop を返す",
 			query:      "?per_page=1&page=2",
 			authHeader: adminAuth,
 			wantBody:   `[{"id":2,"name":"Alice Pending","status":"pending"}]`,
 		},
 		{
-			name:     "non-numeric page and per_page fall back to defaults",
+			name:     "数値でない page と per_page はデフォルト値に fallback する",
 			query:    "?page=abc&per_page=xyz",
 			wantBody: `[{"id":1,"name":"Active Diner","status":"active"}]`,
 		},
 		{
-			name:     "page beyond the data yields empty array",
+			name:     "データの範囲外の page は空配列になる",
 			query:    "?page=99",
 			wantBody: `[]`,
 		},
@@ -269,12 +269,12 @@ func TestGetShopVisibility(t *testing.T) {
 		authHeader string
 		wantStatus int
 	}{
-		{name: "AC4 anonymous viewer gets 404 for pending shop", path: "/shops/2", wantStatus: http.StatusNotFound},
-		{name: "AC4 creator gets 200 for own pending shop", path: "/shops/2", authHeader: aliceAuth, wantStatus: http.StatusOK},
-		{name: "AC4 admin gets 200 for pending shop", path: "/shops/2", authHeader: adminAuth, wantStatus: http.StatusOK},
-		{name: "non-creator gets 404 for rejected shop", path: "/shops/3", authHeader: aliceAuth, wantStatus: http.StatusNotFound},
-		{name: "AC6 unknown id gets 404", path: "/shops/999", wantStatus: http.StatusNotFound},
-		{name: "non-numeric id gets the same 404", path: "/shops/abc", wantStatus: http.StatusNotFound},
+		{name: "AC4 匿名の viewer が pending な shop を開くと 404 になる", path: "/shops/2", wantStatus: http.StatusNotFound},
+		{name: "AC4 creator が自分の pending な shop を開くと 200 になる", path: "/shops/2", authHeader: aliceAuth, wantStatus: http.StatusOK},
+		{name: "AC4 admin が pending な shop を開くと 200 になる", path: "/shops/2", authHeader: adminAuth, wantStatus: http.StatusOK},
+		{name: "creator 以外が rejected な shop を開くと 404 になる", path: "/shops/3", authHeader: aliceAuth, wantStatus: http.StatusNotFound},
+		{name: "AC6 未知の id は 404 になる", path: "/shops/999", wantStatus: http.StatusNotFound},
+		{name: "非数値の id は同じ 404 になる", path: "/shops/abc", wantStatus: http.StatusNotFound},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -290,7 +290,7 @@ func TestGetShopVisibility(t *testing.T) {
 		})
 	}
 
-	t.Run("repository failure returns 500", func(t *testing.T) {
+	t.Run("repository の失敗は 500 を返す", func(t *testing.T) {
 		failRouter, _, _, _ := newShopsRouter(t, &shopRepoFake{err: fmt.Errorf("db down")})
 		rec := do(failRouter, http.MethodGet, "/shops/1", "", "")
 		if rec.Code != http.StatusInternalServerError {

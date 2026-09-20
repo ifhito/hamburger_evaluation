@@ -80,34 +80,34 @@ func TestCreateShop(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name:       "unauthenticated returns 401",
+			name:       "未認証は 401 を返す",
 			body:       `{"shop":{"name":"New Shack"}}`,
 			wantStatus: http.StatusUnauthorized,
 			wantBody:   `{"error":"Unauthorized"}`,
 		},
 		{
-			name:       "whitespace-only name returns 422",
+			name:       "空白のみの name は 422 を返す",
 			body:       `{"shop":{"name":"   "}}`,
 			auth:       true,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Name can't be blank"]}`,
 		},
 		{
-			name:       "missing shop wrapper returns the same 422",
+			name:       "shop ラッパーがなくても同じ 422 を返す",
 			body:       `{}`,
 			auth:       true,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Name can't be blank"]}`,
 		},
 		{
-			name:       "malformed JSON returns 400",
+			name:       "不正な JSON は 400 を返す",
 			body:       `{"shop":`,
 			auth:       true,
 			wantStatus: http.StatusBadRequest,
 			wantBody:   `{"error":"invalid JSON body"}`,
 		},
 		{
-			name:       "valid name returns 201 pending with creator",
+			name:       "有効な name なら creator 付きの pending な shop を 201 で返す",
 			body:       `{"shop":{"name":"New Shack"}}`,
 			auth:       true,
 			wantStatus: http.StatusCreated,
@@ -131,7 +131,7 @@ func TestCreateShop(t *testing.T) {
 		})
 	}
 
-	t.Run("created pending shop is listed for its creator but not anonymously", func(t *testing.T) {
+	t.Run("作成した pending な shop は creator の一覧には出るが匿名の一覧には出ない", func(t *testing.T) {
 		router, aliceAuth, _, _ := newShopsRouter(t, seedShops(1))
 		if rec := do(router, http.MethodPost, "/shops", `{"shop":{"name":"New Shack"}}`, aliceAuth); rec.Code != http.StatusCreated {
 			t.Fatalf("create status = %d (body %s)", rec.Code, rec.Body)
@@ -163,7 +163,7 @@ func TestAdminShopsForbidden(t *testing.T) {
 	}
 	router, aliceAuth, _, _ := newShopsRouter(t, seedShops(1))
 	for _, ep := range endpoints {
-		t.Run(ep.method+" "+ep.path+" non-admin gets 403", func(t *testing.T) {
+		t.Run(ep.method+" "+ep.path+" は非 admin だと 403 になる", func(t *testing.T) {
 			rec := do(router, ep.method, ep.path, ep.body, aliceAuth)
 			if rec.Code != http.StatusForbidden {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusForbidden, rec.Body)
@@ -172,7 +172,7 @@ func TestAdminShopsForbidden(t *testing.T) {
 				t.Errorf("body = %q, want the Forbidden JSON", got)
 			}
 		})
-		t.Run(ep.method+" "+ep.path+" unauthenticated gets 401", func(t *testing.T) {
+		t.Run(ep.method+" "+ep.path+" は未認証だと 401 になる", func(t *testing.T) {
 			rec := do(router, ep.method, ep.path, "", "")
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnauthorized, rec.Body)
@@ -180,7 +180,7 @@ func TestAdminShopsForbidden(t *testing.T) {
 		})
 	}
 
-	t.Run("non-admin gets 403 even for an unknown shop id", func(t *testing.T) {
+	t.Run("未知の shop id でも非 admin は 403 になる", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/999/approve", "", aliceAuth)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("status = %d, want %d (existence must not leak)", rec.Code, http.StatusForbidden)
@@ -202,24 +202,24 @@ func TestAdminListShops(t *testing.T) {
 		wantBody string
 	}{
 		{
-			name:  "all shops newest first",
+			name:  "すべての shop を新しい順に返す",
 			query: "",
 			wantBody: `[{"id":3,"name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","creator":null},` +
 				`{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}},` +
 				`{"id":1,"name":"Active Diner","status":"active","moderation_note":null,"creator":null}]`,
 		},
 		{
-			name:     "status=pending filters",
+			name:     "status=pending で絞り込む",
 			query:    "?status=pending",
 			wantBody: `[{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}}]`,
 		},
 		{
-			name:     "unknown status yields empty array",
+			name:     "未知の status は空配列になる",
 			query:    "?status=bogus",
 			wantBody: `[]`,
 		},
 		{
-			name:  "empty status means all",
+			name:  "status が空ならすべての shop を返す",
 			query: "?status=",
 			wantBody: `[{"id":3,"name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","creator":null},` +
 				`{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}},` +
@@ -251,28 +251,28 @@ func TestAdminUpdateShop(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name:       "rename returns 200 with unchanged status",
+			name:       "rename は status を変えずに 200 を返す",
 			path:       "/admin/shops/2",
 			body:       `{"shop":{"name":"Renamed Shack"}}`,
 			wantStatus: http.StatusOK,
 			wantBody:   `{"id":2,"name":"Renamed Shack","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}}`,
 		},
 		{
-			name:       "blank name returns 422",
+			name:       "空の name は 422 を返す",
 			path:       "/admin/shops/2",
 			body:       `{"shop":{"name":""}}`,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Name can't be blank"]}`,
 		},
 		{
-			name:       "unknown id returns 404",
+			name:       "未知の id は 404 を返す",
 			path:       "/admin/shops/999",
 			body:       `{"shop":{"name":"Renamed"}}`,
 			wantStatus: http.StatusNotFound,
 			wantBody:   `{"error":"Shop not found"}`,
 		},
 		{
-			name:       "non-numeric id returns the same 404",
+			name:       "非数値の id は同じ 404 を返す",
 			path:       "/admin/shops/abc",
 			body:       `{"shop":{"name":"Renamed"}}`,
 			wantStatus: http.StatusNotFound,
@@ -302,7 +302,7 @@ func TestAdminApproveShop(t *testing.T) {
 	repo.shops[2].Shop.ModerationNote = shopPtr("needs fixes")
 	router, _, adminAuth, _ := newShopsRouter(t, repo)
 
-	t.Run("approves a rejected shop and clears the note", func(t *testing.T) {
+	t.Run("rejected の shop を approve して note を消す", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/3/approve", "", adminAuth)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
@@ -313,21 +313,21 @@ func TestAdminApproveShop(t *testing.T) {
 		}
 	})
 
-	t.Run("approved shop appears in the anonymous list", func(t *testing.T) {
+	t.Run("approve された shop は匿名の一覧に出る", func(t *testing.T) {
 		got := do(router, http.MethodGet, "/shops?keyword=Rejected+Grill", "", "").Body.String()
 		if want := `[{"id":3,"name":"Rejected Grill","status":"active"}]`; got != want {
 			t.Errorf("anonymous list = %s, want %s", got, want)
 		}
 	})
 
-	t.Run("request body is ignored", func(t *testing.T) {
+	t.Run("リクエスト body は無視される", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/2/approve", `not even json`, adminAuth)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 	})
 
-	t.Run("unknown id returns 404", func(t *testing.T) {
+	t.Run("未知の id は 404 を返す", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/999/approve", "", adminAuth)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusNotFound, rec.Body)
@@ -345,7 +345,7 @@ func TestAdminApproveShop(t *testing.T) {
 func TestAdminRejectShop(t *testing.T) {
 	router, _, adminAuth, _ := newShopsRouter(t, seedShops(1))
 
-	t.Run("rejects with the note", func(t *testing.T) {
+	t.Run("note 付きで reject する", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/1/reject", `{"moderation_note":"spam"}`, adminAuth)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
@@ -356,14 +356,14 @@ func TestAdminRejectShop(t *testing.T) {
 		}
 	})
 
-	t.Run("rejected shop leaves the anonymous list", func(t *testing.T) {
+	t.Run("reject された shop は匿名の一覧から消える", func(t *testing.T) {
 		got := do(router, http.MethodGet, "/shops?keyword=Active+Diner", "", "").Body.String()
 		if got != `[]` {
 			t.Errorf("anonymous list = %s, want []", got)
 		}
 	})
 
-	t.Run("empty body rejects with null note", func(t *testing.T) {
+	t.Run("空の body は note を null にして reject する", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/2/reject", "", adminAuth)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
@@ -374,14 +374,14 @@ func TestAdminRejectShop(t *testing.T) {
 		}
 	})
 
-	t.Run("malformed JSON body returns 400", func(t *testing.T) {
+	t.Run("不正な JSON の body は 400 を返す", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/2/reject", `{"moderation_note":`, adminAuth)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusBadRequest, rec.Body)
 		}
 	})
 
-	t.Run("unknown id returns 404", func(t *testing.T) {
+	t.Run("未知の id は 404 を返す", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/999/reject", "", adminAuth)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusNotFound, rec.Body)

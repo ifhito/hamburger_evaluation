@@ -98,7 +98,7 @@ func TestReviewRepository(t *testing.T) {
 	insertRow(ctx, t, conn, insertReview, 2, "pending only", alice, hidden, nil, t2)
 	insertRow(ctx, t, conn, insertReview, 2, "rejected only", alice, outcast, nil, t2)
 
-	t.Run("ListReviews filters to active-shop burgers, no dupes, newest first", func(t *testing.T) {
+	t.Run("ListReviews は active な shop の burger に絞り込み、重複なしで新しい順に返す", func(t *testing.T) {
 		reviews, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
@@ -131,7 +131,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("ListReviews paginates the ordered feed", func(t *testing.T) {
+	t.Run("ListReviews は順序付きフィードを pagination する", func(t *testing.T) {
 		page1, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
@@ -155,7 +155,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("ListReviews applies the Rails ReviewQuery filters on top of the feed rules", func(t *testing.T) {
+	t.Run("ListReviews はフィードのルールに加えて Rails ReviewQuery の filter を適用する", func(t *testing.T) {
 		intp := func(n int) *int { return &n }
 		int64p := func(n int64) *int64 { return &n }
 		tests := []struct {
@@ -163,27 +163,27 @@ func TestReviewRepository(t *testing.T) {
 			filter usecase.ReviewListFilter
 			want   []int64
 		}{
-			{name: "rating exact match (by_rating)", filter: usecase.ReviewListFilter{Rating: intp(4)}, want: []int64{rTie2}},
+			{name: "rating の完全一致 (by_rating)", filter: usecase.ReviewListFilter{Rating: intp(4)}, want: []int64{rTie2}},
 			// rating 2 の review は pending だけ・rejected だけの burger にしか
 			// 存在しない：active な shop のフィードのルールが引き続き適用される。
-			{name: "rating matching only hidden reviews is empty", filter: usecase.ReviewListFilter{Rating: intp(2)}, want: []int64{}},
-			{name: "keyword is case-insensitive (keyword_search ILIKE)", filter: usecase.ReviewListFilter{Keyword: "tAsT"}, want: []int64{rOld}},
+			{name: "rating が非表示の review にしか一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(2)}, want: []int64{}},
+			{name: "keyword は大文字小文字を区別しない (keyword_search ILIKE)", filter: usecase.ReviewListFilter{Keyword: "tAsT"}, want: []int64{rOld}},
 			// NULL の comment は決して一致しない。Rails の comment ILIKE と
 			// 同様である。
-			{name: "keyword skips NULL comments", filter: usecase.ReviewListFilter{Keyword: "a"}, want: []int64{rOld}},
+			{name: "keyword は NULL の comment を対象にしない", filter: usecase.ReviewListFilter{Keyword: "a"}, want: []int64{rOld}},
 			// エスケープしなければ、"%" は NULL でないすべての comment に
 			// ILIKE で一致してしまう。
-			{name: "keyword LIKE metacharacters match literally", filter: usecase.ReviewListFilter{Keyword: "%"}, want: []int64{}},
-			{name: "keyword matching only hidden reviews is empty", filter: usecase.ReviewListFilter{Keyword: "only"}, want: []int64{}},
-			{name: "shop_id follows the shops_burgers link", filter: usecase.ReviewListFilter{ShopID: int64p(active2)}, want: []int64{rTie1, rOld}},
-			{name: "shop_id keeps all burgers of the shop", filter: usecase.ReviewListFilter{ShopID: int64p(active1)}, want: []int64{rTie2, rTie1, rOld}},
-			{name: "unknown shop_id is empty", filter: usecase.ReviewListFilter{ShopID: int64p(99999)}, want: []int64{}},
-			{name: "filters combine with AND", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: int64p(active2)}, want: []int64{rOld}},
-			{name: "AND combination with no match is empty", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []int64{}},
+			{name: "keyword の LIKE メタ文字はリテラルとして一致する", filter: usecase.ReviewListFilter{Keyword: "%"}, want: []int64{}},
+			{name: "keyword が非表示の review にしか一致しない場合は空になる", filter: usecase.ReviewListFilter{Keyword: "only"}, want: []int64{}},
+			{name: "shop_id は shops_burgers の link をたどる", filter: usecase.ReviewListFilter{ShopID: int64p(active2)}, want: []int64{rTie1, rOld}},
+			{name: "shop_id で絞り込んでも、その shop の burger の review はすべて残る", filter: usecase.ReviewListFilter{ShopID: int64p(active1)}, want: []int64{rTie2, rTie1, rOld}},
+			{name: "存在しない shop_id は空になる", filter: usecase.ReviewListFilter{ShopID: int64p(99999)}, want: []int64{}},
+			{name: "filter は AND で組み合わされる", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: int64p(active2)}, want: []int64{rOld}},
+			{name: "AND の組み合わせが一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []int64{}},
 			// 範囲外の rating は比較結果が false にならなければならず、
 			// smallint カラムをオーバーフローさせて SQL エラーに
 			// なってはならない。
-			{name: "rating beyond smallint is empty, not an error", filter: usecase.ReviewListFilter{Rating: intp(1 << 40)}, want: []int64{}},
+			{name: "smallint を超える rating は空になり、エラーにならない", filter: usecase.ReviewListFilter{Rating: intp(1 << 40)}, want: []int64{}},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -198,7 +198,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("shop_id filter requires the filter shop itself to be active", func(t *testing.T) {
+	t.Run("shop_id の filter は、指定された shop 自体が active であることを要求する", func(t *testing.T) {
 		// active と pending の「両方」の shop に link された burger：その
 		// review は（active な link 経由で）フィードに含まれるが、pending な
 		// shop で絞り込むと何も返してはならない。これは Rails の、status を
@@ -242,7 +242,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("GetReview joins author, burger, and stats", func(t *testing.T) {
+	t.Run("GetReview は author、burger、stats を join する", func(t *testing.T) {
 		got, err := repo.GetReview(ctx, rTie1)
 		if err != nil {
 			t.Fatalf("GetReview returned error: %v", err)
@@ -261,7 +261,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("AC6 discarded and unknown reviews yield ErrReviewNotFound", func(t *testing.T) {
+	t.Run("AC6 discard 済みの review と存在しない review は ErrReviewNotFound になる", func(t *testing.T) {
 		for name, id := range map[string]int64{"discarded": rDiscarded, "unknown": 99999} {
 			if _, err := repo.GetReview(ctx, id); !errors.Is(err, domain.ErrReviewNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrReviewNotFound)
@@ -269,7 +269,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("GetShop returns the bare shop or ErrShopNotFound", func(t *testing.T) {
+	t.Run("GetShop は shop 単体を返すか ErrShopNotFound を返す", func(t *testing.T) {
 		shop, err := repo.GetShop(ctx, pending)
 		if err != nil {
 			t.Fatalf("GetShop returned error: %v", err)
@@ -282,7 +282,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("GetShopBurger requires the shops_burgers link", func(t *testing.T) {
+	t.Run("GetShopBurger は shops_burgers の link を要求する", func(t *testing.T) {
 		burger, err := repo.GetShopBurger(ctx, active1, cheese)
 		if err != nil {
 			t.Fatalf("GetShopBurger returned error: %v", err)
@@ -307,7 +307,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("CreateReview inserts and returns the stored row", func(t *testing.T) {
+	t.Run("CreateReview は insert して保存された行を返す", func(t *testing.T) {
 		review, err := domain.NewReview(4, "Fresh", carol, cheese)
 		if err != nil {
 			t.Fatalf("NewReview returned error: %v", err)
@@ -337,7 +337,7 @@ func TestReviewRepository(t *testing.T) {
 		seedCheeseStats(t)
 	})
 
-	t.Run("UpdateReviewContent writes only rating and comment", func(t *testing.T) {
+	t.Run("UpdateReviewContent は rating と comment だけを書き込む", func(t *testing.T) {
 		updated, err := repo.UpdateReviewContent(ctx, rOld, 2, "Changed my mind")
 		if err != nil {
 			t.Fatalf("UpdateReviewContent returned error: %v", err)
@@ -360,7 +360,7 @@ func TestReviewRepository(t *testing.T) {
 		seedCheeseStats(t)
 	})
 
-	t.Run("UpdateReviewContent on discarded or unknown reviews yields ErrReviewNotFound", func(t *testing.T) {
+	t.Run("UpdateReviewContent に discard 済みまたは存在しない review を渡すと ErrReviewNotFound になる", func(t *testing.T) {
 		for name, id := range map[string]int64{"discarded": rDiscarded, "unknown": 99999} {
 			if _, err := repo.UpdateReviewContent(ctx, id, 3, "x"); !errors.Is(err, domain.ErrReviewNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrReviewNotFound)
@@ -368,7 +368,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("DiscardReview soft-deletes exactly once and never hard-deletes", func(t *testing.T) {
+	t.Run("DiscardReview は soft delete をちょうど 1 回だけ行い、hard delete はしない", func(t *testing.T) {
 		victim := insertRow(ctx, t, conn, insertReview, 3, "bye", carol, cheese, nil, t2)
 		if err := repo.DiscardReview(ctx, victim); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
@@ -468,7 +468,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		return created, burger
 	}
 
-	t.Run("existing name in the shop is reused with its pre-insert stats", func(t *testing.T) {
+	t.Run("shop 内に同名の burger があれば再利用し、戻り値の burger は insert 前の stats を持つ", func(t *testing.T) {
 		created, burger := mustNamedCreate(t, shopA, "Cheese")
 		if burger.ID != cheese {
 			t.Fatalf("burger id = %d, want the existing Cheese %d", burger.ID, cheese)
@@ -489,7 +489,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown name creates the burger and its shops_burgers link", func(t *testing.T) {
+	t.Run("未知の名前は burger とその shops_burgers の link を作成する", func(t *testing.T) {
 		created, burger := mustNamedCreate(t, shopA, "Veggie")
 		if burger.Name != "Veggie" || burger.ID == cheese {
 			t.Fatalf("burger = %+v, want a new Veggie row", burger)
@@ -508,7 +508,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		}
 	})
 
-	t.Run("the same name at another shop is a distinct burger row", func(t *testing.T) {
+	t.Run("別の shop の同じ名前は別の burger 行になる", func(t *testing.T) {
 		_, burger := mustNamedCreate(t, shopB, "Cheese")
 		if burger.ID == cheese {
 			t.Fatalf("burger id = %d, want a new row distinct from shop A's Cheese %d", burger.ID, cheese)
@@ -525,7 +525,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		}
 	})
 
-	t.Run("a failed insert commits no orphan burger or link", func(t *testing.T) {
+	t.Run("insert に失敗しても孤立した burger や link は commit されない", func(t *testing.T) {
 		// 未知の author は、burger と link の insert の後で reviews.user_id の
 		// FK に違反する。トランザクション全体が rollback されなければならない。
 		review := domain.Review{Rating: 4, AuthorID: 99999}
@@ -698,7 +698,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 
 	var aliceReview domain.Review
 
-	t.Run("AC1 CreateReview upserts stats in the same transaction", func(t *testing.T) {
+	t.Run("AC1 CreateReview は同一トランザクション内で stats を upsert する", func(t *testing.T) {
 		aliceReview = mustCreateReview(ctx, t, repo, 5, "great", alice, burger)
 		stats := requireConsistentStats(ctx, t, conn, burger)
 		if stats.ReviewCount != 1 || stats.AverageRating != 5.0 {
@@ -712,7 +712,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateReviewContent recalculates stats", func(t *testing.T) {
+	t.Run("UpdateReviewContent は stats を再計算する", func(t *testing.T) {
 		before := requireConsistentStats(ctx, t, conn, burger)
 		if _, err := repo.UpdateReviewContent(ctx, aliceReview.ID, 1, "changed my mind"); err != nil {
 			t.Fatalf("UpdateReviewContent returned error: %v", err)
@@ -726,7 +726,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 DiscardReview recalculates without the discarded review", func(t *testing.T) {
+	t.Run("AC2 DiscardReview は discard した review を除いて再計算する", func(t *testing.T) {
 		if err := repo.DiscardReview(ctx, aliceReview.ID); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}
@@ -736,7 +736,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 discarding the only review leaves the zero row", func(t *testing.T) {
+	t.Run("AC2 唯一の review を discard すると stats はゼロの行になる", func(t *testing.T) {
 		var bobReviewID int64
 		if err := conn.QueryRow(ctx,
 			`SELECT id FROM reviews WHERE burger_id = $1 AND discarded_at IS NULL`, burger,
@@ -753,7 +753,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("AC4 reviews and histories of discarded users are excluded", func(t *testing.T) {
+	t.Run("AC4 discard 済みの user の review と履歴は除外される", func(t *testing.T) {
 		ac4Burger := insertRow(ctx, t, conn, insertBurger, "AC4 Burger")
 		carl := insertRow(ctx, t, conn, insertUser, "carl@example.com", "carl", false)
 		aliceAC4 := mustCreateReview(ctx, t, repo, 5, "mine stays", alice, ac4Burger)
@@ -791,7 +791,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 concurrent creates on one burger never lose an update", func(t *testing.T) {
+	t.Run("AC3 1 つの burger への並行する create で更新が失われない", func(t *testing.T) {
 		pool, err := pgxpool.New(ctx, dbURL)
 		if err != nil {
 			t.Fatalf("open pool: %v", err)
@@ -840,7 +840,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("failed writes leave burger_stats untouched", func(t *testing.T) {
+	t.Run("失敗した書き込みは burger_stats に手を付けない", func(t *testing.T) {
 		errBurger := insertRow(ctx, t, conn, insertBurger, "Error Burger")
 		mustCreateReview(ctx, t, repo, 5, "baseline", alice, errBurger)
 		victim := mustCreateReview(ctx, t, repo, 3, "to discard", bob, errBurger)
@@ -906,7 +906,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		t.Fatalf("created PhotoKey = %v, want reviews/abc.jpg", created.PhotoKey)
 	}
 
-	t.Run("read queries carry photo_key", func(t *testing.T) {
+	t.Run("読み取りクエリは photo_key を返す", func(t *testing.T) {
 		detail, err := repo.GetReview(ctx, created.ID)
 		if err != nil {
 			t.Fatalf("GetReview returned error: %v", err)
@@ -923,7 +923,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateReviewContentAndPhotoKey writes content and key together", func(t *testing.T) {
+	t.Run("UpdateReviewContentAndPhotoKey は content と key を一緒に書き込む", func(t *testing.T) {
 		updated, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 5, "Even better", strPtr("reviews/both.png"))
 		if err != nil {
 			t.Fatalf("UpdateReviewContentAndPhotoKey returned error: %v", err)
@@ -946,7 +946,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 	})
 
-	t.Run("keyless create stays NULL", func(t *testing.T) {
+	t.Run("key なしの create は NULL のままになる", func(t *testing.T) {
 		plain, err := repo.CreateReview(ctx, domain.Review{Rating: 3, Comment: &comment, AuthorID: alice, BurgerID: burger})
 		if err != nil {
 			t.Fatalf("CreateReview returned error: %v", err)
@@ -956,7 +956,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 	})
 
-	t.Run("discarded review yields ErrReviewNotFound", func(t *testing.T) {
+	t.Run("discard 済みの review への UpdateReviewContentAndPhotoKey は ErrReviewNotFound になり、変更は残らない", func(t *testing.T) {
 		if err := repo.DiscardReview(ctx, created.ID); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}

@@ -96,13 +96,13 @@ func TestShopRepository(t *testing.T) {
 		return shops
 	}
 
-	t.Run("AC1 anonymous viewer lists active shops only", func(t *testing.T) {
+	t.Run("AC1 匿名の viewer には active な shop だけが一覧に出る", func(t *testing.T) {
 		if got := shopIDs(list(t, anon, "", 100, 0)); !reflect.DeepEqual(got, activeIDs) {
 			t.Errorf("ids = %v, want %v", got, activeIDs)
 		}
 	})
 
-	t.Run("AC2 creator additionally sees own pending shop with its status", func(t *testing.T) {
+	t.Run("AC2 creator には自分の pending な shop が status 付きで追加で見える", func(t *testing.T) {
 		shops := list(t, aliceVis, "", 100, 0)
 		want := sortedIDs(append([]int64{alicePending}, activeIDs...)...)
 		if got := shopIDs(shops); !reflect.DeepEqual(got, want) {
@@ -115,14 +115,14 @@ func TestShopRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 admin sees all statuses", func(t *testing.T) {
+	t.Run("AC3 admin はすべての status の shop を見られる", func(t *testing.T) {
 		want := sortedIDs(append([]int64{alicePending, golfRejected}, activeIDs...)...)
 		if got := shopIDs(list(t, adminVis, "", 100, 0)); !reflect.DeepEqual(got, want) {
 			t.Errorf("ids = %v, want %v", got, want)
 		}
 	})
 
-	t.Run("ordering is name asc then id asc", func(t *testing.T) {
+	t.Run("順序は name 昇順、次に id 昇順になる", func(t *testing.T) {
 		shops := list(t, anon, "Order Cafe", 100, 0)
 		wantNames := []string{"Order Cafe A", "Order Cafe A", "Order Cafe B"}
 		if got := shopNames(shops); !reflect.DeepEqual(got, wantNames) {
@@ -133,7 +133,7 @@ func TestShopRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("pagination slices the ordered list and runs out to empty", func(t *testing.T) {
+	t.Run("pagination は順序付き一覧を切り出し、範囲外では空になる", func(t *testing.T) {
 		if got := shopNames(list(t, anon, "Order Cafe", 2, 0)); !reflect.DeepEqual(got, []string{"Order Cafe A", "Order Cafe A"}) {
 			t.Errorf("page 1 = %v", got)
 		}
@@ -145,32 +145,32 @@ func TestShopRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("AC5 keyword is case-insensitive substring", func(t *testing.T) {
+	t.Run("AC5 keyword は大文字小文字を区別しない部分一致になる", func(t *testing.T) {
 		want := sortedIDs(pctBeef, xBeef)
 		if got := shopIDs(list(t, anon, "bEEf", 100, 0)); !reflect.DeepEqual(got, want) {
 			t.Errorf("ids = %v, want %v", got, want)
 		}
 	})
 
-	t.Run("AC5 percent in keyword matches literally", func(t *testing.T) {
+	t.Run("AC5 keyword 中のパーセントはリテラルとして一致する", func(t *testing.T) {
 		if got := shopNames(list(t, anon, "100%", 100, 0)); !reflect.DeepEqual(got, []string{"100% Beef"}) {
 			t.Errorf("names = %v, want [100%% Beef]", got)
 		}
 	})
 
-	t.Run("AC5 underscore in keyword matches literally", func(t *testing.T) {
+	t.Run("AC5 keyword 中のアンダースコアはリテラルとして一致する", func(t *testing.T) {
 		if got := shopNames(list(t, anon, "Under_", 100, 0)); !reflect.DeepEqual(got, []string{"Under_score"}) {
 			t.Errorf("names = %v, want [Under_score]", got)
 		}
 	})
 
-	t.Run("AC5 backslash in keyword matches literally", func(t *testing.T) {
+	t.Run("AC5 keyword 中のバックスラッシュはリテラルとして一致する", func(t *testing.T) {
 		if got := shopNames(list(t, anon, `\`, 100, 0)); !reflect.DeepEqual(got, []string{`Back\slash Cafe`}) {
 			t.Errorf(`names = %v, want [Back\slash Cafe]`, got)
 		}
 	})
 
-	t.Run("AC5 SQL injection keyword neither errors nor leaks", func(t *testing.T) {
+	t.Run("AC5 SQL injection を狙った keyword はエラーにならず、データも漏れない", func(t *testing.T) {
 		if got := list(t, anon, `'; DROP TABLE shops;--`, 100, 0); len(got) != 0 {
 			t.Errorf("shops = %v, want empty", got)
 		}
@@ -180,7 +180,7 @@ func TestShopRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("GetShopWithCreator returns creator and status", func(t *testing.T) {
+	t.Run("GetShopWithCreator は creator と status を返す", func(t *testing.T) {
 		detail, err := repo.GetShopWithCreator(ctx, deltaDiner)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
@@ -197,7 +197,7 @@ func TestShopRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("GetShopWithCreator maps null creator and moderation note", func(t *testing.T) {
+	t.Run("GetShopWithCreator は creator が null で moderation note がある shop をマッピングする", func(t *testing.T) {
 		detail, err := repo.GetShopWithCreator(ctx, golfRejected)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
@@ -213,13 +213,13 @@ func TestShopRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("AC6 unknown shop id yields ErrShopNotFound", func(t *testing.T) {
+	t.Run("AC6 存在しない shop id は ErrShopNotFound になる", func(t *testing.T) {
 		if _, err := repo.GetShopWithCreator(ctx, 99999); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
 
-	t.Run("ListShopReviews joins user, burger, and stats in order", func(t *testing.T) {
+	t.Run("ListShopReviews は user、burger、stats を join して順序どおりに返す", func(t *testing.T) {
 		insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
 		cheese := insertRow(ctx, t, conn, insertBurger, "Cheese")
 		plain := insertRow(ctx, t, conn, insertBurger, "Plain")
@@ -321,7 +321,7 @@ func TestShopModerationRepository(t *testing.T) {
 	anon := domain.ShopVisibilityFor(nil)
 	aliceVis := domain.ShopVisibilityFor(&domain.User{ID: alice})
 
-	t.Run("CreateShop persists a pending shop with its creator", func(t *testing.T) {
+	t.Run("CreateShop は creator 付きの pending な shop を永続化する", func(t *testing.T) {
 		submission, err := domain.NewShopSubmission("Fresh Shack", alice)
 		if err != nil {
 			t.Fatalf("NewShopSubmission returned error: %v", err)
@@ -364,7 +364,7 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("ListShopsForModeration orders created_at desc then id desc", func(t *testing.T) {
+	t.Run("ListShopsForModeration は created_at 降順、次に id 降順に並べる", func(t *testing.T) {
 		shops, err := repo.ListShopsForModeration(ctx, nil)
 		if err != nil {
 			t.Fatalf("ListShopsForModeration returned error: %v", err)
@@ -387,7 +387,7 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("ListShopsForModeration filters by status", func(t *testing.T) {
+	t.Run("ListShopsForModeration は status で絞り込む", func(t *testing.T) {
 		status := domain.ShopStatusRejected
 		shops, err := repo.ListShopsForModeration(ctx, &status)
 		if err != nil {
@@ -398,7 +398,7 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateShopStatus persists approve and reject with visibility", func(t *testing.T) {
+	t.Run("UpdateShopStatus は approve と reject を永続化し、visibility に反映する", func(t *testing.T) {
 		detail, err := repo.GetShopWithCreator(ctx, newest)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
@@ -445,7 +445,7 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("column-scoped writes never revert a concurrent update", func(t *testing.T) {
+	t.Run("カラム単位の書き込みは並行する更新を巻き戻さない", func(t *testing.T) {
 		shop := insertRow(ctx, t, conn, insertShop, "Race Shack", 0, nil, alice, tNew)
 
 		// lost-update の回帰、方向 1：古い rename 側は、並行する approve の
@@ -498,14 +498,14 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateShopName on unknown id yields ErrShopNotFound", func(t *testing.T) {
+	t.Run("UpdateShopName に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
 		_, err := repo.UpdateShopName(ctx, 99999, "x")
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
 
-	t.Run("UpdateShopStatus on unknown id yields ErrShopNotFound", func(t *testing.T) {
+	t.Run("UpdateShopStatus に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
 		_, err := repo.UpdateShopStatus(ctx, 99999, domain.ShopStatusActive, nil)
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)

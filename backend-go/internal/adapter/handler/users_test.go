@@ -102,7 +102,7 @@ func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) stri
 // id の昇順で、トークンを含まないユーザーの形をしたトップレベルの単純な配列
 // として返す。
 func TestListUsers(t *testing.T) {
-	t.Run("anonymous request returns kept users id ascending", func(t *testing.T) {
+	t.Run("匿名のリクエストは kept なユーザーを id の昇順で返す", func(t *testing.T) {
 		repo, router, _ := newUsersRouter(t)
 		repo.seed("alice", "alice@example.com", "password123")
 		repo.seed("bob", "bob@example.com", "password123")
@@ -120,7 +120,7 @@ func TestListUsers(t *testing.T) {
 		}
 	})
 
-	t.Run("no users marshals as []", func(t *testing.T) {
+	t.Run("ユーザーがいなければ [] として marshal される", func(t *testing.T) {
 		_, router, _ := newUsersRouter(t)
 		rec := do(router, http.MethodGet, "/users", "", "")
 		if rec.Code != http.StatusOK || rec.Body.String() != `[]` {
@@ -128,7 +128,7 @@ func TestListUsers(t *testing.T) {
 		}
 	})
 
-	t.Run("repository failure returns 500", func(t *testing.T) {
+	t.Run("repository の失敗は 500 を返す", func(t *testing.T) {
 		repo, router, _ := newUsersRouter(t)
 		repo.err = fmt.Errorf("db down")
 		rec := do(router, http.MethodGet, "/users", "", "")
@@ -151,7 +151,7 @@ func TestUpdateUser(t *testing.T) {
 		return repo, router, token(alice.ID), token(bob.ID)
 	}
 
-	t.Run("AC1 self username update returns 200 and is reflected in GET /users", func(t *testing.T) {
+	t.Run("AC1 自分自身の username 更新は 200 を返し GET /users に反映される", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodPut, "/users/1", `{"user":{"username":"alice2"}}`, aliceAuth)
 		if rec.Code != http.StatusOK {
@@ -167,7 +167,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 another existing user's id returns 403", func(t *testing.T) {
+	t.Run("AC2 存在する別のユーザーの id は 403 を返す", func(t *testing.T) {
 		_, router, _, bobAuth := setup(t)
 		rec := do(router, http.MethodPut, "/users/1", `{"user":{"username":"hacked"}}`, bobAuth)
 		if rec.Code != http.StatusForbidden || rec.Body.String() != `{"error":"Forbidden"}` {
@@ -175,7 +175,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 nonexistent and non-numeric ids return 404 regardless of ownership", func(t *testing.T) {
+	t.Run("AC2 存在しない id と非数値の id は所有権に関わらず 404 を返す", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		for _, path := range []string{"/users/999", "/users/abc"} {
 			rec := do(router, http.MethodPut, path, `{"user":{"username":"x"}}`, aliceAuth)
@@ -185,7 +185,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 email changed to another user's email returns 422", func(t *testing.T) {
+	t.Run("AC3 email を別のユーザーの email に変更すると 422 を返す", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodPut, "/users/1", `{"user":{"email":"bob@example.com"}}`, aliceAuth)
 		if rec.Code != http.StatusUnprocessableEntity {
@@ -196,7 +196,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("empty user object and absent user key return 200 unchanged", func(t *testing.T) {
+	t.Run("空の user オブジェクトと user キーなしは変更なしで 200 を返す", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		want := `{"id":1,"username":"alice","email":"alice@example.com","admin":false}`
 		for _, body := range []string{`{"user":{}}`, `{}`} {
@@ -207,7 +207,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("empty-string password is a no-op on the digest", func(t *testing.T) {
+	t.Run("空文字列の password は digest に影響しない", func(t *testing.T) {
 		repo, router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodPut, "/users/1", `{"user":{"password":""}}`, aliceAuth)
 		if rec.Code != http.StatusOK {
@@ -218,29 +218,29 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("validation failures return 422 with the exact messages", func(t *testing.T) {
+	t.Run("検証エラーは正確なメッセージ付きで 422 を返す", func(t *testing.T) {
 		tests := []struct {
 			name     string
 			body     string
 			wantBody string
 		}{
 			{
-				name:     "blank username",
+				name:     "空の username は検証エラーになる",
 				body:     `{"user":{"username":""}}`,
 				wantBody: `{"errors":["Username can't be blank"]}`,
 			},
 			{
-				name:     "blank email",
+				name:     "空の email は検証エラーになる",
 				body:     `{"user":{"email":""}}`,
 				wantBody: `{"errors":["Email can't be blank"]}`,
 			},
 			{
-				name:     "mismatched confirmation",
+				name:     "確認用パスワードの不一致は検証エラーになる",
 				body:     `{"user":{"password":"newpassword1","password_confirmation":"other"}}`,
 				wantBody: `{"errors":["Password confirmation doesn't match Password"]}`,
 			},
 			{
-				name:     "password over 72 bytes",
+				name:     "72 bytes を超える password は検証エラーになる",
 				body:     fmt.Sprintf(`{"user":{"password":%q}}`, strings.Repeat("a", 73)),
 				wantBody: `{"errors":["Password is too long (maximum is 72 characters)"]}`,
 			},
@@ -259,7 +259,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("malformed and empty JSON bodies return 400", func(t *testing.T) {
+	t.Run("不正な JSON の body と空の body は 400 を返す", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		for _, body := range []string{`{"user":`, ""} {
 			rec := do(router, http.MethodPut, "/users/1", body, aliceAuth)
@@ -281,7 +281,7 @@ func TestDeleteUser(t *testing.T) {
 		return router, token(alice.ID), token(bob.ID)
 	}
 
-	t.Run("AC2 another existing user's id returns 403", func(t *testing.T) {
+	t.Run("AC2 存在する別のユーザーの id は 403 を返す", func(t *testing.T) {
 		router, _, bobAuth := setup(t)
 		rec := do(router, http.MethodDelete, "/users/1", "", bobAuth)
 		if rec.Code != http.StatusForbidden || rec.Body.String() != `{"error":"Forbidden"}` {
@@ -289,7 +289,7 @@ func TestDeleteUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 nonexistent and non-numeric ids return 404", func(t *testing.T) {
+	t.Run("AC2 存在しない id と非数値の id は 404 を返す", func(t *testing.T) {
 		router, aliceAuth, _ := setup(t)
 		for _, path := range []string{"/users/999", "/users/abc"} {
 			rec := do(router, http.MethodDelete, path, "", aliceAuth)
@@ -299,7 +299,7 @@ func TestDeleteUser(t *testing.T) {
 		}
 	})
 
-	t.Run("self delete returns 204, kills the token, and leaves the index", func(t *testing.T) {
+	t.Run("自分自身を削除すると 204 を返し、トークンが無効になり、index から消える", func(t *testing.T) {
 		router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodDelete, "/users/1", "", aliceAuth)
 		if rec.Code != http.StatusNoContent {

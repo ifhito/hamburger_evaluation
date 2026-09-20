@@ -178,7 +178,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 		"burger_id": fmt.Sprint(cheeseBurgerID),
 	}
 
-	t.Run("6MB photo returns 422 too large", func(t *testing.T) {
+	t.Run("6MB の photo は 422 too large を返す", func(t *testing.T) {
 		body, contentType := multipartBody(t, fields, jpegBytes(t, 6_000_000))
 		rec := doMultipart(router, http.MethodPost, "/reviews", body, contentType, aliceAuth)
 		if rec.Code != http.StatusUnprocessableEntity {
@@ -189,7 +189,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 		}
 	})
 
-	t.Run("PDF bytes disguised as JPEG return 422 unsupported", func(t *testing.T) {
+	t.Run("JPEG に偽装した PDF のバイト列は 422 unsupported を返す", func(t *testing.T) {
 		pdf := append([]byte("%PDF-1.4\n"), make([]byte, 2048)...)
 		body, contentType := multipartBody(t, fields, pdf)
 		rec := doMultipart(router, http.MethodPost, "/reviews", body, contentType, aliceAuth)
@@ -201,7 +201,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 		}
 	})
 
-	t.Run("duplicate photo part returns 400", func(t *testing.T) {
+	t.Run("photo part が重複すると 400 を返す", func(t *testing.T) {
 		small := jpegBytes(t, 4096)
 		body, contentType := multipartBody(t, fields, small, small)
 		rec := doMultipart(router, http.MethodPost, "/reviews", body, contentType, aliceAuth)
@@ -210,7 +210,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 		}
 	})
 
-	t.Run("truncated body without the closing boundary returns 400", func(t *testing.T) {
+	t.Run("終端の boundary を欠いて切り詰められた body は 400 を返す", func(t *testing.T) {
 		// field の part は完全だが、最後の boundary の末尾 "--\r\n" が切り
 		// 落とされている：HTTP としては完結しているが multipart としては途中で
 		// 切れている。Go 1.22 の NextPart はこれを「wrap された」io.EOF として
@@ -225,7 +225,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 		}
 	})
 
-	t.Run("multipart rating 0 gets the JSON validation message", func(t *testing.T) {
+	t.Run("multipart の rating が数値でない場合は JSON の rating 0 と同じ検証メッセージで 422 になる", func(t *testing.T) {
 		body, contentType := multipartBody(t, map[string]string{
 			"rating":    "not-a-number",
 			"comment":   "ok",
@@ -266,7 +266,7 @@ func TestDeleteReviewWithPhoto(t *testing.T) {
 // ファイルを入れ替え、一方 photo を含まない JSON の update は保存済みの
 // photo に手を触れない。
 func TestUpdateReviewPhoto(t *testing.T) {
-	t.Run("AC5 new photo replaces url and file", func(t *testing.T) {
+	t.Run("AC5 新しい photo は url とファイルを入れ替える", func(t *testing.T) {
 		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
 		id, oldURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 		oldPath := photoPath(t, photoDir, oldURL)
@@ -294,7 +294,7 @@ func TestUpdateReviewPhoto(t *testing.T) {
 		}
 	})
 
-	t.Run("photo-less JSON update keeps the photo", func(t *testing.T) {
+	t.Run("photo を含まない JSON の update は photo を保持する", func(t *testing.T) {
 		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
 		id, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 
@@ -377,12 +377,12 @@ func TestReviewBodyLimit(t *testing.T) {
 		body     string
 		wantCode int
 	}{
-		{name: "POST /reviews 2MiB passes the cap", method: http.MethodPost, path: "/reviews", body: twoMiB, wantCode: http.StatusUnauthorized},
-		{name: "PUT /reviews/1 2MiB passes the cap", method: http.MethodPut, path: "/reviews/1", body: twoMiB, wantCode: http.StatusUnauthorized},
-		{name: "POST /reviews 7MiB is 413", method: http.MethodPost, path: "/reviews", body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "PUT /reviews/1 7MiB is 413", method: http.MethodPut, path: "/reviews/1", body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "POST /shops keeps the 1MiB cap", method: http.MethodPost, path: "/shops", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "POST /signup keeps the 1MiB cap", method: http.MethodPost, path: "/signup", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
+		{name: "POST /reviews は 2MiB なら上限を通過する", method: http.MethodPost, path: "/reviews", body: twoMiB, wantCode: http.StatusUnauthorized},
+		{name: "PUT /reviews/1 は 2MiB なら上限を通過する", method: http.MethodPut, path: "/reviews/1", body: twoMiB, wantCode: http.StatusUnauthorized},
+		{name: "POST /reviews は 7MiB だと 413 になる", method: http.MethodPost, path: "/reviews", body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
+		{name: "PUT /reviews/1 は 7MiB だと 413 になる", method: http.MethodPut, path: "/reviews/1", body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
+		{name: "POST /shops は 1MiB の上限を保つ", method: http.MethodPost, path: "/shops", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
+		{name: "POST /signup は 1MiB の上限を保つ", method: http.MethodPost, path: "/signup", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
