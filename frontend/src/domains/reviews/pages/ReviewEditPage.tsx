@@ -19,14 +19,7 @@ export default function ReviewEditPage() {
   const { data: review, isLoading } = useReview(Number(id));
   const { update } = useUpdateReview(Number(id));
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors },
-  } = useUpdateReviewForm();
+  const { register, handleSubmit, setValue, watch, reset } = useUpdateReviewForm();
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,12 +53,10 @@ export default function ReviewEditPage() {
           <RatingSelect
             value={watch("rating")}
             onChange={(v) => setValue("rating", v)}
-            error={errors.rating?.message}
           />
           <Textarea
             id="comment"
             label={t("reviews.edit.comment")}
-            error={errors.comment?.message}
             {...register("comment")}
           />
           <div className={styles.field}>

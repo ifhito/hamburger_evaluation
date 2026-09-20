@@ -23,13 +23,7 @@ export default function ReviewNewPage() {
   const shopName = shops?.find((s) => s.id === shopId)?.name;
 
   const { create } = useCreateReview();
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useCreateReviewForm({ shopId });
+  const { register, handleSubmit, setValue, watch } = useCreateReviewForm({ shopId });
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,13 +54,11 @@ export default function ReviewNewPage() {
         <RatingSelect
           value={watch("rating")}
           onChange={(v) => setValue("rating", v)}
-          error={errors.rating?.message}
         />
         <Textarea
           id="comment"
           label={t("reviews.new.comment")}
           placeholder={t("reviews.new.commentPlaceholder")}
-          error={errors.comment?.message}
           {...register("comment")}
         />
         <Input
@@ -74,7 +66,6 @@ export default function ReviewNewPage() {
           label={t("reviews.new.burgerName")}
           type="text"
           placeholder={t("reviews.new.burgerNamePlaceholder")}
-          error={errors.burgerName?.message}
           {...register("burgerName")}
         />
         <div className={styles.field}>

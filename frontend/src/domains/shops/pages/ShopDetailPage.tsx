@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useShopDetail } from "../hooks/useShops";
+import { formatRating } from "../../../lib/rating";
 import { Button } from "../../../components/Button";
 import { Layout } from "../../../components/Layout";
 import styles from "./shopDetail.module.css";
@@ -44,10 +45,7 @@ export default function ShopDetailPage() {
               <li key={review.id} className={styles.reviewCard}>
                 <div className={styles.reviewCardHeader}>
                   <strong>{review.burger?.name ?? "—"}</strong>
-                  <span>
-                    {"★".repeat(review.rating)}
-                    {"☆".repeat(5 - review.rating)}
-                  </span>
+                  <span>{formatRating(review.rating)}</span>
                 </div>
                 <p className={styles.reviewComment}>{review.comment}</p>
                 <small className={styles.reviewAuthor}>

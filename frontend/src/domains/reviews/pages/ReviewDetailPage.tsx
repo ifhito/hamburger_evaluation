@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
 import { useDeleteReview } from "../hooks/useReviewMutations";
 import { formatDate } from "../../../lib/date";
+import { formatRating } from "../../../lib/rating";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
@@ -41,10 +42,7 @@ export default function ReviewDetailPage() {
       {review && (
         <div className={styles.card}>
           <div className={styles.cardHeader}>
-            <span className={styles.rating}>
-              {"★".repeat(review.rating)}
-              {"☆".repeat(5 - review.rating)}
-            </span>
+            <span className={styles.rating}>{formatRating(review.rating)}</span>
             <span className={styles.date}>{formatDate(review.createdAt)}</span>
           </div>
           <p className={styles.comment}>{review.comment}</p>

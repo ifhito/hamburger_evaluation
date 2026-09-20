@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { isValidUserId, useUser } from "../hooks/useUser";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { formatDate } from "../../../lib/date";
+import { formatRating } from "../../../lib/rating";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
@@ -66,10 +67,7 @@ export default function UserDetailPage() {
         {userReviews?.map((review) => (
           <div key={review.id} className={styles.reviewCard}>
             <div className={styles.reviewHeader}>
-              <span>
-                {"★".repeat(review.rating)}
-                {"☆".repeat(5 - review.rating)}
-              </span>
+              <span>{formatRating(review.rating)}</span>
               <span className={styles.reviewDate}>{formatDate(review.createdAt)}</span>
             </div>
             <p className={styles.reviewComment}>{review.comment}</p>
