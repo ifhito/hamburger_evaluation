@@ -14,28 +14,29 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// ShopRepository implements usecase.ShopRepository over sqlc-generated
-// queries. It translates the domain visibility descriptor into SQL
-// parameters and maps the smallint status codes onto domain.ShopStatus;
-// the visibility rule itself lives in domain.ShopVisibility.
+// ShopRepository は、sqlc 生成のクエリ上で usecase.ShopRepository を実装する。
+// domain の visibility 記述子を SQL パラメータに変換し、smallint の status
+// コードを domain.ShopStatus に対応づける。visibility のルール自体は
+// domain.ShopVisibility にある。
 type ShopRepository struct {
 	q *sqlcgen.Queries
 }
 
-// NewShopRepository wraps db (normally the shared pgx pool).
+// NewShopRepository は db（通常は共有の pgx pool）をラップする。
 func NewShopRepository(db sqlcgen.DBTX) *ShopRepository {
 	return &ShopRepository{q: sqlcgen.New(db)}
 }
 
 var _ usecase.ShopRepository = (*ShopRepository)(nil)
 
-// likeEscaper escapes the LIKE metacharacters (backslash first) so user
-// keywords always match literally inside an ILIKE pattern.
+// likeEscaper は LIKE のメタ文字をエスケープする（最初にバックスラッシュ）。
+// これにより、user の keyword は ILIKE パターンの中で常にリテラルとして
+// 一致する。
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// ListShops returns visible shops matching keyword ordered by name, id.
-// The keyword is passed as an escaped ILIKE parameter, never concatenated
-// into SQL.
+// ListShops は、keyword に一致する可視の shop を name、id の順に並べて返す。
+// keyword はエスケープ済みの ILIKE パラメータとして渡され、SQL に連結される
+// ことはない。
 func (r *ShopRepository) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
 	params := sqlcgen.ListShopsParams{
 		ViewAll:    vis.ViewAll,
@@ -63,8 +64,8 @@ func (r *ShopRepository) ListShops(ctx context.Context, vis domain.ShopVisibilit
 	return shops, nil
 }
 
-// GetShopWithCreator returns the shop and its creator (Reviews left
-// empty), or domain.ErrShopNotFound.
+// GetShopWithCreator は shop とその creator を返す（Reviews は空のまま）。
+// または domain.ErrShopNotFound を返す。
 func (r *ShopRepository) GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error) {
 	row, err := r.q.GetShopWithCreator(ctx, id)
 	if err != nil {
@@ -79,14 +80,14 @@ func (r *ShopRepository) GetShopWithCreator(ctx context.Context, id int64) (doma
 	}
 	detail := domain.ShopDetail{Shop: shop}
 	if row.CreatorID.Valid {
-		// users.id is a foreign key, so the LEFT JOIN found the creator.
+		// users.id は外部キーなので、LEFT JOIN で creator が見つかっている。
 		detail.Creator = &domain.UserRef{ID: row.CreatorID.Int64, Username: row.CreatorUsername.String}
 	}
 	return detail, nil
 }
 
-// ListShopReviews returns the shop's non-discarded reviews with author,
-// burger, and stats, newest first — a single JOIN query (no N+1).
+// ListShopReviews は、shop の discard されていない review を author、
+// burger、stats とともに新しい順に返す。単一の JOIN クエリである（N+1 なし）。
 func (r *ShopRepository) ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error) {
 	rows, err := r.q.ListShopReviews(ctx, shopID)
 	if err != nil {
@@ -102,7 +103,7 @@ func (r *ShopRepository) ListShopReviews(ctx context.Context, shopID int64) ([]d
 			Burger: &domain.ShopReviewBurger{
 				ID:   row.BurgerID,
 				Name: row.BurgerName,
-				// The stats row may not exist yet; zero values then.
+				// stats 行がまだ存在しないことがある。その場合はゼロ値になる。
 				AverageRating: row.AverageRating.Float64,
 				ReviewCount:   row.ReviewCount.Int64,
 				WeightedScore: row.WeightedScore.Float64,
@@ -118,8 +119,8 @@ func (r *ShopRepository) ListShopReviews(ctx context.Context, shopID int64) ([]d
 	return reviews, nil
 }
 
-// CreateShop inserts the (already validated) shop and returns it with
-// its generated id.
+// CreateShop は（検証済みの）shop を insert し、生成された id を持つ shop を
+// 返す。
 func (r *ShopRepository) CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error) {
 	code, err := statusCode(shop.Status)
 	if err != nil {
@@ -141,8 +142,8 @@ func (r *ShopRepository) CreateShop(ctx context.Context, shop domain.Shop) (doma
 	return created, nil
 }
 
-// ListShopsForModeration returns every shop with its creator, newest
-// first (created_at desc, id desc), optionally filtered to one status.
+// ListShopsForModeration は、すべての shop をその creator とともに新しい順
+// （created_at desc、id desc）に返す。任意で 1 つの status に絞り込める。
 func (r *ShopRepository) ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
 	var filter pgtype.Int2
 	if status != nil {
@@ -164,7 +165,7 @@ func (r *ShopRepository) ListShopsForModeration(ctx context.Context, status *dom
 		}
 		detail := domain.ShopDetail{Shop: shop}
 		if row.CreatorID.Valid {
-			// users.id is a foreign key, so the LEFT JOIN found the creator.
+			// users.id は外部キーなので、LEFT JOIN で creator が見つかっている。
 			detail.Creator = &domain.UserRef{ID: row.CreatorID.Int64, Username: row.CreatorUsername.String}
 		}
 		details = append(details, detail)
@@ -172,10 +173,10 @@ func (r *ShopRepository) ListShopsForModeration(ctx context.Context, status *dom
 	return details, nil
 }
 
-// UpdateShopName persists only the shop's name under id and returns the
-// stored row, or domain.ErrShopNotFound when the shop vanished between
-// read and write. Writing a single column keeps a concurrent status
-// change from being reverted by a stale snapshot.
+// UpdateShopName は、id の shop の name だけを永続化し、保存された行を返す。
+// 読み取りから書き込みまでの間に shop が消えた場合は domain.ErrShopNotFound
+// を返す。単一のカラムだけを書くことで、同時に行われた status の変更が古い
+// スナップショットによって元に戻されるのを防ぐ。
 func (r *ShopRepository) UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error) {
 	row, err := r.q.UpdateShopName(ctx, sqlcgen.UpdateShopNameParams{ID: id, Name: name})
 	if err != nil {
@@ -191,10 +192,10 @@ func (r *ShopRepository) UpdateShopName(ctx context.Context, id int64, name stri
 	return updated, nil
 }
 
-// UpdateShopStatus persists only the shop's status and moderation note
-// under id and returns the stored row, or domain.ErrShopNotFound when the
-// shop vanished between read and write. Not touching name keeps a
-// concurrent rename from being reverted by a stale snapshot.
+// UpdateShopStatus は、id の shop の status と moderation note だけを
+// 永続化し、保存された行を返す。読み取りから書き込みまでの間に shop が
+// 消えた場合は domain.ErrShopNotFound を返す。name に触れないことで、
+// 同時に行われた rename が古いスナップショットによって元に戻されるのを防ぐ。
 func (r *ShopRepository) UpdateShopStatus(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
 	code, err := statusCode(status)
 	if err != nil {
@@ -218,7 +219,7 @@ func (r *ShopRepository) UpdateShopStatus(ctx context.Context, id int64, status 
 	return updated, nil
 }
 
-// textOrNull maps an optional string onto its nullable pgx form.
+// textOrNull は、省略可能な string を null 許容な pgx の形式に変換する。
 func textOrNull(s *string) pgtype.Text {
 	if s == nil {
 		return pgtype.Text{}
@@ -226,7 +227,7 @@ func textOrNull(s *string) pgtype.Text {
 	return pgtype.Text{String: *s, Valid: true}
 }
 
-// int8OrNull maps an optional int64 onto its nullable pgx form.
+// int8OrNull は、省略可能な int64 を null 許容な pgx の形式に変換する。
 func int8OrNull(n *int64) pgtype.Int8 {
 	if n == nil {
 		return pgtype.Int8{}
@@ -234,8 +235,8 @@ func int8OrNull(n *int64) pgtype.Int8 {
 	return pgtype.Int8{Int64: *n, Valid: true}
 }
 
-// statusCode encodes domain.ShopStatus as the smallint storage code, the
-// inverse of toDomainShop. The mapping never leaves this package.
+// statusCode は domain.ShopStatus を smallint の保存用コードにエンコードする。
+// toDomainShop の逆である。この対応づけがこのパッケージの外に出ることはない。
 func statusCode(status domain.ShopStatus) (int16, error) {
 	switch status {
 	case domain.ShopStatusPending:
@@ -245,14 +246,14 @@ func statusCode(status domain.ShopStatus) (int16, error) {
 	case domain.ShopStatusRejected:
 		return 2, nil
 	default:
-		// Unreachable while callers only build statuses from the domain
-		// constants; fail loudly instead of persisting garbage.
+		// 呼び出し側が domain の定数からしか status を作らない限り到達
+		// しない。ゴミを永続化する代わりに fail loudly する。
 		return 0, fmt.Errorf("unknown shop status %q", status)
 	}
 }
 
-// toDomainShop maps sqlc shop columns onto the domain entity, decoding
-// the smallint status (0=pending, 1=active, 2=rejected).
+// toDomainShop は sqlc の shop のカラムを domain のエンティティに変換し、
+// smallint の status をデコードする（0=pending、1=active、2=rejected）。
 func toDomainShop(id int64, name string, status int16, note pgtype.Text, creatorID pgtype.Int8) (domain.Shop, error) {
 	shop := domain.Shop{ID: id, Name: name}
 	switch status {
@@ -263,7 +264,8 @@ func toDomainShop(id int64, name string, status int16, note pgtype.Text, creator
 	case 2:
 		shop.Status = domain.ShopStatusRejected
 	default:
-		// Unreachable while the CHECK constraint holds; fail loudly if not.
+		// CHECK 制約が保たれている限り到達しない。保たれていなければ
+		// fail loudly する。
 		return domain.Shop{}, fmt.Errorf("shop %d: unknown status code %d", id, status)
 	}
 	if note.Valid {

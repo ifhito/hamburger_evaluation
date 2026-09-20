@@ -1,7 +1,7 @@
-// Package usecase holds application use cases and the repository
-// interfaces they consume (implemented in adapter/repository).
+// Package usecase は、アプリケーションの use case と、それらが consume する
+// repository の interface（adapter/repository で実装される）を保持する。
 //
-// It imports domain and the standard library only: no HTTP, no SQL
-// drivers, and no imports from adapter packages. Populated in later
-// stories.
+// import するのは domain と標準ライブラリだけである。HTTP も SQL ドライバも
+// 使わず、adapter パッケージからの import もない。中身は後続の story で
+// 埋められる。
 package usecase

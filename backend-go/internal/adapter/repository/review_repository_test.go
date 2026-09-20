@@ -17,7 +17,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// reviewIDs extracts the review ids preserving order.
+// reviewIDs は review の id を順序を保ったまま取り出す。
 func reviewIDs(reviews []domain.ReviewDetail) []int64 {
 	ids := make([]int64, 0, len(reviews))
 	for _, r := range reviews {
@@ -26,11 +26,11 @@ func reviewIDs(reviews []domain.ReviewDetail) []int64 {
 	return ids
 }
 
-// TestReviewRepository exercises the S6 review persistence against a real
-// PostgreSQL via the shared dbtest scaffold (skips without
-// TEST_DATABASE_URL): the EXISTS active-shop feed filter (with the
-// duplicate-link dedup), the soft-delete exclusion, the joined detail,
-// and the column-scoped writes.
+// TestReviewRepository は、S6 の review の永続化を、共有の dbtest の
+// スキャフォールドを通じて実際の PostgreSQL に対して検証する
+// （TEST_DATABASE_URL がなければスキップする）。対象は、active な shop に
+// 対する EXISTS のフィード絞り込み（重複した link の dedup を含む）、
+// soft delete の除外、結合された詳細、カラム単位の書き込みである。
 func TestReviewRepository(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -44,17 +44,17 @@ func TestReviewRepository(t *testing.T) {
 	carol := insertRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
-	// status codes: 0=pending, 1=active, 2=rejected.
+	// status のコード：0=pending、1=active、2=rejected。
 	active1 := insertRow(ctx, t, conn, insertShop, "Active One", 1, nil, alice)
 	active2 := insertRow(ctx, t, conn, insertShop, "Active Two", 1, nil, nil)
 	pending := insertRow(ctx, t, conn, insertShop, "Pending Shack", 0, nil, alice)
 	rejected := insertRow(ctx, t, conn, insertShop, "Rejected Grill", 2, nil, nil)
 
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-	cheese := insertRow(ctx, t, conn, insertBurger, "Cheese")   // linked to BOTH active shops
-	plain := insertRow(ctx, t, conn, insertBurger, "Plain")     // linked to active1 only, no stats
-	hidden := insertRow(ctx, t, conn, insertBurger, "Hidden")   // linked to pending only
-	outcast := insertRow(ctx, t, conn, insertBurger, "Outcast") // linked to rejected only
+	cheese := insertRow(ctx, t, conn, insertBurger, "Cheese")   // active な shop の両方に link されている
+	plain := insertRow(ctx, t, conn, insertBurger, "Plain")     // active1 だけに link されている。stats なし
+	hidden := insertRow(ctx, t, conn, insertBurger, "Hidden")   // pending だけに link されている
+	outcast := insertRow(ctx, t, conn, insertBurger, "Outcast") // rejected だけに link されている
 	mustLink := func(shopID, burgerID int64) {
 		t.Helper()
 		if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopID, burgerID); err != nil {
@@ -67,9 +67,10 @@ func TestReviewRepository(t *testing.T) {
 	mustLink(pending, hidden)
 	mustLink(rejected, outcast)
 
-	// The read subtests assert these literal stats for cheese. The S7
-	// recalculation overwrites this row on every review write, so each
-	// write subtest below re-seeds it in its cleanup via this upsert.
+	// 読み取り系のサブテストは、cheese についてこのリテラルの stats を
+	// アサートする。S7 の再計算は review の書き込みのたびにこの行を上書きする
+	// ので、以下の書き込み系の各サブテストは、その cleanup で、この upsert に
+	// よってこの行を再度 seed する。
 	seedCheeseStats := func(t *testing.T) {
 		t.Helper()
 		if _, err := conn.Exec(ctx,
@@ -92,7 +93,7 @@ func TestReviewRepository(t *testing.T) {
 	t2 := time.Date(2024, 5, 2, 10, 0, 0, 0, time.UTC)
 	rOld := insertRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
 	rTie1 := insertRow(ctx, t, conn, insertReview, 3, nil, carol, cheese, nil, t2)
-	rTie2 := insertRow(ctx, t, conn, insertReview, 4, nil, alice, plain, nil, t2) // same instant: id desc breaks the tie
+	rTie2 := insertRow(ctx, t, conn, insertReview, 4, nil, alice, plain, nil, t2) // 同一時刻：id desc で同順位を解消する
 	rDiscarded := insertRow(ctx, t, conn, insertReview, 1, "gone", alice, cheese, time.Now(), t2)
 	insertRow(ctx, t, conn, insertReview, 2, "pending only", alice, hidden, nil, t2)
 	insertRow(ctx, t, conn, insertReview, 2, "rejected only", alice, outcast, nil, t2)
@@ -102,10 +103,10 @@ func TestReviewRepository(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
-		// The cheese reviews must appear exactly once despite cheese being
-		// linked to two active shops (EXISTS, not a multiplying JOIN); the
-		// pending-only and rejected-only burgers' reviews and the discarded
-		// review are absent (AC5/AC6 at the SQL level).
+		// cheese の review は、cheese が active な 2 つの shop に link されて
+		// いても、ちょうど 1 回だけ現れなければならない（結合を増殖させる JOIN
+		// ではなく EXISTS）。pending だけ・rejected だけの burger の review と、
+		// discard 済みの review は現れない（SQL レベルでの AC5/AC6）。
 		if got, want := reviewIDs(reviews), []int64{rTie2, rTie1, rOld}; !reflect.DeepEqual(got, want) {
 			t.Fatalf("ids = %v, want %v", got, want)
 		}
@@ -124,7 +125,7 @@ func TestReviewRepository(t *testing.T) {
 		if !reflect.DeepEqual(got, wantOld) {
 			t.Errorf("review = %+v, want %+v", got, wantOld)
 		}
-		// The stats-less burger maps to zeros.
+		// stats のない burger はゼロになる。
 		if want := (&domain.ShopReviewBurger{ID: plain, Name: "Plain"}); !reflect.DeepEqual(reviews[0].Burger, want) {
 			t.Errorf("stats-less burger = %+v, want %+v", reviews[0].Burger, want)
 		}
@@ -163,13 +164,15 @@ func TestReviewRepository(t *testing.T) {
 			want   []int64
 		}{
 			{name: "rating exact match (by_rating)", filter: usecase.ReviewListFilter{Rating: intp(4)}, want: []int64{rTie2}},
-			// Rating-2 reviews exist only on the pending/rejected-only
-			// burgers: the active-shop feed rule still applies.
+			// rating 2 の review は pending だけ・rejected だけの burger にしか
+			// 存在しない：active な shop のフィードのルールが引き続き適用される。
 			{name: "rating matching only hidden reviews is empty", filter: usecase.ReviewListFilter{Rating: intp(2)}, want: []int64{}},
 			{name: "keyword is case-insensitive (keyword_search ILIKE)", filter: usecase.ReviewListFilter{Keyword: "tAsT"}, want: []int64{rOld}},
-			// NULL comments never match, like Rails' comment ILIKE.
+			// NULL の comment は決して一致しない。Rails の comment ILIKE と
+			// 同様である。
 			{name: "keyword skips NULL comments", filter: usecase.ReviewListFilter{Keyword: "a"}, want: []int64{rOld}},
-			// Unescaped, "%" would ILIKE-match every non-NULL comment.
+			// エスケープしなければ、"%" は NULL でないすべての comment に
+			// ILIKE で一致してしまう。
 			{name: "keyword LIKE metacharacters match literally", filter: usecase.ReviewListFilter{Keyword: "%"}, want: []int64{}},
 			{name: "keyword matching only hidden reviews is empty", filter: usecase.ReviewListFilter{Keyword: "only"}, want: []int64{}},
 			{name: "shop_id follows the shops_burgers link", filter: usecase.ReviewListFilter{ShopID: int64p(active2)}, want: []int64{rTie1, rOld}},
@@ -177,8 +180,9 @@ func TestReviewRepository(t *testing.T) {
 			{name: "unknown shop_id is empty", filter: usecase.ReviewListFilter{ShopID: int64p(99999)}, want: []int64{}},
 			{name: "filters combine with AND", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: int64p(active2)}, want: []int64{rOld}},
 			{name: "AND combination with no match is empty", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []int64{}},
-			// Out-of-range ratings must compare false, not overflow the
-			// smallint column into a SQL error.
+			// 範囲外の rating は比較結果が false にならなければならず、
+			// smallint カラムをオーバーフローさせて SQL エラーに
+			// なってはならない。
 			{name: "rating beyond smallint is empty, not an error", filter: usecase.ReviewListFilter{Rating: intp(1 << 40)}, want: []int64{}},
 		}
 		for _, tt := range tests {
@@ -195,10 +199,11 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("shop_id filter requires the filter shop itself to be active", func(t *testing.T) {
-		// A burger linked to BOTH an active and a pending shop: its review
-		// is in the feed (via the active link), but filtering by the pending
-		// shop must return nothing — stricter than Rails' status-blind shop
-		// filter, consistent with the feed's active-shop rule.
+		// active と pending の「両方」の shop に link された burger：その
+		// review は（active な link 経由で）フィードに含まれるが、pending な
+		// shop で絞り込むと何も返してはならない。これは Rails の、status を
+		// 見ない shop の filter よりも厳格であり、フィードの active な shop の
+		// ルールと整合する。
 		mixedActive := insertRow(ctx, t, conn, insertShop, "Mixed Active", 1, nil, nil)
 		mixed := insertRow(ctx, t, conn, insertBurger, "Mixed")
 		mustLink(mixedActive, mixed)
@@ -286,7 +291,7 @@ func TestReviewRepository(t *testing.T) {
 		if !reflect.DeepEqual(burger, want) {
 			t.Errorf("burger = %+v, want %+v", burger, want)
 		}
-		// No stats row: zeros.
+		// stats 行がない場合：ゼロ。
 		statless, err := repo.GetShopBurger(ctx, active1, plain)
 		if err != nil {
 			t.Fatalf("GetShopBurger returned error: %v", err)
@@ -294,7 +299,7 @@ func TestReviewRepository(t *testing.T) {
 		if want := (domain.ShopReviewBurger{ID: plain, Name: "Plain"}); !reflect.DeepEqual(statless, want) {
 			t.Errorf("stats-less burger = %+v, want %+v", statless, want)
 		}
-		// Existing burger of another shop and unknown burger are identical.
+		// 別の shop に属する既存の burger と未知の burger は同一である。
 		for name, burgerID := range map[string]int64{"unlinked": hidden, "unknown": 99999} {
 			if _, err := repo.GetShopBurger(ctx, active1, burgerID); !errors.Is(err, domain.ErrBurgerNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrBurgerNotFound)
@@ -323,9 +328,9 @@ func TestReviewRepository(t *testing.T) {
 		if _, err := repo.GetReview(ctx, created.ID); err != nil {
 			t.Errorf("GetReview after create returned error: %v", err)
 		}
-		// Remove it again and re-seed cheese's burger_stats (the create
-		// recalculated them) so the feed and stats assertions of sibling
-		// subtests stay exact regardless of execution order.
+		// 再度これを削除し、cheese の burger_stats を再 seed する（create が
+		// 再計算した）。これにより、兄弟サブテストのフィードと stats の
+		// アサーションが、実行順序にかかわらず厳密なままになる。
 		if _, err := conn.Exec(ctx, `DELETE FROM reviews WHERE id = $1`, created.ID); err != nil {
 			t.Fatalf("delete created review: %v", err)
 		}
@@ -343,12 +348,12 @@ func TestReviewRepository(t *testing.T) {
 		if !updated.CreatedAt.Equal(t1) {
 			t.Errorf("CreatedAt = %v, want unchanged %v", updated.CreatedAt, t1)
 		}
-		// discarded_at was not touched: the review is still in the feed.
+		// discarded_at には触れていない：review は依然としてフィードに含まれる。
 		if _, err := repo.GetReview(ctx, rOld); err != nil {
 			t.Errorf("GetReview after update returned error: %v", err)
 		}
-		// Restore the review and re-seed cheese's burger_stats (both updates
-		// recalculated them) for sibling subtests.
+		// review を元に戻し、cheese の burger_stats を再 seed する（2 回の
+		// update がどちらも再計算した）。兄弟サブテストのためである。
 		if _, err := repo.UpdateReviewContent(ctx, rOld, 5, "Tasty"); err != nil {
 			t.Fatalf("restore review: %v", err)
 		}
@@ -380,7 +385,7 @@ func TestReviewRepository(t *testing.T) {
 				t.Errorf("feed still contains discarded review %d", victim)
 			}
 		}
-		// The row still exists (soft delete), with discarded_at stamped.
+		// 行はまだ存在し（soft delete）、discarded_at に時刻が刻まれている。
 		var discardedAt *time.Time
 		if err := conn.QueryRow(ctx, `SELECT discarded_at FROM reviews WHERE id = $1`, victim).Scan(&discardedAt); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -391,15 +396,15 @@ func TestReviewRepository(t *testing.T) {
 		if discardedAt == nil {
 			t.Error("discarded_at is NULL, want a timestamp")
 		}
-		// A second discard matches no row.
+		// 2 回目の discard はどの行にも一致しない。
 		if err := repo.DiscardReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("second discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 		if err := repo.DiscardReview(ctx, 99999); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		// Clean up for sibling subtests: remove the victim and re-seed
-		// cheese's burger_stats (the discard recalculated them).
+		// 兄弟サブテストのための後始末：victim を削除し、cheese の
+		// burger_stats を再 seed する（discard が再計算した）。
 		if _, err := conn.Exec(ctx, `DELETE FROM reviews WHERE id = $1`, victim); err != nil {
 			t.Fatalf("delete victim review: %v", err)
 		}
@@ -407,12 +412,12 @@ func TestReviewRepository(t *testing.T) {
 	})
 }
 
-// TestReviewRepositoryCreateReviewForNamedBurger exercises the burger_name
-// find-or-create submission path (S6 P3-1): shop-scoped reuse by exact
-// name, burger + link creation for unknown names, per-shop name scoping
-// (the same name at another shop is a distinct burger row), and the
-// single-transaction guarantee (a failed insert commits no orphan burger
-// or link).
+// TestReviewRepositoryCreateReviewForNamedBurger は、burger_name による
+// find-or-create の投稿経路（S6 P3-1）を検証する。名前の完全一致による
+// shop 単位での再利用、未知の名前に対する burger と link の作成、shop ごとの
+// 名前のスコープ（別の shop の同じ名前は別の burger 行になる）、および
+// 単一トランザクションの保証（insert に失敗しても、孤立した burger や link が
+// commit されない）である。
 func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -478,7 +483,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		if got := burgersNamed(t, "Cheese"); got != 1 {
 			t.Errorf("Cheese burger rows = %d, want no duplicate", got)
 		}
-		// The insert recalculated the stats in the same transaction.
+		// insert が、同じトランザクション内で stats を再計算した。
 		if stats := requireConsistentStats(ctx, t, conn, cheese); stats.ReviewCount != 1 {
 			t.Errorf("stats = %+v, want the recalculated count 1 (only the new kept review)", stats)
 		}
@@ -514,15 +519,15 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1 AND burger_id = $2`, shopB, burger.ID); got != 1 {
 			t.Errorf("shop B link rows = %d, want 1", got)
 		}
-		// Shop A's Cheese link still points at the original burger only.
+		// Shop A の Cheese の link は、元の burger だけを指したままである。
 		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1`, shopA); got != 2 {
 			t.Errorf("shop A link rows = %d, want its original Cheese and Veggie", got)
 		}
 	})
 
 	t.Run("a failed insert commits no orphan burger or link", func(t *testing.T) {
-		// The unknown author violates the reviews.user_id FK after the
-		// burger and link inserts — the whole transaction must roll back.
+		// 未知の author は、burger と link の insert の後で reviews.user_id の
+		// FK に違反する。トランザクション全体が rollback されなければならない。
 		review := domain.Review{Rating: 4, AuthorID: 99999}
 		if _, _, err := repo.CreateReviewForNamedBurger(ctx, shopA, "Ghost", review); err == nil {
 			t.Fatal("CreateReviewForNamedBurger returned nil error, want the FK failure")
@@ -539,7 +544,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 	})
 }
 
-// storedBurgerStats is the burger_stats row as read back in tests.
+// storedBurgerStats は、テストで読み戻した burger_stats の行である。
 type storedBurgerStats struct {
 	ReviewCount   int64
 	AverageRating float64
@@ -548,8 +553,8 @@ type storedBurgerStats struct {
 	CalculatedAt  time.Time
 }
 
-// fetchBurgerStats reads the burger_stats row directly; ok is false when
-// no row exists.
+// fetchBurgerStats は burger_stats の行を直接読み取る。行が存在しない場合、
+// ok は false になる。
 func fetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) (storedBurgerStats, bool) {
 	t.Helper()
 	var s storedBurgerStats
@@ -566,9 +571,10 @@ func fetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerI
 	return s, true
 }
 
-// keptReviewFacts loads the burger's kept reviews of kept users (the same
-// rule the repository uses) as domain facts, with each fact author's kept
-// ratings across all burgers as reviewer history.
+// keptReviewFacts は、burger の kept な review のうち kept な user のものを
+// （repository が使うのと同じルールで）domain の fact として読み込み、
+// 各 fact の author の、すべての burger にわたる kept な rating を
+// reviewer の履歴として付ける。
 func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) []domain.ReviewFact {
 	t.Helper()
 	rows, err := conn.Query(ctx,
@@ -606,8 +612,8 @@ func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID
 	return facts
 }
 
-// keptRatingsOf returns the user's kept ratings across all burgers, id
-// ascending (the reviewer-trust history).
+// keptRatingsOf は、user の、すべての burger にわたる kept な rating を id の
+// 昇順で返す（reviewer-trust の履歴）。
 func keptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID int64) []float64 {
 	t.Helper()
 	rows, err := conn.Query(ctx,
@@ -629,12 +635,12 @@ func keptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID int
 	return ratings
 }
 
-// requireConsistentStats asserts the stored burger_stats row exists and
-// exactly equals a recomputation via the domain functions from the stored
-// review rows and the stored calculated_at (the repository truncates its
-// "now" to the timestamptz resolution precisely so this round-trips), then
-// returns the row. Floats are compared exactly: same inputs through the
-// same pure functions must yield identical values.
+// requireConsistentStats は、保存された burger_stats の行が存在し、保存された
+// review の行と保存された calculated_at から domain の関数で再計算した結果と
+// 完全に一致することをアサートし（repository が "now" を timestamptz の精度に
+// 切り詰めるのは、まさにこれが往復しても一致するようにするためである）、その
+// 行を返す。float は厳密に比較する：同じ入力を同じ純粋関数に通せば、同一の値に
+// ならなければならない。
 func requireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) storedBurgerStats {
 	t.Helper()
 	got, ok := fetchBurgerStats(ctx, t, conn, burgerID)
@@ -656,7 +662,7 @@ func requireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, b
 	return got
 }
 
-// mustCreateReview builds and persists a review through the repository.
+// mustCreateReview は repository を通して review を構築し永続化する。
 func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID, burgerID int64) domain.Review {
 	t.Helper()
 	review, err := domain.NewReview(rating, comment, authorID, burgerID)
@@ -670,11 +676,11 @@ func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.Review
 	return created
 }
 
-// TestReviewRepositoryBurgerStats exercises the S7 same-transaction
-// burger_stats recalculation (issue #15): every review write leaves the
-// stats row exactly consistent with the domain calculator over the kept
-// reviews of kept users, concurrent writers never lose an update, and
-// failed writes leave the stats untouched.
+// TestReviewRepositoryBurgerStats は、S7 の同一トランザクション内での
+// burger_stats の再計算（issue #15）を検証する。review の書き込みのたびに、
+// stats の行は、kept な user の kept な review に対する domain の calculator と
+// 厳密に整合した状態になり、並行する書き込みが更新を失うことはなく、
+// 失敗した書き込みは stats に手を付けない。
 func TestReviewRepositoryBurgerStats(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -759,7 +765,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = now() WHERE id = $1`, carl); err != nil {
 			t.Fatalf("discard user: %v", err)
 		}
-		// Trigger recalculation via a kept user's write.
+		// kept な user の書き込みで再計算を発火させる。
 		if _, err := repo.UpdateReviewContent(ctx, aliceAC4.ID, 4, "still here"); err != nil {
 			t.Fatalf("UpdateReviewContent returned error: %v", err)
 		}
@@ -768,9 +774,9 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		if stats.ReviewCount != 1 || stats.AverageRating != 4.0 {
 			t.Errorf("stats after user discard = %+v, want only alice's kept review", stats)
 		}
-		// Carl's ratings feed neither the facts nor any reviewer history:
-		// the stored score equals one computed from alice's fact and
-		// alice's own kept ratings alone.
+		// Carl の rating は、fact にも、どの reviewer の履歴にも反映されない：
+		// 保存されたスコアは、alice の fact と alice 自身の kept な rating
+		// だけから計算したスコアに等しい。
 		var createdAt time.Time
 		if err := conn.QueryRow(ctx, `SELECT created_at FROM reviews WHERE id = $1`, aliceAC4.ID).Scan(&createdAt); err != nil {
 			t.Fatalf("select review created_at: %v", err)
@@ -796,10 +802,11 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		dave := insertRow(ctx, t, conn, insertUser, "dave@example.com", "dave", false)
 		erin := insertRow(ctx, t, conn, insertUser, "erin@example.com", "erin", false)
 
-		// Without the FOR UPDATE serialization both transactions read a
-		// snapshot missing the other's review and the later upsert writes
-		// review_count 1 (lost update). Repeat with fresh burgers so a
-		// lucky interleaving cannot mask the race.
+		// FOR UPDATE による直列化がなければ、2 つのトランザクションはどちらも
+		// 相手の review が欠けたスナップショットを読み、後の upsert が
+		// review_count 1 を書き込む（lost update）。新しい burger で繰り返す
+		// のは、運よくうまく interleave しても race が隠れないようにするため
+		// である。
 		for i := 0; i < 5; i++ {
 			raceBurger := insertRow(ctx, t, conn, insertBurger, fmt.Sprintf("Race Burger %d", i))
 			daveReview, err := domain.NewReview(5, "race", dave, raceBurger)
@@ -865,10 +872,10 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 	})
 }
 
-// TestReviewRepositoryPhotoKey covers the S10 photo_key persistence:
-// CreateReview stores the key, the joined read queries return it, and
-// UpdateReviewContentAndPhotoKey swaps content and key together on
-// still-kept reviews.
+// TestReviewRepositoryPhotoKey は、S10 の photo_key の永続化を検証する。
+// CreateReview が key を保存し、結合された読み取りクエリがそれを返し、
+// UpdateReviewContentAndPhotoKey が、まだ kept な review の content と key を
+// 一緒に入れ替える。
 func TestReviewRepositoryPhotoKey(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -927,8 +934,9 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		if updated.PhotoKey == nil || *updated.PhotoKey != "reviews/both.png" {
 			t.Errorf("updated PhotoKey = %v, want reviews/both.png", updated.PhotoKey)
 		}
-		// The committed row carries BOTH the content and the key (one
-		// transaction — never content without the key).
+		// commit された行は content と key の「両方」を持つ（1 つの
+		// トランザクションなので、key を伴わない content だけになることは
+		// 決してない）。
 		detail, err := repo.GetReview(ctx, created.ID)
 		if err != nil {
 			t.Fatalf("GetReview after combined update returned error: %v", err)
@@ -952,7 +960,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		if err := repo.DiscardReview(ctx, created.ID); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}
-		// The combined write rolls back: no content change survives.
+		// 結合した書き込みは rollback される：content の変更は何も残らない。
 		if _, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 1, "ghost", strPtr("reviews/ghost.jpg")); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("UpdateReviewContentAndPhotoKey error = %v, want %v", err, domain.ErrReviewNotFound)
 		}

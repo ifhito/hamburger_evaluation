@@ -11,17 +11,18 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// maxRequestBodyBytes caps request bodies at 1 MiB (resource guardrail).
+// maxRequestBodyBytes は request body を 1 MiB に制限する
+// （resource guardrail）。
 const maxRequestBodyBytes int64 = 1 << 20
 
-// maxReviewRequestBodyBytes caps the review submission bodies at 6 MiB:
-// room for the 5 MiB photo (S10) plus fields and multipart framing. The
-// photo itself is still checked against its own 5 MiB limit, which is what
-// yields the 422 — this cap only stops runaway bodies with 413.
+// maxReviewRequestBodyBytes は review の投稿 body を 6 MiB に制限する：
+// 5 MiB の写真（S10）に加え、フィールドと multipart のフレーミングの分の
+// 余裕がある。写真自体は引き続き独自の 5 MiB の上限で検査され、422 を返す
+// のはそちらである。この cap は暴走した body を 413 で止めるだけである。
 const maxReviewRequestBodyBytes int64 = 6 << 20
 
-// bodyLimit returns the request's body cap: only the review write
-// endpoints (which may carry a multipart photo, S10) get the larger one.
+// bodyLimit は request の body の上限を返す：より大きな上限を得るのは、
+// review の書き込み endpoint（multipart の写真を含みうる、S10）だけである。
 func bodyLimit(r *http.Request) int64 {
 	if (r.Method == http.MethodPost && r.URL.Path == "/reviews") ||
 		(r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/reviews/")) {
@@ -30,11 +31,11 @@ func bodyLimit(r *http.Request) int64 {
 	return maxRequestBodyBytes
 }
 
-// limitBody is the global body-cap middleware. It rejects requests whose
-// declared Content-Length exceeds the limit up front with 413 and the
-// error JSON shape (covering handlers that never read the body), and wraps
-// the body in http.MaxBytesReader so handlers that do read (including
-// chunked requests without Content-Length) are also capped.
+// limitBody はグローバルな body cap の middleware である。宣言された
+// Content-Length が上限を超える request は、事前に 413 とエラー JSON 形式で
+// 拒否し（body を読まない handler も対象になる）、さらに body を
+// http.MaxBytesReader で包むことで、body を読む handler（Content-Length の
+// ない chunked request を含む）も上限の対象にする。
 func limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		limit := bodyLimit(r)
@@ -49,23 +50,24 @@ func limitBody(next http.Handler) http.Handler {
 	})
 }
 
-// viewerKeyType is the unexported context key type for the authenticated
-// viewer; collisions with other packages are impossible.
+// viewerKeyType は、認証済みの viewer 用の非公開の context キー型である。
+// 他の package との衝突は起こりえない。
 type viewerKeyType struct{}
 
 var viewerKey viewerKeyType
 
-// ViewerFrom returns the authenticated viewer stored by RequireAuth or
-// OptionalAuth, and false when the request is anonymous.
+// ViewerFrom は RequireAuth または OptionalAuth が格納した認証済みの viewer を
+// 返し、request が匿名の場合は false を返す。
 func ViewerFrom(ctx context.Context) (domain.User, bool) {
 	viewer, ok := ctx.Value(viewerKey).(domain.User)
 	return viewer, ok
 }
 
-// bearerToken extracts the token from "Authorization: Bearer <token>".
-// Per RFC 6750 the scheme is matched case-insensitively and extra
-// whitespace between scheme and token is tolerated. A missing header,
-// another scheme, a bare token, or an empty token yields ok=false.
+// bearerToken は "Authorization: Bearer <token>" から token を取り出す。
+// RFC 6750 に従い、scheme は大文字小文字を区別せずに照合され、scheme と
+// token の間の余分な空白は許容される。ヘッダーがない、別の scheme である、
+// scheme のない token 単体である、または token が空である場合は ok=false に
+// なる。
 func bearerToken(r *http.Request) (string, bool) {
 	fields := strings.Fields(r.Header.Get("Authorization"))
 	if len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") {
@@ -74,10 +76,10 @@ func bearerToken(r *http.Request) (string, bool) {
 	return fields[1], true
 }
 
-// RequireAuth guards a route: without a valid Bearer token of an active
-// user it answers the Rails-parity 401 {"error":"Unauthorized"}; on
-// success it stores the viewer in the request context. Authentication
-// decisions live in the usecase; this only maps them onto HTTP.
+// RequireAuth は route を保護する：active な user の有効な Bearer token が
+// ない場合は Rails-parity の 401 {"error":"Unauthorized"} を返し、成功した
+// 場合は viewer を request の context に格納する。認証の判断は usecase に
+// あり、ここではそれを HTTP に対応させるだけである。
 func RequireAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -92,12 +94,13 @@ func RequireAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 					writeError(w, http.StatusUnauthorized, "Unauthorized")
 					return
 				}
-				// Anything else is an infrastructure failure (e.g. a DB
-				// error the usecase propagates), a server fault rather
-				// than an authentication decision: log it (never the
-				// token) and answer 500, consistent with handleSignup
-				// and handleLogin (Rails rescues only decode/not-found,
-				// so infra failures are 500 there too).
+				// それ以外は infrastructure の障害（例：usecase が
+				// 伝播する DB エラー）であり、認証の判断ではなく
+				// server 側の不具合である。ログに記録し（token は
+				// 決して記録しない）、handleSignup および
+				// handleLogin と同様に 500 を返す（Rails が rescue
+				// するのは decode/not-found だけなので、Rails でも
+				// infra の障害は 500 になる）。
 				log.Printf("auth: authenticate token: %v", err)
 				writeError(w, http.StatusInternalServerError, "internal server error")
 				return
@@ -107,9 +110,9 @@ func RequireAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 	}
 }
 
-// OptionalAuth stores the viewer in the request context when a valid
-// Bearer token of an active user is present, and otherwise lets the
-// request continue anonymously — it never rejects.
+// OptionalAuth は、active な user の有効な Bearer token がある場合は viewer を
+// request の context に格納し、そうでなければ request を匿名のまま続行させる。
+// 決して拒否しない。
 func OptionalAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,9 +122,10 @@ func OptionalAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 				case err == nil:
 					r = r.WithContext(context.WithValue(r.Context(), viewerKey, viewer))
 				case !errors.Is(err, domain.ErrUnauthenticated):
-					// Infrastructure failures are swallowed by contract
-					// (this middleware never rejects) but must not be
-					// silent; the token itself is never logged.
+					// infrastructure の障害は契約上握りつぶされる
+					// （この middleware は決して拒否しない）が、黙殺
+					// してはならない。token 自体は決してログに
+					// 記録しない。
 					log.Printf("auth: optional authenticate token: %v", err)
 				}
 			}

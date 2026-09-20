@@ -12,8 +12,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// fakeUserRepo is a hand-written usecase.UserRepository test double.
-// Unset behaviors panic so tests fail loudly on unexpected calls.
+// fakeUserRepo は、手書きの usecase.UserRepository の test double である。
+// 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
+// fail-loud する。
 type fakeUserRepo struct {
 	createUser func(ctx context.Context, params usecase.CreateUserParams) (domain.User, error)
 	getByEmail func(ctx context.Context, email string) (usecase.UserCredentials, error)
@@ -41,8 +42,8 @@ func (f *fakeUserRepo) GetActiveUserByID(ctx context.Context, id int64) (domain.
 	return f.getByID(ctx, id)
 }
 
-// fakeHasher marks digests deterministically so tests can assert what
-// was stored and compared without real bcrypt work.
+// fakeHasher は digest に決定的な印を付けるので、テストは本物の bcrypt の
+// 処理なしに、何が保存・比較されたかをアサートできる。
 type fakeHasher struct{}
 
 func (fakeHasher) Hash(password string) (string, error) { return "digest(" + password + ")", nil }
@@ -54,8 +55,9 @@ func (fakeHasher) Compare(digest, password string) error {
 	return nil
 }
 
-// recordingHasher behaves like fakeHasher but counts Compare calls so
-// tests can assert the dummy comparison on Login's unknown-email path.
+// recordingHasher は fakeHasher と同様に振る舞うが、Compare の呼び出しを
+// 数えるので、テストは Login の未知の email の経路でのダミー比較を
+// アサートできる。
 type recordingHasher struct {
 	compareCalls int
 }
@@ -86,8 +88,8 @@ func (f fakeVerifier) Verify(token string) (int64, error) { return f.verify(toke
 
 func strPtr(s string) *string { return &s }
 
-// assertValidationError fails the test unless err is a *domain.ValidationError
-// carrying exactly wantMsgs.
+// assertValidationError は、err がちょうど wantMsgs を保持する
+// *domain.ValidationError でない限り、テストを失敗させる。
 func assertValidationError(t *testing.T, err error, wantMsgs []string) {
 	t.Helper()
 	var vErr *domain.ValidationError
@@ -151,7 +153,7 @@ func TestAuthSignupValidation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// The repository must not be reached on validation failure.
+			// validation が失敗したとき、repository に到達してはならない。
 			auth := usecase.NewAuth(&fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 			_, _, err := auth.Signup(context.Background(), tt.input)
 			assertValidationError(t, err, tt.wantMsgs)
@@ -293,9 +295,9 @@ func TestAuthLogin(t *testing.T) {
 	}
 
 	t.Run("unknown email still performs a dummy hash comparison", func(t *testing.T) {
-		// Timing side-channel guard: without a Compare call the
-		// unknown-email path would return measurably faster than the
-		// wrong-password path, allowing email enumeration.
+		// タイミングのサイドチャネル対策：Compare の呼び出しがなければ、
+		// 未知の email の経路は誤ったパスワードの経路より測定できるほど
+		// 速く返り、email の列挙を許してしまう。
 		notFound := &fakeUserRepo{
 			getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
 				return usecase.UserCredentials{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
@@ -332,8 +334,8 @@ func TestAuthAuthenticateToken(t *testing.T) {
 	repo := &fakeUserRepo{
 		getByID: func(_ context.Context, id int64) (domain.User, error) {
 			if id != activeUser.ID {
-				// Unknown and discarded users are both "not found"
-				// at the repository boundary.
+				// 未知のユーザーと discard 済みのユーザーは、repository の
+				// 境界ではどちらも "not found" になる。
 				return domain.User{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
 			}
 			return activeUser, nil
@@ -346,9 +348,9 @@ func TestAuthAuthenticateToken(t *testing.T) {
 		case "valid-discarded":
 			return 8, nil
 		default:
-			// Stands in for tampered, expired, and wrong-algorithm
-			// tokens, all rejected by the real verifier (see infra
-			// JWT tests).
+			// 改ざんされた、期限切れの、アルゴリズムが誤っているトークンの
+			// 代役であり、これらはすべて本物の verifier に拒否される
+			// （infra の JWT テストを参照）。
 			return 0, errors.New("invalid token")
 		}
 	}}

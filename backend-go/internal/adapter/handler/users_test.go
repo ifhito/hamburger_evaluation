@@ -21,8 +21,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// userRepoFake's usecase.UsersRepository half (the auth half lives in
-// auth_test.go), mirroring the real repository's error mapping.
+// userRepoFake の usecase.UsersRepository の半分（auth の半分は auth_test.go に
+// ある）で、本物の repository のエラーの対応づけを再現している。
 
 func (f *userRepoFake) ListActiveUsers(_ context.Context) ([]domain.User, error) {
 	if f.err != nil {
@@ -47,7 +47,8 @@ func (f *userRepoFake) UpdateUserProfile(_ context.Context, id int64, changes us
 		return domain.User{}, domain.ErrUserNotFound
 	}
 	if changes.Email != nil {
-		// The unique index spans discarded users too, like users_email_key.
+		// unique index は、users_email_key と同様に、discard 済みの
+		// ユーザーにも及ぶ。
 		for otherID, other := range f.users {
 			if otherID != id && other.user.Email == *changes.Email {
 				return domain.User{}, domain.ErrEmailTaken
@@ -78,8 +79,8 @@ func (f *userRepoFake) DiscardUser(_ context.Context, id int64) error {
 	return nil
 }
 
-// newUsersRouter wires the router with auth and users over the SAME
-// in-memory user repository, so profile changes are visible to logins.
+// newUsersRouter は、「同一の」in-memory のユーザー repository の上で auth と
+// users を router に配線するので、profile の変更がログインから見える。
 func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) string) {
 	t.Helper()
 	repo, auth, codec := newAuthKit()
@@ -97,8 +98,9 @@ func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) stri
 	return repo, router, token
 }
 
-// TestListUsers pins GET /users: public, kept users only, id ascending,
-// as a plain top-level array of the token-less user shape.
+// TestListUsers は GET /users を固定する：公開であり、kept なユーザーのみで、
+// id の昇順で、トークンを含まないユーザーの形をしたトップレベルの単純な配列
+// として返す。
 func TestListUsers(t *testing.T) {
 	t.Run("anonymous request returns kept users id ascending", func(t *testing.T) {
 		repo, router, _ := newUsersRouter(t)
@@ -136,9 +138,10 @@ func TestListUsers(t *testing.T) {
 	})
 }
 
-// TestUpdateUser covers PUT /users/{id}: AC1 (self update reflected in
-// the index), AC2 (403 for another existing user, 404 for a nonexistent
-// id), AC3 (taken email 422), and the Rails-parity validation edges.
+// TestUpdateUser は PUT /users/{id} を扱う：AC1（自分自身の更新が index に反映
+// される）、AC2（存在する別のユーザーには 403、存在しない id には 404）、
+// AC3（既に使われている email は 422）、そして Rails parity の validation の
+// 境界ケース。
 func TestUpdateUser(t *testing.T) {
 	setup := func(t *testing.T) (*userRepoFake, http.Handler, string, string) {
 		t.Helper()
@@ -267,8 +270,8 @@ func TestUpdateUser(t *testing.T) {
 	})
 }
 
-// TestDeleteUser covers DELETE /users/{id}: AC2's 403/404 split and the
-// AC4 kernel (204 without a body, dead token, gone from the index).
+// TestDeleteUser は DELETE /users/{id} を扱う：AC2 の 403/404 の使い分けと、
+// AC4 の核（body なしの 204、無効になったトークン、index からの消失）。
 func TestDeleteUser(t *testing.T) {
 	setup := func(t *testing.T) (http.Handler, string, string) {
 		t.Helper()
@@ -315,9 +318,9 @@ func TestDeleteUser(t *testing.T) {
 	})
 }
 
-// TestUsersRequireAuth pins the 401 boundary of the user routes: the
-// writes reject anonymous requests before any repository access while the
-// index stays open.
+// TestUsersRequireAuth はユーザー系のルートの 401 の境界を固定する：書き込みは
+// repository へのアクセスより前に匿名の request を拒否し、一方で index は
+// 開かれたままである。
 func TestUsersRequireAuth(t *testing.T) {
 	_, router, _ := newUsersRouter(t)
 	const unauthorized = `{"error":"Unauthorized"}`
@@ -342,9 +345,9 @@ func TestUsersRequireAuth(t *testing.T) {
 	}
 }
 
-// newUsersIntegrationKit wires the full router over real repositories,
-// real bcrypt, and real JWT on a fresh per-run database (skipped without
-// TEST_DATABASE_URL, inside dbtest).
+// newUsersIntegrationKit は、実行ごとに新しく作られる database 上で、本物の
+// repository、本物の bcrypt、本物の JWT を使って router 全体を配線する
+// （TEST_DATABASE_URL がなければ dbtest の内部で skip される）。
 func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	t.Helper()
 	conn, _ := dbtest.New(t)
@@ -359,8 +362,8 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	return conn, router
 }
 
-// signupUser registers a user through POST /signup and returns its id and
-// Bearer header.
+// signupUser は POST /signup を通じてユーザーを登録し、その id と Bearer
+// ヘッダーを返す。
 func signupUser(t *testing.T, router http.Handler, username, email, password string) (int64, string) {
 	t.Helper()
 	body := fmt.Sprintf(`{"username":%q,"email":%q,"password":%q}`, username, email, password)
@@ -372,10 +375,10 @@ func signupUser(t *testing.T, router http.Handler, username, email, password str
 	return user.ID, "Bearer " + user.Token
 }
 
-// TestUsersPasswordChangeIntegration covers AC6 end to end: after a
-// password update through PUT /users/{id}, the old password no longer
-// logs in (401) while the new one does (200) — real bcrypt, real JWT,
-// real PostgreSQL.
+// TestUsersPasswordChangeIntegration は AC6 をエンドツーエンドで扱う：
+// PUT /users/{id} によるパスワードの更新後は、古いパスワードではもう
+// ログインできず（401）、新しいパスワードではログインできる（200）。
+// 本物の bcrypt、本物の JWT、本物の PostgreSQL を使う。
 func TestUsersPasswordChangeIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed integration test in short mode")
@@ -403,8 +406,8 @@ func TestUsersPasswordChangeIntegration(t *testing.T) {
 	}
 }
 
-// usersFeedItem is the slice of the review JSON these integration
-// assertions care about.
+// usersFeedItem は、これらの統合テストの assertion が関心を持つ review の
+// JSON の一部分である。
 type usersFeedItem struct {
 	ID   int64 `json:"id"`
 	User struct {
@@ -416,11 +419,11 @@ type usersFeedItem struct {
 	} `json:"burger"`
 }
 
-// TestUsersDiscardPropagationIntegration is the AC4+AC5 退会の波及
-// scenario over HTTP against a real database: user A reviews a shared
-// burger (also reviewed by B) and a solo burger, deletes their account,
-// and everything downstream — token, index, feed, detail, shop reviews,
-// burger stats — forgets A while keeping B intact.
+// TestUsersDiscardPropagationIntegration は、本物の database に対して
+// HTTP 越しに行う AC4+AC5 退会の波及のシナリオである：ユーザー A は共有の
+// burger（B も review している）と単独の burger を review し、account を
+// 削除する。すると下流のすべて（トークン、index、feed、detail、shop の
+// review、burger の統計）が A を忘れ、B はそのまま残る。
 func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed integration test in short mode")
@@ -431,8 +434,8 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	aliceID, aliceAuth := signupUser(t, router, "alice", "alice@example.com", "password123")
 	bobID, bobAuth := signupUser(t, router, "bob", "bob@example.com", "password123")
 
-	// One approved (active) shop serving two burgers, seeded directly —
-	// moderation is out of this scenario's scope.
+	// 承認済みの（active な）shop 1 件が 2 つの burger を提供し、直接 seed
+	// している。moderation はこのシナリオの範囲外である。
 	var shopID, sharedID, soloID int64
 	if err := conn.QueryRow(ctx, `INSERT INTO shops (name, status) VALUES ('Active One', 1) RETURNING id`).Scan(&shopID); err != nil {
 		t.Fatalf("insert shop: %v", err)
@@ -467,7 +470,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	aliceSolo := postReview(aliceAuth, soloID, 5, "only mine")
 	bobShared := postReview(bobAuth, sharedID, 4, "good")
 
-	// AC4: A discards themself — 204 with an empty body.
+	// AC4：A は自分自身を discard する。空の body を伴う 204 になる。
 	rec := do(router, http.MethodDelete, fmt.Sprintf("/users/%d", aliceID), "", aliceAuth)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want %d (body %s)", rec.Code, http.StatusNoContent, rec.Body)
@@ -476,12 +479,13 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Errorf("delete body = %q, want empty", rec.Body.String())
 	}
 
-	// A's still-unexpired token no longer opens protected endpoints.
+	// A の、まだ期限切れになっていないトークンは、もう保護された
+	// エンドポイントを通さない。
 	if rec := do(router, http.MethodPost, "/logout", "", aliceAuth); rec.Code != http.StatusUnauthorized {
 		t.Errorf("discarded user's token = %d, want 401 (body %s)", rec.Code, rec.Body)
 	}
 
-	// GET /users forgets A and keeps B.
+	// GET /users は A を忘れ、B を残す。
 	rec = do(router, http.MethodGet, "/users", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list users status = %d (body %s)", rec.Code, rec.Body)
@@ -496,8 +500,8 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Errorf("GET /users = %s, want only bob (id %d)", rec.Body, bobID)
 	}
 
-	// AC5: the feed hides A's reviews, keeps B's, and the shared burger's
-	// displayed review_count (1) equals the number of its feed reviews.
+	// AC5：feed は A の review を隠し、B の review を残し、共有の burger に
+	// 表示される review_count（1）は feed 上のその review の件数と等しくなる。
 	rec = do(router, http.MethodGet, "/reviews", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("feed status = %d (body %s)", rec.Code, rec.Body)
@@ -520,8 +524,8 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 			feed[0].Burger.ReviewCount, sharedInFeed)
 	}
 
-	// A's reviews are gone from the detail endpoint, indistinguishable
-	// from never-existing ones.
+	// A の review は detail エンドポイントから消えており、
+	// もともと存在しなかった review と区別できない。
 	for _, id := range []int64{aliceShared, aliceSolo} {
 		rec := do(router, http.MethodGet, fmt.Sprintf("/reviews/%d", id), "", "")
 		if rec.Code != http.StatusNotFound || rec.Body.String() != `{"error":"Review not found"}` {
@@ -529,7 +533,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		}
 	}
 
-	// The shop detail lists only B's review.
+	// shop の detail は B の review だけを列挙する。
 	rec = do(router, http.MethodGet, fmt.Sprintf("/shops/%d", shopID), "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("shop detail status = %d (body %s)", rec.Code, rec.Body)
@@ -547,8 +551,8 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Errorf("shop detail shared review_count = %d, want 1", got)
 	}
 
-	// The stored stats agree: shared keeps only B's rating, solo drops to
-	// the zero row (recalculated in the discard's transaction).
+	// 保存された統計も一致する：shared は B の rating だけを保ち、solo は
+	// ゼロの行に落ちる（discard の transaction 内で再計算される）。
 	assertStats := func(burgerID, wantCount int64, wantAvg float64) {
 		t.Helper()
 		var count int64

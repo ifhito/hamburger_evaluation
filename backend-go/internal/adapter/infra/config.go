@@ -1,6 +1,5 @@
-// Package infra holds infrastructure concerns: environment configuration,
-// database pool construction, JWT issuing/verification, and password
-// hashing.
+// Package infra は infrastructure に関する関心事（環境変数からの設定、
+// database pool の構築、JWT の発行/検証、パスワードのハッシュ化）を保持する。
 package infra
 
 import (
@@ -19,53 +18,55 @@ const (
 	photoStorageS3Mode   = "s3"
 )
 
-// Config is the process configuration loaded from the environment.
+// Config は環境変数から読み込まれるプロセスの設定である。
 type Config struct {
-	// Port is the TCP port the HTTP server listens on. PORT, default 8080.
+	// Port は HTTP サーバーが listen する TCP ポートである。PORT、
+	// デフォルトは 8080。
 	Port string
-	// DatabaseURL is the PostgreSQL connection string. DATABASE_URL, required.
+	// DatabaseURL は PostgreSQL の接続文字列である。DATABASE_URL、必須。
 	DatabaseURL string
-	// JWTSecret is the HMAC secret for JWT auth. JWT_SECRET, required.
-	// For tokens issued by the Rails backend to remain valid, it must
-	// equal the Rails secret_key_base.
-	// Its value must never be hardcoded or logged.
+	// JWTSecret は JWT 認証に使う HMAC の secret である。JWT_SECRET、必須。
+	// Rails バックエンドが発行したトークンを有効なまま保つには、Rails の
+	// secret_key_base と一致していなければならない。
+	// その値は決してハードコードしてはならず、ログにも出力してはならない。
 	JWTSecret string
-	// JWTTTL is the lifetime of issued JWTs. JWT_TTL (a Go duration such
-	// as "24h"), default 24h, must be positive.
+	// JWTTTL は発行される JWT の有効期間である。JWT_TTL（"24h" のような
+	// Go の duration）、デフォルトは 24h、正の値でなければならない。
 	JWTTTL time.Duration
-	// DBMaxConns caps the pgx pool size. DB_MAX_CONNS, default 10.
+	// DBMaxConns は pgx pool のサイズの上限である。DB_MAX_CONNS、
+	// デフォルトは 10。
 	DBMaxConns int32
-	// PhotoStorage selects the review-photo backend. PHOTO_STORAGE,
-	// "disk" (default) or "s3"; any other value is a boot error.
+	// PhotoStorage は review の写真の backend を選択する。PHOTO_STORAGE、
+	// "disk"（デフォルト）または "s3"。それ以外の値は起動時のエラーになる。
 	PhotoStorage string
-	// PhotoDiskDir is the root directory for disk-stored photos.
-	// PHOTO_DISK_DIR, default "storage/photos"; disk mode only.
+	// PhotoDiskDir は disk に保存される写真のルートディレクトリである。
+	// PHOTO_DISK_DIR、デフォルトは "storage/photos"。disk モードのみ。
 	PhotoDiskDir string
-	// PhotoPublicBaseURL prefixes public photo URLs.
-	// PHOTO_PUBLIC_BASE_URL, default "/photos" in disk mode, required in
-	// s3 mode (e.g. an R2 public bucket domain or CDN).
+	// PhotoPublicBaseURL は公開される写真の URL の接頭辞である。
+	// PHOTO_PUBLIC_BASE_URL、disk モードではデフォルトが "/photos"、
+	// s3 モードでは必須（例：R2 の公開 bucket のドメインや CDN）。
 	PhotoPublicBaseURL string
-	// PhotoS3Endpoint is the S3 API endpoint (e.g. the Cloudflare R2 S3
-	// endpoint). PHOTO_S3_ENDPOINT, required in s3 mode.
+	// PhotoS3Endpoint は S3 API の endpoint である（例：Cloudflare R2 の
+	// S3 endpoint）。PHOTO_S3_ENDPOINT、s3 モードでは必須。
 	PhotoS3Endpoint string
-	// PhotoS3Bucket is the bucket name. PHOTO_S3_BUCKET, required in s3
-	// mode.
+	// PhotoS3Bucket は bucket 名である。PHOTO_S3_BUCKET、s3 モードでは
+	// 必須。
 	PhotoS3Bucket string
-	// PhotoS3AccessKeyID is the static access key id.
-	// PHOTO_S3_ACCESS_KEY_ID, required in s3 mode.
-	// Its value must never be hardcoded or logged.
+	// PhotoS3AccessKeyID は静的な access key id である。
+	// PHOTO_S3_ACCESS_KEY_ID、s3 モードでは必須。
+	// その値は決してハードコードしてはならず、ログにも出力してはならない。
 	PhotoS3AccessKeyID string
-	// PhotoS3SecretAccessKey is the static secret access key.
-	// PHOTO_S3_SECRET_ACCESS_KEY, required in s3 mode.
-	// Its value must never be hardcoded or logged.
+	// PhotoS3SecretAccessKey は静的な secret access key である。
+	// PHOTO_S3_SECRET_ACCESS_KEY、s3 モードでは必須。
+	// その値は決してハードコードしてはならず、ログにも出力してはならない。
 	PhotoS3SecretAccessKey string
 }
 
-// LoadConfig reads configuration via getenv (normally os.Getenv; injected
-// for tests). It fails when DATABASE_URL or JWT_SECRET is missing, when
-// JWT_TTL is not a positive duration, when DB_MAX_CONNS is not a positive
-// integer, when PHOTO_STORAGE is neither "disk" nor "s3", or when s3 mode
-// lacks any of its required variables.
+// LoadConfig は getenv を通して設定を読み込む（通常は os.Getenv で、
+// テストのために注入される）。DATABASE_URL または JWT_SECRET がない場合、
+// JWT_TTL が正の duration でない場合、DB_MAX_CONNS が正の整数でない場合、
+// PHOTO_STORAGE が "disk" でも "s3" でもない場合、または s3 モードで必須の
+// 変数のいずれかが欠けている場合に失敗する。
 func LoadConfig(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		Port:        getenv("PORT"),
@@ -116,8 +117,8 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		cfg.PhotoS3Bucket = getenv("PHOTO_S3_BUCKET")
 		cfg.PhotoS3AccessKeyID = getenv("PHOTO_S3_ACCESS_KEY_ID")
 		cfg.PhotoS3SecretAccessKey = getenv("PHOTO_S3_SECRET_ACCESS_KEY")
-		// Fail loudly on the first missing var; error messages name the
-		// variable only, never its value.
+		// 最初に欠けている変数で fail-loud する。エラーメッセージには
+		// 変数名だけを含め、その値は決して含めない。
 		for name, value := range map[string]string{
 			"PHOTO_S3_ENDPOINT":          cfg.PhotoS3Endpoint,
 			"PHOTO_S3_BUCKET":            cfg.PhotoS3Bucket,

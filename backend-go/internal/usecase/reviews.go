@@ -13,92 +13,93 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
 
-// ReviewRepository is the consumer-side persistence contract for reviews.
-// Implementations keep the SQL details (EXISTS active-shop filter, the
-// smallint status encoding, soft-delete predicates) to themselves and
-// return wrapped domain sentinels (ErrReviewNotFound, ErrShopNotFound,
-// ErrBurgerNotFound) when no row matches.
+// ReviewRepository は review 向けの consumer 側の永続化の契約である。
+// 実装は SQL の詳細（EXISTS による active な shop のフィルタ、smallint の
+// status のエンコード、soft delete の述語）を自分の内部に留め、一致する行が
+// ないときは wrap した domain の sentinel（ErrReviewNotFound、
+// ErrShopNotFound、ErrBurgerNotFound）を返す。
 type ReviewRepository interface {
-	// ListReviews returns the non-discarded reviews whose burger is
-	// served by at least one active shop, narrowed by filter, with
-	// author, burger, and stats joined (no N+1), newest first
-	// (created_at desc, id desc).
+	// ListReviews は、burger が少なくとも 1 つの active な shop で提供されて
+	// いる、discard されていない review を返す。filter で絞り込み、author、
+	// burger、stats を結合し（N+1 なし）、新しい順（created_at desc、
+	// id desc）に並べる。
 	ListReviews(ctx context.Context, filter ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error)
-	// GetReview returns one non-discarded review with author, burger, and
-	// stats, or (a wrapped) domain.ErrReviewNotFound — missing and
-	// discarded reviews are indistinguishable.
+	// GetReview は、author、burger、stats つきの、discard されていない
+	// review を 1 件返すか、（wrap された）domain.ErrReviewNotFound を返す。
+	// 存在しない review と discard 済みの review は区別できない。
 	GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error)
-	// GetShop returns the bare shop row (no creator, no reviews) or (a
-	// wrapped) domain.ErrShopNotFound.
+	// GetShop は素の shop の行（creator なし、review なし）を返すか、
+	// （wrap された）domain.ErrShopNotFound を返す。
 	GetShop(ctx context.Context, id int64) (domain.Shop, error)
-	// GetShopBurger returns the burger with its stats (zeros when none
-	// calculated yet) only when it is linked to the shop via
-	// shops_burgers, else (a wrapped) domain.ErrBurgerNotFound.
+	// GetShopBurger は、burger が shops_burgers 経由でその shop に紐づいて
+	// いるときに限り、stats つき（まだ計算されていなければゼロ）の burger を
+	// 返し、そうでなければ（wrap された）domain.ErrBurgerNotFound を返す。
 	GetShopBurger(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error)
-	// CreateReview persists a new (already validated) review and returns
-	// it with its generated id and created_at. The write also recalculates
-	// the burger's burger_stats in the same transaction (issue #15, S7).
+	// CreateReview は、新しい（validate 済みの）review を永続化し、生成された
+	// id と created_at つきで返す。この書き込みは、同一 transaction 内で
+	// burger の burger_stats も再計算する（issue #15、S7）。
 	CreateReview(ctx context.Context, review domain.Review) (domain.Review, error)
-	// CreateReviewForNamedBurger persists a new (already validated) review
-	// against the shop's burger with the given exact name, creating the
-	// burger and its shops_burgers link when the shop has none by that name
-	// (Rails find_or_create_burger, S6 P3-1). The review's BurgerID input
-	// is ignored and set to the resolved burger. Find-or-create, review
-	// insert, and burger_stats recalculation happen in ONE transaction, so
-	// a failed insert leaves no orphan burger or link. The returned burger
-	// carries the stats as stored before the insert — exactly what
-	// GetShopBurger yields on the burger_id path; a brand-new burger has
-	// zero stats.
+	// CreateReviewForNamedBurger は、新しい（validate 済みの）review を、
+	// shop の burger のうち指定された名前と完全一致するものに対して永続化する。
+	// shop にその名前の burger がなければ、burger とその shops_burgers の
+	// リンクを作成する（Rails の find_or_create_burger、S6 P3-1）。review の
+	// BurgerID の入力は無視され、解決された burger に設定される。
+	// find-or-create、review の insert、burger_stats の再計算は「1 つの」
+	// transaction 内で行われるので、insert が失敗しても孤立した burger や
+	// リンクは残らない。返される burger は、insert 前に保存されていた stats を
+	// 持つ。これは burger_id の経路で GetShopBurger が返すものとまったく同じで
+	// ある。まったく新しい burger の stats はゼロである。
 	CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error)
-	// UpdateReviewContent persists only rating and comment of the still
-	// kept review under id and returns the stored row, or (a wrapped)
-	// domain.ErrReviewNotFound when it is missing or discarded.
-	// Column-scoped so discarded_at is never written. The write also
-	// recalculates the burger's burger_stats in the same transaction.
+	// UpdateReviewContent は、id の、まだ kept な review の rating と comment
+	// だけを永続化し、保存された行を返す。存在しないか discard 済みのときは
+	// （wrap された）domain.ErrReviewNotFound を返す。カラム限定の書き込み
+	// なので、discarded_at が書き込まれることは決してない。この書き込みは、
+	// 同一 transaction 内で burger の burger_stats も再計算する。
 	UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
-	// UpdateReviewContentAndPhotoKey persists rating, comment, AND
-	// photo_key of the still kept review under id atomically — the two
-	// column-scoped writes plus the burger_stats recalculation share ONE
-	// transaction, so a photo-carrying edit can never commit the content
-	// without the key (S10 review fix). Returns the stored row, or (a
-	// wrapped) domain.ErrReviewNotFound when the review is missing or
-	// discarded (nothing is committed then).
+	// UpdateReviewContentAndPhotoKey は、id の、まだ kept な review の
+	// rating、comment、「および」photo_key を atomic に永続化する。カラム限定の
+	// 2 つの書き込みと burger_stats の再計算が「1 つの」transaction を共有する
+	// ので、写真つきの編集が content だけを key なしで commit してしまうことは
+	// 決してない（S10 の review fix）。保存された行を返すか、review が存在しない
+	// か discard 済みのときは（wrap された）domain.ErrReviewNotFound を返す
+	// （その場合は何も commit されない）。
 	UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error)
-	// DiscardReview soft-deletes the review (stamps discarded_at, never a
-	// hard DELETE), or returns (a wrapped) domain.ErrReviewNotFound when
-	// it is missing or already discarded. The write also recalculates the
-	// burger's burger_stats in the same transaction.
+	// DiscardReview は review を soft delete する（discarded_at を記録し、
+	// hard DELETE は決して行わない）。存在しないか、すでに discard 済みの
+	// ときは（wrap された）domain.ErrReviewNotFound を返す。この書き込みは、
+	// 同一 transaction 内で burger の burger_stats も再計算する。
 	DiscardReview(ctx context.Context, id int64) error
 }
 
-// ReviewListFilter carries the optional GET /reviews query filters,
-// mirroring Rails ReviewQuery: each present filter narrows the feed, all
-// present filters combine with AND. A nil Rating/ShopID and an empty
-// Keyword mean "absent" (Rails params[:x].present?), so a present zero or
-// negative id/rating still filters (to an empty page) exactly like Rails.
+// ReviewListFilter は、GET /reviews の任意のクエリフィルタを保持する。
+// Rails の ReviewQuery を再現しており、指定されたフィルタはそれぞれフィードを
+// 絞り込み、指定されたフィルタはすべて AND で組み合わされる。nil の
+// Rating/ShopID と空の Keyword は「absent」を意味する（Rails の
+// params[:x].present?）。したがって、0 や負の id/rating が指定された場合も、
+// Rails とまったく同様にフィルタとして働く（結果は空のページになる）。
 type ReviewListFilter struct {
-	// Rating is an exact-match rating filter (Rails by_rating).
+	// Rating は rating の完全一致フィルタである（Rails の by_rating）。
 	Rating *int
-	// Keyword is a literal case-insensitive substring match on comment
-	// (Rails keyword_search, comment ILIKE %escaped%).
+	// Keyword は、comment に対するリテラルで大文字小文字を区別しない部分文字列
+	// 一致である（Rails の keyword_search、comment ILIKE %escaped%）。
 	Keyword string
-	// ShopID keeps only reviews whose burger is linked to that shop via
-	// shops_burgers (Rails' shops_and_burgers join).
+	// ShopID は、shops_burgers 経由でその shop に burger が紐づいている review
+	// だけを残す（Rails の shops_and_burgers の join）。
 	ShopID *int64
 }
 
-// Reviews implements the review use cases: the public feed and detail,
-// and the author-scoped create/edit/delete, with an optional photo per
-// review stored via photos (S10).
+// Reviews は review の use case を実装する。公開フィードと詳細、および
+// author に限定された create/edit/delete であり、review ごとに任意で 1 枚の
+// 写真を photos 経由で保存する（S10）。
 type Reviews struct {
 	repo   ReviewRepository
 	photos PhotoStorage
 }
 
-// NewReviews wires the review use cases. photos must be non-nil (disk or
-// S3 in production, a fake in tests): every request path may dereference
-// it (photoURL, deletePhotoBestEffort), so a nil storage fails loudly
-// here instead of panicking mid-request.
+// NewReviews は review の use case を配線する。photos は non-nil でなければ
+// ならない（本番では disk か S3、テストでは fake）。どのリクエスト経路も
+// それを dereference しうる（photoURL、deletePhotoBestEffort）ので、nil の
+// storage は、リクエストの途中で panic するのではなく、ここで fail-loud する。
 func NewReviews(repo ReviewRepository, photos PhotoStorage) *Reviews {
 	if photos == nil {
 		panic("usecase.NewReviews: nil PhotoStorage")
@@ -106,8 +107,8 @@ func NewReviews(repo ReviewRepository, photos PhotoStorage) *Reviews {
 	return &Reviews{repo: repo, photos: photos}
 }
 
-// List returns the public review feed narrowed by filter, paginated with
-// the same fallback rules as Shops.List, per clampPage.
+// List は、filter で絞り込んだ公開 review フィードを返す。ページネーションは
+// clampPage に従い、Shops.List と同じフォールバック規則で行う。
 func (s *Reviews) List(ctx context.Context, filter ReviewListFilter, page, perPage int) ([]domain.ReviewDetail, error) {
 	limit, offset := clampPage(page, perPage)
 	reviews, err := s.repo.ListReviews(ctx, filter, limit, offset)
@@ -120,8 +121,8 @@ func (s *Reviews) List(ctx context.Context, filter ReviewListFilter, page, perPa
 	return reviews, nil
 }
 
-// Get returns one review with author, burger, and stats. Missing and
-// discarded reviews both yield domain.ErrReviewNotFound.
+// Get は author、burger、stats つきの review を 1 件返す。存在しない review と
+// discard 済みの review は、どちらも domain.ErrReviewNotFound を返す。
 func (s *Reviews) Get(ctx context.Context, id int64) (domain.ReviewDetail, error) {
 	detail, err := s.repo.GetReview(ctx, id)
 	if err != nil {
@@ -131,19 +132,20 @@ func (s *Reviews) Get(ctx context.Context, id int64) (domain.ReviewDetail, error
 	return detail, nil
 }
 
-// Create posts a review by viewer for a burger of a shop, in the
-// contract's check order: unknown shop (404), then the domain reviewable
-// rule (403), then the burger resolution, then content validation (422).
-// A positive burgerID takes precedence and must name a burger linked to
-// the shop (404 otherwise); else a non-blank burgerName find-or-creates
-// the shop's burger by exact, untrimmed name (Rails parity, S6 P3-1)
-// inside the same transaction as the insert; neither is a validation
-// failure (422) — never a silent default. The response detail is composed
-// from the viewer and the burger resolved for the existence check — no
-// re-fetch. A non-nil upload (already validated/normalized by the
-// handler, S10) is stored under a fresh random key before the insert; a
-// failed insert then best-effort deletes the just-uploaded blob so no
-// orphan file outlives the request.
+// Create は、viewer による、shop の burger に対する review を投稿する。
+// チェックの順序は契約どおりで、未知の shop（404）、次に domain の
+// reviewable ルール（403）、次に burger の解決、次に content の validation
+// （422）である。正の burgerID が優先され、shop に紐づく burger を指して
+// いなければならない（そうでなければ 404）。そうでない場合は、空白でない
+// burgerName が、insert と同じ transaction 内で、完全一致かつ trim されて
+// いない名前で shop の burger を find-or-create する（Rails parity、
+// S6 P3-1）。どちらでもない場合は validation の失敗（422）であり、黙って
+// デフォルトを使うことは決してない。レスポンスの detail は、viewer と、
+// 存在確認のために解決した burger から組み立てる。再取得はしない。nil でない
+// upload（handler で validate 済み/正規化済み、S10）は、insert の前に新しい
+// ランダムな key で保存される。その後 insert が失敗した場合は、アップロード
+// したばかりの blob を best-effort で削除するので、リクエストより長く残る
+// 孤立ファイルはない。
 func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burgerID int64, burgerName string, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
 	shop, err := s.repo.GetShop(ctx, shopID)
 	if err != nil {
@@ -160,7 +162,7 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	} else if err := domain.ValidateBurgerName(burgerName); err != nil {
 		return domain.ReviewDetail{}, err
 	}
-	// BurgerID 0: the repository resolves it inside the transaction.
+	// BurgerID 0：repository が transaction 内でこれを解決する。
 	review, err := domain.NewReview(rating, comment, viewer.ID, burgerID)
 	if err != nil {
 		return domain.ReviewDetail{}, err
@@ -186,17 +188,17 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	}, nil
 }
 
-// Update edits a review's rating and comment: load (404 for missing and
-// discarded alike), the domain ownership rule (403 — issue #14 AC3, an
-// admin gets no pass), content validation (422), then the column-scoped
-// write. The stored row is merged into the loaded detail so the response
-// carries author, burger, and stats without a re-fetch. A non-nil upload
-// (S10) replaces the photo: the new blob is stored first, then content
-// and photo_key are switched in ONE repository transaction (so a failure
-// can never commit the content without the key), and only after that DB
-// success is the old blob best-effort deleted. A nil upload takes the
-// content-only write and leaves photo_key untouched (there is no
-// photo-removal path).
+// Update は review の rating と comment を編集する。load（存在しない review
+// と discard 済みの review はどちらも 404）、domain の所有権ルール（403。
+// issue #14 AC3、admin でも通らない）、content の validation（422）、
+// そしてカラム限定の書き込みの順で行う。保存された行は load した detail に
+// マージされるので、レスポンスは再取得なしで author、burger、stats を持つ。
+// nil でない upload（S10）は写真を置き換える。新しい blob を先に保存し、
+// 続いて content と photo_key を「1 つの」repository の transaction で切り
+// 替え（失敗しても content だけが key なしで commit されることは決して
+// ない）、その DB の成功の後にはじめて古い blob を best-effort で削除する。
+// nil の upload は content だけの書き込みを行い、photo_key には触れない
+// （写真を削除する経路はない）。
 func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
 	detail, err := s.repo.GetReview(ctx, id)
 	if err != nil {
@@ -218,8 +220,9 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 			s.deletePhotoBestEffort(ctx, newKey)
 			return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 		}
-		// The old blob is unreferenced only now that the DB points at the
-		// new key; losing it is a leaked file, not a broken review.
+		// 古い blob が参照されなくなるのは、DB が新しい key を指すように
+		// なった今になってからである。それを失っても、漏れたファイルに
+		// なるだけで、review が壊れることはない。
 		s.deletePhotoBestEffort(ctx, detail.PhotoKey)
 	} else if updated, err = s.repo.UpdateReviewContent(ctx, id, rating, comment); err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
@@ -229,10 +232,10 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 	return detail, nil
 }
 
-// Delete soft-deletes a review: load (404), the domain ownership rule
-// (403, author-only like Update), then the column-scoped discard — never
-// a hard DELETE. The photo blob, if any, is best-effort deleted after the
-// discard succeeded (S10).
+// Delete は review を soft delete する。load（404）、domain の所有権ルール
+// （403、Update と同様に author のみ）、そしてカラム限定の discard の順で
+// 行い、hard DELETE は決して行わない。写真の blob があれば、discard が
+// 成功した後に best-effort で削除される（S10）。
 func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) error {
 	detail, err := s.repo.GetReview(ctx, id)
 	if err != nil {
@@ -248,10 +251,10 @@ func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) erro
 	return nil
 }
 
-// putPhoto stores the processed upload under a fresh random key
-// ("reviews/<32 hex chars><ext>", crypto/rand — collisions are
-// negligible) and returns that key; a nil upload yields a nil key and no
-// storage call.
+// putPhoto は、処理済みの upload を新しいランダムな key
+// （"reviews/<32 hex chars><ext>"、crypto/rand。衝突は無視できるほど小さい）
+// で保存し、その key を返す。nil の upload は nil の key を返し、storage の
+// 呼び出しは行わない。
 func (s *Reviews) putPhoto(ctx context.Context, upload *photo.Processed) (*string, error) {
 	if upload == nil {
 		return nil, nil
@@ -267,14 +270,15 @@ func (s *Reviews) putPhoto(ctx context.Context, upload *photo.Processed) (*strin
 	return &key, nil
 }
 
-// deletePhotoBestEffort removes the blob under key, if any. This is the
-// documented best-effort exception to fail-loud: the DB is already the
-// source of truth by the time it runs, so a storage failure here means a
-// leaked (or already-gone) blob, never a broken review — it is logged
-// with the key and the request still succeeds. The delete runs detached
-// from the request's cancellation (WithoutCancel) under its own short
-// timeout: a client that hangs up must not turn every delete into a
-// guaranteed orphan (S3 mode), while the timeout keeps the call bounded.
+// deletePhotoBestEffort は、key の下の blob があれば削除する。これは
+// fail-loud に対する、文書化された best-effort の例外である。実行される
+// 時点で DB はすでに source of truth になっているので、ここでの storage の
+// 失敗が意味するのは、漏れた（またはすでに消えている）blob であり、
+// review が壊れることは決してない。key つきでログに記録され、リクエストは
+// 成功のままである。delete は、リクエストのキャンセルから切り離され
+// （WithoutCancel）、それ専用の短い timeout の下で実行される。クライアントが
+// 接続を切っても、すべての delete が確実に孤立ファイルになってしまっては
+// ならない（S3 モード）。一方で timeout が呼び出しの長さを有限に保つ。
 func (s *Reviews) deletePhotoBestEffort(ctx context.Context, key *string) {
 	if key == nil {
 		return
@@ -286,7 +290,8 @@ func (s *Reviews) deletePhotoBestEffort(ctx context.Context, key *string) {
 	}
 }
 
-// photoURL maps a stored photo key onto its public URL (nil in, nil out).
+// photoURL は、保存された写真の key をその公開 URL に対応させる（nil を渡せば
+// nil が返る）。
 func (s *Reviews) photoURL(key *string) *string {
 	if key == nil {
 		return nil

@@ -12,8 +12,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// fakeUsersRepo is a hand-written usecase.UsersRepository test double.
-// Unset behaviors panic so tests fail loudly on unexpected calls.
+// fakeUsersRepo は、手書きの usecase.UsersRepository の test double である。
+// 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
+// fail-loud する。
 type fakeUsersRepo struct {
 	list          func(ctx context.Context) ([]domain.User, error)
 	getByID       func(ctx context.Context, id int64) (domain.User, error)
@@ -54,8 +55,8 @@ var (
 	usersOther  = domain.User{ID: 2, Username: "bob", Email: "bob@example.com"}
 )
 
-// activeUsersByID returns a getByID behavior serving the given users and
-// domain.ErrUserNotFound for everyone else.
+// activeUsersByID は、指定されたユーザーを返し、それ以外のすべての id には
+// domain.ErrUserNotFound を返す getByID の振る舞いを返す。
 func activeUsersByID(users ...domain.User) func(context.Context, int64) (domain.User, error) {
 	return func(_ context.Context, id int64) (domain.User, error) {
 		for _, u := range users {
@@ -85,10 +86,10 @@ func TestUsersList(t *testing.T) {
 	}
 }
 
-// TestUsersUpdateCheckOrder pins the find-then-authorize order of issue
-// #16 AC2: an unknown target yields ErrUserNotFound even for a
-// non-owner, an existing foreign target yields ErrForbidden before any
-// validation or write (the unset updateProfile would panic if reached).
+// TestUsersUpdateCheckOrder は、issue #16 AC2 の find-then-authorize の順序を
+// 固定する。未知の target は、所有者でない場合でも ErrUserNotFound を返し、
+// 存在する他人の target は、validation や書き込みの前に ErrForbidden を返す
+// （未設定の updateProfile は、到達すれば panic する）。
 func TestUsersUpdateCheckOrder(t *testing.T) {
 	repo := &fakeUsersRepo{getByID: activeUsersByID(usersViewer, usersOther)}
 	users := usecase.NewUsers(repo, fakeHasher{})
@@ -96,8 +97,8 @@ func TestUsersUpdateCheckOrder(t *testing.T) {
 	if _, err := users.Update(context.Background(), usersViewer, 999, usecase.UpdateUserInput{}); !errors.Is(err, domain.ErrUserNotFound) {
 		t.Errorf("unknown target error = %v, want %v", err, domain.ErrUserNotFound)
 	}
-	// Even an invalid input against a foreign target is answered with 403,
-	// never with the validation result.
+	// 他人の target に対しては、不正な入力であっても 403 で応答され、
+	// validation の結果で応答されることは決してない。
 	input := usecase.UpdateUserInput{Username: strPtr("")}
 	if _, err := users.Update(context.Background(), usersViewer, usersOther.ID, input); !errors.Is(err, domain.ErrForbidden) {
 		t.Errorf("foreign target error = %v, want %v", err, domain.ErrForbidden)
@@ -153,10 +154,10 @@ func TestUsersUpdateValidation(t *testing.T) {
 	}
 }
 
-// TestUsersUpdateChanges pins what reaches the repository: absent fields
-// stay nil (partial update), an empty-string password is treated as
-// absent (Rails has_secure_password), and a present password arrives
-// hashed — never as plaintext.
+// TestUsersUpdateChanges は、repository に届くものを固定する。存在しない
+// フィールドは nil のまま（部分更新）、空文字列のパスワードは存在しない
+// ものとして扱われ（Rails の has_secure_password）、存在するパスワードは
+// ハッシュ化されて届く。平文で届くことは決してない。
 func TestUsersUpdateChanges(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -230,7 +231,8 @@ func TestUsersUpdateChanges(t *testing.T) {
 	}
 }
 
-// profileChangesString renders the pointer fields legibly for failures.
+// profileChangesString は、失敗時に読みやすいよう、ポインタのフィールドを
+// 描画する。
 func profileChangesString(c usecase.ProfileChanges) string {
 	deref := func(p *string) string {
 		if p == nil {
@@ -241,9 +243,9 @@ func profileChangesString(c usecase.ProfileChanges) string {
 	return fmt.Sprintf("{Username:%s Email:%s PasswordDigest:%s}", deref(c.Username), deref(c.Email), deref(c.PasswordDigest))
 }
 
-// TestUsersUpdateEmailTaken covers AC3 at the usecase level: the
-// repository's unique-violation sentinel surfaces as the Rails-parity
-// validation message.
+// TestUsersUpdateEmailTaken は usecase レベルで AC3 を扱う。repository の
+// unique violation の sentinel が、Rails parity の validation message として
+// 現れる。
 func TestUsersUpdateEmailTaken(t *testing.T) {
 	repo := &fakeUsersRepo{
 		getByID: activeUsersByID(usersViewer),
@@ -256,8 +258,9 @@ func TestUsersUpdateEmailTaken(t *testing.T) {
 	assertValidationError(t, err, []string{"Email has already been taken"})
 }
 
-// TestUsersDelete pins the delete flow: the AC2 check order (404 before
-// 403), the self-only rule, and the discard call for the owner.
+// TestUsersDelete は削除のフローを固定する。AC2 のチェック順序（404 が
+// 403 より先）、本人のみのルール、そして所有者に対する discard の呼び出しで
+// ある。
 func TestUsersDelete(t *testing.T) {
 	t.Run("unknown target yields ErrUserNotFound even for a non-owner", func(t *testing.T) {
 		repo := &fakeUsersRepo{getByID: activeUsersByID(usersViewer, usersOther)}

@@ -30,8 +30,8 @@ func TestJWTCodecRoundTrip(t *testing.T) {
 		t.Fatalf("Verify = %d, want %d", got, userID)
 	}
 
-	// Rails/frontend parity: the payload must be exactly
-	// {"user_id": <number>, "exp": <unix>}.
+	// Rails/frontend parity：payload はちょうど
+	// {"user_id": <number>, "exp": <unix>} でなければならない。
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		t.Fatalf("token has %d segments, want 3", len(parts))

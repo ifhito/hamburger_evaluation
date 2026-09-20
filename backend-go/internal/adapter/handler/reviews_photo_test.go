@@ -17,10 +17,10 @@ import (
 	"testing"
 )
 
-// jpegBytes returns a decodable JPEG padded with trailing zeros to size
-// bytes (the Go decoder stops at the EOI marker, so the padding only
-// inflates the upload). Padding keeps building multi-MB fixtures cheap and
-// deterministic.
+// jpegBytes は、末尾を 0 で size バイトまで埋めた、デコード可能な JPEG を返す
+// （Go の decoder は EOI marker で止まるので、この padding はアップロードを
+// 膨らませるだけである）。padding によって、数 MB 級の fixture の構築が安価で
+// 決定的になる。
 func jpegBytes(t *testing.T, size int) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -34,7 +34,7 @@ func jpegBytes(t *testing.T, size int) []byte {
 	return buf.Bytes()
 }
 
-// pngBytes returns a small decodable PNG.
+// pngBytes は、小さなデコード可能な PNG を返す。
 func pngBytes(t *testing.T) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -44,9 +44,10 @@ func pngBytes(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-// multipartBody builds a multipart/form-data body from flat text fields
-// plus optional photo parts (each declared as image/jpeg "photo.jpg" —
-// the server must trust magic bytes, never this declaration).
+// multipartBody は、フラットなテキストの field と任意の photo part から
+// multipart/form-data の body を構築する（各 photo part は image/jpeg の
+// "photo.jpg" として宣言される。server は magic bytes を信頼しなければならず、
+// この宣言を信頼してはならない）。
 func multipartBody(t *testing.T, fields map[string]string, photos ...[]byte) (body *bytes.Buffer, contentType string) {
 	t.Helper()
 	body = &bytes.Buffer{}
@@ -74,7 +75,8 @@ func multipartBody(t *testing.T, fields map[string]string, photos ...[]byte) (bo
 	return body, w.FormDataContentType()
 }
 
-// doMultipart runs one multipart request through the router in-process.
+// doMultipart は multipart の request を router に対して in-process で 1 件
+// 実行する。
 func doMultipart(router http.Handler, method, path string, body *bytes.Buffer, contentType, authHeader string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, bytes.NewReader(body.Bytes()))
 	req.Header.Set("Content-Type", contentType)
@@ -86,7 +88,7 @@ func doMultipart(router http.Handler, method, path string, body *bytes.Buffer, c
 	return rec
 }
 
-// decodePhotoURL extracts id and photo_url from a review response body.
+// decodePhotoURL は review の response body から id と photo_url を取り出す。
 func decodePhotoURL(t *testing.T, body []byte) (id int64, photoURL *string) {
 	t.Helper()
 	var resp struct {
@@ -99,7 +101,7 @@ func decodePhotoURL(t *testing.T, body []byte) (id int64, photoURL *string) {
 	return resp.ID, resp.PhotoURL
 }
 
-// photoPath maps a photo_url onto its file under the disk root.
+// photoPath は photo_url を、disk root 配下のそのファイルへ対応づける。
 func photoPath(t *testing.T, photoDir, photoURL string) string {
 	t.Helper()
 	key, ok := strings.CutPrefix(photoURL, "/photos/")
@@ -109,8 +111,8 @@ func photoPath(t *testing.T, photoDir, photoURL string) string {
 	return filepath.Join(photoDir, filepath.FromSlash(key))
 }
 
-// createPhotoReview posts a multipart review with the given photo and
-// returns its id and photo_url.
+// createPhotoReview は、与えられた photo を付けた multipart の review を
+// 投稿し、その id と photo_url を返す。
 func createPhotoReview(t *testing.T, router http.Handler, auth string, photo []byte) (int64, string) {
 	t.Helper()
 	fields := map[string]string{
@@ -131,10 +133,10 @@ func createPhotoReview(t *testing.T, router http.Handler, auth string, photo []b
 	return id, *photoURL
 }
 
-// TestCreateReviewWithPhoto covers S10 AC1: a multipart create with a
-// ~2MB JPEG answers 201 with a non-null photo_url, the normalized file
-// lands on disk, the detail endpoint echoes the same photo_url, and the
-// photo itself is served under GET /photos/.
+// TestCreateReviewWithPhoto は S10 AC1 を扱う：約 2MB の JPEG を付けた
+// multipart の create は、null でない photo_url を伴う 201 を返し、正規化された
+// ファイルが disk 上に置かれ、detail エンドポイントが同じ photo_url を
+// そのまま返し、photo 自体が GET /photos/ の配下で配信される。
 func TestCreateReviewWithPhoto(t *testing.T) {
 	router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
 	id, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 2_000_000))
@@ -163,10 +165,10 @@ func TestCreateReviewWithPhoto(t *testing.T) {
 	}
 }
 
-// TestCreateReviewPhotoRejections covers S10 AC3: an over-5MiB image is
-// 422 "too large", and a PDF with a JPEG filename and declared image/jpeg
-// content type is 422 "unsupported" — magic bytes decide, never the
-// declaration. A duplicate photo part is a malformed body (400).
+// TestCreateReviewPhotoRejections は S10 AC3 を扱う：5MiB を超える画像は 422
+// "too large" であり、JPEG のファイル名を持ち image/jpeg の content type が
+// 宣言された PDF は 422 "unsupported" である。判定するのは magic bytes であり、
+// 宣言では決してない。photo part の重複は不正な body（400）である。
 func TestCreateReviewPhotoRejections(t *testing.T) {
 	router, _, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
 	fields := map[string]string{
@@ -209,10 +211,11 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 	})
 
 	t.Run("truncated body without the closing boundary returns 400", func(t *testing.T) {
-		// The field parts are complete but the "--\r\n" tail of the final
-		// boundary is cut off: HTTP-complete yet truncated multipart. Go
-		// 1.22 NextPart reports this as a WRAPPED io.EOF; treating it as a
-		// clean end would answer 201 with the photo silently dropped.
+		// field の part は完全だが、最後の boundary の末尾 "--\r\n" が切り
+		// 落とされている：HTTP としては完結しているが multipart としては途中で
+		// 切れている。Go 1.22 の NextPart はこれを WRAP された io.EOF として
+		// 報告する。これを正常な終端として扱うと、photo が黙って捨てられたまま
+		// 201 を返してしまう。
 		full, contentType := multipartBody(t, fields, jpegBytes(t, 4096))
 		raw := full.Bytes()
 		truncated := bytes.NewBuffer(raw[:len(raw)-len("--\r\n")])
@@ -239,8 +242,8 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 	})
 }
 
-// TestDeleteReviewWithPhoto covers S10 AC4: deleting a review with a
-// photo answers 204 and best-effort removes the file from disk.
+// TestDeleteReviewWithPhoto は S10 AC4 を扱う：photo 付きの review を削除すると
+// 204 を返し、disk 上のファイルを best-effort で削除する。
 func TestDeleteReviewWithPhoto(t *testing.T) {
 	router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
 	id, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
@@ -258,9 +261,10 @@ func TestDeleteReviewWithPhoto(t *testing.T) {
 	}
 }
 
-// TestUpdateReviewPhoto covers S10 AC5 and the keep-on-plain-update rule:
-// a multipart update with a new photo swaps photo_url and the disk files,
-// while a photo-less JSON update leaves the stored photo untouched.
+// TestUpdateReviewPhoto は S10 AC5 と、通常の update では保持するというルールを
+// 扱う：新しい photo を付けた multipart の update は photo_url と disk 上の
+// ファイルを入れ替え、一方 photo を含まない JSON の update は保存済みの
+// photo に手を触れない。
 func TestUpdateReviewPhoto(t *testing.T) {
 	t.Run("AC5 new photo replaces url and file", func(t *testing.T) {
 		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
@@ -312,9 +316,9 @@ func TestUpdateReviewPhoto(t *testing.T) {
 	})
 }
 
-// TestPhotoTraversal asserts the /photos file server cannot escape its
-// root: an encoded ".." path answers 400/404, never a file outside the
-// photo dir.
+// TestPhotoTraversal は、/photos の file server が root の外へ出られないことを
+// 検証する：エンコードされた ".." のパスは 400/404 を返し、photo dir の外の
+// ファイルは決して返さない。
 func TestPhotoTraversal(t *testing.T) {
 	router, photoDir, _, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
 	secret := filepath.Join(filepath.Dir(photoDir), "secret.txt")
@@ -335,13 +339,14 @@ func TestPhotoTraversal(t *testing.T) {
 	}
 }
 
-// TestPhotoDirectoryRequests pins handler.PhotoFileServer's anti-listing
-// rule (the same wrapper cmd/api wires): directory requests — the mount
-// root and the existing reviews/ subdir holding stored files — answer
-// 404 and never enumerate the stored keys.
+// TestPhotoDirectoryRequests は handler.PhotoFileServer の listing 禁止ルール
+// （cmd/api が配線するのと同じラッパー）を固定する。directory への request、
+// すなわちマウントの root と、保存済みファイルを含む既存の reviews/
+// サブディレクトリは、404 を返し、保存済みの key を決して列挙しない。
 func TestPhotoDirectoryRequests(t *testing.T) {
 	router, _, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
-	// A stored photo guarantees the reviews/ subdir exists with a file.
+	// 保存済みの photo によって、reviews/ サブディレクトリがファイル付きで
+	// 存在することが保証される。
 	_, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 	storedName := strings.TrimPrefix(photoURL, "/photos/reviews/")
 
@@ -356,10 +361,10 @@ func TestPhotoDirectoryRequests(t *testing.T) {
 	}
 }
 
-// TestReviewBodyLimit pins the S10 body caps: the review write endpoints
-// accept bodies between 1 MiB and 6 MiB (the 401 proves the request got
-// past the cap without auth), reject bodies above 6 MiB with 413, and
-// every other route keeps the global 1 MiB cap.
+// TestReviewBodyLimit は S10 の body の上限を固定する：review の書き込み
+// エンドポイントは 1 MiB から 6 MiB の body を受け付け（401 は、request が認証
+// なしで上限を通過したことを示す）、6 MiB を超える body は 413 で拒否し、
+// それ以外のすべての route はグローバルな 1 MiB の上限を保つ。
 func TestReviewBodyLimit(t *testing.T) {
 	router, _, _, _ := newReviewsRouter(t, seedReviewWorld(1))
 	twoMiB := strings.Repeat("a", 2<<20)

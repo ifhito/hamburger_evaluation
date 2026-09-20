@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// ShopStatus is the API-facing shop status string. Storage encodes it as
-// a smallint; that mapping lives at the repository/domain boundary.
+// ShopStatus は API 向けの shop status 文字列である。storage では smallint
+// として符号化され、その対応付けは repository/domain の境界に置かれる。
 type ShopStatus string
 
 const (
@@ -15,7 +15,7 @@ const (
 	ShopStatusRejected ShopStatus = "rejected"
 )
 
-// Shop is the domain representation of a shop.
+// Shop は shop の domain 表現である。
 type Shop struct {
 	ID             int64
 	Name           string
@@ -24,9 +24,9 @@ type Shop struct {
 	CreatorID      *int64
 }
 
-// ValidateShopName enforces the Rails presence validation on the shop
-// name: a blank or whitespace-only name yields the exact Rails full
-// message inside a *ValidationError.
+// ValidateShopName は、shop 名に対して Rails の presence validation を強制
+// する。空またはホワイトスペースのみの名前は、Rails の full message そのまま
+// を *ValidationError に入れて返す。
 func ValidateShopName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return &ValidationError{Messages: []string{"Name can't be blank"}}
@@ -34,9 +34,9 @@ func ValidateShopName(name string) error {
 	return nil
 }
 
-// NewShopSubmission builds a user-submitted shop: the name is validated,
-// the status starts pending (Rails ShopStatus.initial), there is no
-// moderation note yet, and the submitting user is recorded as creator.
+// NewShopSubmission は、ユーザーが投稿した shop を組み立てる。名前は validate
+// され、status は pending で始まり（Rails ShopStatus.initial）、moderation
+// note はまだなく、投稿したユーザーが creator として記録される。
 func NewShopSubmission(name string, creatorID int64) (Shop, error) {
 	if err := ValidateShopName(name); err != nil {
 		return Shop{}, err
@@ -44,30 +44,30 @@ func NewShopSubmission(name string, creatorID int64) (Shop, error) {
 	return Shop{Name: name, Status: ShopStatusPending, CreatorID: &creatorID}, nil
 }
 
-// Approve is the moderation transition to active. Like Rails ShopStatus,
-// it is an unconditional value transition from any current status —
-// re-approving a rejected shop is allowed — and it clears the moderation
-// note, which only ever explains a rejection.
+// Approve は active への moderation 遷移である。Rails ShopStatus と同様に、
+// 現在のどの status からでも行える無条件の値遷移であり、rejected の shop の
+// 再承認も許される。また、rejection を説明するためだけに存在する moderation
+// note をクリアする。
 func (s Shop) Approve() Shop {
 	s.Status = ShopStatusActive
 	s.ModerationNote = nil
 	return s
 }
 
-// Reject is the moderation transition to rejected, from any current
-// status. The optional note replaces the previous one (nil clears it).
+// Reject は rejected への moderation 遷移であり、現在のどの status からでも
+// 行える。任意の note は以前の note を置き換える（nil ならクリアされる）。
 func (s Shop) Reject(note *string) Shop {
 	s.Status = ShopStatusRejected
 	s.ModerationNote = note
 	return s
 }
 
-// CanBeReviewedBy is the single home of the reviewable rule: whether
-// viewer (always authenticated — posting requires a login) may post a
-// review for a burger of this shop. Rejected shops are never reviewable
-// (even by their creator or an admin, who may still view them via
-// ShopVisibility.CanView), active shops are reviewable by anyone
-// authenticated, and pending shops only by their creator or an admin.
+// CanBeReviewedBy は reviewable ルールの唯一の置き場であり、viewer（常に認証
+// 済み。投稿にはログインが必要）がこの shop の burger の review を投稿して
+// よいかどうかを決める。rejected の shop は決して reviewable ではない
+// （creator や admin であっても同じで、彼らは ShopVisibility.CanView を通じて
+// 閲覧はできる）。active な shop は認証済みの誰でも reviewable であり、
+// pending な shop はその creator か admin のみが reviewable である。
 func (s Shop) CanBeReviewedBy(viewer User) bool {
 	switch s.Status {
 	case ShopStatusActive:
@@ -79,21 +79,21 @@ func (s Shop) CanBeReviewedBy(viewer User) bool {
 	}
 }
 
-// ShopVisibility is the filter descriptor derived from a viewer. A shop
-// is visible iff ViewAll is set, or the shop is active, or its creator is
-// ViewerID. This type is the single home of the shop visibility rule:
-// CanView applies it in-process and repositories only translate the
-// descriptor into SQL parameters.
+// ShopVisibility は viewer から導出されるフィルタ記述子である。shop が見える
+// のは、ViewAll が設定されている、shop が active である、creator が ViewerID
+// である、のいずれかであるとき、かつそのときに限る。この型は shop の可視性
+// ルールの唯一の置き場であり、CanView がそれを in-process で適用し、
+// repository は記述子を SQL パラメータへ変換するだけである。
 type ShopVisibility struct {
-	// ViewAll grants visibility of every shop regardless of status (admin).
+	// ViewAll は、status に関わらずすべての shop を見えるようにする（admin）。
 	ViewAll bool
-	// ViewerID, when non-nil, additionally grants visibility of shops
-	// created by this user, whatever their status.
+	// ViewerID は、nil でない場合、このユーザーが作成した shop も status に
+	// 関わらず追加で見えるようにする。
 	ViewerID *int64
 }
 
-// ShopVisibilityFor derives the visibility descriptor for viewer; nil
-// means anonymous (active shops only).
+// ShopVisibilityFor は viewer に対する可視性の記述子を導出する。nil は匿名
+// （active な shop のみ）を意味する。
 func ShopVisibilityFor(viewer *User) ShopVisibility {
 	if viewer == nil {
 		return ShopVisibility{}
@@ -105,7 +105,7 @@ func ShopVisibilityFor(viewer *User) ShopVisibility {
 	return ShopVisibility{ViewerID: &id}
 }
 
-// CanView reports whether a shop is visible under this descriptor.
+// CanView は、この記述子の下で shop が見えるかどうかを返す。
 func (v ShopVisibility) CanView(shop Shop) bool {
 	if v.ViewAll || shop.Status == ShopStatusActive {
 		return true
@@ -113,22 +113,22 @@ func (v ShopVisibility) CanView(shop Shop) bool {
 	return v.ViewerID != nil && shop.CreatorID != nil && *shop.CreatorID == *v.ViewerID
 }
 
-// UserRef is the {id, username} projection embedded in shop detail and
-// review payloads.
+// UserRef は、shop 詳細と review の payload に埋め込まれる {id, username} の
+// projection である。
 type UserRef struct {
 	ID       int64
 	Username string
 }
 
-// ShopDetail is a shop with its creator and non-discarded reviews.
+// ShopDetail は、creator と non-discarded な review を持つ shop である。
 type ShopDetail struct {
 	Shop
-	Creator *UserRef // nil when the shop has no creator
+	Creator *UserRef // shop に creator がいない場合は nil
 	Reviews []ShopReview
 }
 
-// ShopReview is one review shown on a shop detail, with its author and
-// the reviewed burger including review-derived statistics.
+// ShopReview は shop 詳細に表示される review 1 件であり、その author と、
+// review 由来の統計を含む対象 burger を持つ。
 type ShopReview struct {
 	ID        int64
 	Rating    int
@@ -138,8 +138,8 @@ type ShopReview struct {
 	Burger    *ShopReviewBurger
 }
 
-// ShopReviewBurger is the reviewed burger with its statistics; the stats
-// are zero when none have been calculated yet.
+// ShopReviewBurger は統計付きの対象 burger であり、統計はまだ計算されて
+// いない場合はゼロである。
 type ShopReviewBurger struct {
 	ID            int64
 	Name          string

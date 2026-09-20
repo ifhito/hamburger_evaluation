@@ -14,29 +14,30 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// ReviewRepository implements usecase.ReviewRepository over sqlc-generated
-// queries. The soft-delete predicate (discarded_at IS NULL) and the
-// active-shop EXISTS filter live in the SQL; the authorization rules
-// themselves live in the domain package. Every write (create, edit,
-// discard) also recalculates the affected burger's burger_stats row inside
-// the same transaction, serialized per burger via LockBurgerForStats.
+// ReviewRepository は、sqlc 生成のクエリ上で usecase.ReviewRepository を
+// 実装する。soft delete の述語（discarded_at IS NULL）と、active な shop に
+// 対する EXISTS フィルタは SQL 側にあり、認可ルール自体は domain パッケージに
+// ある。すべての書き込み（create、edit、discard）は、同じトランザクション内で、
+// 影響を受ける burger の burger_stats 行も再計算し、LockBurgerForStats により
+// burger ごとに直列化される。
 type ReviewRepository struct {
 	db beginnerDBTX
 	q  *sqlcgen.Queries
 }
 
-// NewReviewRepository wraps db (normally the shared pgx pool).
+// NewReviewRepository は db（通常は共有の pgx pool）をラップする。
 func NewReviewRepository(db beginnerDBTX) *ReviewRepository {
 	return &ReviewRepository{db: db, q: sqlcgen.New(db)}
 }
 
 var _ usecase.ReviewRepository = (*ReviewRepository)(nil)
 
-// ListReviews returns the public review feed: non-discarded reviews whose
-// burger is linked to at least one active shop, narrowed by filter (Rails
-// ReviewQuery parity), with author, burger, and stats in a single query
-// (no N+1), newest first. The keyword goes through likeEscaper into an
-// ILIKE parameter, never concatenated into SQL; absent filters stay NULL.
+// ListReviews は公開 review フィードを返す。対象は、discard されておらず、
+// burger が少なくとも 1 つの active な shop に紐づいている review で、
+// filter（Rails の ReviewQuery との parity）で絞り込まれ、author、burger、
+// stats を 1 回のクエリで取得し（N+1 なし）、新しい順に並ぶ。keyword は
+// likeEscaper を通して ILIKE パラメータに渡され、SQL に連結されることは
+// ない。指定のない filter は NULL のままである。
 func (r *ReviewRepository) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
 	params := sqlcgen.ListPublicReviewsParams{
 		PageLimit:  limit,
@@ -66,9 +67,9 @@ func (r *ReviewRepository) ListReviews(ctx context.Context, filter usecase.Revie
 	return reviews, nil
 }
 
-// GetReview returns one non-discarded review with author, burger, and
-// stats, or domain.ErrReviewNotFound — the SQL treats missing and
-// discarded rows identically.
+// GetReview は、discard されていない review 1 件を author、burger、stats
+// とともに返す。または domain.ErrReviewNotFound を返す。SQL は、存在しない
+// 行と discard 済みの行を同一に扱う。
 func (r *ReviewRepository) GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error) {
 	row, err := r.q.GetReviewDetail(ctx, id)
 	if err != nil {
@@ -84,7 +85,7 @@ func (r *ReviewRepository) GetReview(ctx context.Context, id int64) (domain.Revi
 	), nil
 }
 
-// GetShop returns the bare shop row, or domain.ErrShopNotFound.
+// GetShop は素の shop 行を返す。または domain.ErrShopNotFound を返す。
 func (r *ReviewRepository) GetShop(ctx context.Context, id int64) (domain.Shop, error) {
 	row, err := r.q.GetShop(ctx, id)
 	if err != nil {
@@ -100,9 +101,9 @@ func (r *ReviewRepository) GetShop(ctx context.Context, id int64) (domain.Shop, 
 	return shop, nil
 }
 
-// GetShopBurger returns the burger with its stats when it is linked to
-// the shop via shops_burgers, or domain.ErrBurgerNotFound — an unknown
-// burger and a burger of another shop are indistinguishable.
+// GetShopBurger は、burger が shops_burgers 経由でその shop に紐づいている
+// とき、stats つきの burger を返す。そうでなければ domain.ErrBurgerNotFound
+// を返す。存在しない burger と別の shop の burger は区別できない。
 func (r *ReviewRepository) GetShopBurger(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error) {
 	row, err := r.q.GetShopBurgerWithStats(ctx, sqlcgen.GetShopBurgerWithStatsParams{
 		ShopID:   shopID,
@@ -117,7 +118,7 @@ func (r *ReviewRepository) GetShopBurger(ctx context.Context, shopID, burgerID i
 	return domain.ShopReviewBurger{
 		ID:   row.ID,
 		Name: row.Name,
-		// The stats row may not exist yet; zero values then.
+		// stats 行がまだ存在しないことがある。その場合はゼロ値になる。
 		AverageRating: row.AverageRating.Float64,
 		ReviewCount:   row.ReviewCount.Int64,
 		WeightedScore: row.WeightedScore.Float64,
@@ -125,10 +126,10 @@ func (r *ReviewRepository) GetShopBurger(ctx context.Context, shopID, burgerID i
 	}, nil
 }
 
-// CreateReview inserts the (already validated) review and returns it with
-// its generated id and created_at. The insert and the burger_stats
-// recalculation happen in one transaction so the stats can never lag or
-// outlive the review.
+// CreateReview は（検証済みの）review を insert し、生成された id と
+// created_at を持つ review を返す。insert と burger_stats の再計算は 1 つの
+// トランザクションで行われるので、stats が review に遅れることも、review より
+// 長く残ることも決してない。
 func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
 	var row sqlcgen.Review
 	err := withTx(ctx, r.db, "create review", func(q *sqlcgen.Queries) error {
@@ -142,17 +143,17 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 	return toDomainReview(row), nil
 }
 
-// CreateReviewForNamedBurger inserts the (already validated) review against
-// the shop's burger with the exact name burgerName, creating the burger and
-// its shops_burgers link when the shop has none by that name (Rails
-// find_or_create_burger, S6 P3-1). Find-or-create, review insert, and
-// burger_stats recalculation share ONE transaction, so a failure at any
-// step commits no orphan burger or link. There is deliberately no unique
-// index on (shop, name): two concurrent creators of the same new name can
-// both insert a burger — the same race Rails' find_or_create_burger has;
-// parity, not a bug. The returned burger carries the pre-insert stats,
-// exactly like GetShopBurger on the burger_id path (zeros for a brand-new
-// burger).
+// CreateReviewForNamedBurger は、（検証済みの）review を、名前が burgerName
+// と完全に一致する shop の burger に対して insert する。shop にその名前の
+// burger がないときは、burger とその shops_burgers の link を作成する
+// （Rails の find_or_create_burger、S6 P3-1）。find-or-create、review の
+// insert、burger_stats の再計算はただ 1 つのトランザクションを共有するので、
+// どの段階で失敗しても、孤立した burger や link が commit されることはない。
+// (shop, name) には unique index が意図的に存在しない。同じ新しい名前を同時に
+// 作成する 2 つの creator が、両方とも burger を insert しうる。これは Rails の
+// find_or_create_burger にもある同じ race であり、parity であってバグでは
+// ない。返される burger は insert 前の stats を持ち、burger_id 経路での
+// GetShopBurger とまったく同じである（まったく新しい burger ではゼロ）。
 func (r *ReviewRepository) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
 	var row sqlcgen.Review
 	var burger domain.ShopReviewBurger
@@ -166,7 +167,7 @@ func (r *ReviewRepository) CreateReviewForNamedBurger(ctx context.Context, shopI
 			burger = domain.ShopReviewBurger{
 				ID:   found.ID,
 				Name: found.Name,
-				// The stats row may not exist yet; zero values then.
+				// stats 行がまだ存在しないことがある。その場合はゼロ値になる。
 				AverageRating: found.AverageRating.Float64,
 				ReviewCount:   found.ReviewCount.Int64,
 				WeightedScore: found.WeightedScore.Float64,
@@ -194,12 +195,13 @@ func (r *ReviewRepository) CreateReviewForNamedBurger(ctx context.Context, shopI
 	return toDomainReview(row), burger, nil
 }
 
-// UpdateReviewContent persists only rating and comment of the still kept
-// review under id and returns the stored row, or domain.ErrReviewNotFound
-// when it is missing or discarded (the transaction is rolled back, so the
-// stats stay untouched). Column-scoped: discarded_at is never written, so
-// an edit can neither resurrect nor race a soft delete. The update and the
-// burger_stats recalculation happen in one transaction.
+// UpdateReviewContent は、id の、まだ kept な review の rating と comment
+// だけを永続化し、保存された行を返す。存在しないか discard 済みの場合は
+// domain.ErrReviewNotFound を返す（トランザクションは rollback されるので、
+// stats には手が付かない）。カラム単位に限定される：discarded_at は決して
+// 書き込まれないので、edit が soft delete を復活させることも、soft delete と
+// race することもない。update と burger_stats の再計算は 1 つの
+// トランザクションで行われる。
 func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error) {
 	var row sqlcgen.Review
 	err := withTx(ctx, r.db, "update review content", func(q *sqlcgen.Queries) error {
@@ -226,14 +228,14 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 	return toDomainReview(row), nil
 }
 
-// UpdateReviewContentAndPhotoKey persists rating, comment, and photo_key
-// of the still kept review under id, or domain.ErrReviewNotFound when it
-// is missing or discarded. The two existing column-scoped statements
-// (UpdateReviewContent, then UpdateReviewPhotoKey) and the burger_stats
-// recalculation run in ONE transaction, so a photo-carrying edit either
-// commits content, key, and stats together or nothing at all. The row
-// returned by the second statement already carries the first statement's
-// rating/comment (same transaction).
+// UpdateReviewContentAndPhotoKey は、id の、まだ kept な review の rating、
+// comment、photo_key を永続化し、存在しないか discard 済みの場合は
+// domain.ErrReviewNotFound を返す。既存のカラム単位の 2 つのステートメント
+// （UpdateReviewContent、続いて UpdateReviewPhotoKey）と burger_stats の
+// 再計算はただ 1 つのトランザクションで実行されるので、photo を伴う edit は、
+// content、key、stats をまとめて commit するか、何も commit しないかの
+// どちらかになる。2 番目のステートメントが返す行には、最初のステートメントの
+// rating/comment がすでに反映されている（同一トランザクション）。
 func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
 	var row sqlcgen.Review
 	err := withTx(ctx, r.db, "update review content and photo key", func(q *sqlcgen.Queries) error {
@@ -269,11 +271,11 @@ func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, i
 	return toDomainReview(row), nil
 }
 
-// DiscardReview soft-deletes the review (stamps discarded_at, never a
-// hard DELETE). Missing and already-discarded reviews match no row and
-// yield domain.ErrReviewNotFound (the transaction is rolled back, so the
-// stats stay untouched). The discard and the burger_stats recalculation
-// happen in one transaction.
+// DiscardReview は review を soft delete する（discarded_at に時刻を刻み、
+// hard DELETE は決して行わない）。存在しない review や、すでに discard 済みの
+// review はどの行にも一致せず、domain.ErrReviewNotFound を返す（トランザクション
+// は rollback されるので、stats には手が付かない）。discard と
+// burger_stats の再計算は 1 つのトランザクションで行われる。
 func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
 	return withTx(ctx, r.db, "discard review", func(q *sqlcgen.Queries) error {
 		burgerID, err := q.DiscardReview(ctx, id)
@@ -290,15 +292,16 @@ func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
 	})
 }
 
-// insertReviewAndRecalc is the shared tail of both create paths: lock the
-// burger, insert the review, recalculate its burger_stats. It runs inside
-// the caller's transaction — q must be tx-scoped, and the helper never
-// opens a transaction of its own. The lock comes BEFORE the insert: the
-// insert's FK check takes a KEY SHARE lock on the burgers row, and
-// upgrading it to FOR UPDATE afterwards could deadlock two concurrent
-// creators. recalculateBurgerStats' own lock is then a free
-// re-acquisition (row locks are transaction-owned in PostgreSQL). op
-// prefixes the error messages, preserving each call site's wording.
+// insertReviewAndRecalc は、2 つの create 経路に共通する末尾処理である。
+// burger をロックし、review を insert し、その burger_stats を再計算する。
+// 呼び出し側のトランザクション内で実行される。q は tx スコープでなければ
+// ならず、この helper が自前のトランザクションを開くことは決してない。
+// ロックは insert の「前」に取る。insert の FK チェックが burgers 行に
+// KEY SHARE ロックを取り、その後でそれを FOR UPDATE に昇格させると、同時に
+// 走る 2 つの creator がデッドロックしうるからである。その場合、
+// recalculateBurgerStats 自身のロックはコストのかからない再取得になる
+// （PostgreSQL では行ロックはトランザクションが所有する）。op はエラー
+// メッセージの接頭辞になり、各呼び出し箇所の文言を保つ。
 func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domain.Review, op string) (sqlcgen.Review, error) {
 	if _, err := q.LockBurgerForStats(ctx, review.BurgerID); err != nil {
 		return sqlcgen.Review{}, fmt.Errorf("%s: lock burger: %w", op, err)
@@ -319,16 +322,16 @@ func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domai
 	return row, nil
 }
 
-// recalculateBurgerStats recomputes and upserts the burger's stats row
-// from its kept reviews via the domain calculator, inside the caller's
-// transaction: q must be tx-scoped. The helper itself takes the per-burger
-// FOR UPDATE lock via LockBurgerForStats first (see that query for the
-// lost-update rationale); re-acquiring a lock the transaction already
-// holds is a no-op. Callers recalculating MULTIPLE burgers in one
-// transaction (the S8 user-discard flow, UserRepository.DiscardUser) must
-// invoke it per burger in ascending burger_id order so overlapping burger
-// sets cannot deadlock. Zero kept reviews still upsert the zero row
-// (Rails BurgerScore.empty).
+// recalculateBurgerStats は、burger の stats 行を、その kept な review から
+// domain の calculator を通して再計算し upsert する。呼び出し側の
+// トランザクション内で実行され、q は tx スコープでなければならない。この
+// helper 自身が、最初に LockBurgerForStats を通じて burger ごとの FOR UPDATE
+// ロックを取る（lost-update の根拠はそのクエリを参照）。トランザクションが
+// すでに保持しているロックの再取得は no-op である。1 つのトランザクションで
+// 「複数」の burger を再計算する呼び出し側（S8 の user discard フロー、
+// UserRepository.DiscardUser）は、burger の集合が重なってもデッドロックしない
+// ように、burger ごとに burger_id の昇順で呼び出さなければならない。kept な
+// review がゼロ件でも、ゼロの行は upsert される（Rails BurgerScore.empty）。
 func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID int64) error {
 	if _, err := q.LockBurgerForStats(ctx, burgerID); err != nil {
 		return fmt.Errorf("recalculate burger stats: lock burger: %w", err)
@@ -337,8 +340,8 @@ func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID in
 	if err != nil {
 		return fmt.Errorf("recalculate burger stats: list facts: %w", err)
 	}
-	// Reviewer-trust histories for the distinct fact authors: each one's
-	// kept ratings across all burgers, grouped by user.
+	// 重複を除いた fact の author の reviewer-trust の履歴：各 author の、
+	// すべての burger にわたる kept な rating を user ごとにまとめたもの。
 	historyByUser := make(map[int64][]float64, len(rows))
 	userIDs := make([]int64, 0, len(rows))
 	for _, row := range rows {
@@ -364,9 +367,9 @@ func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID in
 			ReviewerHistory: domain.ReviewerHistory{Ratings: historyByUser[row.UserID]},
 		})
 	}
-	// Truncated to microseconds (the timestamptz resolution) so the stored
-	// calculated_at is exactly the instant the score was computed with —
-	// tests recompute the score from the stored rows and this timestamp.
+	// マイクロ秒に切り詰める（timestamptz の精度）。これにより、保存される
+	// calculated_at はスコアの計算に使った時刻そのものになる。テストは、
+	// 保存された行とこのタイムスタンプからスコアを再計算する。
 	now := time.Now().Truncate(time.Microsecond)
 	score := domain.CalculateBurgerScore(facts, now)
 	if _, err := q.UpsertBurgerStats(ctx, sqlcgen.UpsertBurgerStatsParams{
@@ -382,7 +385,7 @@ func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID in
 	return nil
 }
 
-// toDomainReview maps a sqlc review row onto the domain entity.
+// toDomainReview は sqlc の review 行を domain のエンティティに変換する。
 func toDomainReview(row sqlcgen.Review) domain.Review {
 	review := domain.Review{
 		ID:        row.ID,
@@ -402,8 +405,9 @@ func toDomainReview(row sqlcgen.Review) domain.Review {
 	return review
 }
 
-// toReviewDetail maps the joined review columns (shared by the list and
-// detail queries) onto the domain payload; absent stats become zeros.
+// toReviewDetail は、結合された review のカラム（一覧クエリと詳細クエリで
+// 共有される）を domain のペイロードに変換する。存在しない stats はゼロに
+// なる。
 func toReviewDetail(
 	id int64, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz,
 	userID int64, username string, burgerID int64, burgerName string,
@@ -421,7 +425,7 @@ func toReviewDetail(
 		Burger: &domain.ShopReviewBurger{
 			ID:   burgerID,
 			Name: burgerName,
-			// The stats row may not exist yet; zero values then.
+			// stats 行がまだ存在しないことがある。その場合はゼロ値になる。
 			AverageRating: averageRating.Float64,
 			ReviewCount:   reviewCount.Int64,
 			WeightedScore: weightedScore.Float64,

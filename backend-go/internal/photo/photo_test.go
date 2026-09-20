@@ -17,7 +17,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
 
-// encode returns an in-memory w x h image in the given stdlib format.
+// encode は、指定された標準ライブラリのフォーマットの、メモリ上の w x h の
+// 画像を返す。
 func encode(t *testing.T, format string, w, h int) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -37,17 +38,17 @@ func encode(t *testing.T, format string, w, h int) []byte {
 	return buf.Bytes()
 }
 
-// pngHeader hand-crafts a PNG signature plus a valid IHDR chunk declaring
-// w x h at the given bit depth (8 or 16), so DecodeConfig sees the
-// dimensions and color model without the test allocating a real image of
-// that size.
+// pngHeader は、PNG シグネチャと、指定された bit depth（8 または 16）で
+// w x h を宣言する有効な IHDR チャンクを手作りする。これにより、テストが
+// その大きさの実際の画像を確保しなくても、DecodeConfig が寸法と color model を
+// 見られる。
 func pngHeader(t *testing.T, w, h uint32, bitDepth byte) []byte {
 	t.Helper()
 	ihdr := make([]byte, 13)
 	binary.BigEndian.PutUint32(ihdr[0:], w)
 	binary.BigEndian.PutUint32(ihdr[4:], h)
 	ihdr[8] = bitDepth
-	ihdr[9] = 2 // color type: truecolor
+	ihdr[9] = 2 // color type：トゥルーカラー
 	var buf bytes.Buffer
 	buf.Write([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
 	if err := binary.Write(&buf, binary.BigEndian, uint32(len(ihdr))); err != nil {
@@ -142,8 +143,8 @@ func TestProcess(t *testing.T) {
 	}
 }
 
-// exifAPP1 builds a complete JPEG APP1 segment (marker, length, "Exif\0\0"
-// header) wrapping the given TIFF stream.
+// exifAPP1 は、与えられた TIFF ストリームを包む完全な JPEG APP1 セグメント
+// （マーカー、長さ、"Exif\0\0" ヘッダ）を組み立てる。
 func exifAPP1(tiff []byte) []byte {
 	payload := append([]byte("Exif\x00\x00"), tiff...)
 	length := len(payload) + 2
@@ -151,26 +152,26 @@ func exifAPP1(tiff []byte) []byte {
 	return append(seg, payload...)
 }
 
-// orientationTIFF builds a little-endian TIFF stream with a single IFD0
-// entry: the Orientation tag (0x0112, SHORT, count 1) with the given
-// value. The IFD actually lives at offset 8; passing a different ifdOffset
-// produces a stream whose header points somewhere bogus.
+// orientationTIFF は、IFD0 のエントリを 1 つだけ持つ little-endian の TIFF
+// ストリームを組み立てる。エントリは、指定された値を持つ Orientation タグ
+// （0x0112、SHORT、count 1）である。IFD は実際にはオフセット 8 にあり、
+// 別の ifdOffset を渡すと、ヘッダがでたらめな場所を指すストリームができる。
 func orientationTIFF(orientation uint16, ifdOffset uint32) []byte {
-	tiff := []byte{'I', 'I', 42, 0} // little-endian byte order + TIFF magic
+	tiff := []byte{'I', 'I', 42, 0} // little-endian のバイトオーダー + TIFF の magic
 	tiff = binary.LittleEndian.AppendUint32(tiff, ifdOffset)
 	tiff = append(tiff,
-		1, 0, // one IFD entry
-		0x12, 0x01, // tag 0x0112 Orientation
-		3, 0, // type SHORT
-		1, 0, 0, 0, // count 1
+		1, 0, // IFD エントリが 1 つ
+		0x12, 0x01, // タグ 0x0112 Orientation
+		3, 0, // 型 SHORT
+		1, 0, 0, 0, // count が 1
 	)
 	tiff = binary.LittleEndian.AppendUint16(tiff, orientation)
-	tiff = append(tiff, 0, 0)       // value field padding
-	return append(tiff, 0, 0, 0, 0) // next-IFD offset: none
+	tiff = append(tiff, 0, 0)       // 値フィールドのパディング
+	return append(tiff, 0, 0, 0, 0) // 次の IFD へのオフセット：なし
 }
 
-// spliceAfterSOI inserts a segment right after the SOI marker, where real
-// cameras put the EXIF APP1.
+// spliceAfterSOI は、SOI マーカーの直後にセグメントを挿入する。実際の
+// カメラは EXIF APP1 をそこに置く。
 func spliceAfterSOI(t *testing.T, jpg, seg []byte) []byte {
 	t.Helper()
 	if len(jpg) < 2 || jpg[0] != 0xFF || jpg[1] != 0xD8 {
@@ -182,9 +183,9 @@ func spliceAfterSOI(t *testing.T, jpg, seg []byte) []byte {
 	return append(out, jpg[2:]...)
 }
 
-// quadrantJPEG encodes a w x h JPEG whose quadrants are solid distinct
-// colors: top-left red, top-right green, bottom-left blue, bottom-right
-// yellow. Large solid blocks keep JPEG loss away from the sampled centers.
+// quadrantJPEG は、4 つの象限がそれぞれ異なる単色になっている w x h の JPEG を
+// エンコードする。左上が赤、右上が緑、左下が青、右下が黄である。大きな単色の
+// ブロックにより、JPEG の劣化がサンプリングする中心に及ばないようにしている。
 func quadrantJPEG(t *testing.T, w, h int) []byte {
 	t.Helper()
 	img := image.NewNRGBA(image.Rect(0, 0, w, h))
@@ -211,9 +212,8 @@ func quadrantJPEG(t *testing.T, w, h int) []byte {
 	return buf.Bytes()
 }
 
-// quadrantColors decodes data and samples the center of each quadrant,
-// returned as 8-bit RGB in order top-left, top-right, bottom-left,
-// bottom-right.
+// quadrantColors は data を decode し、各象限の中心をサンプリングして、
+// 左上、右上、左下、右下の順に 8-bit の RGB として返す。
 func quadrantColors(t *testing.T, data []byte) [4][3]int {
 	t.Helper()
 	img, _, err := image.Decode(bytes.NewReader(data))
@@ -236,8 +236,8 @@ func quadrantColors(t *testing.T, data []byte) [4][3]int {
 	return out
 }
 
-// colorClose tolerates JPEG loss: each channel may drift, but far less
-// than the 0-vs-255 gap between the quadrant colors.
+// colorClose は JPEG の劣化を許容する。各チャンネルはずれてもよいが、その
+// ずれは象限の色の間にある 0 対 255 の差よりはるかに小さい。
 func colorClose(got, want [3]int) bool {
 	for i := range got {
 		d := got[i] - want[i]
@@ -252,8 +252,8 @@ func colorClose(got, want [3]int) bool {
 }
 
 func TestProcessExifOrientation(t *testing.T) {
-	// 64x40 stays under the 1600px shrink threshold, so the output
-	// dimensions reflect the orientation transform alone.
+	// 64x40 は 1600px の shrink のしきい値を下回るので、出力の寸法は
+	// orientation の変換だけを反映する。
 	const w, h = 64, 40
 	red := [3]int{255, 0, 0}
 	green := [3]int{0, 255, 0}
@@ -263,8 +263,8 @@ func TestProcessExifOrientation(t *testing.T) {
 		name         string
 		orientation  uint16
 		wantW, wantH int
-		// want is the corrected image's quadrant colors (TL, TR, BL, BR),
-		// derived from the stored raster TL=red TR=green BL=blue BR=yellow.
+		// want は補正後の画像の象限の色（TL、TR、BL、BR）で、保存されている
+		// ラスタ TL=red TR=green BL=blue BR=yellow から導出したものである。
 		want [4][3]int
 	}{
 		{"orientation 1 passes through", 1, w, h, [4][3]int{red, green, blue, yellow}},
@@ -299,9 +299,10 @@ func TestProcessExifOrientation(t *testing.T) {
 	}
 }
 
-// TestProcessOrientationSegmentWalk covers JPEG streams whose Exif APP1 is
-// not the first thing after SOI: a non-Exif APP1 (e.g. XMP) or a 0xFF fill
-// byte before it must not stop the scan, so the correction still applies.
+// TestProcessOrientationSegmentWalk は、Exif APP1 が SOI の直後の最初の要素
+// ではない JPEG ストリームをカバーする。その前にある Exif 以外の APP1
+// （例：XMP）や 0xFF のフィルバイトは走査を止めてはならず、したがって補正は
+// 引き続き適用される。
 func TestProcessOrientationSegmentWalk(t *testing.T) {
 	const w, h = 64, 40
 	exifSeg := exifAPP1(orientationTIFF(6, 8))
@@ -338,8 +339,8 @@ func TestProcessMalformedExifIsIgnored(t *testing.T) {
 		name string
 		seg  []byte
 	}{
-		// Segment length is valid JPEG-wise but the TIFF stream is cut
-		// short of its 8-byte header.
+		// セグメント長は JPEG としては有効だが、TIFF ストリームが 8 バイトの
+		// ヘッダに満たないところで切れている。
 		{"truncated APP1 payload", exifAPP1([]byte("II*\x00"))},
 		{"IFD offset beyond the segment", exifAPP1(orientationTIFF(6, 0xFFFF))},
 		{"orientation value 0", exifAPP1(orientationTIFF(0, 8))},
@@ -373,9 +374,9 @@ func TestProcessRejections(t *testing.T) {
 		{name: "width beyond 10000", input: pngHeader(t, 10001, 1, 8)},
 		{name: "height beyond 10000", input: pngHeader(t, 1, 10001, 8)},
 		{name: "pixel count beyond 24M", input: pngHeader(t, 5000, 5000, 8)},
-		// 4500x4500 is 20.25M pixels — under maxPixels — but at 16-bit
-		// truecolor (8 bytes/px decoded) the estimate is ~162MB, over the
-		// 128MiB decode memory limit.
+		// 4500x4500 は 20.25M ピクセルで maxPixels 未満だが、16-bit の
+		// truecolor（decode 後は 8 bytes/px）では推定値が約 162MB になり、
+		// 128MiB の decode メモリ上限を超える。
 		{name: "16-bit image under the pixel cap but over the decode memory limit", input: pngHeader(t, 4500, 4500, 16)},
 	}
 	for _, tt := range tests {

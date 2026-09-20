@@ -7,49 +7,49 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// ShopRepository is the consumer-side persistence contract for shops.
-// Implementations translate the visibility descriptor into SQL parameters
-// (the rule itself lives in domain.ShopVisibility), keep the smallint
-// status encoding to themselves, and return (a wrapped)
-// domain.ErrShopNotFound when no shop matches an id.
+// ShopRepository は shops 向けの consumer 側の永続化の契約である。
+// 実装は visibility の記述子を SQL のパラメータに変換し（ルール自体は
+// domain.ShopVisibility にある）、smallint の status のエンコードを自分の
+// 内部に留め、id に一致する shop がないときは（wrap された）
+// domain.ErrShopNotFound を返す。
 type ShopRepository interface {
-	// ListShops returns visible shops matching keyword (literal substring
-	// of the name, case-insensitive; empty matches all), ordered by name
-	// then id.
+	// ListShops は、keyword に一致する見える shop を、name、次に id の順で
+	// 返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別
+	// しない。空ならすべてに一致する）。
 	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error)
-	// GetShopWithCreator returns the shop and its creator, with Reviews
-	// left empty.
+	// GetShopWithCreator は shop とその creator を返す。Reviews は空の
+	// ままである。
 	GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error)
-	// ListShopReviews returns the non-discarded reviews of the shop's
-	// burgers, newest first (created_at desc, id desc).
+	// ListShopReviews は、shop の burger に対する discard されていない
+	// review を、新しい順に返す（created_at desc、id desc）。
 	ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
-	// CreateShop persists a new shop and returns it with its generated id.
+	// CreateShop は新しい shop を永続化し、生成された id つきで返す。
 	CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error)
-	// ListShopsForModeration returns every shop with its creator (Reviews
-	// left empty), newest first (created_at desc, id desc), optionally
-	// filtered to one status (nil = all).
+	// ListShopsForModeration は、creator つきのすべての shop（Reviews は
+	// 空のまま）を新しい順（created_at desc、id desc）に返す。任意で 1 つの
+	// status に絞り込める（nil = すべて）。
 	ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
-	// UpdateShopName persists only the shop's name under id and returns
-	// the stored row. Column-scoped so a concurrent status change is
-	// never reverted by a stale snapshot.
+	// UpdateShopName は、id の shop の name だけを永続化し、保存された行を
+	// 返す。カラム限定なので、並行する status の変更が古いスナップショットで
+	// 元に戻されることは決してない。
 	UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error)
-	// UpdateShopStatus persists only the shop's status and moderation
-	// note under id and returns the stored row. Column-scoped so a
-	// concurrent rename is never reverted by a stale snapshot.
+	// UpdateShopStatus は、id の shop の status と moderation note だけを
+	// 永続化し、保存された行を返す。カラム限定なので、並行する rename が
+	// 古いスナップショットで元に戻されることは決してない。
 	UpdateShopStatus(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error)
 }
 
-// Shops implements the shop use cases: public list and detail, user
-// submission, and admin moderation.
+// Shops は shop の use case を実装する。公開の一覧と詳細、ユーザーによる
+// 投稿、そして admin による moderation である。
 type Shops struct {
 	repo ShopRepository
 }
 
 func NewShops(repo ShopRepository) *Shops { return &Shops{repo: repo} }
 
-// List returns the shops visible to viewer (nil = anonymous) matching
-// keyword, paginated. Out-of-range page/perPage fall back to defaults
-// instead of erroring, per the clampPage rules.
+// List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
+// ものを、ページネーションして返す。範囲外の page/perPage は、clampPage の
+// 規則に従い、エラーにせずデフォルトにフォールバックする。
 func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.Shop, error) {
 	limit, offset := clampPage(page, perPage)
 	shops, err := s.repo.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
@@ -59,9 +59,9 @@ func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, p
 	return shops, nil
 }
 
-// Get returns the shop detail (creator and reviews included) when viewer
-// may see it. A missing shop and a hidden shop both yield
-// domain.ErrShopNotFound so existence is not leaked.
+// Get は、viewer が見てよいときに shop の詳細（creator と review を含む）を
+// 返す。存在しない shop と隠された shop は、どちらも domain.ErrShopNotFound を
+// 返すので、存在の有無は漏れない。
 func (s *Shops) Get(ctx context.Context, viewer *domain.User, id int64) (domain.ShopDetail, error) {
 	detail, err := s.repo.GetShopWithCreator(ctx, id)
 	if err != nil {
@@ -78,9 +78,9 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id int64) (domain.
 	return detail, nil
 }
 
-// Create submits a new shop on behalf of viewer: it starts pending (a
-// moderator activates it later) with viewer recorded as creator. A blank
-// name surfaces the domain *ValidationError unchanged.
+// Create は viewer に代わって新しい shop を投稿する。shop は pending で
+// 始まり（後で moderator が activate する）、viewer が creator として
+// 記録される。空白の name は、domain の *ValidationError をそのまま返す。
 func (s *Shops) Create(ctx context.Context, viewer domain.User, name string) (domain.ShopDetail, error) {
 	shop, err := domain.NewShopSubmission(name, viewer.ID)
 	if err != nil {
@@ -90,18 +90,18 @@ func (s *Shops) Create(ctx context.Context, viewer domain.User, name string) (do
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("create shop: %w", err)
 	}
-	// The creator is the viewer itself, so the response ref is composed
-	// here instead of re-fetching the row with a join.
+	// creator は viewer 自身なので、レスポンスの ref は、join で行を
+	// 再取得せずに、ここで組み立てる。
 	return domain.ShopDetail{
 		Shop:    created,
 		Creator: &domain.UserRef{ID: viewer.ID, Username: viewer.Username},
 	}, nil
 }
 
-// AdminList returns every shop for the moderation screen, newest first,
-// optionally filtered by the status string of the API. An unknown status
-// matches nothing (like Rails where(status: unknown)) instead of erroring.
-// Non-admin viewers get domain.ErrForbidden.
+// AdminList は moderation 画面向けにすべての shop を新しい順で返し、
+// API の status 文字列で任意に絞り込む。未知の status はエラーにならず、
+// 何にも一致しない（Rails の where(status: unknown) と同様）。
+// admin でない viewer には domain.ErrForbidden を返す。
 func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string) ([]domain.ShopDetail, error) {
 	if !viewer.Admin {
 		return nil, domain.ErrForbidden
@@ -122,9 +122,10 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 	return shops, nil
 }
 
-// AdminUpdateName renames a shop (the only moderation edit, Rails
-// parity). Non-admin viewers get domain.ErrForbidden before any lookup so
-// they cannot probe which ids exist; a blank name is a *ValidationError.
+// AdminUpdateName は shop の名前を変更する（唯一の moderation 編集、Rails
+// parity）。admin でない viewer には、どの id が存在するかを探れないよう、
+// lookup の前に domain.ErrForbidden を返す。空白の name は
+// *ValidationError である。
 func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int64, name string) (domain.ShopDetail, error) {
 	if !viewer.Admin {
 		return domain.ShopDetail{}, domain.ErrForbidden
@@ -132,9 +133,9 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int6
 	if err := domain.ValidateShopName(name); err != nil {
 		return domain.ShopDetail{}, err
 	}
-	// The fetch supplies the creator for the response (and a 404 for
-	// unknown ids); the write itself touches only the name column so it
-	// cannot revert a concurrent status change.
+	// fetch はレスポンス用の creator（と、未知の id に対する 404）を
+	// 供給する。書き込み自体は name のカラムにしか触れないので、並行する
+	// status の変更を元に戻すことはない。
 	detail, err := s.repo.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
@@ -147,9 +148,9 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int6
 	return detail, nil
 }
 
-// Approve activates a shop and clears its moderation note (the domain
-// transition), making it publicly visible. Non-admin viewers get
-// domain.ErrForbidden before any lookup.
+// Approve は shop を activate し、moderation note を消去して（domain の
+// 遷移）、公開して見えるようにする。admin でない viewer には、lookup の前に
+// domain.ErrForbidden を返す。
 func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (domain.ShopDetail, error) {
 	if !viewer.Admin {
 		return domain.ShopDetail{}, domain.ErrForbidden
@@ -157,9 +158,8 @@ func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (doma
 	return s.moderate(ctx, id, domain.Shop.Approve)
 }
 
-// Reject rejects a shop with an optional moderation note, hiding it from
-// the public list. Non-admin viewers get domain.ErrForbidden before any
-// lookup.
+// Reject は、任意の moderation note つきで shop を reject し、公開の一覧から
+// 隠す。admin でない viewer には、lookup の前に domain.ErrForbidden を返す。
 func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *string) (domain.ShopDetail, error) {
 	if !viewer.Admin {
 		return domain.ShopDetail{}, domain.ErrForbidden
@@ -169,11 +169,11 @@ func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *
 	})
 }
 
-// moderate is the shared flow of the status transitions: load the shop
-// with its creator (for the response and the 404), apply the domain
-// transition, persist only its status and moderation note, and return the
-// detail carrying the stored row. The column-scoped write cannot revert a
-// concurrent rename from the stale snapshot.
+// moderate は status 遷移に共通のフローである。shop を creator とともに
+// load し（レスポンスと 404 のため）、domain の遷移を適用し、その status と
+// moderation note だけを永続化し、保存された行を持つ detail を返す。
+// カラム限定の書き込みなので、古いスナップショットから並行する rename を
+// 元に戻すことはない。
 func (s *Shops) moderate(ctx context.Context, id int64, transition func(domain.Shop) domain.Shop) (domain.ShopDetail, error) {
 	detail, err := s.repo.GetShopWithCreator(ctx, id)
 	if err != nil {

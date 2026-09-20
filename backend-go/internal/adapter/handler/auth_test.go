@@ -19,7 +19,7 @@ import (
 
 const testJWTSecret = "handler-test-secret"
 
-// hasherFake is a fast stand-in for bcrypt with the same contract.
+// hasherFake は、同じ契約を持つ bcrypt の高速な代役である。
 type hasherFake struct{}
 
 func (hasherFake) Hash(password string) (string, error) { return "digest:" + password, nil }
@@ -30,15 +30,15 @@ func (hasherFake) Compare(digest, password string) error {
 	return nil
 }
 
-// fakeRecord is a stored user inside userRepoFake.
+// fakeRecord は userRepoFake の中に保存されたユーザーである。
 type fakeRecord struct {
 	user      domain.User
 	digest    string
 	discarded bool
 }
 
-// userRepoFake is an in-memory usecase.UserRepository. Setting err makes
-// every operation fail with it (drives the 500 paths).
+// userRepoFake は in-memory の usecase.UserRepository である。err を設定すると
+// すべての操作がその err で失敗する（500 の経路を駆動する）。
 type userRepoFake struct {
 	seq   int64
 	users map[int64]*fakeRecord
@@ -84,7 +84,8 @@ func (f *userRepoFake) GetActiveUserByID(_ context.Context, id int64) (domain.Us
 	return domain.User{}, domain.ErrUserNotFound
 }
 
-// seed stores an active user with the hasherFake digest for password.
+// seed は、password に対する hasherFake の digest を持つ active なユーザーを
+// 保存する。
 func (f *userRepoFake) seed(username, email, password string) domain.User {
 	user, err := f.CreateUser(context.Background(), usecase.CreateUserParams{
 		Username:       username,
@@ -97,26 +98,26 @@ func (f *userRepoFake) seed(username, email, password string) domain.User {
 	return user
 }
 
-// newAuthKit builds the real auth usecase over the in-memory fakes and a
-// real JWT codec, ready for router-level tests.
+// newAuthKit は、in-memory の fake と本物の JWT codec の上に本物の auth
+// usecase を構築し、router レベルのテストに使える状態にする。
 func newAuthKit() (*userRepoFake, *usecase.Auth, *infra.JWTCodec) {
 	repo := newUserRepoFake()
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
 	return repo, usecase.NewAuth(repo, hasherFake{}, codec, codec), codec
 }
 
-// newTestRouter is the default router for tests that only need db health
-// or routing behavior.
+// newTestRouter は、db の health か routing の挙動だけを必要とするテスト向けの
+// 既定の router である。
 func newTestRouter(t *testing.T, p handler.Pinger) http.Handler {
 	t.Helper()
 	_, auth, _ := newAuthKit()
 	return newTestRouterWith(t, p, auth)
 }
 
-// newTestRouterWith wires the router with the given auth, empty in-memory
-// shop/review fakes, and a real disk photo store in a fresh temp dir
-// (NewReviews demands a non-nil storage), for tests that do not care
-// about that data.
+// newTestRouterWith は、与えられた auth、空の in-memory の shop/review の
+// fake、新しい temp dir 内の本物の disk photo store（NewReviews は nil でない
+// storage を要求する）で router を配線する。そのデータを気にしないテスト向け
+// である。
 func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.Handler {
 	t.Helper()
 	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}),
@@ -124,8 +125,8 @@ func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.
 		usecase.NewUsers(newUserRepoFake(), hasherFake{}), nil)
 }
 
-// do runs one request through the router in-process and returns the
-// recorder.
+// do は router に対して 1 件の request を in-process で実行し、recorder を
+// 返す。
 func do(router http.Handler, method, path, body, authHeader string) *httptest.ResponseRecorder {
 	var reader io.Reader
 	if body != "" {
@@ -154,9 +155,9 @@ func decodeAuthUser(t *testing.T, body []byte) (resp struct {
 	return resp
 }
 
-// TestSignupThenLogout covers AC1: a fresh signup returns 201 with the
-// full snake_case body and a token that immediately opens the protected
-// POST /logout route.
+// TestSignupThenLogout は AC1 を扱う：新規の signup は、完全な snake_case の
+// body を伴う 201 と、保護された POST /logout ルートをただちに通過できる
+// トークンを返す。
 func TestSignupThenLogout(t *testing.T) {
 	_, auth, _ := newAuthKit()
 	router := newTestRouterWith(t, okPinger, auth)
@@ -183,15 +184,15 @@ func TestSignupThenLogout(t *testing.T) {
 	}
 }
 
-// TestSignupErrors covers AC2 (taken email -> 422) plus the decode and
-// failure paths of POST /signup.
+// TestSignupErrors は AC2（既に使われている email -> 422）に加え、POST /signup
+// の decode 経路と失敗経路を扱う。
 func TestSignupErrors(t *testing.T) {
 	tests := []struct {
 		name       string
 		setup      func(repo *userRepoFake)
 		body       string
 		wantStatus int
-		wantBody   string // exact body; empty means only status is asserted
+		wantBody   string // 完全一致させる body。空なら status のみを検証する
 	}{
 		{
 			name:       "AC2 taken email returns 422",
@@ -254,8 +255,8 @@ func TestSignupErrors(t *testing.T) {
 	}
 }
 
-// TestLogin covers AC3: correct credentials return 200 with a token,
-// wrong password and unknown email both return the Rails-parity 401.
+// TestLogin は AC3 を扱う：正しい認証情報はトークンを伴う 200 を返し、誤った
+// パスワードと未知の email はどちらも Rails parity の 401 を返す。
 func TestLogin(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -329,10 +330,10 @@ func TestLogin(t *testing.T) {
 	}
 }
 
-// TestRequireAuth covers AC4 and AC5 on the protected POST /logout route:
-// missing, non-Bearer, tampered, wrong-secret, and expired tokens, tokens
-// of unknown users, and tokens of discarded users all return the exact
-// Rails-parity 401 body; a valid token passes.
+// TestRequireAuth は、保護された POST /logout ルートに対する AC4 と AC5 を
+// 扱う：トークンの欠落、Bearer 以外、改ざん、secret 違い、期限切れのトークン、
+// 未知のユーザーのトークン、discard 済みのユーザーのトークンは、いずれも
+// 正確な Rails parity の 401 body を返し、有効なトークンは通る。
 func TestRequireAuth(t *testing.T) {
 	repo, auth, codec := newAuthKit()
 	alice := repo.seed("alice", "alice@example.com", "password123")
@@ -396,9 +397,9 @@ func TestRequireAuth(t *testing.T) {
 	}
 }
 
-// TestRequireAuthInfraFailure: a repository failure while resolving a
-// syntactically valid token is a server fault, not an authentication
-// decision — RequireAuth answers 500, not 401.
+// TestRequireAuthInfraFailure：構文上有効なトークンを解決する際の repository の
+// 失敗は、認証の判断ではなくサーバー側の障害であり、RequireAuth は 401 ではなく
+// 500 を返す。
 func TestRequireAuthInfraFailure(t *testing.T) {
 	repo, auth, codec := newAuthKit()
 	alice := repo.seed("alice", "alice@example.com", "password123")
@@ -417,9 +418,9 @@ func TestRequireAuthInfraFailure(t *testing.T) {
 	}
 }
 
-// TestOptionalAuth covers AC6 by wrapping a probe handler directly: no or
-// invalid tokens continue anonymously without a 401, a valid token puts
-// the viewer into the request context.
+// TestOptionalAuth は、probe handler を直接ラップして AC6 を扱う：トークンが
+// ない、または無効な場合は 401 にならず匿名のまま続行し、有効なトークンは
+// viewer を request context に入れる。
 func TestOptionalAuth(t *testing.T) {
 	repo, auth, codec := newAuthKit()
 	alice := repo.seed("alice", "alice@example.com", "password123")
@@ -466,8 +467,8 @@ func TestOptionalAuth(t *testing.T) {
 	}
 }
 
-// TestOptionalAuthInfraFailure: OptionalAuth never rejects, even on a
-// repository failure — the downstream handler still runs anonymously.
+// TestOptionalAuthInfraFailure：OptionalAuth は repository の失敗時でも決して
+// 拒否せず、下流の handler は匿名のまま実行される。
 func TestOptionalAuthInfraFailure(t *testing.T) {
 	repo, auth, codec := newAuthKit()
 	alice := repo.seed("alice", "alice@example.com", "password123")
@@ -496,12 +497,12 @@ func TestOptionalAuthInfraFailure(t *testing.T) {
 	}
 }
 
-// TestSignupBodyTooLarge exercises the decodeJSON 413 path: a chunked
-// body (no Content-Length) over 1 MiB trips http.MaxBytesReader while the
-// decoder reads, yielding 413 with the JSON error shape.
+// TestSignupBodyTooLarge は decodeJSON の 413 経路を実行する：1 MiB を超える
+// chunked body（Content-Length なし）は、decoder が読み込む間に
+// http.MaxBytesReader を作動させ、JSON のエラー形式で 413 を返す。
 func TestSignupBodyTooLarge(t *testing.T) {
-	// Wrap the reader so httptest.NewRequest cannot set Content-Length,
-	// bypassing the up-front limitBody check.
+	// httptest.NewRequest が Content-Length を設定できないように reader を
+	// ラップし、事前の limitBody のチェックを迂回する。
 	body := struct{ io.Reader }{strings.NewReader(`{"username":"` + strings.Repeat("a", 2<<20))}
 	req := httptest.NewRequest(http.MethodPost, "/signup", body)
 	rec := httptest.NewRecorder()

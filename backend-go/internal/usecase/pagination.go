@@ -2,19 +2,19 @@ package usecase
 
 import "math"
 
-// Pagination bounds shared by the shop and review list use cases (Rails
-// parity).
+// shop と review の一覧 use case で共有する、ページネーションの
+// 境界値（Rails parity）。
 const (
 	defaultPerPage = 20
 	maxPerPage     = 100
 )
 
-// clampPage converts the raw page/perPage query values into repository
-// limit/offset with the shared fallback rules: page < 1 becomes 1,
-// perPage < 1 becomes 20, and perPage is capped at 100. Far-out pages
-// yield an empty list; clamping page before the multiplication keeps the
-// product (at most (2^31-1)*100) inside int64, and clamping the offset
-// keeps it in int32 without changing that outcome.
+// clampPage は、生の page/perPage のクエリ値を、共通のフォールバック規則で
+// repository の limit/offset に変換する。page < 1 は 1 になり、perPage < 1 は
+// 20 になり、perPage は 100 が上限となる。遠く離れたページは空のリストを
+// 返す。掛け算の前に page を clamp することで、積（最大でも (2^31-1)*100）が
+// int64 に収まり、offset を clamp することで、その結果を変えずに int32 に
+// 収まる。
 func clampPage(page, perPage int) (limit, offset int32) {
 	if page < 1 {
 		page = 1

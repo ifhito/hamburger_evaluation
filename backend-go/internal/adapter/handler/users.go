@@ -10,16 +10,16 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// userNotFoundMessage is the shared 404 body for missing, discarded, and
-// non-numeric user ids, so soft-deleted accounts are indistinguishable
-// from never-existing ones.
+// userNotFoundMessage は、存在しない user、discard 済みの user、および
+// 数値でない user の id に共通の 404 body であり、soft delete 済みの
+// account が一度も存在しなかったものと区別できないようにする。
 const userNotFoundMessage = "User not found"
 
-// userResponse is the token-less user JSON shape of GET /users (array
-// elements) and PUT /users/{id} (single object): {id, username, email,
-// admin} per issue #16's 仕様 (「user 形 + admin フラグ」, the response
-// shape of the issue's cited frontend contract) — authUserResponse minus
-// token.
+// userResponse は、GET /users（配列の要素）と PUT /users/{id}（単一の
+// オブジェクト）の、token を含まない user の JSON 形式である：issue #16 の
+// 仕様（「user 形 + admin フラグ」、issue が引用する frontend の契約の
+// レスポンス形状）に従った {id, username, email, admin} であり、
+// authUserResponse から token を除いたものである。
 type userResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -31,10 +31,11 @@ func newUserResponse(user domain.User) userResponse {
 	return userResponse{ID: user.ID, Username: user.Username, Email: user.Email, Admin: user.Admin}
 }
 
-// updateUserRequest is the {"user":{...}} wrapper of PUT /users/{id}.
-// Every field stays a pointer so an absent field (nil, left untouched —
-// partial update) is distinguished from an empty one, matching Rails
-// strong params; {"user":{}} and an absent user key are both no-ops.
+// updateUserRequest は PUT /users/{id} の {"user":{...}} ラッパーである。
+// すべてのフィールドを pointer のままにして、フィールドが存在しない場合
+// （nil、変更しない部分更新）と空の場合を区別できるようにしており、
+// Rails の strong params に合わせている。{"user":{}} と user キーが存在
+// しない場合は、どちらも no-op である。
 type updateUserRequest struct {
 	User struct {
 		Username             *string `json:"username"`
@@ -44,9 +45,9 @@ type updateUserRequest struct {
 	} `json:"user"`
 }
 
-// userIDPathValue parses the {id} path value; false means the uniform
-// user 404 was already written (non-numeric ids look exactly like missing
-// users, the shop/review-id convention).
+// userIDPathValue は {id} の path value をパースする。false は統一された
+// user の 404 が既に書き込まれたことを意味する（数値でない id は存在しない
+// user とまったく同じに見える。shop/review の id と同じ規約）。
 func userIDPathValue(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -56,12 +57,12 @@ func userIDPathValue(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
-// writeUserError maps the users usecase errors onto HTTP: the domain
-// self-management decision to 403, the not-found sentinel to 404 (checked
-// after the load, so a nonexistent id 404s even for a non-owner — the
-// find-then-authorize order of issue #16 AC2; this deliberately diverges
-// from this branch's Rails controller, which ignores the path id),
-// validation to 422, anything else to 500.
+// writeUserError は users の usecase のエラーを HTTP に対応させる：domain の
+// 自己管理の判断は 403、not-found の sentinel は 404（load の後で検査される
+// ので、存在しない id は所有者でない者に対しても 404 になる。これは issue #16
+// AC2 の find-then-authorize の順序であり、path の id を無視するこの
+// branch の Rails controller とは意図的に異なる）、validation は 422、
+// それ以外は 500 である。
 func writeUserError(w http.ResponseWriter, op string, err error) {
 	var vErr *domain.ValidationError
 	switch {
@@ -77,8 +78,8 @@ func writeUserError(w http.ResponseWriter, op string, err error) {
 	}
 }
 
-// handleListUsers serves GET /users: the public (no auth) top-level JSON
-// array of kept users, id ascending.
+// handleListUsers は GET /users を処理する：kept な user の、公開（認証なし）
+// のトップレベルの JSON 配列で、id の昇順である。
 func handleListUsers(users *usecase.Users) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		list, err := users.List(r.Context())
@@ -87,7 +88,7 @@ func handleListUsers(users *usecase.Users) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
-		resp := make([]userResponse, 0, len(list)) // non-nil: marshals as []
+		resp := make([]userResponse, 0, len(list)) // nil ではない：[] として marshal される
 		for _, user := range list {
 			resp = append(resp, newUserResponse(user))
 		}
@@ -95,9 +96,9 @@ func handleListUsers(users *usecase.Users) http.HandlerFunc {
 	}
 }
 
-// handleUpdateUser serves PUT /users/{id} behind RequireAuth: 200 with
-// the updated user. Self-management (no admin pass) is the domain's
-// decision surfaced as 403.
+// handleUpdateUser は RequireAuth の背後で PUT /users/{id} を処理する：更新後の
+// user を伴う 200。自己管理（admin の例外なし）は domain の判断であり、
+// 403 として表面化する。
 func handleUpdateUser(users *usecase.Users) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)
@@ -126,8 +127,8 @@ func handleUpdateUser(users *usecase.Users) http.HandlerFunc {
 	}
 }
 
-// handleDeleteUser serves DELETE /users/{id} behind RequireAuth: a
-// self-only soft delete answered with 204 and no body.
+// handleDeleteUser は RequireAuth の背後で DELETE /users/{id} を処理する：
+// 本人のみの soft delete で、body なしの 204 を返す。
 func handleDeleteUser(users *usecase.Users) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)

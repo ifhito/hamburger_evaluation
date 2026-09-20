@@ -12,27 +12,28 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 )
 
-// TestMigrationsAcceptance covers AC1-AC4 of story S2 against a real
-// PostgreSQL. It requires TEST_DATABASE_URL to point at a maintenance
-// database (e.g. postgres://postgres:password@localhost:5433/postgres) whose
-// user may create and drop databases; without it the test skips (inside
-// dbtest.NewEmpty).
+// TestMigrationsAcceptance は、実際の PostgreSQL に対して story S2 の
+// AC1-AC4 をカバーする。TEST_DATABASE_URL が、database を作成・drop できる
+// ユーザーの maintenance database
+// （例：postgres://postgres:password@localhost:5433/postgres）を指している
+// 必要がある。設定されていない場合、テストは skip される（dbtest.NewEmpty
+// の内部で）。
 //
-// The subtests are order-dependent (up -> negative inserts -> down -> re-up)
-// and therefore run sequentially within this single test.
+// subtest は実行順序に依存する（up -> negative insert -> down -> re-up）ため、
+// この 1 つのテストの中で順次実行される。
 func TestMigrationsAcceptance(t *testing.T) {
 	ctx := context.Background()
 	conn, _ := dbtest.NewEmpty(t)
 	ups, downs := dbtest.LoadMigrations(t)
 
-	// AC1: from an empty DB, all migrations up yield tables, constraints
-	// and indexes.
+	// AC1：空の DB から、すべての migration を up すると table、制約、
+	// index が得られる。
 	dbtest.Apply(ctx, t, conn, ups)
 	t.Run("AC1_up_creates_schema", func(t *testing.T) {
 		assertSchemaPresent(ctx, t, conn)
 	})
 
-	// AC3: rating outside 1..5 is rejected by the CHECK constraint.
+	// AC3：1..5 の範囲外の rating は CHECK 制約によって拒否される。
 	t.Run("AC3_rating_check_violation", func(t *testing.T) {
 		var userID, burgerID int64
 		if err := conn.QueryRow(ctx,
@@ -49,8 +50,8 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23514", "reviews_rating_check")
 	})
 
-	// AC4: a second user with the same email is rejected by the UNIQUE
-	// constraint.
+	// AC4：同じ email を持つ 2 人目のユーザーは UNIQUE 制約によって
+	// 拒否される。
 	t.Run("AC4_email_unique_violation", func(t *testing.T) {
 		const email = "ac4@example.com"
 		if _, err := conn.Exec(ctx,
@@ -64,7 +65,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23505", "users_email_key")
 	})
 
-	// AC2: all migrations down return to an empty database.
+	// AC2：すべての migration を down すると空の database に戻る。
 	dbtest.Apply(ctx, t, conn, downs)
 	t.Run("AC2_down_returns_to_empty_schema", func(t *testing.T) {
 		var count int
@@ -77,7 +78,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 		}
 	})
 
-	// Re-up after down must succeed (up/down/re-up cycle).
+	// down の後の re-up は成功しなければならない（up/down/re-up のサイクル）。
 	dbtest.Apply(ctx, t, conn, ups)
 	t.Run("reup_after_down_recreates_schema", func(t *testing.T) {
 		assertSchemaPresent(ctx, t, conn)
@@ -94,8 +95,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		t.Fatalf("tables mismatch:\n got %v\nwant %v", gotTables, wantTables)
 	}
 
-	// Column-level schema: table/column/data_type/is_nullable, ordered by
-	// table name then column position, exactly as the migrations define them.
+	// カラム単位の schema：table/column/data_type/is_nullable を、table 名、
+	// 次にカラムの位置の順に並べたもので、migration が定義するとおりである。
 	wantColumns := []string{
 		"burger_stats/burger_id/bigint/NO",
 		"burger_stats/review_count/bigint/NO",
@@ -115,8 +116,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"reviews/discarded_at/timestamp with time zone/YES",
 		"reviews/created_at/timestamp with time zone/NO",
 		"reviews/updated_at/timestamp with time zone/NO",
-		// photo_key was added by 000007 (S10), so it sits last by ordinal
-		// position.
+		// photo_key は 000007（S10）で追加されたので、ordinal position では
+		// 最後に来る。
 		"reviews/photo_key/text/YES",
 		"shops/id/bigint/NO",
 		"shops/name/text/NO",
@@ -143,8 +144,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 			strings.Join(gotColumns, "\n"), strings.Join(wantColumns, "\n"))
 	}
 
-	// Key constraints: contype is p=primary key, u=unique, c=check,
-	// f=foreign key.
+	// 主要な制約：contype は p=primary key、u=unique、c=check、f=foreign key
+	// である。
 	constraints := map[string]bool{}
 	rows, err := conn.Query(ctx,
 		"SELECT conrelid::regclass::text, conname, contype::text FROM pg_constraint WHERE connamespace = 'public'::regnamespace")

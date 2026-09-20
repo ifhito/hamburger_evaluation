@@ -162,8 +162,8 @@ func TestLoadConfig(t *testing.T) {
 	}
 }
 
-// TestLoadConfigS3MissingVars asserts that s3 mode fails loudly when any
-// one of its required variables is missing.
+// TestLoadConfigS3MissingVars は、s3 モードで必須の変数のうちどれか 1 つが
+// 欠けている場合に fail-loud することを検証する。
 func TestLoadConfigS3MissingVars(t *testing.T) {
 	required := []string{
 		"PHOTO_S3_ENDPOINT",

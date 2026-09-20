@@ -9,9 +9,10 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// signupRequest is the POST /signup body. PasswordConfirmation stays a
-// pointer so an absent field (nil) is distinguished from an empty one,
-// matching Rails has_secure_password. Extra unknown fields are ignored.
+// signupRequest は POST /signup の body である。PasswordConfirmation は
+// pointer のままにして、フィールドが存在しない場合（nil）と空の場合を区別
+// できるようにしており、Rails has_secure_password に合わせている。余分な
+// 未知のフィールドは無視される。
 type signupRequest struct {
 	Username             string  `json:"username"`
 	Email                string  `json:"email"`
@@ -24,8 +25,8 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// authUserResponse is the snake_case body of successful signup and login,
-// per the frontend contract (SignupResponse in domains/auth/types.ts).
+// authUserResponse は、signup と login の成功時に返す snake_case の body で
+// あり、frontend の契約（domains/auth/types.ts の SignupResponse）に従う。
 type authUserResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -44,8 +45,9 @@ func newAuthUserResponse(user domain.User, token string) authUserResponse {
 	}
 }
 
-// handleSignup serves POST /signup: 201 with the user and a fresh token,
-// 422 {"errors":[...]} on validation failure (including a taken email).
+// handleSignup は POST /signup を処理する：user と新しい token を伴う 201、
+// 422 {"errors":[...]}（validation の失敗時。email が既に使われている
+// 場合を含む）。
 func handleSignup(auth *usecase.Auth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req signupRequest
@@ -64,7 +66,7 @@ func handleSignup(auth *usecase.Auth) http.HandlerFunc {
 				writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
 				return
 			}
-			// Wrapped usecase errors never carry the password.
+			// wrap された usecase のエラーには password は含まれない。
 			log.Printf("signup: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
@@ -73,8 +75,8 @@ func handleSignup(auth *usecase.Auth) http.HandlerFunc {
 	}
 }
 
-// handleLogin serves POST /login: 200 with the user and a fresh token, or
-// the Rails-parity 401 body on bad credentials.
+// handleLogin は POST /login を処理する：user と新しい token を伴う 200、
+// 認証情報が誤っている場合は Rails-parity の 401 body。
 func handleLogin(auth *usecase.Auth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req loginRequest
@@ -99,8 +101,9 @@ type messageResponse struct {
 	Message string `json:"message"`
 }
 
-// handleLogout serves POST /logout behind RequireAuth. Auth is stateless
-// JWT, so there is nothing to invalidate server-side (Rails parity).
+// handleLogout は RequireAuth の背後で POST /logout を処理する。認証は
+// stateless な JWT なので、server 側で無効化するものは何もない
+// （Rails parity）。
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, messageResponse{Message: "Logged out successfully"})
 }

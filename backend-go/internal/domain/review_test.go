@@ -8,15 +8,15 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// TestValidateReviewContent pins the Rails-parity validation messages
-// (issue #14 AC4): rating outside 1..5 and a blank comment fail with the
-// exact full messages, rating message first when both fail.
+// TestValidateReviewContent は Rails parity の validation メッセージを固定する
+// （issue #14 AC4）。1..5 の範囲外の rating と空の comment は full message
+// そのままで失敗し、両方が失敗する場合は rating のメッセージが先に来る。
 func TestValidateReviewContent(t *testing.T) {
 	tests := []struct {
 		name    string
 		rating  int
 		comment string
-		want    []string // nil = valid
+		want    []string // nil = 有効
 	}{
 		{name: "valid", rating: 4, comment: "Tasty"},
 		{name: "boundary ratings 1 and 5 are valid", rating: 1, comment: "ok"},
@@ -51,9 +51,9 @@ func TestValidateReviewContent(t *testing.T) {
 	}
 }
 
-// TestNewReview pins the constructor: valid input yields a review with
-// the comment kept verbatim (never trimmed) and author/burger recorded;
-// invalid input surfaces the ValidationError without a review.
+// TestNewReview はコンストラクタを固定する。有効な入力は、comment をそのまま
+// 保持し（trim しない）、author/burger を記録した review を返す。無効な入力は
+// review を返さずに ValidationError を表に出す。
 func TestNewReview(t *testing.T) {
 	t.Run("valid input builds the review", func(t *testing.T) {
 		review, err := domain.NewReview(4, " Tasty ", 7, 9)
@@ -77,8 +77,8 @@ func TestNewReview(t *testing.T) {
 	})
 }
 
-// TestReviewCanBeModifiedBy pins the ownership rule (issue #14 AC3):
-// only the author may edit or delete — an admin gets no pass.
+// TestReviewCanBeModifiedBy は所有権ルールを固定する（issue #14 AC3）。
+// author だけが編集または削除でき、admin にも例外はない。
 func TestReviewCanBeModifiedBy(t *testing.T) {
 	review := domain.Review{ID: 1, AuthorID: 7}
 

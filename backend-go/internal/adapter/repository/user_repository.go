@@ -13,24 +13,24 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// usersEmailUniqueConstraint is the users.email UNIQUE constraint name
-// from db/migrations/000001_create_users.up.sql.
+// usersEmailUniqueConstraint は、db/migrations/000001_create_users.up.sql の
+// users.email の UNIQUE 制約の名前である。
 const usersEmailUniqueConstraint = "users_email_key"
 
-// pgUniqueViolation is SQLSTATE 23505.
+// pgUniqueViolation は SQLSTATE 23505 である。
 const pgUniqueViolation = "23505"
 
-// UserRepository implements usecase.UserRepository over sqlc-generated
-// queries. Storage details (sqlc rows, pgtype, pg error codes) stay
-// inside this boundary; callers only see domain types and errors. The S8
-// writes (profile update, user discard) are transactional, so the
-// connection must be Begin-capable, like ReviewRepository's.
+// UserRepository は、sqlc 生成のクエリ上で usecase.UserRepository を実装する。
+// ストレージの詳細（sqlc の行、pgtype、pg のエラーコード）はこの境界の内側に
+// とどまり、呼び出し側には domain の型とエラーしか見えない。S8 の書き込み
+// （プロフィールの更新、user の discard）はトランザクションで行われるので、
+// 接続は ReviewRepository のものと同様に Begin できなければならない。
 type UserRepository struct {
 	db beginnerDBTX
 	q  *sqlcgen.Queries
 }
 
-// NewUserRepository wraps db (normally the shared pgx pool).
+// NewUserRepository は db（通常は共有の pgx pool）をラップする。
 func NewUserRepository(db beginnerDBTX) *UserRepository {
 	return &UserRepository{db: db, q: sqlcgen.New(db)}
 }
@@ -40,8 +40,8 @@ var (
 	_ usecase.UsersRepository = (*UserRepository)(nil)
 )
 
-// CreateUser inserts a new user and returns it. A unique violation on
-// the email column maps to domain.ErrEmailTaken.
+// CreateUser は新しい user を insert して返す。email カラムでの unique
+// violation は domain.ErrEmailTaken に対応づけられる。
 func (r *UserRepository) CreateUser(ctx context.Context, params usecase.CreateUserParams) (domain.User, error) {
 	row, err := r.q.CreateUser(ctx, sqlcgen.CreateUserParams{
 		Email:          params.Email,
@@ -55,8 +55,9 @@ func (r *UserRepository) CreateUser(ctx context.Context, params usecase.CreateUs
 	return toDomainUser(row), nil
 }
 
-// GetActiveUserByEmail returns the non-discarded user with the given
-// email together with its password digest, or domain.ErrUserNotFound.
+// GetActiveUserByEmail は、指定された email を持つ discard されていない
+// user をその password digest とともに返す。または domain.ErrUserNotFound を
+// 返す。
 func (r *UserRepository) GetActiveUserByEmail(ctx context.Context, email string) (usecase.UserCredentials, error) {
 	row, err := r.q.GetActiveUserByEmail(ctx, email)
 	if err != nil {
@@ -68,8 +69,8 @@ func (r *UserRepository) GetActiveUserByEmail(ctx context.Context, email string)
 	return usecase.UserCredentials{User: toDomainUser(row), PasswordDigest: row.PasswordDigest}, nil
 }
 
-// GetActiveUserByID returns the non-discarded user with the given id,
-// or domain.ErrUserNotFound.
+// GetActiveUserByID は、指定された id を持つ discard されていない user を
+// 返す。または domain.ErrUserNotFound を返す。
 func (r *UserRepository) GetActiveUserByID(ctx context.Context, id int64) (domain.User, error) {
 	row, err := r.q.GetActiveUserByID(ctx, id)
 	if err != nil {
@@ -81,8 +82,8 @@ func (r *UserRepository) GetActiveUserByID(ctx context.Context, id int64) (domai
 	return toDomainUser(row), nil
 }
 
-// ListActiveUsers returns every kept user, id ascending (no pagination —
-// Rails parity: the index returns all kept users).
+// ListActiveUsers はすべての kept な user を id の昇順で返す（pagination
+// なし。Rails parity：index はすべての kept な user を返す）。
 func (r *UserRepository) ListActiveUsers(ctx context.Context) ([]domain.User, error) {
 	rows, err := r.q.ListActiveUsers(ctx)
 	if err != nil {
@@ -95,13 +96,14 @@ func (r *UserRepository) ListActiveUsers(ctx context.Context) ([]domain.User, er
 	return users, nil
 }
 
-// UpdateUserProfile applies the present fields of changes to the still
-// kept user under id in one transaction, each field via its own
-// column-scoped UPDATE, and returns the stored user. A missing or
-// discarded user yields domain.ErrUserNotFound; an email unique violation
-// yields domain.ErrEmailTaken (either way the transaction is rolled back,
-// so no field is partially applied). Zero present fields are a plain
-// lookup of the current user (200 no-op, Rails parity).
+// UpdateUserProfile は、changes のうち指定されているフィールドを、id の、
+// まだ kept な user に 1 つのトランザクションで適用する。各フィールドは
+// それぞれ専用のカラム単位の UPDATE で更新し、保存された user を返す。
+// 存在しないか discard 済みの user は domain.ErrUserNotFound を返し、email の
+// unique violation は domain.ErrEmailTaken を返す（どちらの場合も
+// トランザクションは rollback されるので、一部のフィールドだけが適用される
+// ことはない）。指定されたフィールドがゼロ個の場合は、現在の user を単純に
+// 参照するだけである（200 の no-op、Rails parity）。
 func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
 	if changes.Username == nil && changes.Email == nil && changes.PasswordDigest == nil {
 		return r.GetActiveUserByID(ctx, id)
@@ -135,14 +137,15 @@ func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, change
 	return toDomainUser(row), nil
 }
 
-// DiscardUser soft-deletes the user (stamps users.discarded_at, never a
-// hard DELETE) and recalculates the burger_stats of every burger the
-// user's kept reviews touch, all in one transaction. Missing and
-// already-discarded users match no row and yield domain.ErrUserNotFound.
-// The user's reviews themselves stay kept (reviews.discarded_at is never
-// written — Rails parity; hiding is done by the read-side u.discarded_at
-// filters), but the recalculation still drops them from the stats because
-// ListBurgerReviewFacts excludes discarded users' reviews.
+// DiscardUser は user を soft delete し（users.discarded_at に時刻を刻み、
+// hard DELETE は決して行わない）、その user の kept な review が触れている
+// すべての burger の burger_stats を再計算する。すべて 1 つの
+// トランザクションで行う。存在しない user や、すでに discard 済みの user は
+// どの行にも一致せず、domain.ErrUserNotFound を返す。user の review 自体は
+// kept のままである（reviews.discarded_at は決して書き込まれない。
+// Rails parity。非表示化は読み取り側の u.discarded_at フィルタで行う）。
+// ただし、ListBurgerReviewFacts が discard 済みの user の review を除外する
+// ので、再計算によって、それらの review は stats から外れる。
 func (r *UserRepository) DiscardUser(ctx context.Context, id int64) error {
 	return withTx(ctx, r.db, "discard user", func(q *sqlcgen.Queries) error {
 		if _, err := q.DiscardUser(ctx, id); err != nil {
@@ -155,8 +158,8 @@ func (r *UserRepository) DiscardUser(ctx context.Context, id int64) error {
 		if err != nil {
 			return fmt.Errorf("discard user: list review burgers: %w", err)
 		}
-		// The query returns the ids in ascending order — the multi-burger
-		// lock-ordering rule of recalculateBurgerStats (deadlock avoidance).
+		// クエリは id を昇順で返す。これは recalculateBurgerStats の、複数
+		// burger にわたるロック順序のルールである（デッドロックの回避）。
 		for _, burgerID := range burgerIDs {
 			if err := recalculateBurgerStats(ctx, q, burgerID); err != nil {
 				return fmt.Errorf("discard user: %w", err)
@@ -166,10 +169,10 @@ func (r *UserRepository) DiscardUser(ctx context.Context, id int64) error {
 	})
 }
 
-// mapUserWriteError translates the storage errors of user writes into
-// domain errors: no matched row (missing or discarded user) becomes
-// domain.ErrUserNotFound, a unique violation on users.email becomes
-// domain.ErrEmailTaken; anything else passes through unchanged.
+// mapUserWriteError は、user の書き込みで生じたストレージのエラーを domain の
+// エラーに変換する。行が一致しなかった場合（存在しない、または discard 済みの
+// user）は domain.ErrUserNotFound に、users.email の unique violation は
+// domain.ErrEmailTaken になり、それ以外はそのまま素通りする。
 func mapUserWriteError(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrUserNotFound
@@ -181,8 +184,8 @@ func mapUserWriteError(err error) error {
 	return err
 }
 
-// toDomainUser maps a sqlc row to the domain entity, dropping the
-// password digest and storage-only columns.
+// toDomainUser は sqlc の行を domain のエンティティに変換し、password digest
+// と、ストレージ専用のカラムを落とす。
 func toDomainUser(row sqlcgen.User) domain.User {
 	return domain.User{
 		ID:       row.ID,

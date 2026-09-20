@@ -13,15 +13,15 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// s3API is the slice of the S3 client used here, split out so unit tests
-// can fake it without a network.
+// s3API は、ここで使う S3 client の一部分であり、単体テストがネットワークなしで
+// fake できるように切り出してある。
 type s3API interface {
 	PutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
 }
 
-// S3 stores photos in an S3-compatible bucket and serves them from a
-// public base URL (e.g. an R2 public bucket domain or CDN).
+// S3 は、S3 互換のバケットに写真を保存し、公開 base URL（例：R2 の公開バケット
+// のドメインや CDN）から配信する。
 type S3 struct {
 	client  s3API
 	bucket  string
@@ -30,14 +30,14 @@ type S3 struct {
 
 var _ usecase.PhotoStorage = (*S3)(nil)
 
-// NewS3 builds a client for an S3-compatible endpoint (e.g. the Cloudflare
-// R2 S3 API) with static credentials. Path-style addressing is used
-// because custom endpoints generally do not resolve bucket subdomains.
-// No connection is made until the first call.
+// NewS3 は、S3 互換のエンドポイント（例：Cloudflare R2 の S3 API）向けの
+// client を、静的な credentials で組み立てる。カスタムエンドポイントは一般に
+// バケットのサブドメインを解決しないので、path-style のアドレッシングを使う。
+// 最初の呼び出しまで接続は行われない。
 func NewS3(endpoint, bucket, accessKeyID, secretAccessKey, baseURL string) *S3 {
 	client := s3.New(s3.Options{
 		BaseEndpoint: aws.String(endpoint),
-		Region:       "auto", // R2's placeholder region
+		Region:       "auto", // R2 のプレースホルダのリージョン
 		Credentials:  credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, ""),
 		UsePathStyle: true,
 	})
@@ -60,8 +60,8 @@ func (s *S3) Put(ctx context.Context, key string, contentType string, r io.Reade
 	return nil
 }
 
-// Delete relies on S3 semantics: DeleteObject succeeds for missing keys,
-// which gives the idempotency the contract requires.
+// Delete は S3 のセマンティクスに依拠する。DeleteObject は存在しないキーに
+// 対しても成功し、これが契約の求める冪等性をもたらす。
 func (s *S3) Delete(ctx context.Context, key string) error {
 	if err := validateKey(key); err != nil {
 		return err

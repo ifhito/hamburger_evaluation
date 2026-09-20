@@ -6,8 +6,9 @@ import (
 	"testing"
 )
 
-// TestRegisterRoutesAllow asserts the derived 405 fallback lists exactly
-// the declared methods, sorted and comma-joined in a single Allow header.
+// TestRegisterRoutesAllow は、導出された 405 の fallback が、宣言された
+// メソッドをちょうど列挙し、ソートしてカンマで連結した 1 つの Allow ヘッダー
+// になっていることを検証する。
 func TestRegisterRoutesAllow(t *testing.T) {
 	ok := func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }
 	mux := http.NewServeMux()
@@ -32,11 +33,11 @@ func TestRegisterRoutesAllow(t *testing.T) {
 	}
 }
 
-// TestRegisterRoutesPerMethodMiddleware asserts one path can register
-// different middleware per method without a ServeMux pattern panic:
-// each method is wrapped in its own methodMiddleware entry, methods
-// without one fall back to the path-level middleware, and the derived
-// 405 still lists every declared method.
+// TestRegisterRoutesPerMethodMiddleware は、1 つのパスが、ServeMux の
+// pattern の panic を起こさずに、メソッドごとに異なる middleware を登録できる
+// ことを検証する：各メソッドはそれ自身の methodMiddleware のエントリで
+// ラップされ、エントリのないメソッドはパスレベルの middleware に fallback し、
+// 導出された 405 は宣言されたすべてのメソッドを引き続き列挙する。
 func TestRegisterRoutesPerMethodMiddleware(t *testing.T) {
 	tag := func(name string) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {

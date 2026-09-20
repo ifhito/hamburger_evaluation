@@ -1,8 +1,7 @@
 package domain
 
-// User is the domain representation of an account. It deliberately
-// excludes the password digest: credentials never travel on the entity
-// and stay inside the persistence/usecase boundary.
+// User は account の domain 表現である。password digest は意図的に含めない。
+// 認証情報は entity 上を流れず、persistence/usecase の境界の内側にとどまる。
 type User struct {
 	ID       int64
 	Username string
@@ -10,7 +9,7 @@ type User struct {
 	Admin    bool
 }
 
-// Manages reports whether the user may manage (edit or delete) the
-// account with the given id: self-management only, an admin gets no pass
-// (issue #16 R2/R3).
+// Manages は、ユーザーが指定された id の account を管理（編集または削除）
+// してよいかどうかを返す。自分自身の管理のみ可能で、admin にも例外はない
+// （issue #16 R2/R3）。
 func (u User) Manages(id int64) bool { return u.ID == id }

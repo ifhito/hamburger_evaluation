@@ -14,10 +14,10 @@ import (
 
 const testTimeout = 5 * time.Second
 
-// TestServeGracefulShutdown covers AC4: the server starts on an ephemeral
-// port, a request is in flight when the context is canceled (standing in
-// for SIGTERM), the in-flight request still completes, and serve returns
-// nil without leaking the serve goroutine.
+// TestServeGracefulShutdown は AC4 をカバーする。server が ephemeral port で
+// 起動し、context が cancel された（SIGTERM の代わり）時点でリクエストが
+// in-flight であり、その in-flight のリクエストがそれでも完了し、serve が
+// serve goroutine を leak させずに nil を返す。
 func TestServeGracefulShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -25,8 +25,8 @@ func TestServeGracefulShutdown(t *testing.T) {
 	inFlight := make(chan struct{})
 	release := make(chan struct{})
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		close(inFlight) // signal the request has reached the handler
-		<-release       // hold it in flight across the shutdown trigger
+		close(inFlight) // リクエストが handler に到達したことを知らせる
+		<-release       // shutdown のトリガーをまたいで in-flight のまま保持する
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
@@ -68,18 +68,18 @@ func TestServeGracefulShutdown(t *testing.T) {
 		t.Fatal("timed out waiting for request to be in flight")
 	}
 
-	cancel() // stands in for SIGTERM via signal.NotifyContext
+	cancel() // signal.NotifyContext 経由の SIGTERM の代わり
 
-	// Deterministically wait until Shutdown has begun: Shutdown closes the
-	// listener first, so poll until new TCP dials are refused before
-	// releasing the held handler. This guarantees the request is still in
-	// flight when shutdown starts, so the assertion below cannot pass
-	// vacuously.
+	// Shutdown が始まるまで決定的に待つ：Shutdown はまず listener を close
+	// するので、保持していた handler を解放する前に、新しい TCP dial が拒否
+	// されるまで poll する。これにより shutdown が始まった時点でリクエストが
+	// まだ in-flight であることが保証され、下の assertion が空虚に通ることは
+	// ない。
 	deadline := time.Now().Add(testTimeout)
 	for {
 		conn, err := net.Dial("tcp", addr)
 		if err != nil {
-			break // listener closed: shutdown is underway
+			break // listener が close された：shutdown が進行中である
 		}
 		_ = conn.Close()
 		if time.Now().After(deadline) {
@@ -112,24 +112,24 @@ func TestServeGracefulShutdown(t *testing.T) {
 	}
 }
 
-// TestRunShutsDownCleanly covers AC4 at the run() level: run wires config,
-// pool, and router, serves /up on an ephemeral port (503 here — the pool
-// points at an unreachable address and pgxpool connects lazily), and
-// returns nil when the context is canceled.
+// TestRunShutsDownCleanly は run() レベルで AC4 をカバーする。run は config、
+// pool、router を配線し、ephemeral port で /up を serve し（ここでは 503。
+// pool は到達不能なアドレスを指しており、pgxpool は遅延して接続する）、
+// context が cancel されたとき nil を返す。
 func TestRunShutsDownCleanly(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	cfg := infra.Config{
 		Port: "0",
-		// Deliberately unreachable; credentials are dummies for parsing only.
+		// 意図的に到達不能にしている。認証情報はパース専用のダミーである。
 		DatabaseURL: "postgres://user:pass@127.0.0.1:1/hamburger_test?sslmode=disable",
-		// JWT_SECRET is required by config; the value is a test dummy.
+		// JWT_SECRET は config で必須であり、その値はテスト用のダミーである。
 		JWTSecret:  "test-secret",
 		JWTTTL:     time.Minute,
 		DBMaxConns: 1,
-		// Photo storage as LoadConfig's disk-mode defaults would set it,
-		// pointed at a throwaway dir.
+		// LoadConfig の disk モードのデフォルトが設定するとおりの写真の
+		// storage で、使い捨ての dir を指している。
 		PhotoStorage:       "disk",
 		PhotoDiskDir:       t.TempDir(),
 		PhotoPublicBaseURL: "/photos",
@@ -171,8 +171,8 @@ func TestRunShutsDownCleanly(t *testing.T) {
 	}
 }
 
-// TestServeListenError asserts serve fails fast with an error when the
-// port cannot be bound, instead of hanging.
+// TestServeListenError は、port を bind できないとき、serve がハングせずに
+// エラーで fail-fast することを検証する。
 func TestServeListenError(t *testing.T) {
 	err := serve(context.Background(), "not-a-port", http.NotFoundHandler(), nil)
 	if err == nil {

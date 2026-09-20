@@ -10,29 +10,30 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// forbiddenMessage is the Rails-parity 403 body for authenticated viewers
-// without moderation rights.
+// forbiddenMessage は、moderation の権限を持たない認証済みの viewer に返す
+// Rails-parity の 403 body である。
 const forbiddenMessage = "Forbidden"
 
-// shopParamsRequest is the {"shop":{"name":...}} wrapper of POST /shops
-// and PUT /admin/shops/{id}. A missing wrapper or name decodes to "",
-// which the domain rejects as blank — Rails-parity 422 rather than 400.
+// shopParamsRequest は POST /shops と PUT /admin/shops/{id} の
+// {"shop":{"name":...}} ラッパーである。wrapper や name が欠けている場合は
+// "" にデコードされ、domain はそれを blank として拒否する。400 ではなく
+// Rails-parity の 422 になる。
 type shopParamsRequest struct {
 	Shop struct {
 		Name string `json:"name"`
 	} `json:"shop"`
 }
 
-// rejectShopRequest is the POST /admin/shops/{id}/reject body. The note is
-// a top-level key (not nested under "shop") and optional; the whole body
-// may be absent.
+// rejectShopRequest は POST /admin/shops/{id}/reject の body である。
+// note はトップレベルのキー（"shop" の下にネストされない）で任意であり、
+// body 全体が存在しなくてもよい。
 type rejectShopRequest struct {
 	ModerationNote *string `json:"moderation_note"`
 }
 
-// adminShopResponse is the shop submission/moderation payload (Rails
-// ShopSerializer, frontend AdminShop): the shop with moderation note and
-// creator, without reviews.
+// adminShopResponse は shop の投稿/moderation の payload である（Rails
+// ShopSerializer、frontend の AdminShop）。moderation note と creator を
+// 持ち、reviews は持たない shop である。
 type adminShopResponse struct {
 	ID             int64            `json:"id"`
 	Name           string           `json:"name"`
@@ -51,9 +52,9 @@ func newAdminShopResponse(detail domain.ShopDetail) adminShopResponse {
 	}
 }
 
-// requireViewer returns the viewer RequireAuth stored in the context. The
-// false branch is a wiring bug (route registered without RequireAuth); it
-// answers 500 so the bug cannot silently act as an anonymous request.
+// requireViewer は RequireAuth が context に格納した viewer を返す。false の
+// 分岐は配線のバグ（RequireAuth なしで登録された route）を表し、500 を返す
+// ことで、そのバグが匿名リクエストとして黙って通用しないようにする。
 func requireViewer(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
 	viewer, ok := ViewerFrom(r.Context())
 	if !ok {
@@ -63,9 +64,9 @@ func requireViewer(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
 	return viewer, ok
 }
 
-// shopIDPathValue parses the {id} path value; false means the uniform
-// shop 404 was already written (non-numeric ids look exactly like missing
-// shops, the existing GET /shops/{id} convention).
+// shopIDPathValue は {id} の path value をパースする。false は統一された
+// shop の 404 が既に書き込まれたことを意味する（数値でない id は存在しない
+// shop とまったく同じに見える。既存の GET /shops/{id} の規約）。
 func shopIDPathValue(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -75,10 +76,10 @@ func shopIDPathValue(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	return id, true
 }
 
-// writeShopModerationError maps the shop submission/moderation usecase
-// errors onto HTTP: authorization (decided in the usecase, never here) to
-// 403, missing shops to the uniform 404, validation to 422, anything else
-// to 500.
+// writeShopModerationError は、shop の投稿/moderation の usecase のエラーを
+// HTTP に対応させる：認可（usecase で決定し、ここでは決して決めない）は
+// 403、存在しない shop は統一された 404、validation は 422、それ以外は
+// 500 である。
 func writeShopModerationError(w http.ResponseWriter, op string, err error) {
 	var vErr *domain.ValidationError
 	switch {
@@ -94,8 +95,8 @@ func writeShopModerationError(w http.ResponseWriter, op string, err error) {
 	}
 }
 
-// handleCreateShop serves POST /shops behind RequireAuth: 201 with the
-// created (pending) shop and its creator, 422 on a blank name.
+// handleCreateShop は RequireAuth の背後で POST /shops を処理する：作成された
+// （pending の）shop とその creator を伴う 201、name が blank の場合は 422。
 func handleCreateShop(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)
@@ -115,8 +116,8 @@ func handleCreateShop(shops *usecase.Shops) http.HandlerFunc {
 	}
 }
 
-// handleAdminListShops serves GET /admin/shops: a top-level array of every
-// shop, newest first, optionally filtered by ?status=.
+// handleAdminListShops は GET /admin/shops を処理する：すべての shop の
+// トップレベルの配列で、新しい順に並び、任意で ?status= により絞り込まれる。
 func handleAdminListShops(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)
@@ -128,7 +129,7 @@ func handleAdminListShops(shops *usecase.Shops) http.HandlerFunc {
 			writeShopModerationError(w, "admin list", err)
 			return
 		}
-		resp := make([]adminShopResponse, 0, len(list)) // non-nil: marshals as []
+		resp := make([]adminShopResponse, 0, len(list)) // nil ではない：[] として marshal される
 		for _, detail := range list {
 			resp = append(resp, newAdminShopResponse(detail))
 		}
@@ -136,8 +137,8 @@ func handleAdminListShops(shops *usecase.Shops) http.HandlerFunc {
 	}
 }
 
-// handleAdminUpdateShop serves PUT /admin/shops/{id}: renames the shop
-// (name is the only editable attribute, Rails parity).
+// handleAdminUpdateShop は PUT /admin/shops/{id} を処理する：shop の名前を
+// 変更する（編集できる属性は name だけ、Rails parity）。
 func handleAdminUpdateShop(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)
@@ -161,8 +162,8 @@ func handleAdminUpdateShop(shops *usecase.Shops) http.HandlerFunc {
 	}
 }
 
-// handleApproveShop serves POST /admin/shops/{id}/approve. Any request
-// body is deliberately ignored — the transition takes no input.
+// handleApproveShop は POST /admin/shops/{id}/approve を処理する。リクエスト
+// の body は意図的に無視する。この遷移は入力を取らない。
 func handleApproveShop(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)
@@ -182,9 +183,9 @@ func handleApproveShop(shops *usecase.Shops) http.HandlerFunc {
 	}
 }
 
-// handleRejectShop serves POST /admin/shops/{id}/reject. The body (and
-// its moderation_note) is optional: an empty body rejects with a null
-// note.
+// handleRejectShop は POST /admin/shops/{id}/reject を処理する。body（および
+// その moderation_note）は任意であり、body が空の場合は null の note で
+// reject する。
 func handleRejectShop(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)

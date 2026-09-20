@@ -10,9 +10,9 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
-// TestShopVisibility pins the shop visibility rule in its single home:
-// anonymous viewers see active shops only, regular users additionally see
-// shops they created (any status), admins see everything.
+// TestShopVisibility は、shop の可視性ルールをその唯一の置き場で固定する。
+// 匿名の viewer は active な shop のみ見え、通常のユーザーは自分が作成した
+// shop（どの status でも）も見え、admin はすべて見える。
 func TestShopVisibility(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"}
 	admin := domain.User{ID: 2, Username: "root", Admin: true}
@@ -49,10 +49,10 @@ func TestShopVisibility(t *testing.T) {
 	}
 }
 
-// TestShopCanBeReviewedBy pins the reviewable rule in its single home
-// (issue #14 AC2): rejected shops are never reviewable, active shops are
-// reviewable by anyone authenticated, pending shops only by their creator
-// or an admin.
+// TestShopCanBeReviewedBy は reviewable ルールをその唯一の置き場で固定する
+// （issue #14 AC2）。rejected の shop は決して reviewable ではなく、active な
+// shop は認証済みの誰でも reviewable であり、pending な shop はその creator か
+// admin のみが reviewable である。
 func TestShopCanBeReviewedBy(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"}
 	bob := domain.User{ID: 2, Username: "bob"}
@@ -86,9 +86,9 @@ func TestShopCanBeReviewedBy(t *testing.T) {
 	}
 }
 
-// TestNewShopSubmission pins the submission constructor: a valid name
-// yields a pending shop with the creator recorded and no moderation note;
-// blank and whitespace-only names fail with the exact Rails message.
+// TestNewShopSubmission は投稿用のコンストラクタを固定する。有効な名前は、
+// creator が記録され moderation note のない pending な shop を返す。空および
+// ホワイトスペースのみの名前は、Rails のメッセージそのままで失敗する。
 func TestNewShopSubmission(t *testing.T) {
 	t.Run("valid name starts pending with creator", func(t *testing.T) {
 		shop, err := domain.NewShopSubmission("New Shack", 7)
@@ -121,14 +121,14 @@ func TestNewShopSubmission(t *testing.T) {
 	}
 }
 
-// TestShopModerationTransitions pins the Rails-parity state machine:
-// approve and reject are unconditional value transitions from any current
-// status; approve clears the moderation note, reject replaces it.
+// TestShopModerationTransitions は Rails parity の state machine を固定する。
+// approve と reject は現在のどの status からでも行える無条件の値遷移であり、
+// approve は moderation note をクリアし、reject は置き換える。
 func TestShopModerationTransitions(t *testing.T) {
 	statuses := []domain.ShopStatus{
 		domain.ShopStatusPending,
 		domain.ShopStatusActive,
-		domain.ShopStatusRejected, // rejected→active re-approval is allowed
+		domain.ShopStatusRejected, // rejected→active への再承認は許される
 	}
 
 	for _, from := range statuses {
@@ -174,8 +174,8 @@ func TestShopModerationTransitions(t *testing.T) {
 	})
 }
 
-// TestShopVisibilityFor pins the descriptor itself, since repositories
-// translate it into SQL parameters.
+// TestShopVisibilityFor は記述子そのものを固定する。repository がそれを SQL
+// パラメータへ変換するためである。
 func TestShopVisibilityFor(t *testing.T) {
 	if vis := domain.ShopVisibilityFor(nil); vis.ViewAll || vis.ViewerID != nil {
 		t.Errorf("anonymous descriptor = %+v, want zero", vis)
