@@ -30,4 +30,7 @@ export interface ReviewUpdateInput {
 export interface ReviewListParams {
   rating?: number
   keyword?: string
+  user_id?: number
+  page?: number
+  per_page?: number
 }

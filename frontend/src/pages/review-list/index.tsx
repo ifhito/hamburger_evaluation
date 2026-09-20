@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
 import { useReviews } from '../../shared/lib/hooks/useReviews'
 import { formatDate } from '../../shared/lib/date'
+import { Button } from '../../shared/ui/Button'
 import { ErrorMessage } from '../../shared/ui/ErrorMessage'
 import { Layout } from '../../shared/ui/Layout'
 
@@ -11,7 +12,7 @@ export default function ReviewListPage() {
   const [keyword, setKeyword] = useState('')
   const [ratingFilter, setRatingFilter] = useState<number | undefined>(undefined)
 
-  const { data: reviews, isLoading, error } = useReviews(
+  const { data: reviews, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useReviews(
     ratingFilter !== undefined || keyword ? { rating: ratingFilter, keyword: keyword || undefined } : undefined,
   )
 
@@ -97,6 +98,13 @@ export default function ReviewListPage() {
           </div>
         ))}
       </div>
+      {hasNextPage && (
+        <div style={{ marginTop: 16, textAlign: 'center' }}>
+          <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
+            Load more
+          </Button>
+        </div>
+      )}
     </Layout>
   )
 }

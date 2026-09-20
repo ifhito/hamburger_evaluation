@@ -3,6 +3,7 @@ import { useAuth } from '../../app/providers/AuthProvider'
 import { useUsers } from '../../shared/lib/hooks/useUsers'
 import { useReviews } from '../../shared/lib/hooks/useReviews'
 import { formatDate } from '../../shared/lib/date'
+import { Button } from '../../shared/ui/Button'
 import { ErrorMessage } from '../../shared/ui/ErrorMessage'
 import { Layout } from '../../shared/ui/Layout'
 
@@ -10,12 +11,17 @@ export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user: authUser } = useAuth()
   const { data: users, isLoading: usersLoading, error: usersError } = useUsers()
-  const { data: allReviews, isLoading: reviewsLoading } = useReviews()
 
   const userId = Number(id)
+  const {
+    data: reviews,
+    isLoading: reviewsLoading,
+    error: reviewsError,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useReviews({ user_id: userId })
   const user = users?.find((u) => u.id === userId)
-  // /users/:id/reviews エンドポイントがまだ存在しないため、クライアント側でフィルタする
-  const userReviews = allReviews?.filter((r) => r.user?.id === userId)
   const isOwner = authUser?.id === userId
 
   return (
@@ -41,11 +47,12 @@ export default function UserDetailPage() {
       )}
 
       <h2 style={{ marginBottom: 16, fontSize: '1.1rem' }}>Reviews</h2>
-      {userReviews && userReviews.length === 0 && (
+      {reviewsError && <ErrorMessage message="Failed to load reviews." />}
+      {reviews && reviews.length === 0 && (
         <p style={{ color: 'var(--color-text-muted)' }}>No reviews yet.</p>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {userReviews?.map((review) => (
+        {reviews?.map((review) => (
           <div
             key={review.id}
             style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: 16, background: '#fff' }}
@@ -59,6 +66,13 @@ export default function UserDetailPage() {
           </div>
         ))}
       </div>
+      {hasNextPage && (
+        <div style={{ marginTop: 16, textAlign: 'center' }}>
+          <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
+            Load more
+          </Button>
+        </div>
+      )}
     </Layout>
   )
 }
