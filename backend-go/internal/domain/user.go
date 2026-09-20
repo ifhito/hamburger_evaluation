@@ -1,7 +1,8 @@
 package domain
 
 // User は account の domain 表現である。password digest は意図的に含めない。
-// 認証情報は entity 上を流れず、persistence/usecase の境界の内側にとどまる。
+// 認証情報が entity 上を流れることは決してなく、persistence/usecase の境界の
+// 内側にとどまる。
 type User struct {
 	ID       int64
 	Username string

@@ -55,7 +55,7 @@ func (s Shop) Approve() Shop {
 }
 
 // Reject は rejected への moderation 遷移であり、現在のどの status からでも
-// 行える。任意の note は以前の note を置き換える（nil ならクリアされる）。
+// 行える。省略可能な note は以前の note を置き換える（nil ならクリアされる）。
 func (s Shop) Reject(note *string) Shop {
 	s.Status = ShopStatusRejected
 	s.ModerationNote = note
@@ -120,7 +120,7 @@ type UserRef struct {
 	Username string
 }
 
-// ShopDetail は、creator と non-discarded な review を持つ shop である。
+// ShopDetail は、creator と discard されていない review を持つ shop である。
 type ShopDetail struct {
 	Shop
 	Creator *UserRef // shop に creator がいない場合は nil

@@ -198,7 +198,7 @@ func (r *ReviewRepository) CreateReviewForNamedBurger(ctx context.Context, shopI
 // UpdateReviewContent は、id の、まだ kept な review の rating と comment
 // だけを永続化し、保存された行を返す。存在しないか discard 済みの場合は
 // domain.ErrReviewNotFound を返す（トランザクションは rollback されるので、
-// stats には手が付かない）。カラム単位に限定される：discarded_at は決して
+// stats は変更されない）。カラム単位に限定される：discarded_at は決して
 // 書き込まれないので、edit が soft delete を復活させることも、soft delete と
 // race することもない。update と burger_stats の再計算は 1 つの
 // トランザクションで行われる。
@@ -274,7 +274,7 @@ func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, i
 // DiscardReview は review を soft delete する（discarded_at に時刻を刻み、
 // hard DELETE は決して行わない）。存在しない review や、すでに discard 済みの
 // review はどの行にも一致せず、domain.ErrReviewNotFound を返す（トランザクション
-// は rollback されるので、stats には手が付かない）。discard と
+// は rollback されるので、stats は変更されない）。discard と
 // burger_stats の再計算は 1 つのトランザクションで行われる。
 func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
 	return withTx(ctx, r.db, "discard review", func(q *sqlcgen.Queries) error {
@@ -298,9 +298,9 @@ func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
 // ならず、この helper が自前のトランザクションを開くことは決してない。
 // ロックは insert の「前」に取る。insert の FK チェックが burgers 行に
 // KEY SHARE ロックを取り、その後でそれを FOR UPDATE に昇格させると、同時に
-// 走る 2 つの creator がデッドロックしうるからである。その場合、
-// recalculateBurgerStats 自身のロックはコストのかからない再取得になる
-// （PostgreSQL では行ロックはトランザクションが所有する）。op はエラー
+// 走る 2 つの creator がデッドロックしうるからである。こうして先に取って
+// おけば、recalculateBurgerStats 自身のロックはコストのかからない再取得に
+// なる（PostgreSQL では行ロックはトランザクションが所有する）。op はエラー
 // メッセージの接頭辞になり、各呼び出し箇所の文言を保つ。
 func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domain.Review, op string) (sqlcgen.Review, error) {
 	if _, err := q.LockBurgerForStats(ctx, review.BurgerID); err != nil {

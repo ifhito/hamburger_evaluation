@@ -36,7 +36,7 @@ WHERE r.burger_id = $1
 ORDER BY r.id;
 
 -- name: ListReviewerRatings :many
--- reviewer trust の履歴：各 reviewer がすべての burger にわたってつけた
+-- reviewer trust の履歴：各 reviewer が「すべての」burger にわたってつけた
 -- kept な rating（Rails の user.reviews.kept に対応する）。
 SELECT r.user_id, r.rating
 FROM reviews r

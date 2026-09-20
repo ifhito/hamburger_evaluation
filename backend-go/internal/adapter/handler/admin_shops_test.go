@@ -295,8 +295,8 @@ func TestAdminUpdateShop(t *testing.T) {
 
 // TestAdminApproveShop は POST /admin/shops/{id}/approve を扱う：status が
 // active で note がクリアされた 200（rejected からの再承認でも同様）、
-// 任意の request body は無視されること、未知の id には 404、そして承認された
-// shop が匿名でも見えるようになること。
+// どのような request body も無視されること、未知の id には 404、そして
+// 承認された shop が匿名でも見えるようになること。
 func TestAdminApproveShop(t *testing.T) {
 	repo := seedShops(1)
 	repo.shops[2].Shop.ModerationNote = shopPtr("needs fixes")

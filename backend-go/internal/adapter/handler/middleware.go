@@ -123,9 +123,9 @@ func OptionalAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 					r = r.WithContext(context.WithValue(r.Context(), viewerKey, viewer))
 				case !errors.Is(err, domain.ErrUnauthenticated):
 					// infrastructure の障害は契約上握りつぶされる
-					// （この middleware は決して拒否しない）が、黙殺
-					// してはならない。token 自体は決してログに
-					// 記録しない。
+					// （この middleware は決して拒否しない）が、何も
+					// 記録しないままにしてはならない。token 自体は
+					// 決してログに記録しない。
 					log.Printf("auth: optional authenticate token: %v", err)
 				}
 			}

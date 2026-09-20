@@ -482,7 +482,7 @@ func TestReviewsUpdate(t *testing.T) {
 }
 
 // TestReviewsDelete は soft delete のフローを扱う。author のみ（AC3）、
-// load した review に対してちょうど discard が呼ばれること
+// load した review そのものに対して discard が呼ばれること
 // （updateReviewContent は未設定のままなので、どの content の書き込みも
 // panic する）、そして 404 である。
 func TestReviewsDelete(t *testing.T) {

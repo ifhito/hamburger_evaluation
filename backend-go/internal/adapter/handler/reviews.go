@@ -188,8 +188,8 @@ func readPhotoPart(ctx context.Context, w http.ResponseWriter, part *multipart.P
 }
 
 // writeMultipartReadError は、multipart のストリーム途中の読み取り失敗を
-// 対応させる：グローバルな body cap の MaxBytesReader は 413 として現れ、
-// それ以外は不正な body（400）として扱う。
+// HTTP に対応させる：グローバルな body cap の MaxBytesReader は 413 として
+// 現れ、それ以外は不正な body（400）として扱う。
 func writeMultipartReadError(w http.ResponseWriter, err error) {
 	var maxErr *http.MaxBytesError
 	if errors.As(err, &maxErr) {
@@ -257,7 +257,7 @@ func writeReviewError(w http.ResponseWriter, op string, err error) {
 	}
 }
 
-// reviewListFilter は GET /reviews の任意の rating/keyword/shop_id の
+// reviewListFilter は GET /reviews の省略可能な rating/keyword/shop_id の
 // クエリフィルタをパースする（Rails ReviewQuery）。空の値は存在しないものと
 // 数える（params[:x].present?）。false は、rating または shop_id が整数で
 // ない場合の 422 が既に書き込まれたことを意味する。これは Rails からの

@@ -232,7 +232,7 @@ func TestUsersUpdateChanges(t *testing.T) {
 }
 
 // profileChangesString は、失敗時に読みやすいよう、ポインタのフィールドを
-// 描画する。
+// 文字列に整形する。
 func profileChangesString(c usecase.ProfileChanges) string {
 	deref := func(p *string) string {
 		if p == nil {

@@ -94,7 +94,7 @@ type ListReviewerRatingsRow struct {
 	Rating int16
 }
 
-// reviewer trust の履歴：各 reviewer がすべての burger にわたってつけた
+// reviewer trust の履歴：各 reviewer が「すべての」burger にわたってつけた
 // kept な rating（Rails の user.reviews.kept に対応する）。
 func (q *Queries) ListReviewerRatings(ctx context.Context, userIds []int64) ([]ListReviewerRatingsRow, error) {
 	rows, err := q.db.Query(ctx, listReviewerRatings, userIds)

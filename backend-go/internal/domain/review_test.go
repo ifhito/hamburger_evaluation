@@ -52,8 +52,8 @@ func TestValidateReviewContent(t *testing.T) {
 }
 
 // TestNewReview はコンストラクタを固定する。有効な入力は、comment をそのまま
-// 保持し（trim しない）、author/burger を記録した review を返す。無効な入力は
-// review を返さずに ValidationError を表に出す。
+// 保持し（決して trim しない）、author/burger を記録した review を返す。
+// 無効な入力は review を返さずに ValidationError を表に出す。
 func TestNewReview(t *testing.T) {
 	t.Run("valid input builds the review", func(t *testing.T) {
 		review, err := domain.NewReview(4, " Tasty ", 7, 9)

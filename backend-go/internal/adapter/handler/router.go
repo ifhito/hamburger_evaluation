@@ -9,7 +9,7 @@ import (
 )
 
 // route は 1 つの path の handler を HTTP method ごとに宣言し、加えて、その
-// path のすべての method に適用される任意の middleware を宣言する。
+// path のすべての method に適用される省略可能な middleware を宣言する。
 // methodMiddleware は、個々の method についてその path 単位の middleware を
 // 上書きするので、1 つの path が、重複する ServeMux パターンなしに、
 // 例：GET を OptionalAuth の背後で、POST を RequireAuth の背後で提供できる。

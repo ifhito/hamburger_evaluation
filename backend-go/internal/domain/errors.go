@@ -24,7 +24,7 @@ var (
 	// その shop を見る権限がないことを表す。この 2 つのケースは意図的に同一
 	// であり、隠された shop の存在が漏れないようにしている。
 	ErrShopNotFound = errors.New("shop not found")
-	// ErrReviewNotFound は、lookup に一致する non-discarded な review が
+	// ErrReviewNotFound は、lookup に一致する discard されていない review が
 	// ないことを表す。存在しない review と soft delete 済みの review は
 	// 意図的に同一である。
 	ErrReviewNotFound = errors.New("review not found")

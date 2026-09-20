@@ -213,7 +213,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 	t.Run("truncated body without the closing boundary returns 400", func(t *testing.T) {
 		// field の part は完全だが、最後の boundary の末尾 "--\r\n" が切り
 		// 落とされている：HTTP としては完結しているが multipart としては途中で
-		// 切れている。Go 1.22 の NextPart はこれを WRAP された io.EOF として
+		// 切れている。Go 1.22 の NextPart はこれを「wrap された」io.EOF として
 		// 報告する。これを正常な終端として扱うと、photo が黙って捨てられたまま
 		// 201 を返してしまう。
 		full, contentType := multipartBody(t, fields, jpegBytes(t, 4096))

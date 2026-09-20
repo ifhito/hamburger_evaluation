@@ -51,7 +51,7 @@ func TestReviewRepository(t *testing.T) {
 	rejected := insertRow(ctx, t, conn, insertShop, "Rejected Grill", 2, nil, nil)
 
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-	cheese := insertRow(ctx, t, conn, insertBurger, "Cheese")   // active な shop の両方に link されている
+	cheese := insertRow(ctx, t, conn, insertBurger, "Cheese")   // active な shop の「両方」に link されている
 	plain := insertRow(ctx, t, conn, insertBurger, "Plain")     // active1 だけに link されている。stats なし
 	hidden := insertRow(ctx, t, conn, insertBurger, "Hidden")   // pending だけに link されている
 	outcast := insertRow(ctx, t, conn, insertBurger, "Outcast") // rejected だけに link されている
@@ -69,7 +69,7 @@ func TestReviewRepository(t *testing.T) {
 
 	// 読み取り系のサブテストは、cheese についてこのリテラルの stats を
 	// アサートする。S7 の再計算は review の書き込みのたびにこの行を上書きする
-	// ので、以下の書き込み系の各サブテストは、その cleanup で、この upsert に
+	// ので、以下の書き込み系の各サブテストは、自身の後始末で、この upsert に
 	// よってこの行を再度 seed する。
 	seedCheeseStats := func(t *testing.T) {
 		t.Helper()
@@ -104,7 +104,7 @@ func TestReviewRepository(t *testing.T) {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		// cheese の review は、cheese が active な 2 つの shop に link されて
-		// いても、ちょうど 1 回だけ現れなければならない（結合を増殖させる JOIN
+		// いても、ちょうど 1 回だけ現れなければならない（行を増殖させる JOIN
 		// ではなく EXISTS）。pending だけ・rejected だけの burger の review と、
 		// discard 済みの review は現れない（SQL レベルでの AC5/AC6）。
 		if got, want := reviewIDs(reviews), []int64{rTie2, rTie1, rOld}; !reflect.DeepEqual(got, want) {
@@ -299,7 +299,7 @@ func TestReviewRepository(t *testing.T) {
 		if want := (domain.ShopReviewBurger{ID: plain, Name: "Plain"}); !reflect.DeepEqual(statless, want) {
 			t.Errorf("stats-less burger = %+v, want %+v", statless, want)
 		}
-		// 別の shop に属する既存の burger と未知の burger は同一である。
+		// 別の shop に属する既存の burger と未知の burger は、区別できない。
 		for name, burgerID := range map[string]int64{"unlinked": hidden, "unknown": 99999} {
 			if _, err := repo.GetShopBurger(ctx, active1, burgerID); !errors.Is(err, domain.ErrBurgerNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrBurgerNotFound)

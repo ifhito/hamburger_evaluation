@@ -63,8 +63,8 @@ type reviewBurgerResponse struct {
 	Confidence    float64 `json:"confidence"`
 }
 
-// viewerPtr は OptionalAuth が context に置いた viewer を、usecase の任意の
-// 形式（nil = 匿名）に変換する。
+// viewerPtr は OptionalAuth が context に置いた viewer を、usecase の
+// 省略可能な形（nil = 匿名）に変換する。
 func viewerPtr(r *http.Request) *domain.User {
 	if viewer, ok := ViewerFrom(r.Context()); ok {
 		return &viewer
@@ -72,9 +72,9 @@ func viewerPtr(r *http.Request) *domain.User {
 	return nil
 }
 
-// queryInt は名前付きの query parameter を int としてパースし、存在しない
-// または数値でない場合は 0（デフォルトへの fall back を示す usecase の
-// マーカー）を返す。
+// queryInt は指定された名前の query parameter を int としてパースし、
+// 存在しない、または数値でない場合は 0（デフォルトへのフォールバックを示す
+// usecase のマーカー）を返す。
 func queryInt(r *http.Request, name string) int {
 	n, err := strconv.Atoi(r.URL.Query().Get(name))
 	if err != nil {
@@ -83,9 +83,9 @@ func queryInt(r *http.Request, name string) int {
 	return n
 }
 
-// handleListShops は GET /shops を処理する：（任意の）viewer から見える
-// shop のトップレベルの JSON 配列で、keyword で絞り込まれ、ページネーション
-// される。
+// handleListShops は GET /shops を処理する：（存在する場合の）viewer から
+// 見える shop のトップレベルの JSON 配列で、keyword で絞り込まれ、
+// ページネーションされる。
 func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		list, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"),

@@ -10,9 +10,9 @@ import (
 )
 
 // beginnerDBTX は、トランザクションを扱う repository（reviews、users）の
-// 接続への依存である。sqlc のクエリ面に Begin を加えたもので、各書き込みが
-// その書き込みと burger_stats の再計算を 1 つのトランザクションで包める
-// ようにする。*pgxpool.Pool と *pgx.Conn のどちらもこれを満たす。
+// 接続への依存である。sqlc のクエリ用インターフェースに Begin を加えたもので、
+// 各書き込みがその書き込みと burger_stats の再計算を 1 つのトランザクション
+// で包めるようにする。*pgxpool.Pool と *pgx.Conn のどちらもこれを満たす。
 type beginnerDBTX interface {
 	sqlcgen.DBTX
 	Begin(ctx context.Context) (pgx.Tx, error)

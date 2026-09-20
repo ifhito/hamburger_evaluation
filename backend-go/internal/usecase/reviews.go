@@ -71,7 +71,7 @@ type ReviewRepository interface {
 	DiscardReview(ctx context.Context, id int64) error
 }
 
-// ReviewListFilter は、GET /reviews の任意のクエリフィルタを保持する。
+// ReviewListFilter は、GET /reviews の省略可能なクエリフィルタを保持する。
 // Rails の ReviewQuery を再現しており、指定されたフィルタはそれぞれフィードを
 // 絞り込み、指定されたフィルタはすべて AND で組み合わされる。nil の
 // Rating/ShopID と空の Keyword は「absent」を意味する（Rails の

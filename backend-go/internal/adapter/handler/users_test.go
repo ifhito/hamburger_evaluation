@@ -501,7 +501,8 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	}
 
 	// AC5：feed は A の review を隠し、B の review を残し、共有の burger に
-	// 表示される review_count（1）は feed 上のその review の件数と等しくなる。
+	// 表示される review_count（1）は feed 上のその burger の review の件数と
+	// 等しくなる。
 	rec = do(router, http.MethodGet, "/reviews", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("feed status = %d (body %s)", rec.Code, rec.Body)

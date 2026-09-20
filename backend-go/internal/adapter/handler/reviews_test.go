@@ -484,8 +484,8 @@ func TestCreateReview(t *testing.T) {
 	})
 }
 
-// doResult は、テーブル用の helper のために、記録された status/body の組を
-// 保持する。
+// doResult は、テーブル駆動テストの helper 用に、記録された status/body の
+// 組を保持する。
 type doResult struct {
 	code int
 	body string
