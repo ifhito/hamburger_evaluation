@@ -124,7 +124,10 @@ func TestRunShutsDownCleanly(t *testing.T) {
 		Port: "0",
 		// Deliberately unreachable; credentials are dummies for parsing only.
 		DatabaseURL: "postgres://user:pass@127.0.0.1:1/hamburger_test?sslmode=disable",
-		DBMaxConns:  1,
+		// JWT_SECRET is required by config; the value is a test dummy.
+		JWTSecret:  "test-secret",
+		JWTTTL:     time.Minute,
+		DBMaxConns: 1,
 	}
 
 	addrCh := make(chan string, 1)

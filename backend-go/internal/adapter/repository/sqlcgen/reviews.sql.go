@@ -45,66 +45,146 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 	return i, err
 }
 
-const deleteReview = `-- name: DeleteReview :exec
-DELETE FROM reviews
-WHERE id = $1
+const discardReview = `-- name: DiscardReview :one
+UPDATE reviews
+SET discarded_at = now(),
+    updated_at = now()
+WHERE id = $1 AND discarded_at IS NULL
+RETURNING burger_id
 `
 
-func (q *Queries) DeleteReview(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteReview, id)
-	return err
+// Column-scoped soft delete: only stamps discarded_at, and only once —
+// an already-discarded review matches no row, surfacing as not found.
+// Returns burger_id so the caller can recalculate that burger's stats in
+// the same transaction.
+func (q *Queries) DiscardReview(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, discardReview, id)
+	var burger_id int64
+	err := row.Scan(&burger_id)
+	return burger_id, err
 }
 
-const getReview = `-- name: GetReview :one
-SELECT id, rating, comment, user_id, burger_id, discarded_at, created_at, updated_at FROM reviews
-WHERE id = $1
+const getReviewDetail = `-- name: GetReviewDetail :one
+SELECT r.id, r.rating, r.comment, r.created_at,
+       u.id AS user_id, u.username AS user_username,
+       b.id AS burger_id, b.name AS burger_name,
+       bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
+FROM reviews r
+JOIN users u ON u.id = r.user_id
+JOIN burgers b ON b.id = r.burger_id
+LEFT JOIN burger_stats bs ON bs.burger_id = b.id
+WHERE r.id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL
 `
 
-func (q *Queries) GetReview(ctx context.Context, id int64) (Review, error) {
-	row := q.db.QueryRow(ctx, getReview, id)
-	var i Review
+type GetReviewDetailRow struct {
+	ID            int64
+	Rating        int16
+	Comment       pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UserID        int64
+	UserUsername  string
+	BurgerID      int64
+	BurgerName    string
+	ReviewCount   pgtype.Int8
+	AverageRating pgtype.Float8
+	WeightedScore pgtype.Float8
+	Confidence    pgtype.Float8
+}
+
+// One non-discarded review of a non-discarded user with author, burger,
+// and stats — serves both the public detail endpoint and the
+// load-for-authorization of edit and delete (user_id carries the
+// ownership check). A discarded author makes the review indistinguishable
+// from a missing one (S8).
+func (q *Queries) GetReviewDetail(ctx context.Context, id int64) (GetReviewDetailRow, error) {
+	row := q.db.QueryRow(ctx, getReviewDetail, id)
+	var i GetReviewDetailRow
 	err := row.Scan(
 		&i.ID,
 		&i.Rating,
 		&i.Comment,
-		&i.UserID,
-		&i.BurgerID,
-		&i.DiscardedAt,
 		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.UserID,
+		&i.UserUsername,
+		&i.BurgerID,
+		&i.BurgerName,
+		&i.ReviewCount,
+		&i.AverageRating,
+		&i.WeightedScore,
+		&i.Confidence,
 	)
 	return i, err
 }
 
-const listReviews = `-- name: ListReviews :many
-SELECT id, rating, comment, user_id, burger_id, discarded_at, created_at, updated_at FROM reviews
-ORDER BY id
-LIMIT $1 OFFSET $2
+const listPublicReviews = `-- name: ListPublicReviews :many
+SELECT r.id, r.rating, r.comment, r.created_at,
+       u.id AS user_id, u.username AS user_username,
+       b.id AS burger_id, b.name AS burger_name,
+       bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
+FROM reviews r
+JOIN users u ON u.id = r.user_id
+JOIN burgers b ON b.id = r.burger_id
+LEFT JOIN burger_stats bs ON bs.burger_id = b.id
+WHERE r.discarded_at IS NULL
+  AND u.discarded_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM shops_burgers sb
+      JOIN shops s ON s.id = sb.shop_id
+      WHERE sb.burger_id = r.burger_id AND s.status = 1
+  )
+ORDER BY r.created_at DESC, r.id DESC
+LIMIT $2 OFFSET $1
 `
 
-type ListReviewsParams struct {
-	Limit  int32
-	Offset int32
+type ListPublicReviewsParams struct {
+	PageOffset int32
+	PageLimit  int32
 }
 
-func (q *Queries) ListReviews(ctx context.Context, arg ListReviewsParams) ([]Review, error) {
-	rows, err := q.db.Query(ctx, listReviews, arg.Limit, arg.Offset)
+type ListPublicReviewsRow struct {
+	ID            int64
+	Rating        int16
+	Comment       pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UserID        int64
+	UserUsername  string
+	BurgerID      int64
+	BurgerName    string
+	ReviewCount   pgtype.Int8
+	AverageRating pgtype.Float8
+	WeightedScore pgtype.Float8
+	Confidence    pgtype.Float8
+}
+
+// Global review feed: non-discarded reviews of non-discarded users whose
+// burger is served by at least one active shop (status 1), with author,
+// burger, and stats in one query (no N+1). EXISTS instead of a plain JOIN
+// on shops_burgers so a burger linked to several active shops still
+// yields exactly one row. The u.discarded_at filter hides discarded
+// users' (still kept) reviews from the feed (S8).
+func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsParams) ([]ListPublicReviewsRow, error) {
+	rows, err := q.db.Query(ctx, listPublicReviews, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Review
+	var items []ListPublicReviewsRow
 	for rows.Next() {
-		var i Review
+		var i ListPublicReviewsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Rating,
 			&i.Comment,
-			&i.UserID,
-			&i.BurgerID,
-			&i.DiscardedAt,
 			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.UserID,
+			&i.UserUsername,
+			&i.BurgerID,
+			&i.BurgerName,
+			&i.ReviewCount,
+			&i.AverageRating,
+			&i.WeightedScore,
+			&i.Confidence,
 		); err != nil {
 			return nil, err
 		}
@@ -116,30 +196,57 @@ func (q *Queries) ListReviews(ctx context.Context, arg ListReviewsParams) ([]Rev
 	return items, nil
 }
 
-const updateReview = `-- name: UpdateReview :one
+const listUserKeptReviewBurgerIDs = `-- name: ListUserKeptReviewBurgerIDs :many
+SELECT DISTINCT burger_id FROM reviews
+WHERE user_id = $1 AND discarded_at IS NULL
+ORDER BY burger_id
+`
+
+// The distinct burgers the user's kept reviews touch, for the S8
+// user-discard stats recalculation. The ascending burger_id ORDER BY is
+// load-bearing: recalculateBurgerStats locks each burger FOR UPDATE, and
+// all multi-burger callers must lock in ascending burger_id order so
+// overlapping burger sets cannot deadlock.
+func (q *Queries) ListUserKeptReviewBurgerIDs(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listUserKeptReviewBurgerIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var burger_id int64
+		if err := rows.Scan(&burger_id); err != nil {
+			return nil, err
+		}
+		items = append(items, burger_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateReviewContent = `-- name: UpdateReviewContent :one
 UPDATE reviews
 SET rating = $2,
     comment = $3,
-    discarded_at = $4,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND discarded_at IS NULL
 RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, updated_at
 `
 
-type UpdateReviewParams struct {
-	ID          int64
-	Rating      int16
-	Comment     pgtype.Text
-	DiscardedAt pgtype.Timestamptz
+type UpdateReviewContentParams struct {
+	ID      int64
+	Rating  int16
+	Comment pgtype.Text
 }
 
-func (q *Queries) UpdateReview(ctx context.Context, arg UpdateReviewParams) (Review, error) {
-	row := q.db.QueryRow(ctx, updateReview,
-		arg.ID,
-		arg.Rating,
-		arg.Comment,
-		arg.DiscardedAt,
-	)
+// Column-scoped edit: touches only rating and comment (never
+// discarded_at), and only while the review is still kept, so an edit can
+// neither resurrect nor race a concurrent soft delete.
+func (q *Queries) UpdateReviewContent(ctx context.Context, arg UpdateReviewContentParams) (Review, error) {
+	row := q.db.QueryRow(ctx, updateReviewContent, arg.ID, arg.Rating, arg.Comment)
 	var i Review
 	err := row.Scan(
 		&i.ID,

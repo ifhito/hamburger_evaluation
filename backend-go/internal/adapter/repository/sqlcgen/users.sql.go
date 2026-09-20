@@ -7,8 +7,6 @@ package sqlcgen
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
@@ -45,14 +43,63 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
-const deleteUser = `-- name: DeleteUser :exec
-DELETE FROM users
-WHERE id = $1
+const discardUser = `-- name: DiscardUser :one
+UPDATE users
+SET discarded_at = now(),
+    updated_at = now()
+WHERE id = $1 AND discarded_at IS NULL
+RETURNING id
 `
 
-func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteUser, id)
-	return err
+// Column-scoped soft delete: only stamps discarded_at, and only once —
+// an already-discarded user matches no row, surfacing as not found
+// (mirrors DiscardReview).
+func (q *Queries) DiscardUser(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRow(ctx, discardUser, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getActiveUserByEmail = `-- name: GetActiveUserByEmail :one
+SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
+WHERE email = $1 AND discarded_at IS NULL
+`
+
+func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getActiveUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getActiveUserByID = `-- name: GetActiveUserByID :one
+SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
+WHERE id = $1 AND discarded_at IS NULL
+`
+
+func (q *Queries) GetActiveUserByID(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRow(ctx, getActiveUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getUser = `-- name: GetUser :one
@@ -76,19 +123,16 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 	return i, err
 }
 
-const listUsers = `-- name: ListUsers :many
+const listActiveUsers = `-- name: ListActiveUsers :many
 SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
+WHERE discarded_at IS NULL
 ORDER BY id
-LIMIT $1 OFFSET $2
 `
 
-type ListUsersParams struct {
-	Limit  int32
-	Offset int32
-}
-
-func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsers, arg.Limit, arg.Offset)
+// User index: every kept user, id ascending. No LIMIT/OFFSET — Rails
+// parity: the index returns all kept users unpaginated.
+func (q *Queries) ListActiveUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.Query(ctx, listActiveUsers)
 	if err != nil {
 		return nil, err
 	}
@@ -116,36 +160,86 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 	return items, nil
 }
 
-const updateUser = `-- name: UpdateUser :one
+const updateUserEmail = `-- name: UpdateUserEmail :one
 UPDATE users
 SET email = $2,
-    username = $3,
-    password_digest = $4,
-    admin = $5,
-    discarded_at = $6,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND discarded_at IS NULL
 RETURNING id, email, username, password_digest, admin, discarded_at, created_at, updated_at
 `
 
-type UpdateUserParams struct {
-	ID             int64
-	Email          string
-	Username       string
-	PasswordDigest string
-	Admin          bool
-	DiscardedAt    pgtype.Timestamptz
+type UpdateUserEmailParams struct {
+	ID    int64
+	Email string
 }
 
-func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUser,
-		arg.ID,
-		arg.Email,
-		arg.Username,
-		arg.PasswordDigest,
-		arg.Admin,
-		arg.DiscardedAt,
+// Column-scoped profile update: touches only email (see
+// UpdateUserUsername for the rationale).
+func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserEmail, arg.ID, arg.Email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const updateUserPasswordDigest = `-- name: UpdateUserPasswordDigest :one
+UPDATE users
+SET password_digest = $2,
+    updated_at = now()
+WHERE id = $1 AND discarded_at IS NULL
+RETURNING id, email, username, password_digest, admin, discarded_at, created_at, updated_at
+`
+
+type UpdateUserPasswordDigestParams struct {
+	ID             int64
+	PasswordDigest string
+}
+
+// Column-scoped profile update: touches only password_digest (see
+// UpdateUserUsername for the rationale).
+func (q *Queries) UpdateUserPasswordDigest(ctx context.Context, arg UpdateUserPasswordDigestParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserPasswordDigest, arg.ID, arg.PasswordDigest)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserUsername = `-- name: UpdateUserUsername :one
+UPDATE users
+SET username = $2,
+    updated_at = now()
+WHERE id = $1 AND discarded_at IS NULL
+RETURNING id, email, username, password_digest, admin, discarded_at, created_at, updated_at
+`
+
+type UpdateUserUsernameParams struct {
+	ID       int64
+	Username string
+}
+
+// Column-scoped profile update: touches only username, and only while
+// the user is still kept, so a concurrent email/password change or soft
+// delete is never reverted from a stale snapshot.
+func (q *Queries) UpdateUserUsername(ctx context.Context, arg UpdateUserUsernameParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserUsername, arg.ID, arg.Username)
 	var i User
 	err := row.Scan(
 		&i.ID,

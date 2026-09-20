@@ -7,6 +7,8 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createShopBurger = `-- name: CreateShopBurger :exec
@@ -37,6 +39,46 @@ type DeleteShopBurgerParams struct {
 func (q *Queries) DeleteShopBurger(ctx context.Context, arg DeleteShopBurgerParams) error {
 	_, err := q.db.Exec(ctx, deleteShopBurger, arg.ShopID, arg.BurgerID)
 	return err
+}
+
+const getShopBurgerWithStats = `-- name: GetShopBurgerWithStats :one
+SELECT b.id, b.name,
+       bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
+FROM burgers b
+JOIN shops_burgers sb ON sb.burger_id = b.id
+LEFT JOIN burger_stats bs ON bs.burger_id = b.id
+WHERE sb.shop_id = $1 AND b.id = $2
+`
+
+type GetShopBurgerWithStatsParams struct {
+	ShopID   int64
+	BurgerID int64
+}
+
+type GetShopBurgerWithStatsRow struct {
+	ID            int64
+	Name          string
+	ReviewCount   pgtype.Int8
+	AverageRating pgtype.Float8
+	WeightedScore pgtype.Float8
+	Confidence    pgtype.Float8
+}
+
+// The burger only when it is linked to the shop via shops_burgers, with
+// its stats (NULLs when none calculated yet) — the review submission
+// existence check and response payload in one query.
+func (q *Queries) GetShopBurgerWithStats(ctx context.Context, arg GetShopBurgerWithStatsParams) (GetShopBurgerWithStatsRow, error) {
+	row := q.db.QueryRow(ctx, getShopBurgerWithStats, arg.ShopID, arg.BurgerID)
+	var i GetShopBurgerWithStatsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ReviewCount,
+		&i.AverageRating,
+		&i.WeightedScore,
+		&i.Confidence,
+	)
+	return i, err
 }
 
 const listShopBurgersByShop = `-- name: ListShopBurgersByShop :many
