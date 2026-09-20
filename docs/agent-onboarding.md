@@ -11,8 +11,7 @@
 ```mermaid
 flowchart TD
     Dev[Developer] -->|reads first| AGENTS[AGENTS.md]
-    Claude[Claude Code] -->|loads wrapper/context| CLAUDE[CLAUDE.md]
-    CLAUDE --> AGENTS
+    Claude[Claude Code] -->|loads context| CLAUDE[CLAUDE.md]
     Codex[Codex CLI] -->|reads repo instructions| AGENTS
     Hermes[Hermes Agent] -->|reads repo instructions| AGENTS
 
@@ -34,7 +33,7 @@ flowchart TD
 ## 責任範囲
 
 - `AGENTS.md`: 全エージェント共通の最小ルール、検証コマンド、禁止範囲。
-- `CLAUDE.md`: Claude Code が読む入口。原則 `@AGENTS.md` への薄いラッパー。
+- `CLAUDE.md`: Claude Code が読む入口。プロジェクト概要、アーキテクチャ、コマンド、エンドポイント、スキーマを持つ。
 - `.agents/skills/*`: Claude / Codex / Hermes で共有する、1ジョブ単位の再利用手順。
 - `.claude/skills/*`: Claude Code から `.agents/skills/*` を読むための symlink。
 - `.claude/agents/*`: 調査・レビュー・テストを親コンテキストから分離する subagent 定義。
@@ -55,7 +54,7 @@ flowchart TD
 
 ## 触ってはいけないファイル・操作
 
-- `.env*`, `backend/.env*`, `frontend/.env*`, `secrets/**`, `backend/.kamal/secrets`, `backend/config/master.key`。
+- `.env*`, `backend-go/.env*`, `frontend/.env*`, `secrets/**`。
 - `~/.claude`, `~/.hermes`, `~/.codex` などのグローバル設定。必要なら別PRや明示確認を取る。
 - `.claude/settings.local.json` の共有前提化。個人ローカル設定として扱う。
 - ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
