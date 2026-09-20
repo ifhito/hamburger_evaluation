@@ -1,18 +1,22 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { GuestRoute } from './GuestRoute'
+import { AdminRoute } from './AdminRoute'
 
-import ShopListPage from '../../pages/shop-list'
-import ShopDetailPage from '../../pages/shop-detail'
-import ReviewListPage from '../../pages/review-list'
-import ReviewDetailPage from '../../pages/review-detail'
-import ReviewNewPage from '../../pages/review-new'
-import ReviewEditPage from '../../pages/review-edit'
-import SignupPage from '../../pages/signup'
-import SigninPage from '../../pages/signin'
-import SignoutPage from '../../pages/signout'
-import UserDetailPage from '../../pages/user-detail'
-import UserUpdatePage from '../../pages/user-update'
+import ShopListPage from '../../domains/shops/pages/ShopListPage'
+import ShopDetailPage from '../../domains/shops/pages/ShopDetailPage'
+import ShopNewPage from '../../domains/shops/pages/ShopNewPage'
+import AdminShopListPage from '../../domains/shops/pages/admin/AdminShopListPage'
+import AdminShopEditPage from '../../domains/shops/pages/admin/AdminShopEditPage'
+import ReviewListPage from '../../domains/reviews/pages/ReviewListPage'
+import ReviewDetailPage from '../../domains/reviews/pages/ReviewDetailPage'
+import ReviewNewPage from '../../domains/reviews/pages/ReviewNewPage'
+import ReviewEditPage from '../../domains/reviews/pages/ReviewEditPage'
+import SignupPage from '../../domains/auth/pages/SignupPage'
+import SigninPage from '../../domains/auth/pages/SigninPage'
+import SignoutPage from '../../domains/auth/pages/SignoutPage'
+import UserDetailPage from '../../domains/users/pages/UserDetailPage'
+import UserUpdatePage from '../../domains/users/pages/UserUpdatePage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/shops" replace /> },
@@ -37,10 +41,20 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
+      { path: '/shops/new', element: <ShopNewPage /> },
       { path: '/reviews/new', element: <ReviewNewPage /> },
       { path: '/reviews/:id/edit', element: <ReviewEditPage /> },
       { path: '/signout', element: <SignoutPage /> },
       { path: '/users/:id/edit', element: <UserUpdatePage /> },
+    ],
+  },
+
+  // Admin-only routes
+  {
+    element: <AdminRoute />,
+    children: [
+      { path: '/admin/shops', element: <AdminShopListPage /> },
+      { path: '/admin/shops/:id/edit', element: <AdminShopEditPage /> },
     ],
   },
 ])
