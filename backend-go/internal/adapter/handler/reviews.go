@@ -265,12 +265,13 @@ func writeReviewError(w http.ResponseWriter, op string, err error) {
 	}
 }
 
-// reviewListFilter は GET /reviews の省略可能な rating/keyword/shop_id の
-// クエリフィルタをパースする（Rails ReviewQuery）。空の値は存在しないものと
-// 数える（params[:x].present?）。false は、rating または shop_id が整数で
-// ない場合の 422 が既に書き込まれたことを意味する。これは Rails からの
-// 意図的な fail-loud な乖離であり、Rails はゴミを 0 にキャストして黙って
-// 空のリストを返す。
+// reviewListFilter は GET /reviews の省略可能な rating/keyword/shop_id/user_id の
+// クエリフィルタをパースする（Rails ReviewQuery。user_id は本 API の拡張）。
+// 空の値は存在しないものと数える（params[:x].present?）。false は、rating、
+// shop_id、user_id のいずれかが整数でない場合の 422 が既に書き込まれたことを
+// 意味する。rating と shop_id については Rails からの意図的な fail-loud な
+// 乖離であり（Rails はゴミを 0 にキャストして黙って空のリストを返す）、
+// user_id は Rails に対応物がないため、同じ fail-loud の形に揃えただけである。
 func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewListFilter, bool) {
 	filter := usecase.ReviewListFilter{Keyword: r.URL.Query().Get("keyword")}
 	if raw := r.URL.Query().Get("rating"); raw != "" {
@@ -289,12 +290,20 @@ func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewLis
 		}
 		filter.ShopID = &shopID
 	}
+	if raw := r.URL.Query().Get("user_id"); raw != "" {
+		userID, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{"User id must be an integer"}})
+			return usecase.ReviewListFilter{}, false
+		}
+		filter.UserID = &userID
+	}
 	return filter, true
 }
 
 // handleListReviews は GET /reviews を処理する：active な shop の burger の
 // review の、公開されたトップレベルの JSON 配列で、任意で rating/keyword/
-// shop_id のフィルタにより絞り込まれ、新しい順で、ページネーションされる。
+// shop_id/user_id のフィルタにより絞り込まれ、新しい順で、ページネーションされる。
 // OptionalAuth の viewer は、ここでは絞り込みに関与しない。
 func handleListReviews(reviews *usecase.Reviews) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

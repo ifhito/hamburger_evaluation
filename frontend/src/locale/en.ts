@@ -49,6 +49,7 @@ const en = {
       avg: "avg",
       reviews: "reviews",
       viewLink: "View \u2192",
+      loadMore: "Load more",
     },
     detail: {
       title: "Review Detail",
@@ -93,6 +94,8 @@ const en = {
       namedProfile: "{{name}}'s Profile",
       loading: "Loading\u2026",
       loadError: "Failed to load user.",
+      reviewsLoadError: "Failed to load reviews.",
+      loadMore: "Load more",
       editProfile: "Edit Profile",
       reviewsHeading: "Reviews",
       noReviews: "No reviews yet.",

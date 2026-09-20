@@ -30,4 +30,5 @@ export interface ReviewUpdateInput {
 export interface ReviewSearchParams {
   rating?: number;
   keyword?: string;
+  userId?: number;
 }

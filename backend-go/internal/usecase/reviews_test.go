@@ -135,7 +135,8 @@ func TestReviewsListPagination(t *testing.T) {
 func TestReviewsListFilterPassThrough(t *testing.T) {
 	rating := 4
 	shopID := int64(7)
-	want := usecase.ReviewListFilter{Rating: &rating, Keyword: "tasty", ShopID: &shopID}
+	userID := int64(42)
+	want := usecase.ReviewListFilter{Rating: &rating, Keyword: "tasty", ShopID: &shopID, UserID: &userID}
 	var got usecase.ReviewListFilter
 	repo := &fakeReviewRepo{
 		listReviews: func(_ context.Context, filter usecase.ReviewListFilter, _, _ int32) ([]domain.ReviewDetail, error) {

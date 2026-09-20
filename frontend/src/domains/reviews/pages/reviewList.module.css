@@ -94,3 +94,8 @@
   margin-bottom: 0.5rem;
   border-radius: var(--radius);
 }
+
+.loadMore {
+  margin-top: 1rem;
+  text-align: center;
+}

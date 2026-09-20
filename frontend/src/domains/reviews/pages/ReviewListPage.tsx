@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useReviews } from "../hooks/useReviews";
 import { formatDate } from "../../../lib/date";
+import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
 import styles from "./reviewList.module.css";
@@ -14,7 +15,7 @@ export default function ReviewListPage() {
   const [keyword, setKeyword] = useState("");
   const [ratingFilter, setRatingFilter] = useState<number | undefined>(undefined);
 
-  const { data: reviews, isLoading, error } = useReviews(
+  const { data: reviews, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useReviews(
     ratingFilter !== undefined || keyword
       ? { rating: ratingFilter, keyword: keyword || undefined }
       : undefined
@@ -93,6 +94,13 @@ export default function ReviewListPage() {
           </div>
         ))}
       </div>
+      {hasNextPage && (
+        <div className={styles.loadMore}>
+          <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
+            {t("reviews.list.loadMore")}
+          </Button>
+        </div>
+      )}
     </Layout>
   );
 }

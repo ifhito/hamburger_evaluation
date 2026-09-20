@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -409,6 +410,147 @@ func TestReviewRepository(t *testing.T) {
 			t.Fatalf("delete victim review: %v", err)
 		}
 		seedCheeseStats(t)
+	})
+}
+
+// TestReviewRepositoryListByUser は、ListReviews の UserID フィルタを実際の
+// PostgreSQL に対して検証する：その user の公開 review だけが新しい順に
+// pagination されること、rating との AND、discard 済み・存在しない user が
+// 空になること、そして「新しいフィルタが公開ルール（discard 済みの review、
+// active な shop に紐づかない burger）を迂回しない」ことである。
+func TestReviewRepositoryListByUser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed repository test in short mode")
+	}
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	repo := repository.NewReviewRepository(conn)
+
+	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
+	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+	bob := insertRow(ctx, t, conn, insertUser, "bob@example.com", "bob", false)
+	carol := insertRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
+	dave := insertRow(ctx, t, conn, insertUser, "dave@example.com", "dave", false)
+	erin := insertRow(ctx, t, conn, insertUser, "erin@example.com", "erin", false)
+
+	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
+	// status のコード：0=pending、1=active、2=rejected。
+	activeShop := insertRow(ctx, t, conn, insertShop, "Active Shop", 1, nil, nil)
+	pendingShop := insertRow(ctx, t, conn, insertShop, "Pending Shop", 0, nil, dave)
+
+	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
+	cheese := insertRow(ctx, t, conn, insertBurger, "Cheese") // active な shop に link されている
+	secret := insertRow(ctx, t, conn, insertBurger, "Secret") // pending な shop だけに link されている
+	for _, link := range [][2]int64{{activeShop, cheese}, {pendingShop, secret}} {
+		if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, link[0], link[1]); err != nil {
+			t.Fatalf("link shop %d burger %d: %v", link[0], link[1], err)
+		}
+	}
+
+	insertReview := `INSERT INTO reviews (rating, comment, user_id, burger_id, discarded_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
+	base := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
+
+	// alice の公開 review 25 件と、bob の公開 review 30 件。時刻は重なっており、
+	// 一部は同一時刻（id desc で同順位を解消する）なので、フィルタがなければ
+	// 2 人の review は混ざる。
+	var aliceIDs, aliceRating5IDs []int64
+	for i := 0; i < 25; i++ {
+		rating := 1 + i%5
+		id := insertRow(ctx, t, conn, insertReview, rating, fmt.Sprintf("alice %d", i), alice, cheese, nil, base.Add(time.Duration(i/2)*time.Minute))
+		aliceIDs = append(aliceIDs, id)
+		if rating == 5 {
+			aliceRating5IDs = append(aliceRating5IDs, id)
+		}
+	}
+	for i := 0; i < 30; i++ {
+		insertRow(ctx, t, conn, insertReview, 1+i%5, fmt.Sprintf("bob %d", i), bob, cheese, nil, base.Add(time.Duration(i/3)*time.Minute))
+	}
+	// created_at は挿入順に単調非減少で id は単調増加なので、新しい順
+	// （created_at desc、id desc）は挿入順の逆になる。
+	slices.Reverse(aliceIDs)
+	slices.Reverse(aliceRating5IDs)
+
+	list := func(t *testing.T, filter usecase.ReviewListFilter, limit, offset int32) []int64 {
+		t.Helper()
+		reviews, err := repo.ListReviews(ctx, filter, limit, offset)
+		if err != nil {
+			t.Fatalf("ListReviews returned error: %v", err)
+		}
+		return reviewIDs(reviews)
+	}
+	byUser := func(id int64) usecase.ReviewListFilter { return usecase.ReviewListFilter{UserID: &id} }
+
+	t.Run("AC1 UserID はその user の公開 review だけを新しい順に pagination して返す", func(t *testing.T) {
+		if got, want := list(t, byUser(alice), 20, 0), aliceIDs[:20]; !reflect.DeepEqual(got, want) {
+			t.Errorf("page 1 = %v, want %v", got, want)
+		}
+		if got, want := list(t, byUser(alice), 20, 20), aliceIDs[20:]; !reflect.DeepEqual(got, want) {
+			t.Errorf("page 2 = %v, want %v", got, want)
+		}
+		if got := list(t, byUser(alice), 20, 40); len(got) != 0 {
+			t.Errorf("page 3 = %v, want empty", got)
+		}
+		// 1 ページに収まる場合も、alice の 25 件だけがちょうど返る（bob の 30 件は
+		// 混ざらない）。
+		if got := list(t, byUser(alice), 100, 0); !reflect.DeepEqual(got, aliceIDs) {
+			t.Errorf("all = %v, want %v", got, aliceIDs)
+		}
+		if got := list(t, usecase.ReviewListFilter{}, 100, 0); len(got) != 55 {
+			t.Errorf("unfiltered feed has %d reviews, want 55 (alice 25 + bob 30)", len(got))
+		}
+	})
+
+	t.Run("AC2 UserID は rating と AND で組み合わされる", func(t *testing.T) {
+		// alice の rating 5 だけが残る。alice の他の rating と、bob の rating 5 は
+		// 返らない。
+		rating := 5
+		filter := byUser(alice)
+		filter.Rating = &rating
+		if got := list(t, filter, 100, 0); !reflect.DeepEqual(got, aliceRating5IDs) {
+			t.Errorf("alice rating 5 = %v, want %v", got, aliceRating5IDs)
+		}
+	})
+
+	t.Run("AC4 discard 済みの user と存在しない user の id は空になる", func(t *testing.T) {
+		carolReview := insertRow(ctx, t, conn, insertReview, 4, "carol was here", carol, cheese, nil, base)
+		// discard する前は、carol の review は見える（このテストが空を検証する
+		// 意味を持つための前提）。
+		if got, want := list(t, byUser(carol), 100, 0), []int64{carolReview}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("active carol = %v, want %v", got, want)
+		}
+		if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = now() WHERE id = $1`, carol); err != nil {
+			t.Fatalf("discard carol: %v", err)
+		}
+		if got := list(t, byUser(carol), 100, 0); !reflect.DeepEqual(got, []int64{}) {
+			t.Errorf("discarded carol = %v, want empty", got)
+		}
+		if got := list(t, byUser(999999), 100, 0); !reflect.DeepEqual(got, []int64{}) {
+			t.Errorf("unknown user = %v, want empty", got)
+		}
+	})
+
+	t.Run("AC5 pending な shop の burger だけの review しかない user は空になり、公開ルールを迂回しない", func(t *testing.T) {
+		daveA := insertRow(ctx, t, conn, insertReview, 5, "dave secret 1", dave, secret, nil, base)
+		daveB := insertRow(ctx, t, conn, insertReview, 4, "dave secret 2", dave, secret, nil, base.Add(time.Minute))
+		// UserID なしのフィードにも現れない（公開ルールの前提）。
+		for _, id := range list(t, usecase.ReviewListFilter{}, 100, 0) {
+			if id == daveA || id == daveB {
+				t.Fatalf("review %d on a pending-only burger leaked into the public feed", id)
+			}
+		}
+		if got := list(t, byUser(dave), 100, 0); !reflect.DeepEqual(got, []int64{}) {
+			t.Errorf("dave (pending only) = %v, want empty", got)
+		}
+	})
+
+	t.Run("AC5 UserID を指定しても discard 済みの review と非公開の burger の review は除外される", func(t *testing.T) {
+		kept := insertRow(ctx, t, conn, insertReview, 4, "erin kept", erin, cheese, nil, base)
+		insertRow(ctx, t, conn, insertReview, 1, "erin discarded", erin, cheese, time.Now(), base.Add(time.Minute))
+		insertRow(ctx, t, conn, insertReview, 5, "erin on pending", erin, secret, nil, base.Add(2*time.Minute))
+		if got, want := list(t, byUser(erin), 100, 0), []int64{kept}; !reflect.DeepEqual(got, want) {
+			t.Errorf("erin = %v, want only the kept review on the active shop %v", got, want)
+		}
 	})
 }
 

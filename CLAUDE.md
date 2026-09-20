@@ -138,7 +138,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `POST /shops` — ショップの申請 (要認証)
 
 **レビュー**
-- `GET /reviews` — レビュー一覧
+- `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリで、そのユーザーの公開レビューだけに絞り込める)
 - `GET /reviews/:id` — レビュー 1 件の取得
 - `POST /reviews` — レビューの投稿 (要認証)
 - `PUT /reviews/:id` — レビューの更新 (要認証)

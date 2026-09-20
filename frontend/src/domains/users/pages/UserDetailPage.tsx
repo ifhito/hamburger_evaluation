@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useUsers } from "../hooks/useUsers";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { formatDate } from "../../../lib/date";
+import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
 import styles from "./userDetail.module.css";
@@ -13,11 +14,17 @@ export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user: authUser } = useAuth();
   const { data: users, isLoading: usersLoading, error: usersError } = useUsers();
-  const { data: allReviews, isLoading: reviewsLoading } = useReviews();
 
   const userId = Number(id);
+  const {
+    data: userReviews,
+    isLoading: reviewsLoading,
+    error: reviewsError,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useReviews({ userId });
   const user = users?.find((u) => u.id === userId);
-  const userReviews = allReviews?.filter((r) => r.user?.id === userId);
   const isOwner = authUser?.id === userId;
 
   return (
@@ -42,6 +49,7 @@ export default function UserDetailPage() {
       )}
 
       <h2 className={styles.reviewsHeading}>{t("users.detail.reviewsHeading")}</h2>
+      {reviewsError && <ErrorMessage message={t("users.detail.reviewsLoadError")} />}
       {userReviews && userReviews.length === 0 && (
         <p className={styles.muted}>{t("users.detail.noReviews")}</p>
       )}
@@ -62,6 +70,13 @@ export default function UserDetailPage() {
           </div>
         ))}
       </div>
+      {hasNextPage && (
+        <div className={styles.loadMore}>
+          <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
+            {t("users.detail.loadMore")}
+          </Button>
+        </div>
+      )}
     </Layout>
   );
 }
