@@ -23,6 +23,9 @@ Forbidden:
 Boundaries (from `backend-go-boundaries` / `frontend-spa-boundaries` skills):
 - dependencies point inward: handler → usecase → domain
 - domain/usecase never import net/http, sql drivers, or adapter code
+- usecases read via `*Query` (`Get*`/`List*`) and write via domain services
+  (`domain.*Service`); `*Repository` (`Create*`/`Update*`/`Discard*`) is
+  declared by domain and called only by domain services, never by usecase
 - resource guardrails are defaults: timeouts, body caps, ctx, sized pool
 - snake_case API JSON; frontend API types are the response contract
 - code text language: comments, Go doc comments, and test names in Japanese

@@ -8,6 +8,7 @@ files changed in this working tree.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -51,6 +52,12 @@ GO_BOUNDARY_RULES = (
     ("backend-go/internal/domain/", ('"net/http"', "database/sql", "pgx", "/adapter/", "/usecase/")),
     ("backend-go/internal/usecase/", ('"net/http"', "database/sql", "pgx", "/adapter/")),
 )
+# usecase が宣言するインターフェースの責務分割:
+# *Query は読み取りだけ、*Repository は書き込みだけを持つ
+GO_INTERFACE_RE = re.compile(r"^type\s+(\w+)\s+interface\s*\{(.*?)^\}", re.M | re.S)
+GO_METHOD_RE = re.compile(r"^\s+([A-Z]\w*)\(", re.M)
+GO_READ_PREFIXES = ("Get", "List", "Find", "Search", "Count", "Exists")
+GO_WRITE_PREFIXES = ("Create", "Update", "Delete", "Discard", "Save", "Insert", "Upsert")
 OUT_OF_SCOPE_STAGED_PREFIXES = ("plans/", "memory/", "plan/")
 OUT_OF_SCOPE_STAGED_FILES = {"SETUP.md"}
 FRONTEND_BUILD_ESCALATION_PREFIXES = (
@@ -143,6 +150,34 @@ def go_boundary_violations(paths: list[str]) -> list[str]:
     return violations
 
 
+def go_query_repository_violations(paths: list[str]) -> list[str]:
+    violations: list[str] = []
+    for path in paths:
+        if not (path.startswith("backend-go/internal/usecase/") and path.endswith(".go") and not path.endswith("_test.go")):
+            continue
+        file_path = ROOT / path
+        if not file_path.is_file():
+            continue
+        text = file_path.read_text(errors="ignore")
+        for match in GO_INTERFACE_RE.finditer(text):
+            name, body = match.group(1), match.group(2)
+            if name.endswith("Repository"):
+                banned, kind = GO_READ_PREFIXES, "read"
+            elif name.endswith("Query"):
+                banned, kind = GO_WRITE_PREFIXES, "write"
+            else:
+                continue
+            first_line = text[: match.start()].count("\n") + 1
+            for method in GO_METHOD_RE.finditer(body):
+                if method.group(1).startswith(banned):
+                    line = first_line + body[: method.start()].count("\n")
+                    violations.append(
+                        f"{path}:{line}: {name}.{method.group(1)} is a {kind} method "
+                        "(reads belong to *Query, writes to *Repository)"
+                    )
+    return violations
+
+
 def main() -> int:
     os.chdir(ROOT)
     failures: list[str] = []
@@ -184,6 +219,14 @@ def main() -> int:
             print(f"- {violation}")
         print("Keep domain/usecase free of net/http, sql drivers, and adapter imports.")
         failures.append("go architecture boundary sensor failed")
+
+    query_violations = go_query_repository_violations(paths)
+    if query_violations:
+        print("usecase Query/Repository split violations found in changed files:")
+        for violation in query_violations:
+            print(f"- {violation}")
+        print("usecase reads go through *Query interfaces and writes through domain services; usecase never declares, holds, or calls a repository.")
+        failures.append("go query/repository split sensor failed")
 
     architecture_violations = architecture_boundary_violations(paths)
     if architecture_violations:
