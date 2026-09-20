@@ -104,9 +104,6 @@ export const shopsApi = {
 }
 
 export const usersApi = {
-  list(): Promise<User[]> {
-    return request('/users')
-  },
   get(id: number): Promise<User> {
     // token があるときだけ Bearer を付ける。本人が自分のプロフィールを開いたときに限り API が email / admin を返す。
     return getToken() ? authRequest(`/users/${id}`) : request(`/users/${id}`)

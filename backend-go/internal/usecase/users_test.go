@@ -16,17 +16,9 @@ import (
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeUsersRepo struct {
-	list          func(ctx context.Context) ([]domain.User, error)
 	getByID       func(ctx context.Context, id int64) (domain.User, error)
 	updateProfile func(ctx context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error)
 	discard       func(ctx context.Context, id int64) error
-}
-
-func (f *fakeUsersRepo) ListActiveUsers(ctx context.Context) ([]domain.User, error) {
-	if f.list == nil {
-		panic("unexpected ListActiveUsers call")
-	}
-	return f.list(ctx)
 }
 
 func (f *fakeUsersRepo) GetActiveUserByID(ctx context.Context, id int64) (domain.User, error) {
@@ -79,67 +71,6 @@ func publicProfile(u domain.User) domain.UserProfile {
 // selfProfile は、u の本人ビュー（email と admin を含む）を返す。
 func selfProfile(u domain.User) domain.UserProfile {
 	return domain.UserProfile{ID: u.ID, Username: u.Username, Email: strPtr(u.Email), Admin: boolPtr(u.Admin)}
-}
-
-// TestUsersList は、一覧が viewer ごとのビューで返ることを固定する。
-// email と admin が入るのは viewer 本人の要素だけで、匿名にも、他人にも、
-// admin の viewer にも、他人の要素の email と admin は渡らない。
-func TestUsersList(t *testing.T) {
-	admin := domain.User{ID: 3, Username: "root", Email: "root@example.com", Admin: true}
-	stored := []domain.User{usersViewer, usersOther, admin}
-	repo := &fakeUsersRepo{list: func(context.Context) ([]domain.User, error) { return stored, nil }}
-	users := usecase.NewUsers(repo, fakeHasher{})
-
-	tests := []struct {
-		name   string
-		viewer *domain.User
-		want   []domain.UserProfile
-	}{
-		{
-			name:   "匿名の viewer には全要素を公開ビューで返す",
-			viewer: nil,
-			want:   []domain.UserProfile{publicProfile(usersViewer), publicProfile(usersOther), publicProfile(admin)},
-		},
-		{
-			name:   "一般ユーザーの viewer には自分の要素だけ本人ビューで返す",
-			viewer: &usersViewer,
-			want:   []domain.UserProfile{selfProfile(usersViewer), publicProfile(usersOther), publicProfile(admin)},
-		},
-		{
-			name:   "admin の viewer にも自分の要素だけ本人ビューで返し、他人の email と admin は返さない",
-			viewer: &admin,
-			want:   []domain.UserProfile{publicProfile(usersViewer), publicProfile(usersOther), selfProfile(admin)},
-		},
-		{
-			name:   "一覧に含まれない viewer には全要素を公開ビューで返す",
-			viewer: &domain.User{ID: 99, Username: "carol", Email: "carol@example.com", Admin: true},
-			want:   []domain.UserProfile{publicProfile(usersViewer), publicProfile(usersOther), publicProfile(admin)},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := users.List(context.Background(), tt.viewer)
-			if err != nil {
-				t.Fatalf("List returned error: %v", err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("List = %+v, want %+v", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestUsersListError は、repository のエラーが wrap されて返ることを固定する。
-func TestUsersListError(t *testing.T) {
-	repoErr := errors.New("db down")
-	failing := &fakeUsersRepo{list: func(context.Context) ([]domain.User, error) { return nil, repoErr }}
-	got, err := usecase.NewUsers(failing, fakeHasher{}).List(context.Background(), &usersViewer)
-	if !errors.Is(err, repoErr) {
-		t.Fatalf("List error = %v, want wrapped %v", err, repoErr)
-	}
-	if got != nil {
-		t.Errorf("List = %+v, want nil on error", got)
-	}
 }
 
 // TestUsersGet は、詳細が viewer ごとのビューで返ることと、存在しない

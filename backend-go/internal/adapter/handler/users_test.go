@@ -25,20 +25,6 @@ import (
 // userRepoFake の usecase.UsersRepository の半分（auth の半分は auth_test.go に
 // ある）で、本物の repository のエラーの対応づけを再現している。
 
-func (f *userRepoFake) ListActiveUsers(_ context.Context) ([]domain.User, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	out := make([]domain.User, 0, len(f.users))
-	for _, rec := range f.users {
-		if !rec.discarded {
-			out = append(out, rec.user)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out, nil
-}
-
 func (f *userRepoFake) UpdateUserProfile(_ context.Context, id int64, changes usecase.ProfileChanges) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err
@@ -128,16 +114,6 @@ func decodeUserObject(t *testing.T, body []byte) map[string]any {
 	return obj
 }
 
-// decodeUserList は body を JSON オブジェクトの配列として読む。
-func decodeUserList(t *testing.T, body []byte) []map[string]any {
-	t.Helper()
-	var list []map[string]any
-	if err := json.Unmarshal(body, &list); err != nil {
-		t.Fatalf("body %q is not a JSON array of objects: %v", body, err)
-	}
-	return list
-}
-
 // userObjectID は JSON オブジェクトの id を int64 で返す。
 func userObjectID(t *testing.T, obj map[string]any) int64 {
 	t.Helper()
@@ -148,43 +124,9 @@ func userObjectID(t *testing.T, obj map[string]any) int64 {
 	return int64(id)
 }
 
-// listUsers は GET /users を実行し、200 であることを確かめてから配列を返す。
-func listUsers(t *testing.T, router http.Handler, path, auth string) []map[string]any {
-	t.Helper()
-	rec := do(router, http.MethodGet, path, "", auth)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET %s: status = %d, want %d (body %s)", path, rec.Code, http.StatusOK, rec.Body)
-	}
-	return decodeUserList(t, rec.Body.Bytes())
-}
-
-// assertUserIDs は list の id が want と（順序も含めて）一致することを確かめる。
-func assertUserIDs(t *testing.T, list []map[string]any, want ...int64) {
-	t.Helper()
-	got := make([]int64, 0, len(list))
-	for _, obj := range list {
-		got = append(got, userObjectID(t, obj))
-	}
-	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Errorf("ids = %v, want %v", got, want)
-	}
-}
-
-// assertPublicUserList は、list のすべての要素が公開ビュー {id, username} の
-// キーだけを持つことを確かめる。
-func assertPublicUserList(t *testing.T, list []map[string]any) {
-	t.Helper()
-	for _, obj := range list {
-		if got := userKeySet(obj); got != publicUserKeys {
-			t.Errorf("user %v: keys = [%s], want [%s] (email/admin must be absent, not null)", obj["id"], got, publicUserKeys)
-		}
-	}
-}
-
-// newUsersListSetup は、alice(1)、discard 済みの ghost(2)、bob(3)、admin の
-// root(4) を seed した router を返す。id に欠番があるので、discard 済みが id の
-// 昇順や件数に紛れ込まないことも確かめられる。
-func newUsersListSetup(t *testing.T) (*userRepoFake, http.Handler, func(int64) string) {
+// newSeededUsersRouter は、alice(1)、discard 済みの ghost(2)、bob(3)、admin の
+// root(4) を seed した router を返す。discard 済みの id 2 が欠番になる。
+func newSeededUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) string) {
 	t.Helper()
 	repo, router, token := newUsersRouter(t)
 	repo.seed("alice", "alice@example.com", "password123")
@@ -194,124 +136,6 @@ func newUsersListSetup(t *testing.T) (*userRepoFake, http.Handler, func(int64) s
 	root := repo.seed("root", "root@example.com", "password123")
 	repo.users[root.ID].user.Admin = true
 	return repo, router, token
-}
-
-// TestListUsers は GET /users を固定する：認証は任意で、kept なユーザーのみを
-// id の昇順で、viewer から見えるビューのトップレベルの単純な配列として返す。
-// email と admin は viewer 本人の要素にだけ入り、他人・匿名には「キー自体が
-// 存在しない」。
-func TestListUsers(t *testing.T) {
-	t.Run("AC1 匿名のリクエストは kept なユーザーを id の昇順で {id, username} だけで返す", func(t *testing.T) {
-		_, router, _ := newUsersListSetup(t)
-
-		rec := do(router, http.MethodGet, "/users", "", "")
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
-		}
-		list := decodeUserList(t, rec.Body.Bytes())
-		assertUserIDs(t, list, 1, 3, 4)
-		assertPublicUserList(t, list)
-		if got := []any{list[0]["username"], list[1]["username"], list[2]["username"]}; fmt.Sprint(got) != "[alice bob root]" {
-			t.Errorf("usernames = %v, want [alice bob root]", got)
-		}
-		if body := rec.Body.String(); strings.Contains(body, "@") {
-			t.Errorf("body = %s, want no email address anywhere", body)
-		}
-	})
-
-	t.Run("AC2 ログイン中の viewer 自身の要素だけが本人ビューになる", func(t *testing.T) {
-		tests := []struct {
-			name      string
-			viewerID  int64
-			wantEmail string
-			wantAdmin bool
-		}{
-			{name: "一般ユーザー alice は admin=false のキーを含む本人ビューを得る", viewerID: 1, wantEmail: "alice@example.com", wantAdmin: false},
-			{name: "一般ユーザー bob は自分の要素だけが本人ビューになる", viewerID: 3, wantEmail: "bob@example.com", wantAdmin: false},
-			{name: "admin の root でも他人の要素は公開ビューのままで自分の要素だけ本人ビューになる", viewerID: 4, wantEmail: "root@example.com", wantAdmin: true},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				_, router, token := newUsersListSetup(t)
-				list := listUsers(t, router, "/users", token(tt.viewerID))
-				assertUserIDs(t, list, 1, 3, 4)
-				selfSeen := 0
-				for _, obj := range list {
-					if userObjectID(t, obj) != tt.viewerID {
-						if got := userKeySet(obj); got != publicUserKeys {
-							t.Errorf("other user %v: keys = [%s], want [%s]", obj["id"], got, publicUserKeys)
-						}
-						continue
-					}
-					selfSeen++
-					if got := userKeySet(obj); got != selfUserKeys {
-						t.Errorf("self: keys = [%s], want [%s]", got, selfUserKeys)
-					}
-					if obj["email"] != tt.wantEmail {
-						t.Errorf("self email = %v, want %q", obj["email"], tt.wantEmail)
-					}
-					if obj["admin"] != tt.wantAdmin {
-						t.Errorf("self admin = %v (%T), want %v", obj["admin"], obj["admin"], tt.wantAdmin)
-					}
-				}
-				if selfSeen != 1 {
-					t.Errorf("self elements = %d, want exactly 1", selfSeen)
-				}
-			})
-		}
-	})
-
-	t.Run("認証できない Authorization は 401 にならず匿名扱いで公開ビューだけを返す", func(t *testing.T) {
-		expired, err := infra.NewJWTCodec(testJWTSecret, -time.Minute).Issue(1)
-		if err != nil {
-			t.Fatalf("issue expired token: %v", err)
-		}
-		wrongSecret, err := infra.NewJWTCodec("other-secret", time.Hour).Issue(1)
-		if err != nil {
-			t.Fatalf("issue wrong-secret token: %v", err)
-		}
-		_, router, token := newUsersListSetup(t)
-		validAlice := strings.TrimPrefix(token(1), "Bearer ")
-
-		tests := []struct {
-			name string
-			auth string
-		}{
-			{name: "不正な token", auth: "Bearer garbage"},
-			{name: "空の Bearer token", auth: "Bearer "},
-			{name: "期限切れの token", auth: "Bearer " + expired},
-			{name: "別の secret で署名された token", auth: "Bearer " + wrongSecret},
-			{name: "存在しないユーザーの token", auth: token(9999)},
-			{name: "退会済みユーザーの token", auth: token(2)},
-			{name: "Bearer 以外の scheme (Token)", auth: "Token " + validAlice},
-			{name: "Bearer 以外の scheme (Basic)", auth: "Basic " + validAlice},
-			{name: "scheme のない生の token", auth: validAlice},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				list := listUsers(t, router, "/users", tt.auth)
-				assertUserIDs(t, list, 1, 3, 4)
-				assertPublicUserList(t, list)
-			})
-		}
-	})
-
-	t.Run("ユーザーがいなければ [] として marshal される", func(t *testing.T) {
-		_, router, _ := newUsersRouter(t)
-		rec := do(router, http.MethodGet, "/users", "", "")
-		if rec.Code != http.StatusOK || rec.Body.String() != `[]` {
-			t.Errorf("status/body = %d %s, want 200 []", rec.Code, rec.Body)
-		}
-	})
-
-	t.Run("repository の失敗は 500 を返す", func(t *testing.T) {
-		repo, router, _ := newUsersRouter(t)
-		repo.err = fmt.Errorf("db down")
-		rec := do(router, http.MethodGet, "/users", "", "")
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusInternalServerError, rec.Body)
-		}
-	})
 }
 
 // TestGetUser は GET /users/{id} を扱う：認証は任意で、匿名・他人・admin の他人には
@@ -324,7 +148,7 @@ func TestGetUser(t *testing.T) {
 	}
 
 	t.Run("AC3 匿名は {id, username} のキーだけを返す", func(t *testing.T) {
-		_, router, _ := newUsersListSetup(t)
+		_, router, _ := newSeededUsersRouter(t)
 		rec := get(router, "/users/1", "")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
@@ -353,7 +177,7 @@ func TestGetUser(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				_, router, token := newUsersListSetup(t)
+				_, router, token := newSeededUsersRouter(t)
 				rec := get(router, fmt.Sprintf("/users/%d", tt.id), token(tt.id))
 				if rec.Code != http.StatusOK {
 					t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
@@ -383,7 +207,7 @@ func TestGetUser(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				_, router, token := newUsersListSetup(t)
+				_, router, token := newSeededUsersRouter(t)
 				rec := get(router, fmt.Sprintf("/users/%d", tt.targetID), token(tt.viewerID))
 				if rec.Code != http.StatusOK {
 					t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
@@ -403,7 +227,7 @@ func TestGetUser(t *testing.T) {
 	})
 
 	t.Run("AC5 認証できない Authorization では本人の id でも公開ビューだけを返す", func(t *testing.T) {
-		_, router, token := newUsersListSetup(t)
+		_, router, token := newSeededUsersRouter(t)
 		validAlice := strings.TrimPrefix(token(1), "Bearer ")
 		tests := []struct {
 			name string
@@ -439,7 +263,7 @@ func TestGetUser(t *testing.T) {
 			"/users/-1",                   // 整数だが存在しない
 			"/users/99999999999999999999", // int64 に収まらない
 		}
-		_, router, token := newUsersListSetup(t)
+		_, router, token := newSeededUsersRouter(t)
 		for name, auth := range map[string]string{"匿名": "", "ログイン中の alice": token(1)} {
 			t.Run(name, func(t *testing.T) {
 				for _, path := range paths {
@@ -459,7 +283,7 @@ func TestGetUser(t *testing.T) {
 	})
 
 	t.Run("repository の失敗は 500 を返す", func(t *testing.T) {
-		repo, router, token := newUsersListSetup(t)
+		repo, router, token := newSeededUsersRouter(t)
 		repo.err = fmt.Errorf("db down")
 		for _, auth := range []string{"", token(1)} {
 			rec := get(router, "/users/1", auth)
@@ -470,8 +294,64 @@ func TestGetUser(t *testing.T) {
 	})
 }
 
-// TestUpdateUser は PUT /users/{id} を扱う：AC1（自分自身の更新が index に反映
-// される）、AC2（存在する別のユーザーには 403、存在しない id には 404）、
+// TestUsersIndexIsNotFound は、ユーザー一覧が廃止されたことを固定する：
+// "/users" は route として登録されていないので、匿名でも有効な token 付きでも、
+// どの method でも、未知のルート（/nope）と status・body・Content-Type が同一の
+// 404 になる（405 や Allow ヘッダーで存在を示さない）。
+func TestUsersIndexIsNotFound(t *testing.T) {
+	repo, router, token := newUsersRouter(t)
+	alice := repo.seed("alice", "alice@example.com", "password123")
+
+	unknown := do(router, http.MethodGet, "/nope", "", "")
+	if unknown.Code != http.StatusNotFound || unknown.Body.String() != `{"error":"not found"}` {
+		t.Fatalf("GET /nope = %d %s, want 404 not found (基準となる未知のルート)", unknown.Code, unknown.Body)
+	}
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		auth   string
+	}{
+		{name: "匿名の GET", method: http.MethodGet, path: "/users"},
+		{name: "有効な token 付きの GET", method: http.MethodGet, path: "/users", auth: token(alice.ID)},
+		{name: "不正な token 付きの GET", method: http.MethodGet, path: "/users", auth: "Bearer garbage"},
+		{name: "匿名の POST", method: http.MethodPost, path: "/users", body: `{"user":{"username":"x"}}`},
+		{name: "有効な token 付きの POST", method: http.MethodPost, path: "/users", body: `{"user":{"username":"x"}}`, auth: token(alice.ID)},
+		{name: "匿名の PUT", method: http.MethodPut, path: "/users", body: `{"user":{"username":"x"}}`},
+		{name: "有効な token 付きの PUT", method: http.MethodPut, path: "/users", body: `{"user":{"username":"x"}}`, auth: token(alice.ID)},
+		{name: "匿名の DELETE", method: http.MethodDelete, path: "/users"},
+		{name: "有効な token 付きの DELETE", method: http.MethodDelete, path: "/users", auth: token(alice.ID)},
+		{name: "匿名の GET (末尾スラッシュ /users/)", method: http.MethodGet, path: "/users/"},
+		{name: "有効な token 付きの GET (末尾スラッシュ /users/)", method: http.MethodGet, path: "/users/", auth: token(alice.ID)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := do(router, tt.method, tt.path, tt.body, tt.auth)
+			if rec.Code != unknown.Code {
+				t.Errorf("status = %d, want %d (body %s)", rec.Code, unknown.Code, rec.Body)
+			}
+			if got, want := rec.Body.String(), unknown.Body.String(); got != want {
+				t.Errorf("body = %s, want %s", got, want)
+			}
+			if got, want := rec.Header().Get("Content-Type"), unknown.Header().Get("Content-Type"); got != want {
+				t.Errorf("Content-Type = %q, want %q", got, want)
+			}
+			if allow := rec.Header().Get("Allow"); allow != "" {
+				t.Errorf("Allow = %q, want no Allow header (405 ではなく 404)", allow)
+			}
+		})
+	}
+
+	// 一覧を廃止しても GET /users/{id} は影響を受けない。
+	if rec := do(router, http.MethodGet, fmt.Sprintf("/users/%d", alice.ID), "", ""); rec.Code != http.StatusOK {
+		t.Errorf("GET /users/%d = %d, want 200 (詳細は維持される)", alice.ID, rec.Code)
+	}
+}
+
+// TestUpdateUser は PUT /users/{id} を扱う：AC1（自分自身の更新が GET /users/{id} に
+// 反映される）、AC2（存在する別のユーザーには 403、存在しない id には 404）、
 // AC3（既に使われている email は 422）、そして Rails parity の validation の
 // 境界ケース。
 func TestUpdateUser(t *testing.T) {
@@ -483,7 +363,7 @@ func TestUpdateUser(t *testing.T) {
 		return repo, router, token(alice.ID), token(bob.ID)
 	}
 
-	t.Run("AC1 自分自身の username 更新は 200 を返し GET /users に反映される", func(t *testing.T) {
+	t.Run("AC1 自分自身の username 更新は 200 を返し GET /users/{id} に反映される", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodPut, "/users/1", `{"user":{"username":"alice2"}}`, aliceAuth)
 		if rec.Code != http.StatusOK {
@@ -493,9 +373,9 @@ func TestUpdateUser(t *testing.T) {
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
-		list := do(router, http.MethodGet, "/users", "", "")
-		if got := list.Body.String(); !strings.Contains(got, `"username":"alice2"`) || strings.Contains(got, `"username":"alice"`) {
-			t.Errorf("GET /users = %s, want the new username reflected", got)
+		got := do(router, http.MethodGet, "/users/1", "", "")
+		if got.Code != http.StatusOK || got.Body.String() != `{"id":1,"username":"alice2"}` {
+			t.Errorf("GET /users/1 = %d %s, want 200 with the new username reflected", got.Code, got.Body)
 		}
 	})
 
@@ -603,7 +483,7 @@ func TestUpdateUser(t *testing.T) {
 }
 
 // TestDeleteUser は DELETE /users/{id} を扱う：AC2 の 403/404 の使い分けと、
-// AC4 の核（body なしの 204、無効になったトークン、index からの消失）。
+// AC4 の核（body なしの 204、無効になったトークン、GET /users/{id} の 404）。
 func TestDeleteUser(t *testing.T) {
 	setup := func(t *testing.T) (http.Handler, string, string) {
 		t.Helper()
@@ -631,7 +511,7 @@ func TestDeleteUser(t *testing.T) {
 		}
 	})
 
-	t.Run("自分自身を削除すると 204 を返し、トークンが無効になり、index から消える", func(t *testing.T) {
+	t.Run("自分自身を削除すると 204 を返し、トークンが無効になり、GET /users/{id} が 404 になる", func(t *testing.T) {
 		router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodDelete, "/users/1", "", aliceAuth)
 		if rec.Code != http.StatusNoContent {
@@ -643,16 +523,16 @@ func TestDeleteUser(t *testing.T) {
 		if again := do(router, http.MethodPost, "/logout", "", aliceAuth); again.Code != http.StatusUnauthorized {
 			t.Errorf("protected request after discard = %d, want 401", again.Code)
 		}
-		list := do(router, http.MethodGet, "/users", "", "")
-		if got := list.Body.String(); strings.Contains(got, `"username":"alice"`) {
-			t.Errorf("GET /users = %s, want alice gone", got)
+		gone := do(router, http.MethodGet, "/users/1", "", "")
+		if gone.Code != http.StatusNotFound || gone.Body.String() != `{"error":"User not found"}` {
+			t.Errorf("GET /users/1 = %d %s, want 404 User not found", gone.Code, gone.Body)
 		}
 	})
 }
 
 // TestUsersRequireAuth はユーザー系のルートの 401 の境界を固定する：書き込み
 // （PUT/DELETE）は repository へのアクセスより前に匿名の request を拒否し、
-// 一方で GET は（一覧も詳細も）開かれたままである。/users/{id} は 1 つの route に
+// 一方で GET /users/{id} は開かれたままである。/users/{id} は 1 つの route に
 // 3 つの method を宣言しており、GET を OptionalAuth にしたことで PUT/DELETE の
 // RequireAuth が緩んでいないことを確かめる。
 func TestUsersRequireAuth(t *testing.T) {
@@ -683,10 +563,8 @@ func TestUsersRequireAuth(t *testing.T) {
 		t.Errorf("GET /users/1 after rejected writes = %d %s, want 200 alice untouched", rec.Code, rec.Body)
 	}
 
-	for _, path := range []string{"/users", "/users/1"} {
-		if rec := do(router, http.MethodGet, path, "", ""); rec.Code != http.StatusOK {
-			t.Errorf("GET %s anonymous = %d, want 200 (optional auth)", path, rec.Code)
-		}
+	if rec := do(router, http.MethodGet, "/users/1", "", ""); rec.Code != http.StatusOK {
+		t.Errorf("GET /users/1 anonymous = %d, want 200 (optional auth)", rec.Code)
 	}
 }
 
@@ -752,9 +630,9 @@ func TestUsersPasswordChangeIntegration(t *testing.T) {
 }
 
 // TestUsersProfileViewsIntegration は、本物の PostgreSQL・repository・JWT を通して、
-// SQL から domain、JSON までの一連で、公開ビューと本人ビューのキー集合が保たれる
-// ことを確かめる（AC1〜AC6）。fixture は signup した 3 人を共有し、最後に 1 人を
-// 退会させる。
+// SQL から domain、JSON までの一連で、GET /users/{id} の公開ビューと本人ビューの
+// キー集合が保たれることを確かめる（AC2〜AC5）。fixture は signup した 3 人を共有し、
+// 最後に 1 人を退会させる。
 func TestUsersProfileViewsIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed integration test in short mode")
@@ -768,81 +646,51 @@ func TestUsersProfileViewsIntegration(t *testing.T) {
 	if _, err := conn.Exec(ctx, `UPDATE users SET admin = true WHERE id = $1`, rootID); err != nil {
 		t.Fatalf("promote root: %v", err)
 	}
-	const total = 3
 
-	// assertViews は list の各要素が、viewerID（0 = 匿名）に対して正しいビューであること
-	// を確かめる：viewerID 自身の要素だけが {id, username, email, admin}、他は公開ビュー。
-	assertViews := func(t *testing.T, list []map[string]any, viewerID int64, wantEmail string, wantAdmin bool) {
+	// assertView は GET /users/{id} を auth（"" = 匿名）で実行し、200 で、wantEmail が
+	// 空なら公開ビュー {id, username}（body に email の "@" も現れない）、空でなければ
+	// 本人ビュー {id, username, email, admin} であることを確かめる。
+	assertView := func(t *testing.T, id int64, auth, wantEmail string, wantAdmin bool) {
 		t.Helper()
-		selfSeen := 0
-		for _, obj := range list {
-			if viewerID == 0 || userObjectID(t, obj) != viewerID {
-				if got := userKeySet(obj); got != publicUserKeys {
-					t.Errorf("user %v: keys = [%s], want [%s]", obj["id"], got, publicUserKeys)
-				}
-				continue
-			}
-			selfSeen++
-			if got := userKeySet(obj); got != selfUserKeys {
-				t.Errorf("self: keys = [%s], want [%s]", got, selfUserKeys)
-			}
-			if obj["email"] != wantEmail || obj["admin"] != wantAdmin {
-				t.Errorf("self = %v, want email %q admin %v", obj, wantEmail, wantAdmin)
-			}
+		rec := do(router, http.MethodGet, fmt.Sprintf("/users/%d", id), "", auth)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /users/%d = %d, want 200 (body %s)", id, rec.Code, rec.Body)
 		}
-		if viewerID != 0 && selfSeen != 1 {
-			t.Errorf("self elements = %d, want exactly 1", selfSeen)
+		obj := decodeUserObject(t, rec.Body.Bytes())
+		if wantEmail == "" {
+			if got := userKeySet(obj); got != publicUserKeys {
+				t.Errorf("user %d: keys = [%s], want [%s]", id, got, publicUserKeys)
+			}
+			if strings.Contains(rec.Body.String(), "@") {
+				t.Errorf("user %d: body leaks an email address: %s", id, rec.Body)
+			}
+			return
+		}
+		if got := userKeySet(obj); got != selfUserKeys {
+			t.Errorf("self %d: keys = [%s], want [%s]", id, got, selfUserKeys)
+		}
+		if obj["email"] != wantEmail || obj["admin"] != wantAdmin {
+			t.Errorf("self %d = %v, want email %q admin %v", id, obj, wantEmail, wantAdmin)
 		}
 	}
 
-	t.Run("匿名の一覧と詳細は {id, username} だけを返す", func(t *testing.T) {
-		rec := do(router, http.MethodGet, "/users", "", "")
-		list := decodeUserList(t, rec.Body.Bytes())
-		if rec.Code != http.StatusOK || len(list) != total {
-			t.Fatalf("status/len = %d/%d, want 200/%d (body %s)", rec.Code, len(list), total, rec.Body)
-		}
-		assertViews(t, list, 0, "", false)
-		if strings.Contains(rec.Body.String(), "@") {
-			t.Errorf("anonymous list contains an email address: %s", rec.Body)
-		}
-
-		one := do(router, http.MethodGet, fmt.Sprintf("/users/%d", aliceID), "", "")
-		if got := userKeySet(decodeUserObject(t, one.Body.Bytes())); one.Code != http.StatusOK || got != publicUserKeys {
-			t.Errorf("anonymous detail = %d keys [%s], want 200 [%s]", one.Code, got, publicUserKeys)
+	t.Run("匿名の詳細は {id, username} だけを返す", func(t *testing.T) {
+		for _, id := range []int64{aliceID, bobID, rootID} {
+			assertView(t, id, "", "", false)
 		}
 	})
 
-	t.Run("alice の token では alice の要素だけが本人ビューになる", func(t *testing.T) {
-		list := listUsers(t, router, "/users", aliceAuth)
-		if len(list) != total {
-			t.Fatalf("len = %d, want %d", len(list), total)
-		}
-		assertViews(t, list, aliceID, "alice@example.com", false)
-
-		self := do(router, http.MethodGet, fmt.Sprintf("/users/%d", aliceID), "", aliceAuth)
-		if got := userKeySet(decodeUserObject(t, self.Body.Bytes())); self.Code != http.StatusOK || got != selfUserKeys {
-			t.Errorf("own detail = %d keys [%s], want 200 [%s]", self.Code, got, selfUserKeys)
-		}
-		other := do(router, http.MethodGet, fmt.Sprintf("/users/%d", bobID), "", aliceAuth)
-		if got := userKeySet(decodeUserObject(t, other.Body.Bytes())); other.Code != http.StatusOK || got != publicUserKeys {
-			t.Errorf("other's detail = %d keys [%s], want 200 [%s]", other.Code, got, publicUserKeys)
-		}
-		if strings.Contains(other.Body.String(), "bob@example.com") {
-			t.Errorf("other's detail leaks the email: %s", other.Body)
-		}
+	t.Run("alice の token では alice 自身の詳細だけが本人ビューになる", func(t *testing.T) {
+		assertView(t, aliceID, aliceAuth, "alice@example.com", false)
+		assertView(t, bobID, aliceAuth, "", false)
 	})
 
-	t.Run("admin の root でも他人の要素は公開ビューのままで自分の要素だけ本人ビューになる", func(t *testing.T) {
-		list := listUsers(t, router, "/users", rootAuth)
-		assertViews(t, list, rootID, "root@example.com", true)
-
-		other := do(router, http.MethodGet, fmt.Sprintf("/users/%d", aliceID), "", rootAuth)
-		if got := userKeySet(decodeUserObject(t, other.Body.Bytes())); other.Code != http.StatusOK || got != publicUserKeys {
-			t.Errorf("admin viewing other = %d keys [%s], want 200 [%s]", other.Code, got, publicUserKeys)
-		}
+	t.Run("admin の root でも他人の詳細は公開ビューのままで自分の詳細だけ本人ビューになる", func(t *testing.T) {
+		assertView(t, rootID, rootAuth, "root@example.com", true)
+		assertView(t, aliceID, rootAuth, "", false)
 	})
 
-	t.Run("退会したユーザーは一覧から消え、詳細は存在しない id と同一の 404 になる", func(t *testing.T) {
+	t.Run("退会したユーザーの詳細は存在しない id と同一の 404 になる", func(t *testing.T) {
 		if rec := do(router, http.MethodDelete, fmt.Sprintf("/users/%d", bobID), "", bobAuth); rec.Code != http.StatusNoContent {
 			t.Fatalf("delete bob = %d, want 204 (body %s)", rec.Code, rec.Body)
 		}
@@ -856,7 +704,8 @@ func TestUsersProfileViewsIntegration(t *testing.T) {
 			t.Errorf("discarded (%d %s) differs from never-existed (%d %s)", gone.Code, gone.Body, never.Code, never.Body)
 		}
 
-		assertUserIDs(t, listUsers(t, router, "/users", ""), aliceID, rootID)
+		assertView(t, aliceID, "", "", false)
+		assertView(t, rootID, "", "", false)
 	})
 }
 
@@ -876,7 +725,7 @@ type usersFeedItem struct {
 // TestUsersDiscardPropagationIntegration は、本物の database に対して
 // HTTP 越しに行う AC4+AC5 退会の波及のシナリオである：ユーザー A は共有の
 // burger（B も review している）と単独の burger を review し、account を
-// 削除する。すると下流のすべて（トークン、index、feed、detail、shop の
+// 削除する。すると下流のすべて（トークン、user の detail、feed、detail、shop の
 // review、burger の統計）が A を忘れ、B はそのまま残る。
 func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	if testing.Short() {
@@ -939,19 +788,14 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Errorf("discarded user's token = %d, want 401 (body %s)", rec.Code, rec.Body)
 	}
 
-	// GET /users は A を忘れ、B を残す。
-	rec = do(router, http.MethodGet, "/users", "", "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list users status = %d (body %s)", rec.Code, rec.Body)
+	// GET /users/{id} は A を忘れ（存在しない id と同じ 404）、B を残す。
+	rec = do(router, http.MethodGet, fmt.Sprintf("/users/%d", aliceID), "", "")
+	if rec.Code != http.StatusNotFound || rec.Body.String() != `{"error":"User not found"}` {
+		t.Errorf("GET /users/%d = %d %s, want 404 User not found", aliceID, rec.Code, rec.Body)
 	}
-	var listed []struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
-		t.Fatalf("decode users: %v", err)
-	}
-	if len(listed) != 1 || listed[0].ID != bobID {
-		t.Errorf("GET /users = %s, want only bob (id %d)", rec.Body, bobID)
+	rec = do(router, http.MethodGet, fmt.Sprintf("/users/%d", bobID), "", "")
+	if want := fmt.Sprintf(`{"id":%d,"username":"bob"}`, bobID); rec.Code != http.StatusOK || rec.Body.String() != want {
+		t.Errorf("GET /users/%d = %d %s, want 200 %s", bobID, rec.Code, rec.Body, want)
 	}
 
 	// AC5：feed は A の review を隠し、B の review を残し、共有の burger に

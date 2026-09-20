@@ -76,12 +76,12 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *use
 				http.MethodDelete: RequireAuth(auth),
 			},
 		},
-		// user の一覧と詳細は匿名でも使える（OptionalAuth）。ただし email と
+		// user の詳細は匿名でも使える（path 単位は OptionalAuth）。ただし email と
 		// admin が入るのは本人が閲覧したときだけで、その判断は domain
 		// （User.ProfileFor）にある。account の編集と削除にはログインが必要で
-		// （RequireAuth で GET だけを緩めている）、本人のみというルール自体は
-		// usecase にある（ErrForbidden）。
-		{path: "/users", methods: map[string]http.HandlerFunc{http.MethodGet: handleListUsers(users)}, middleware: OptionalAuth(auth)},
+		// （PUT/DELETE だけ methodMiddleware で RequireAuth）、本人のみという
+		// ルール自体は usecase にある（ErrForbidden）。user の一覧は提供しない
+		// ので "/users" は登録せず、catch-all の 404 になる。
 		{
 			path: "/users/{id}",
 			methods: map[string]http.HandlerFunc{

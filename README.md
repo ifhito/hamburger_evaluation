@@ -104,7 +104,6 @@ pnpm run storybook
 - `POST /reviews`
 - `PUT /reviews/:id`
 - `DELETE /reviews/:id`
-- `GET /users`
 - `GET /users/:id`
 - `PUT /users/:id`
 - `DELETE /users/:id`
@@ -118,5 +117,5 @@ pnpm run storybook
 - API の JSON は snake_case です。フロントエンドは snake_case のワイヤ型をそのまま使用します（ケース変換層はありません）。
 - 認証付き API は `Authorization: Bearer <token>` を前提にしています。
 - `/admin/*` と `/users/:id` の更新・削除の認可判定（管理者のみ・本人のみ）は usecase 層で行います。
-- `GET /users` と `GET /users/:id` は認証が任意で、email と admin を返すのは本人が閲覧したときだけです（他人・匿名には id と username のみ。判断は domain 層）。
+- `GET /users/:id` は認証が任意で、email と admin を返すのは本人が閲覧したときだけです（他人・匿名には id と username のみ。判断は domain 層）。
 - フロントエンドは小さめの FSD 構成として `app`, `pages`, `shared` に絞っています。

@@ -33,11 +33,11 @@ func newUserResponse(user domain.User) userResponse {
 	return userResponse{ID: user.ID, Username: user.Username, Email: user.Email, Admin: user.Admin}
 }
 
-// userProfileResponse は、GET /users（配列の要素）と GET /users/{id} の user の
-// JSON 形式である。公開ビューは {id, username} で、本人が閲覧したときだけ
-// {id, username, email, admin} になる。Email と Admin は pointer + omitempty で、
-// 他人・匿名では nil としてキーごと省かれる（null にはならない）。admin=false は
-// 非 nil の pointer なので、本人ビューでは "admin":false として出力される。
+// userProfileResponse は、GET /users/{id} の user の JSON 形式である。公開ビューは
+// {id, username} で、本人が閲覧したときだけ {id, username, email, admin} になる。
+// Email と Admin は pointer + omitempty で、他人・匿名では nil としてキーごと
+// 省かれる（null にはならない）。admin=false は非 nil の pointer なので、本人
+// ビューでは "admin":false として出力される。
 type userProfileResponse struct {
 	ID       int64   `json:"id"`
 	Username string  `json:"username"`
@@ -95,26 +95,6 @@ func writeUserError(w http.ResponseWriter, op string, err error) {
 	default:
 		log.Printf("users: %s: %v", op, err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
-	}
-}
-
-// handleListUsers は GET /users を処理する：kept な user の、（存在する場合の）
-// viewer から見えるビューのトップレベルの JSON 配列で、全件を id の昇順で
-// 返す（ページネーションなし）。認証は任意（OptionalAuth）で、email と admin が
-// 入るのは viewer 本人の要素だけである。
-func handleListUsers(users *usecase.Users) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		list, err := users.List(r.Context(), viewerPtr(r))
-		if err != nil {
-			log.Printf("users: list: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
-		resp := make([]userProfileResponse, 0, len(list)) // nil ではない：[] として marshal される
-		for _, profile := range list {
-			resp = append(resp, newUserProfileResponse(profile))
-		}
-		writeJSON(w, http.StatusOK, resp)
 	}
 }
 
