@@ -3,70 +3,31 @@ package db_test
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-)
 
-// testDBName returns a per-run database name. The database is created fresh
-// (and dropped) inside the compose Postgres instance so tests always start
-// from an empty database without touching the development database or its
-// volume; the pid/timestamp suffix keeps concurrent or aborted runs from
-// colliding while staying a valid lowercase PostgreSQL identifier.
-func testDBName() string {
-	return fmt.Sprintf("hamburger_evaluation_go_test_%d_%d", os.Getpid(), time.Now().UnixNano())
-}
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+)
 
 // TestMigrationsAcceptance covers AC1-AC4 of story S2 against a real
 // PostgreSQL. It requires TEST_DATABASE_URL to point at a maintenance
 // database (e.g. postgres://postgres:password@localhost:5433/postgres) whose
-// user may create and drop databases; without it the test skips.
+// user may create and drop databases; without it the test skips (inside
+// dbtest.NewEmpty).
 //
 // The subtests are order-dependent (up -> negative inserts -> down -> re-up)
 // and therefore run sequentially within this single test.
 func TestMigrationsAcceptance(t *testing.T) {
-	adminURL := os.Getenv("TEST_DATABASE_URL")
-	if adminURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set; skipping DB-backed migration tests")
-	}
 	ctx := context.Background()
-
-	admin, err := pgx.Connect(ctx, adminURL)
-	if err != nil {
-		t.Fatalf("connect to admin database: %v", err)
-	}
-	t.Cleanup(func() { _ = admin.Close(context.Background()) })
-
-	dbName := testDBName()
-	mustExec(ctx, t, admin, fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", dbName))
-	mustExec(ctx, t, admin, "CREATE DATABASE "+dbName)
-	t.Cleanup(func() {
-		_, _ = admin.Exec(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", dbName))
-	})
-
-	testURL, err := withDatabase(adminURL, dbName)
-	if err != nil {
-		t.Fatalf("build test database URL: %v", err)
-	}
-	conn, err := pgx.Connect(ctx, testURL)
-	if err != nil {
-		t.Fatalf("connect to test database: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close(context.Background()) })
-
-	ups, downs := loadMigrations(t)
+	conn, _ := dbtest.NewEmpty(t)
+	ups, downs := dbtest.LoadMigrations(t)
 
 	// AC1: from an empty DB, all migrations up yield tables, constraints
 	// and indexes.
-	applyMigrations(ctx, t, conn, ups)
+	dbtest.Apply(ctx, t, conn, ups)
 	t.Run("AC1_up_creates_schema", func(t *testing.T) {
 		assertSchemaPresent(ctx, t, conn)
 	})
@@ -104,7 +65,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 	})
 
 	// AC2: all migrations down return to an empty database.
-	applyMigrations(ctx, t, conn, downs)
+	dbtest.Apply(ctx, t, conn, downs)
 	t.Run("AC2_down_returns_to_empty_schema", func(t *testing.T) {
 		var count int
 		if err := conn.QueryRow(ctx,
@@ -117,100 +78,10 @@ func TestMigrationsAcceptance(t *testing.T) {
 	})
 
 	// Re-up after down must succeed (up/down/re-up cycle).
-	applyMigrations(ctx, t, conn, ups)
+	dbtest.Apply(ctx, t, conn, ups)
 	t.Run("reup_after_down_recreates_schema", func(t *testing.T) {
 		assertSchemaPresent(ctx, t, conn)
 	})
-}
-
-// loadMigrations returns the *.up.sql files in ascending order and the
-// *.down.sql files in descending order. It fails the test if any file does
-// not match <version>_<name>.{up,down}.sql or if any version does not have
-// exactly one up and one down file.
-func loadMigrations(t *testing.T) (ups, downs []string) {
-	t.Helper()
-	entries, err := os.ReadDir("migrations")
-	if err != nil {
-		t.Fatalf("read migrations dir: %v", err)
-	}
-	upsByVersion := map[string]int{}
-	downsByVersion := map[string]int{}
-	for _, entry := range entries {
-		name := entry.Name()
-		version, direction, ok := parseMigrationName(name)
-		if !ok {
-			t.Fatalf("migration %s does not match <version>_<name>.up.sql / .down.sql", name)
-		}
-		switch direction {
-		case "up":
-			upsByVersion[version]++
-			ups = append(ups, filepath.Join("migrations", name))
-		case "down":
-			downsByVersion[version]++
-			downs = append(downs, filepath.Join("migrations", name))
-		}
-	}
-	if len(ups) == 0 {
-		t.Fatal("no up migrations found in migrations dir")
-	}
-	versions := map[string]bool{}
-	for version := range upsByVersion {
-		versions[version] = true
-	}
-	for version := range downsByVersion {
-		versions[version] = true
-	}
-	sortedVersions := make([]string, 0, len(versions))
-	for version := range versions {
-		sortedVersions = append(sortedVersions, version)
-	}
-	sort.Strings(sortedVersions)
-	for _, version := range sortedVersions {
-		if upsByVersion[version] != 1 || downsByVersion[version] != 1 {
-			t.Fatalf("version %s: expected exactly one .up.sql and one .down.sql, got %d up and %d down",
-				version, upsByVersion[version], downsByVersion[version])
-		}
-	}
-	sort.Strings(ups)
-	sort.Sort(sort.Reverse(sort.StringSlice(downs)))
-	return ups, downs
-}
-
-// parseMigrationName splits a migration file name into its numeric version
-// prefix (e.g. "000001") and direction ("up" or "down"). ok is false when the
-// name does not match <digits>_<name>.up.sql / .down.sql.
-func parseMigrationName(name string) (version, direction string, ok bool) {
-	switch {
-	case strings.HasSuffix(name, ".up.sql"):
-		direction = "up"
-	case strings.HasSuffix(name, ".down.sql"):
-		direction = "down"
-	default:
-		return "", "", false
-	}
-	version, rest, found := strings.Cut(name, "_")
-	if !found || version == "" || rest == "" {
-		return "", "", false
-	}
-	for _, r := range version {
-		if r < '0' || r > '9' {
-			return "", "", false
-		}
-	}
-	return version, direction, true
-}
-
-func applyMigrations(ctx context.Context, t *testing.T, conn *pgx.Conn, files []string) {
-	t.Helper()
-	for _, file := range files {
-		sql, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatalf("read migration %s: %v", file, err)
-		}
-		if _, err := conn.Exec(ctx, string(sql)); err != nil {
-			t.Fatalf("apply migration %s: %v", file, err)
-		}
-	}
 }
 
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
@@ -355,21 +226,4 @@ func assertPgError(t *testing.T, err error, wantCode, wantConstraint string) {
 		t.Fatalf("expected SQLSTATE %s on constraint %s, got SQLSTATE %s on constraint %q: %v",
 			wantCode, wantConstraint, pgErr.Code, pgErr.ConstraintName, pgErr)
 	}
-}
-
-func mustExec(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string) {
-	t.Helper()
-	if _, err := conn.Exec(ctx, sql); err != nil {
-		t.Fatalf("exec %q: %v", sql, err)
-	}
-}
-
-// withDatabase returns rawURL with its database (path) replaced by name.
-func withDatabase(rawURL, name string) (string, error) {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "", fmt.Errorf("parse database URL: %w", err)
-	}
-	u.Path = "/" + name
-	return u.String(), nil
 }

@@ -9,39 +9,68 @@ import (
 )
 
 // route declares one path's handlers by HTTP method, plus optional
-// middleware applied to every method of the path. Routes are data so the
-// 405 fallback (with its Allow header) is derived instead of hand-rolled.
+// middleware applied to every method of the path. methodMiddleware
+// overrides that path-level middleware for individual methods, so one
+// path can e.g. serve GET behind OptionalAuth and POST behind
+// RequireAuth without duplicate ServeMux patterns. Routes are data so
+// the 405 fallback (with its Allow header) is derived instead of
+// hand-rolled.
 type route struct {
-	path       string
-	methods    map[string]http.HandlerFunc
-	middleware func(http.Handler) http.Handler
+	path             string
+	methods          map[string]http.HandlerFunc
+	middleware       func(http.Handler) http.Handler
+	methodMiddleware map[string]func(http.Handler) http.Handler
 }
 
 // NewRouter builds the HTTP handler tree: stdlib Go 1.22 method-pattern
 // mux wrapped in the global body-cap middleware. Unknown routes get 404
 // and wrong methods 405, both in the JSON error shape.
-func NewRouter(db Pinger, auth *usecase.Auth) http.Handler {
+func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops) http.Handler {
 	mux := http.NewServeMux()
 	registerRoutes(mux, []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(auth)}},
 		{path: "/login", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogin(auth)}},
 		{path: "/logout", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogout}, middleware: RequireAuth(auth)},
+		// GET stays anonymous-friendly (OptionalAuth); only submitting a
+		// shop requires a login, hence the per-method override.
+		{
+			path: "/shops",
+			methods: map[string]http.HandlerFunc{
+				http.MethodGet:  handleListShops(shops),
+				http.MethodPost: handleCreateShop(shops),
+			},
+			middleware:       OptionalAuth(auth),
+			methodMiddleware: map[string]func(http.Handler) http.Handler{http.MethodPost: RequireAuth(auth)},
+		},
+		{path: "/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodGet: handleGetShop(shops)}, middleware: OptionalAuth(auth)},
+		// Moderation endpoints: RequireAuth only authenticates; the
+		// admin decision itself lives in the usecase (ErrForbidden).
+		{path: "/admin/shops", methods: map[string]http.HandlerFunc{http.MethodGet: handleAdminListShops(shops)}, middleware: RequireAuth(auth)},
+		{path: "/admin/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodPut: handleAdminUpdateShop(shops)}, middleware: RequireAuth(auth)},
+		{path: "/admin/shops/{id}/approve", methods: map[string]http.HandlerFunc{http.MethodPost: handleApproveShop(shops)}, middleware: RequireAuth(auth)},
+		{path: "/admin/shops/{id}/reject", methods: map[string]http.HandlerFunc{http.MethodPost: handleRejectShop(shops)}, middleware: RequireAuth(auth)},
 	})
 	return limitBody(mux)
 }
 
-// registerRoutes registers each route's "METHOD path" patterns, a per-path
-// method-less fallback answering 405 with a comma-joined sorted Allow
-// header of exactly the declared methods, and the catch-all JSON 404.
+// registerRoutes registers each route's "METHOD path" patterns (each
+// wrapped in its per-method middleware when declared, else the path-level
+// middleware), a per-path method-less fallback answering 405 with a
+// comma-joined sorted Allow header of exactly the declared methods, and
+// the catch-all JSON 404.
 func registerRoutes(mux *http.ServeMux, routes []route) {
 	for _, rt := range routes {
 		allowed := make([]string, 0, len(rt.methods))
 		for method, h := range rt.methods {
 			allowed = append(allowed, method)
 			var handler http.Handler = h
-			if rt.middleware != nil {
-				handler = rt.middleware(handler)
+			mw := rt.middleware
+			if perMethod, ok := rt.methodMiddleware[method]; ok {
+				mw = perMethod
+			}
+			if mw != nil {
+				handler = mw(handler)
 			}
 			mux.Handle(method+" "+rt.path, handler)
 		}

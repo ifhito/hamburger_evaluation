@@ -18,6 +18,14 @@ var (
 	ErrEmailTaken = errors.New("email has already been taken")
 	// ErrUserNotFound signals that no active user matches the lookup.
 	ErrUserNotFound = errors.New("user not found")
+	// ErrShopNotFound signals that no shop matches the lookup or that the
+	// viewer may not see it; the two cases are deliberately identical so
+	// hidden shops' existence is not leaked.
+	ErrShopNotFound = errors.New("shop not found")
+	// ErrForbidden signals that the viewer is authenticated but not
+	// allowed to perform the operation (e.g. a non-admin calling a
+	// moderation use case).
+	ErrForbidden = errors.New("forbidden")
 )
 
 // ValidationError carries Rails-style full validation messages

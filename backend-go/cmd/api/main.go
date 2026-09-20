@@ -63,7 +63,9 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		jwtCodec,
 	)
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth), ready)
+	shops := usecase.NewShops(repository.NewShopRepository(pool))
+
+	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops), ready)
 }
 
 // serve runs an http.Server with explicit timeouts (never bare

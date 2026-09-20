@@ -97,6 +97,9 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 		{name: "unknown route returns 404", method: http.MethodGet, path: "/nope", wantStatus: http.StatusNotFound},
 		{name: "wrong method returns 405", method: http.MethodPost, path: "/up", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
 		{name: "GET /signup returns 405 Allow POST", method: http.MethodGet, path: "/signup", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
+		{name: "DELETE /shops returns 405 Allow GET, POST", method: http.MethodDelete, path: "/shops", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
+		{name: "DELETE /shops/1 returns 405 Allow GET", method: http.MethodDelete, path: "/shops/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
+		{name: "GET /admin/shops/1/approve returns 405 Allow POST", method: http.MethodGet, path: "/admin/shops/1/approve", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
