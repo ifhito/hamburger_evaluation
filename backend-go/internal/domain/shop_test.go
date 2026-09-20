@@ -49,6 +49,43 @@ func TestShopVisibility(t *testing.T) {
 	}
 }
 
+// TestShopCanBeReviewedBy pins the reviewable rule in its single home
+// (issue #14 AC2): rejected shops are never reviewable, active shops are
+// reviewable by anyone authenticated, pending shops only by their creator
+// or an admin.
+func TestShopCanBeReviewedBy(t *testing.T) {
+	alice := domain.User{ID: 1, Username: "alice"}
+	bob := domain.User{ID: 2, Username: "bob"}
+	admin := domain.User{ID: 3, Username: "root", Admin: true}
+
+	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
+	pendingOwn := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
+	pendingNoCreator := domain.Shop{ID: 12, Status: domain.ShopStatusPending}
+	rejectedOwn := domain.Shop{ID: 13, Status: domain.ShopStatusRejected, CreatorID: ptr(alice.ID)}
+
+	tests := []struct {
+		name   string
+		viewer domain.User
+		shop   domain.Shop
+		want   bool
+	}{
+		{name: "anyone may review an active shop", viewer: bob, shop: activeShop, want: true},
+		{name: "creator may review own pending shop", viewer: alice, shop: pendingOwn, want: true},
+		{name: "other user may not review a pending shop", viewer: bob, shop: pendingOwn, want: false},
+		{name: "admin may review any pending shop", viewer: admin, shop: pendingOwn, want: true},
+		{name: "creatorless pending shop rejects regular users", viewer: bob, shop: pendingNoCreator, want: false},
+		{name: "rejected shop is never reviewable, even by its creator", viewer: alice, shop: rejectedOwn, want: false},
+		{name: "rejected shop is never reviewable, even by an admin", viewer: admin, shop: rejectedOwn, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.shop.CanBeReviewedBy(tt.viewer); got != tt.want {
+				t.Errorf("CanBeReviewedBy(%+v) = %v, want %v", tt.viewer, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestNewShopSubmission pins the submission constructor: a valid name
 // yields a pending shop with the creator recorded and no moderation note;
 // blank and whitespace-only names fail with the exact Rails message.
