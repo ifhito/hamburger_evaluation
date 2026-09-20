@@ -25,38 +25,38 @@
 - API の JSON はワイヤー上で **snake_case** を使う。フロントエンドは snake_case のワイヤー型をエンドツーエンドでそのまま使う (ケース変換レイヤーはない)。
 
 ```bash
-# Start (serves on :8080; health check at GET /up)
+# 起動 (:8080 で提供。ヘルスチェックは GET /up)
 cd backend-go
 docker compose up --build
 ```
 
 ```bash
-# Validation (gofmt / go vet / go build / go test), run from the repo root
+# 検証 (gofmt / go vet / go build / go test)。リポジトリのルートから実行する
 .agents/skills/backend-go-change-validation/scripts/go-checks.sh
 ```
 
 ```bash
-# Migrations — by default they target the dev DB; override with MIGRATE_DATABASE_URL
+# マイグレーション — デフォルトでは dev DB が対象。MIGRATE_DATABASE_URL で上書きできる
 cd backend-go
 docker compose run --rm migrate up
 docker compose run --rm migrate down -all
 ```
 
 ```bash
-# Seed idempotent dev fixtures (admin + alice/bob/charlie, shops, burgers,
-# reviews, burger_stats) — run after `migrate up`; override with DATABASE_URL
+# 冪等な dev 用フィクスチャ (admin + alice/bob/charlie、shops、burgers、
+# reviews、burger_stats) を seed する — `migrate up` の後に実行。DATABASE_URL で上書きできる
 cd backend-go
 docker compose run --rm seed
 ```
 
 ```bash
-# Regenerate sqlc code — must produce zero diff under internal/adapter/repository/sqlcgen
+# sqlc のコードを再生成する — internal/adapter/repository/sqlcgen 配下に差分が出てはならない
 cd backend-go
 docker compose run --rm sqlc generate
 ```
 
 ```bash
-# DB acceptance tests (compose db service must be up; tests skip silently without TEST_DATABASE_URL)
+# DB の受け入れテスト (compose の db サービスが起動している必要がある。TEST_DATABASE_URL がなければテストは黙ってスキップされる)
 cd backend-go
 TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=disable' go test ./db/...
 ```
@@ -102,14 +102,14 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - まずはプレーンな HTML で始める (独自のデザインシステムはまだない)
 
 ```bash
-# Start (serves on :5173)
+# 起動 (:5173 で提供)
 cd frontend
 docker compose up --build
 ```
 
 ```bash
-# Validation — build is the only check; `tsc -b` inside it doubles as the type check.
-# There are no lint or test scripts in package.json.
+# 検証 — チェックは build のみで、その中の `tsc -b` が型チェックを兼ねる。
+# package.json に lint や test のスクリプトはない。
 cd frontend
 pnpm run build
 ```
@@ -117,7 +117,7 @@ pnpm run build
 **ディレクトリ構成** (`src/`)：
 ```
 app/
-  router/        # React Router config
+  router/        # React Router の設定
   providers/
   styles/
 pages/
@@ -130,7 +130,7 @@ pages/
 shared/
   ui/            # Button, Input, Textarea, RatingSelect
   lib/
-    api.ts       # API client
+    api.ts       # API クライアント
     date.ts
     types/
       review.ts
