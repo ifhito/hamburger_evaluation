@@ -20,6 +20,34 @@ services:
       GOMEMLIMIT: 920MiB
     mem_limit: 1g
 
+  # Usage: docker compose run --rm migrate up
+  #        docker compose run --rm migrate down -all
+  # Target another database (e.g. the test one) with:
+  #   MIGRATE_DATABASE_URL=postgres://postgres:password@db:5432/hamburger_evaluation_go_test?sslmode=disable \
+  #     docker compose run --rm migrate up
+  migrate:
+    image: migrate/migrate:v4.18.1
+    profiles: ["tools"]
+    volumes:
+      - ./db/migrations:/migrations:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint:
+      [
+        "migrate",
+        "-path", "/migrations",
+        "-database", "${MIGRATE_DATABASE_URL:-postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable}",
+      ]
+
+  # Usage: docker compose run --rm sqlc generate
+  sqlc:
+    image: sqlc/sqlc:1.27.0
+    profiles: ["tools"]
+    working_dir: /src
+    volumes:
+      - .:/src
+
   db:
     image: postgres:16
     volumes:
