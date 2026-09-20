@@ -42,8 +42,6 @@ git diff --stat
 
 - `.env*`(どのディレクトリでも)
 - `secrets/**`
-- `**/.kamal/**`
-- `**/master.key`
 
 ## PR サマリの形
 

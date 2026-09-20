@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Fast stop sensors for Claude Code, Hermes, and Codex sessions.
+"""Claude Code・Hermes・Codex のセッション向けの、終了前の高速なセンサー。
 
-The script is intentionally conservative: it always checks git hygiene and
-secret paths, then runs area-specific checks only when backend/frontend source
-files changed in this working tree.
+意図的に保守的にしてある。git の衛生と秘密パスは常に確認し、Go の API(backend-go/)
+または frontend のソースが変更されたときだけ、その領域の検査を走らせる。
 """
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -17,40 +17,29 @@ SECRET_MARKERS = (
     ".env",
     ".env.",
     "secrets/",
+    # 旧 API(backend/)の名残として手元に残りうる秘密ファイル。.gitignore の除外がない環境でも誤って commit しない
     "backend/.kamal/secrets",
     "backend/config/master.key",
 )
-BACKEND_PREFIXES = ("backend/app/", "backend/config/", "backend/db/", "backend/lib/", "backend/spec/", "backend/Gemfile", "backend/Gemfile.lock")
 FRONTEND_PREFIXES = ("frontend/src/", "frontend/package.json", "frontend/pnpm-lock.yaml", "frontend/vite.config", "frontend/tsconfig", "frontend/eslint")
-ARCHITECTURE_BOUNDARY_PREFIXES = (
-    "backend/app/controllers/",
-    "backend/app/jobs/",
-    "backend/app/domain/",
-)
-ARCHITECTURE_FORBIDDEN_PATTERNS = (
-    ".find(",
-    ".find_by(",
-    ".where(",
-    ".joins(",
-    ".includes(",
-    ".create(",
-    ".create!(",
-    ".save(",
-    ".save!(",
-    ".update(",
-    ".update!(",
-    ".destroy(",
-    ".destroy!(",
-    ".discard(",
-    ".discard!(",
-    ".upsert(",
-)
 GO_PREFIXES = ("backend-go/",)
 # クリーンアーキテクチャの内向き依存ルール: domain/usecase から外側への import を禁止
 GO_BOUNDARY_RULES = (
-    ("backend-go/internal/domain/", ('"net/http"', "database/sql", "pgx", "/adapter/", "/usecase/")),
+    ("backend-go/internal/domain/", ('"net/http"', "database/sql", "pgx", "/adapter/", "/usecase/", "/internal/photo")),
     ("backend-go/internal/usecase/", ('"net/http"', "database/sql", "pgx", "/adapter/")),
 )
+# repository は domain からだけ使う(S15 / #46 の規約):
+# - *Repository の interface(書き込み専用)は domain が宣言し、呼ぶのは domain のサービスだけ
+# - usecase は repository を宣言も保持も呼び出しもしない。読み取りは usecase が宣言する *Query、
+#   書き込みは domain のサービスを通す
+# interface のメソッド名は、*Query が Get*/List* だけ、*Repository が Create*/Update*/Discard* だけ
+GO_INTERFACE_START_RE = re.compile(r"^type\s+(\w+)\s+interface\s*\{", re.M)
+GO_ALLOWED_PREFIXES = {"Query": ("Get", "List"), "Repository": ("Create", "Update", "Discard")}
+GO_REPOSITORY_TYPE_RE = re.compile(r"^type\s+(\w*Repository)\b", re.M)
+# パッケージ名は問わず(import の別名でも)、名前の接尾辞だけで判定する
+GO_REPOSITORY_REF_RE = re.compile(r"\b(\w+)\.(\w*Repository)\b")
+GO_REPO_CALL_RE = re.compile(r"\.repo\.[A-Z]")
+GO_DOT_IMPORT_RE = re.compile(r'^\s*(?:import\s+)?\.\s+"')
 OUT_OF_SCOPE_STAGED_PREFIXES = ("plans/", "memory/", "plan/")
 OUT_OF_SCOPE_STAGED_FILES = {"SETUP.md"}
 FRONTEND_BUILD_ESCALATION_PREFIXES = (
@@ -102,25 +91,6 @@ def is_out_of_scope_staged(path: str) -> bool:
     return path in OUT_OF_SCOPE_STAGED_FILES or path.startswith(OUT_OF_SCOPE_STAGED_PREFIXES)
 
 
-def architecture_boundary_violations(paths: list[str]) -> list[str]:
-    violations: list[str] = []
-    for path in paths:
-        if not path.startswith(ARCHITECTURE_BOUNDARY_PREFIXES):
-            continue
-        file_path = ROOT / path
-        if not file_path.is_file():
-            continue
-        for index, line in enumerate(file_path.read_text(errors="ignore").splitlines(), start=1):
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                continue
-            for pattern in ARCHITECTURE_FORBIDDEN_PATTERNS:
-                if pattern in stripped:
-                    violations.append(f"{path}:{index}: contains `{pattern}`")
-                    break
-    return violations
-
-
 def go_boundary_violations(paths: list[str]) -> list[str]:
     violations: list[str] = []
     for path in paths:
@@ -140,6 +110,62 @@ def go_boundary_violations(paths: list[str]) -> list[str]:
                 if pattern in stripped:
                     violations.append(f"{path}:{index}: contains `{pattern}`")
                     break
+    return violations
+
+
+def go_interfaces(text: str):
+    """(名前, 本体, 開始行)を返す。波括弧の対応で本体を切り出すので、1 行の interface も扱える。"""
+    for match in GO_INTERFACE_START_RE.finditer(text):
+        depth, i = 1, match.end()
+        while i < len(text) and depth:
+            depth += {"{": 1, "}": -1}.get(text[i], 0)
+            i += 1
+        yield match.group(1), text[match.end() : i - 1], text[: match.start()].count("\n") + 1
+
+
+def go_query_repository_violations(paths: list[str]) -> list[str]:
+    violations: list[str] = []
+    for path in paths:
+        in_usecase = path.startswith("backend-go/internal/usecase/")
+        in_domain = path.startswith("backend-go/internal/domain/")
+        if not ((in_usecase or in_domain) and path.endswith(".go") and not path.endswith("_test.go")):
+            continue
+        file_path = ROOT / path
+        if not file_path.is_file():
+            continue
+        text = file_path.read_text(errors="ignore")
+        # interface のメソッド名(*Query は Get*/List* だけ、*Repository は Create*/Update*/Discard* だけ)
+        for name, body, first_line in go_interfaces(text):
+            kind = next((k for k in GO_ALLOWED_PREFIXES if name.endswith(k)), None)
+            if kind is None:
+                continue
+            for offset, raw in enumerate(body.split("\n")):
+                for part in raw.split(";"):
+                    part = part.split("//", 1)[0].strip()
+                    member = re.match(r"([\w.]+)(\()?", part)
+                    if not member:
+                        continue
+                    if member.group(2) is None:
+                        violations.append(f"{path}:{first_line + offset}: {name} embeds {member.group(1)} (embedded interfaces are not allowed)")
+                    elif not member.group(1).startswith(GO_ALLOWED_PREFIXES[kind]):
+                        violations.append(
+                            f"{path}:{first_line + offset}: {name}.{member.group(1)} must start with "
+                            + "/".join(f"{p}*" for p in GO_ALLOWED_PREFIXES[kind]) + f" (*{kind})"
+                        )
+        if not in_usecase:
+            continue
+        # usecase は repository を宣言も保持も呼び出しもしない(repository は domain のサービスからだけ使う)
+        for match in GO_REPOSITORY_TYPE_RE.finditer(text):
+            line = text[: match.start()].count("\n") + 1
+            violations.append(f"{path}:{line}: usecase declares {match.group(1)} (repository types belong to domain)")
+        for index, raw in enumerate(text.splitlines(), start=1):
+            code = raw.split("//", 1)[0]
+            if GO_DOT_IMPORT_RE.match(code):
+                violations.append(f"{path}:{index}: dot import hides repository references (do not use it in usecase)")
+            for ref in GO_REPOSITORY_REF_RE.finditer(code):
+                violations.append(f"{path}:{index}: usecase references {ref.group(1)}.{ref.group(2)} (writes go through domain services)")
+            if GO_REPO_CALL_RE.search(code):
+                violations.append(f"{path}:{index}: usecase calls a repository (writes go through domain services)")
     return violations
 
 
@@ -185,31 +211,21 @@ def main() -> int:
         print("Keep domain/usecase free of net/http, sql drivers, and adapter imports.")
         failures.append("go architecture boundary sensor failed")
 
-    architecture_violations = architecture_boundary_violations(paths)
-    if architecture_violations:
-        print("Backend architecture boundary violations found in changed files:")
-        for violation in architecture_violations:
+    query_violations = go_query_repository_violations(paths)
+    if query_violations:
+        print("Repository dependency violations found in changed files:")
+        for violation in query_violations:
             print(f"- {violation}")
-        print("Move persistence access to query/repository/service boundaries before finishing.")
-        failures.append("backend architecture boundary sensor failed")
+        print(
+            "Repositories are used only from domain: *Repository interfaces (Create*/Update*/Discard* only) live in domain "
+            "and are called only by domain services; usecase reads via *Query (Get*/List* only) and writes via domain services."
+        )
+        failures.append("go query/repository split sensor failed")
 
     if run(["git", "diff", "--check"]) != 0:
         failures.append("git diff --check failed")
 
-    backend_changed = any(p.startswith(BACKEND_PREFIXES) for p in paths)
     frontend_changed = any(p.startswith(FRONTEND_PREFIXES) for p in paths)
-
-    if backend_changed:
-        backend = ROOT / "backend"
-        for cmd in (
-            ["docker", "compose", "run", "--rm", "-e", "RAILS_ENV=test", "api", "bundle", "exec", "rspec"],
-            ["docker", "compose", "run", "--rm", "api", "bin/rubocop", "-f", "github"],
-            ["docker", "compose", "run", "--rm", "api", "bin/brakeman", "--no-pager"],
-        ):
-            if run(cmd, backend) != 0:
-                failures.append("backend sensor failed: " + " ".join(cmd))
-    else:
-        print("backend sensors skipped: no backend source changes detected")
 
     if frontend_changed:
         frontend = ROOT / "frontend"

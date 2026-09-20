@@ -10,7 +10,7 @@ React 19 + TypeScript + Vite で構成された SPA です。Go API を呼び出
 - React Router v6
 - SWR (データフェッチ)
 - Jotai (認証状態グローバル管理)
-- react-hook-form + Zod (フォームバリデーション)
+- react-hook-form (フォーム状態。入力の検証は backend が行い、422 のメッセージを表示する)
 - axios (camelcase-keys / snakecase-keys で HTTP 境界の命名変換)
 - ESLint + typescript-eslint
 - Vitest (ユニットテスト)
@@ -31,7 +31,7 @@ src/
 ├── domains/
 │   ├── auth/
 │   │   ├── api/          # authApiClient.ts
-│   │   ├── hooks/        # useAuthForm.ts (Zod + react-hook-form)
+│   │   ├── hooks/        # useAuthForm.ts (react-hook-form)
 │   │   ├── pages/        # SigninPage / SignupPage / SignoutPage
 │   │   ├── AuthProvider.tsx  # Context + useAuth hook
 │   │   ├── storage.ts    # localStorage 操作
@@ -105,7 +105,7 @@ pnpm run build         # プロダクションビルド (型チェック込み)
 
 ## Notes
 
-- Storybook 用の stories は `src/shared/ui/` に置いています。
+- Storybook 用の stories は `src/components/` に置いています（`*.stories.tsx`）。
 - API のベースパスは既定で `/api` です。環境変数 `VITE_API_BASE_URL` で変更できます。
 - 開発時は Vite proxy が `/api` を Go API(既定 `http://host.docker.internal:8080`)へ転送します。転送先は `VITE_API_PROXY_TARGET` で変更できます。
 - React コンポーネント内ではすべてのフィールド名が camelCase になります（変換は HTTP 境界で完結）。

@@ -5,7 +5,7 @@
 ## Stack
 
 - `backend-go/`: Go 1.22+, net/http + sqlc + pgx, PostgreSQL 16, JWT auth
-- `frontend/`: React 19, TypeScript, Vite, React Router, TanStack Query, Storybook
+- `frontend/`: React 19, TypeScript, Vite, React Router, SWR, Jotai, axios, Storybook
 
 ## Repository Layout
 
@@ -76,10 +76,13 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 ### Frontend
 
-チェックはビルド（`tsc -b && vite build`）のみです。lint / test スクリプトはありません。
+lint（ESLint）、型チェック、テスト（Vitest）、ビルドを実行します。CI でも同じ 4 つを実行しています。
 
 ```bash
 cd frontend
+pnpm run lint
+pnpm run type-check
+pnpm run test
 pnpm run build
 ```
 
@@ -114,8 +117,8 @@ pnpm run storybook
 
 ## Notes
 
-- API の JSON は snake_case です。フロントエンドは snake_case のワイヤ型をそのまま使用します（ケース変換層はありません）。
+- API の JSON は snake_case です。フロントエンドのコードは camelCase で、変換は HTTP 境界（`frontend/src/api/client/buildApiClient.ts`）で行います。
 - 認証付き API は `Authorization: Bearer <token>` を前提にしています。
 - `/admin/*` と `/users/:id` の更新・削除の認可判定（管理者のみ・本人のみ）は usecase 層で行います。
 - `GET /users/:id` は認証が任意で、email と admin を返すのは本人が閲覧したときだけです（他人・匿名には id と username のみ。判断は domain 層）。
-- フロントエンドは小さめの FSD 構成として `app`, `pages`, `shared` に絞っています。
+- フロントエンドは `app` / `domains` / `api` / `states` / `components` / `lib` / `locale` の構成です。詳細は `frontend/README.md` を参照してください。

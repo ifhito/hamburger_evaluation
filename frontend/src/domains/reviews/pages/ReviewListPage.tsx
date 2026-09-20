@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useReviews } from "../hooks/useReviews";
 import { formatDate } from "../../../lib/date";
+import { RATING_MAX, formatRating } from "../../../lib/rating";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
@@ -38,7 +39,7 @@ export default function ReviewListPage() {
           }
         >
           <option value="">{t("reviews.list.allRatings")}</option>
-          {[5, 4, 3, 2, 1].map((r) => (
+          {Array.from({ length: RATING_MAX }, (_, i) => RATING_MAX - i).map((r) => (
             <option key={r} value={r}>
               {"★".repeat(r)}
             </option>
@@ -61,10 +62,7 @@ export default function ReviewListPage() {
         {reviews?.map((review) => (
           <div key={review.id} className={styles.card}>
             <div className={styles.cardHeader}>
-              <span className={styles.rating}>
-                {"★".repeat(review.rating)}
-                {"☆".repeat(5 - review.rating)}
-              </span>
+              <span className={styles.rating}>{formatRating(review.rating)}</span>
               <span className={styles.date}>{formatDate(review.createdAt)}</span>
             </div>
             <p className={styles.comment}>{review.comment}</p>

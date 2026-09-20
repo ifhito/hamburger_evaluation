@@ -1,42 +1,5 @@
-```txt
-src/
-    app/
-        router/
-            index.tsx
-        providers/
-        styles/
-            globals.css
-            App.tsx
+# ディレクトリ構成
 
-pages/
-    review-list/
-        index.tsx
-    review-detail/
-        index.tsx
-    review-new/
-        index.tsx
-    review-edit/
-        index.tsx
-    signup/
-        index.tsx
-    signin/
-        index.tsx
-    signout/
-        index.tsx
-    user-detail/
-        index.tsx
-    user-update/
-        index.tsx
+frontend のディレクトリ構成は、`frontend/README.md` の「Architecture」を参照してください。
 
-shared/
-    ui/
-        Button.tsx
-        Input.tsx
-        Textarea.tsx
-        RatingSelect.tsx
-    lib/
-        api.ts
-        date.ts
-        types/
-            review.ts   
-```
+以前の構成(`pages/` と `shared/`)は、ドメインごとに整理する `domains/<name>` 構成へ移行済みです。

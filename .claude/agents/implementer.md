@@ -26,6 +26,16 @@ own.
     sql drivers, or adapter code; sqlc-generated code is never edited by
     hand — change `db/queries/` and regenerate.
   - Authorization rules live in domain/usecase, not handlers.
+  - **Domain rules are decided only by the backend `domain`.** The frontend
+    shows input, explanations, server errors (422), and returned values
+    (`can_*`, `has_more`, …); never duplicate validation, permission
+    conditions, constants, or derived values in the frontend.
+  - **Repositories are used only from `domain`.** `*Repository` interfaces
+    (writes only: `Create*`/`Update*`/`Discard*`) are declared in `domain` and
+    called only by domain services. A usecase never declares, holds, or calls a
+    repository: it reads through its own `*Query` interfaces (`Get*`/`List*`)
+    and writes through the domain services. Never mix reads and writes in one
+    interface.
   - Runtime resource guardrails are defaults: server timeouts, body caps,
     ctx propagation, single sized pgxpool, pagination.
   - API JSON is snake_case; the TypeScript types under

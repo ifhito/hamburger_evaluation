@@ -73,16 +73,14 @@ type SignupInput struct {
 }
 
 // validate は Rails parity の full message を返す。valid なら空である。
-// メッセージは username、email、password（domain.ValidatePassword）、
-// confirmation の順に並ぶ。
+// メッセージは username、email（domain.ValidateEmail）、password
+// （domain.ValidatePassword）、confirmation の順に並ぶ。
 func (in SignupInput) validate() []string {
 	var msgs []string
 	if in.Username == "" {
 		msgs = append(msgs, "Username can't be blank")
 	}
-	if in.Email == "" {
-		msgs = append(msgs, "Email can't be blank")
-	}
+	msgs = append(msgs, domain.ValidateEmail(in.Email)...)
 	msgs = append(msgs, domain.ValidatePassword(in.Password)...)
 	if in.PasswordConfirmation != nil && *in.PasswordConfirmation != in.Password {
 		msgs = append(msgs, "Password confirmation doesn't match Password")

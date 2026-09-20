@@ -14,7 +14,7 @@ export default function SigninPage() {
   const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
-  const { register, handleSubmit, formState: { errors } } = useLoginForm();
+  const { register, handleSubmit } = useLoginForm();
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -40,7 +40,6 @@ export default function SigninPage() {
           label={t("auth.signin.email")}
           type="email"
           autoComplete="email"
-          error={errors.email?.message}
           {...register("email")}
         />
         <Input
@@ -48,7 +47,6 @@ export default function SigninPage() {
           label={t("auth.signin.password")}
           type="password"
           autoComplete="current-password"
-          error={errors.password?.message}
           {...register("password")}
         />
         <Button type="submit" isLoading={isLoading}>

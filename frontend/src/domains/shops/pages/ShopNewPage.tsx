@@ -14,11 +14,7 @@ export default function ShopNewPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { create } = useCreateShop();
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useShopForm();
+  const { register, handleSubmit } = useShopForm();
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,7 +42,6 @@ export default function ShopNewPage() {
           label={t("shops.new.name")}
           type="text"
           placeholder={t("shops.new.namePlaceholder")}
-          error={errors.name?.message}
           {...register("name")}
         />
         <div className={styles.actions}>

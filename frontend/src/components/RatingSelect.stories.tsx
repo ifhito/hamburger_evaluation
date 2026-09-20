@@ -16,6 +16,3 @@ function Controlled() {
 }
 
 export const Default: Story = { render: () => <Controlled /> }
-export const WithError: Story = {
-  render: () => <RatingSelect value={0} onChange={() => {}} error="Rating is required" />,
-}

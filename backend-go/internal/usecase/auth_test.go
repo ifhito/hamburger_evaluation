@@ -142,6 +142,16 @@ func TestAuthSignupValidation(t *testing.T) {
 			wantMsgs: []string{"Email can't be blank"},
 		},
 		{
+			name:     "email の形式が不正だと検証エラーになる",
+			input:    usecase.SignupInput{Username: "alice", Email: "abc", Password: "Password123!"},
+			wantMsgs: []string{"Email is invalid"},
+		},
+		{
+			name:     "表示名つきの email は形式が不正として検証エラーになる",
+			input:    usecase.SignupInput{Username: "alice", Email: "Alice <a@example.com>", Password: "Password123!"},
+			wantMsgs: []string{"Email is invalid"},
+		},
+		{
 			name:     "password が空だと検証エラーになる",
 			input:    usecase.SignupInput{Username: "alice", Email: "a@example.com"},
 			wantMsgs: []string{"Password can't be blank"},

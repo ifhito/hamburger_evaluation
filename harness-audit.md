@@ -1,6 +1,6 @@
 # ハーネス監査
 
-日付: 2026-05-10
+初版: 2026-05-10 / 更新: 2026-09-20(Go 前提のハーネスの実態に合わせて書き直した)
 リポジトリ: `hamburger_evaluation`
 モード: 読み取り専用の調査(この監査ファイルを除く)。
 
@@ -8,45 +8,29 @@
 
 これは 2 部構成の monorepo です:
 
-- `backend/`: Rails API アプリケーション。
+- `backend-go/`: Go の API アプリケーション。
 - `frontend/`: React SPA アプリケーション。
 
 その他のプロジェクト領域:
 
 - `memory/`, `plan/`, `plans/`: プロジェクトメモとエージェントが生成した計画成果物。
-- `.claude/`: Claude Code のプロジェクト設定が現在存在する。
-- `.agents/` ディレクトリはまだ存在しない。
-- ルートの `docs/` ディレクトリは存在しない。backend のドメインドキュメントは `backend/docs/domain/` 配下にある。
-
-現在のローカル worktree には、すでに無関係な変更がある:
-
-```text
-M AGENT.md
-M CLAUDE.md
-?? SETUP.md
-?? plans/enumerated-twirling-toast.md
-?? plans/parsed-munching-hedgehog.md
-?? plans/setup-md-misty-charm.md
-```
+- `.claude/`: Claude Code のプロジェクト設定(`agents/`, `hooks/`, `skills/`, `workflows/`, `settings.json`)。
+- `.agents/`: Claude / Codex / Hermes で共有する `skills/` と、Hermes 用の設定・agent 定義(`hermes/`)。
+- `docs/`: エージェント向けの文書(`docs/agent/`、`docs/agent-onboarding.md`)。
 
 ## 2. Backend スタック
 
-場所: `backend/`
+場所: `backend-go/`
 
-- 言語: Ruby 3.3.10(`.ruby-version`, `backend/.ruby-version`)。
-- フレームワーク: Rails 8.0.4 API mode。
-- データベース: PostgreSQL 16。
-- パッケージマネージャー: Bundler。
-- 認証: 独自 JWT Bearer token(`jwt`, `bcrypt`)。`devise_token_auth` ではない。
-- 認可: Pundit。
-- DDD / データ整形ライブラリ: `dry-struct`, `dry-types`, `dry-monads`。
-- テストランナー: RSpec / rspec-rails。
-- テストヘルパー: FactoryBot, shoulda-matchers, database_cleaner-active_record。
-- カバレッジ: `backend/spec/spec_helper.rb` の `minimum_coverage 80` による SimpleCov。
-- Linter: `rubocop-rails-omakase` 経由の RuboCop。
-- セキュリティスキャナー: Brakeman。
+- 言語: Go 1.22(`go.mod`)。
+- HTTP: 標準 `net/http` のルーティング。Web フレームワークも ORM も使わない。
+- データベース: PostgreSQL 16(pgx)。クエリは sqlc で生成する。マイグレーションは `db/migrations/`。
+- パッケージマネージャー: Go modules。
+- 認証: 独自 JWT Bearer token(`golang-jwt/jwt`)。パスワードのハッシュは `golang.org/x/crypto/bcrypt`。
+- 写真の保存: disk(既定)または S3 互換のストレージ(`aws-sdk-go-v2`)。
+- 検証: `gofmt`、`go vet`、`go build`、`go test`。テストの方針は `.agents/skills/backend-go-boundaries` に書かれている(usecase は手書きのフェイク、handler は `net/http/httptest`、repository は実 PostgreSQL に対する統合テスト)。
 
-重要なコマンドに関する注意: backend のチェックは、ホストの Ruby ではなく、`backend/` から Docker Compose 経由で実行すべきである。
+重要なコマンドに関する注意: DB を使うコマンド(起動、マイグレーション、sqlc、seed)は、`backend-go/` から Docker Compose 経由で実行する。DB の統合テストは `TEST_DATABASE_URL` を渡さないと黙ってスキップされる。
 
 ## 3. Frontend スタック
 
@@ -56,7 +40,7 @@ M CLAUDE.md
 - フレームワーク / ランタイム: React 19 + Vite 6。
 - ルーター: React Router 6。
 - 状態 / データ: Jotai, SWR。
-- フォーム / バリデーション: react-hook-form + Zod。
+- フォーム: react-hook-form(入力の検証はしない。backend の 422 メッセージを表示する)。
 - HTTP: camelcase / snakecase の境界変換を行う axios。
 - パッケージマネージャー: pnpm 10。
 - テストランナー: Vitest。
@@ -70,8 +54,9 @@ M CLAUDE.md
 追跡されているファイル:
 
 - `AGENTS.md`: エージェントと CI 向けの、日本語による詳細なクイックリファレンス。
-- `AGENT.md`: AI エージェント向けのプロジェクトガイド。現在ローカルで変更されている。
-- `CLAUDE.md`: Claude / Codex 向けのガイダンス。現在ローカルで変更されている。
+- `AGENT.md`: AI エージェント向けのプロジェクトガイド。
+- `CLAUDE.md`: Claude Code 向けのガイダンス。プロジェクト概要、アーキテクチャ、コマンド、エンドポイント、スキーマを持つ。
+- `docs/agent/*.md`、`docs/agent-onboarding.md`: 領域別のメモと、ハーネスの入口。
 - `.claude/settings.json`: 追跡されている Claude のプロジェクト設定。
 
 存在しないファイル:
@@ -79,25 +64,36 @@ M CLAUDE.md
 - `.cursorrules`
 - `.github/copilot-instructions.md`
 
-既存の `.claude/settings.json` は最小限で、現在は次を許可している:
+`.claude/settings.json` の内容:
 
-- `WebSearch`
-- Serena MCP list_dir
-- `Bash(find:*)`
-- `Bash(ls:*)`
-- `Bash(cat:*)`
+- 許可(allow): 読み取り・編集、`git` / `gh` の一般的な操作、`docker`、`go` / `gofmt` / `sqlc`、`pnpm run …`、検証スクリプト、フックの実行。
+- 確認(ask): `gh pr edit`、`gh pr close`、`gh pr merge`。
+- 拒否(deny): 秘密情報ファイルの読み取り(下の「セキュリティ関連ファイル」)、`rm -rf`、`git push --force`、`git rebase`。
+- フック: `Stop` で `python3 .claude/hooks/stop-sensors.py` を実行する。
 
-`.claude/agents/` 配下にプロジェクトの subagent は存在しない。
+subagent(`.claude/agents/`):
+
+- `orchestrator`: 実装とレビューを統括する(worktree の作成、draft PR、レビュー、検証、自動修正)。
+- `implementer`: スコープを絞ったタスクを実装し、検証して報告する。stage / commit / push はしない。
+- `reviewer`: 差分を repo の境界に照らして批判的にレビューする(読み取り専用)。
+- `verifier`: レビューの指摘を実際のコードと突き合わせて、確認 / 反証 / 不確定に分ける(読み取り専用)。
+- `researcher`: 実装前に、コードのパターンを探して行番号つきで示す。
+- `tester`: 対象を絞った frontend のテストを実行し、失敗だけを要約する。
+
+skill(`.agents/skills/`。`.claude/skills/` からは symlink で参照する):
+
+- `backend-go-boundaries` / `backend-go-change-validation` / `db-design`: Go API の境界、検証、DB 設計。
+- `frontend-spa-boundaries` / `frontend-change-validation`: SPA の境界と検証。
+- `focused-review` / `review-fix` / `pr-self-review`: レビューと自動修正。
+- `github-story` / `pr-template` / `pr-hygiene`: story の起票、PR 本文、コミットと PR の衛生。
+
+workflow(`.claude/workflows/`):
+
+- `review-fix.js`: 未コミットの変更を reviewer でレビューし、verifier で指摘を検証(V1)して、自動修正してよいものを implementer で直す(最大 3 ラウンド)。
 
 ## 5. CI
 
 CI は `.github/workflows/ci.yml` で定義されており、pull request と `main` への push で実行される。
-
-Backend ジョブ:
-
-- `backend_scan`: `bin/brakeman --no-pager`
-- `backend_lint`: `bin/rubocop -f github`
-- `backend_test`: PostgreSQL 16 service、`bundle exec rails db:test:prepare`、続いて `bundle exec rspec`
 
 Frontend ジョブ:
 
@@ -106,23 +102,26 @@ Frontend ジョブ:
 - `frontend_test`: `pnpm run test`
 - `frontend_build`: `pnpm run build`
 
-CI は、Ruby を `.ruby-version` から、Node を `.node-version` から、pnpm を v10 でインストールする。
+Node は `.node-version` から、pnpm は v10 でインストールする。
+
+**Go API(`backend-go/`)を検証する CI ジョブは、現時点で存在しない。** Go の検証は、手元の `go-checks.sh` とフックの sensor に依存している。
 
 ## 6. 境界とアーキテクチャ
 
 Backend の境界:
 
 ```text
-backend/app/controllers    HTTP boundary; auth/policy/params/service calls
-backend/app/domain         domain logic/value objects; should not depend on ActiveRecord
-backend/app/parameters     dry-struct input DTOs
-backend/app/queries        read/query boundary
-backend/app/repositories   persistence/CUD boundary
-backend/app/services       application use cases
-backend/app/jobs           async work, should use repository boundaries
-backend/app/policies       Pundit policies
-backend/app/serializers    JSON output
-backend/app/models         thin ActiveRecord models
+backend-go/cmd/api                        composition root: 設定、DB プール、配線、サーバ
+backend-go/internal/domain                エンティティ / 値オブジェクト / ドメインエラー / 書き込みの *Repository の interface と、それを呼ぶ *Service。標準ライブラリのみ
+backend-go/internal/usecase               ユースケースと読み取りの *Query(利用側で宣言)。repository には依存しない
+backend-go/internal/adapter/handler       net/http のハンドラ、DTO、ルーティング、middleware
+backend-go/internal/adapter/query         usecase の *Query(読み取り)を sqlc で実装
+backend-go/internal/adapter/repository    domain の *Repository(書き込み)を sqlc で実装
+backend-go/internal/adapter/repository/sqlcgen   sqlc の生成コード。手で編集しない
+backend-go/internal/adapter/rowmap        sqlc の行 → domain の写像(query と repository で共有)
+backend-go/internal/adapter/infra         DB プール、JWT、パスワードハッシュ、設定
+backend-go/db/migrations                  SQL マイグレーション
+backend-go/db/queries                     sqlc のクエリ
 ```
 
 Frontend の境界:
@@ -137,23 +136,28 @@ frontend/src/components    shared UI components
 
 ## 7. 非標準またはプロジェクト固有の規約
 
-- Backend の検証は、ホストの Ruby ではなく Docker Compose を使う。
-- 認証は、SETUP.md の `devise_token_auth` パターンではなく、意図的に独自 JWT Bearer token を使っている。
-- Backend の API payload は snake_case、frontend のコードは camelCase であり、変換は HTTP 境界で行われる。
-- Rails の model は薄く保つべきである。query / repository の境界が存在する場合、controller / job は永続化のクエリや更新を直接行うべきではない。
-- Domain のコードは ActiveRecord model に直接依存すべきではない。
-- SimpleCov により、example は通っていても全体カバレッジが 80% を下回っている場合、対象を絞った RSpec の実行が非ゼロで終了することがある。カバレッジの判断基準となるのはフルスイートである。
+- Backend の DB を使うコマンドは Docker Compose を使う。DB の統合テストは `TEST_DATABASE_URL` を渡して実行する。
+- 認証は、独自 JWT Bearer token を使っている。
+- Backend の API payload は snake_case、frontend のコードは camelCase であり、変換は HTTP 境界(`frontend/src/api/client/buildApiClient.ts`)で行われる。
+- Backend はクリーンアーキテクチャ(handler → usecase → domain)で、依存は内側にのみ向く。`domain` は標準ライブラリだけを import する。
+- 読み取りの `*Query` は usecase 側で宣言し、書き込みの `*Repository` は domain が宣言する。repository を呼ぶのは domain のサービスだけで、usecase は repository に依存しない(`.agents/skills/backend-go-boundaries`)。
+- ドメインのルールの判断は backend の `domain` だけが持つ。frontend は入力・説明・表示・サーバーのエラーの表示だけを行い、検証・権限の条件・定数・導出を複製しない(`.agents/skills/frontend-spa-boundaries`)。
+- sqlc の生成コードは手で編集せず、`db/queries/` を変更して再生成する。ドメインの形と DB の形は別々に設計する(`.agents/skills/db-design`)。
+- コード内の文章(コメント、Go の doc コメント、テスト名)は日本語で書く。PR の本文も日本語で、固定のセクション構成に従う(`.agents/skills/pr-template`)。
 - 既存の未追跡の `SETUP.md` と `plans/*.md` は、明示的に求められない限り commit してはならない。
-- PR #3 が現在、統合された open な PR である。古い #1 と #2 は、取り込みまたは置き換えられた後に close された。
 
 ## 8. 確認されたプログラム的チェック
 
-Backend(`backend/` から):
+Backend(リポジトリのルートから):
 
 ```bash
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
-docker compose run --rm api bin/rubocop -f github
-docker compose run --rm api bin/brakeman --no-pager
+.agents/skills/backend-go-change-validation/scripts/go-checks.sh   # gofmt / go vet / go build / go test
+```
+
+Backend(`backend-go/` から。`db/queries/` を変更したとき):
+
+```bash
+docker compose run --rm sqlc generate   # internal/adapter/repository/sqlcgen に差分が出てはならない
 ```
 
 Frontend(`frontend/` から):
@@ -165,7 +169,11 @@ pnpm run test
 pnpm run build
 ```
 
-アーキテクチャのチェックは、現時点では専用の単一コマンドではなく、規約 / spec に基づくものである。関連する backend の spec は、`backend/spec/{domain,queries,repositories,services,jobs}` 配下の repository / query / service の境界を対象としている。
+`.claude/hooks/stop-sensors.py`(`Stop` フックで実行される)の sensor:
+
+- 常に確認するもの: `git status`、秘密情報らしいパスが作業ツリーにないこと、対象外のパス(`plans/`、`memory/`、`plan/`、`SETUP.md`)が stage されていないこと(`AGENT_ALLOW_OUT_OF_SCOPE_STAGED=1` で解除できる)、`git diff --check`。
+- `backend-go/` に変更があるとき: `domain` と `usecase` から `net/http`・`database/sql`・`pgx`・`adapter` への import がないこと、usecase が repository を宣言・保持しておらず、`domain.*Repository` を参照していないこと、usecase の `*Query` が `Get*` / `List*` だけ、domain の `*Repository` が `Create*` / `Update*` / `Discard*` だけであること、`gofmt` / `go vet` / `go build` / `go test`。
+- `frontend/` のソースや設定に変更があるとき: `type-check` / `lint` / `test` / `build`。
 
 ## 9. セキュリティ関連ファイル
 
@@ -174,13 +182,12 @@ pnpm run build
 ```text
 .env
 .env.*
-backend/.env
-backend/.env.*
+backend-go/.env
+backend-go/.env.*
 frontend/.env
 frontend/.env.*
 secrets/**
-backend/.kamal/secrets
-backend/config/master.key
+**/secrets/**
 ```
 
-これらは `.gitignore` と重なっているが、Claude の permissions でも明示的に deny すべきである。
+`.env*` は `.gitignore` と重なっているが、Claude の permissions でも明示的に deny すべきである。

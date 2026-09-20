@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { useSignupForm } from "../hooks/useAuthForm";
 import { ApiError } from "../../../api/client/buildApiClient";
-import { PASSWORD_MAX_BYTES, PASSWORD_MIN_BYTES } from "../../../lib/password";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -15,7 +14,7 @@ export default function SignupPage() {
   const { t } = useTranslation();
   const { signup } = useAuth();
   const navigate = useNavigate();
-  const { register, handleSubmit, formState: { errors } } = useSignupForm();
+  const { register, handleSubmit } = useSignupForm();
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -40,7 +39,6 @@ export default function SignupPage() {
           id="username"
           label={t("auth.signup.username")}
           autoComplete="username"
-          error={errors.username?.message}
           {...register("username")}
         />
         <Input
@@ -48,7 +46,6 @@ export default function SignupPage() {
           label={t("auth.signup.email")}
           type="email"
           autoComplete="email"
-          error={errors.email?.message}
           {...register("email")}
         />
         <Input
@@ -56,8 +53,7 @@ export default function SignupPage() {
           label={t("auth.signup.password")}
           type="password"
           autoComplete="new-password"
-          hint={t("auth.passwordHint", { min: PASSWORD_MIN_BYTES, max: PASSWORD_MAX_BYTES })}
-          error={errors.password?.message}
+          hint={t("auth.passwordHint")}
           {...register("password")}
         />
         <Input
@@ -65,7 +61,6 @@ export default function SignupPage() {
           label={t("auth.signup.confirmPassword")}
           type="password"
           autoComplete="new-password"
-          error={errors.passwordConfirmation?.message}
           {...register("passwordConfirmation")}
         />
         <Button type="submit" isLoading={isLoading}>

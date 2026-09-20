@@ -15,7 +15,7 @@ metadata:
 ## 概要
 
 `frontend/` 配下のフロントエンド変更にはこのスキルを使う。SPA は React、
-TypeScript、Vite、SWR、Jotai、react-hook-form、Zod を使い、axios による
+TypeScript、Vite、SWR、Jotai、react-hook-form を使い、axios による
 ケーシング変換を HTTP 境界で行う。
 
 ## 使いどころ
@@ -36,6 +36,26 @@ TypeScript、Vite、SWR、Jotai、react-hook-form、Zod を使い、axios によ
   画面に表示する文言は i18n(`src/locale`)で管理し、この規約の対象外。
   既存の英語コメントは、その行を触るときに日本語へ直す。
 
+## ドメインのルールは backend だけが持つ
+
+frontend の責務は、**入力・説明・表示・サーバーのエラーの表示・導線**だけである。
+ドメインのルール(何が有効か、誰に何が許されるか、何を返すか)の判断は backend の
+`domain` だけが持ち、frontend に複製しない。片方だけ直して食い違う二重管理を防ぐため。
+
+- **持たないもの**:
+  - 検証(必須・形式・範囲・長さ・文字種。例: パスワードの強度、email の形式、rating の範囲)。
+    違反はサーバーの 422 のメッセージを表示する。
+  - 権限の判断(誰が編集・削除できるか。例: `review.userId === authUser.id` の比較)。
+    backend が返す値(`can_edit` など)で出し分ける。
+  - 計算・導出(平均・スコア・「最終ページか」の判定)。backend が返した値をそのまま表示する。
+  - backend と同じ定数の複製(ページサイズ、上限、状態の一覧など)。
+- **許すもの**: HTML 標準の属性(`type="email"`、`required`)、表示のための整形(日付、
+  小数点以下の桁)、ルートの導線としての redirect(権威は backend)、backend が返した値による
+  出し分け、規則を利用者に伝える説明文。説明文に数値を書くときは、対応する backend の定数と、
+  変えるときに直すことをコメントに書く。
+- 要件が frontend でルールを検証することを求めていたら、実装せず、判断を backend に置く形に
+  直す(story の見直しを提案する)。
+
 ## コマンド
 
 `frontend/` から実行する:
@@ -54,9 +74,13 @@ pnpm run build
 3. 複数ドメインが必要とする共有 UI を 1 つのドメイン内に追加する。
 4. `frontend/.env*` を読む。
 5. コメントやテスト名を英語で書く(上記の例外を除き日本語で書く)。
+6. frontend にドメインのルールを複製する(Zod などによる検証、権限の条件、backend と同じ定数、
+   backend の値の再計算)。判断は backend に置き、frontend は結果を表示する。
 
 ## 検証チェックリスト
 
+- [ ] frontend にドメインのルールの判断(検証・権限の条件・定数・導出)を足していない。
+      backend が返した値と、サーバーのエラーを表示している。
 - [ ] TypeScript の変更で型チェックが通る。
 - [ ] フロントエンドの変更で lint が通る。
 - [ ] 変更した挙動を Vitest がカバーしている。

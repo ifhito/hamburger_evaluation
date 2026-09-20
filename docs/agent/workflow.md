@@ -10,13 +10,11 @@ git status --short --branch
 
 ## チェック
 
-Backend:
+Backend(リポジトリのルートから):
 
 ```bash
-cd backend
-docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
-docker compose run --rm api bin/rubocop -f github
-docker compose run --rm api bin/brakeman --no-pager
+.agents/skills/backend-go-change-validation/scripts/go-checks.sh
+cd backend-go && docker compose run --rm sqlc generate   # db/queries/ を変更したとき
 ```
 
 Frontend:
@@ -31,4 +29,4 @@ pnpm run build
 
 ## シークレット
 
-`.env*`、`secrets/**`、`backend/.kamal/secrets`、`backend/config/master.key` を読んだり含めたりしてはならない。
+`.env*`(`backend-go/.env*`、`frontend/.env*` を含む)と `secrets/**` を読んだり含めたりしてはならない。
