@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Fast stop sensors for Claude Code, Hermes, and Codex sessions.
+"""Claude Code・Hermes・Codex のセッション向けの、終了前の高速なセンサー。
 
-The script is intentionally conservative: it always checks git hygiene and
-secret paths, then runs area-specific checks only when Go API (backend-go/) or
-frontend source files changed in this working tree.
+意図的に保守的にしてある。git の衛生と秘密パスは常に確認し、Go の API(backend-go/)
+または frontend のソースが変更されたときだけ、その領域の検査を走らせる。
 """
 from __future__ import annotations
 
@@ -18,6 +17,9 @@ SECRET_MARKERS = (
     ".env",
     ".env.",
     "secrets/",
+    # 旧 API(backend/)の名残として手元に残りうる秘密ファイル。.gitignore の除外がない環境でも誤って commit しない
+    "backend/.kamal/secrets",
+    "backend/config/master.key",
 )
 FRONTEND_PREFIXES = ("frontend/src/", "frontend/package.json", "frontend/pnpm-lock.yaml", "frontend/vite.config", "frontend/tsconfig", "frontend/eslint")
 GO_PREFIXES = ("backend-go/",)

@@ -55,6 +55,7 @@ flowchart TD
 ## 触ってはいけないファイル・操作
 
 - `.env*`, `backend-go/.env*`, `frontend/.env*`, `secrets/**`。
+- 旧 API(`backend/`)の名残として手元に残りうる秘密ファイル(`backend/.env*`, `backend/.kamal/secrets`, `backend/config/master.key`)。
 - `~/.claude`, `~/.hermes`, `~/.codex` などのグローバル設定。必要なら別PRや明示確認を取る。
 - `.claude/settings.local.json` の共有前提化。個人ローカル設定として扱う。
 - ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
@@ -92,7 +93,7 @@ ln -sfn ../../.agents/skills/new-workflow .claude/skills/new-workflow
 
 ```bash
 claude -p "Fix one small bug, use @researcher before editing, then run the required checks." \
-  --allowedTools "Read,Edit,Bash(git status:*),Bash(git diff:*),Bash(pnpm run:*),Bash(docker compose run:*)" \
+  --allowedTools "Read,Edit,Bash(git status:*),Bash(git diff:*),Bash(pnpm run:*),Bash(docker compose run:*),Bash(go:*),Bash(gofmt:*),Bash(.agents/skills/backend-go-change-validation/scripts/go-checks.sh:*)" \
   --max-turns 10
 ```
 

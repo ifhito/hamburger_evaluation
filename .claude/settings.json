@@ -67,12 +67,17 @@
     "deny": [
       "Read(.env)",
       "Read(.env.*)",
+      "Read(backend/.env)",
+      "Read(backend/.env.*)",
       "Read(backend-go/.env)",
       "Read(backend-go/.env.*)",
       "Read(frontend/.env)",
       "Read(frontend/.env.*)",
       "Read(secrets/**)",
       "Read(**/secrets/**)",
+      "Read(backend/.kamal/secrets)",
+      "Read(backend/.kamal/secrets/**)",
+      "Read(backend/config/master.key)",
       "Bash(rm -rf*)",
       "Bash(git push --force*)",
       "Bash(git rebase*)"

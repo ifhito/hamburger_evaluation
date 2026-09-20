@@ -11,7 +11,7 @@ Go 1.22+ の API(標準 `net/http` + sqlc + pgx)と React 19 / TypeScript / Vite
 cd backend-go && docker compose build api-go
 cd frontend && pnpm install --frozen-lockfile
 
-# 開発サーバー起動
+# 開発サーバー起動(API は JWT_SECRET が未設定だと起動時に落ちる。docker compose up の前に export する)
 cd backend-go && docker compose up --build
 cd frontend && pnpm run dev
 
@@ -60,13 +60,15 @@ cd backend-go && docker compose run --rm sqlc generate
 
 1. `git status --short --branch --untracked-files=all` と `git diff --check`。
 2. Backend を変更した場合: `.agents/skills/backend-go-change-validation/scripts/go-checks.sh`(リポジトリのルートから)。
-3. `backend-go/db/queries/` を変更した場合: `cd backend-go && docker compose run --rm sqlc generate` を実行し、`internal/adapter/repository/sqlcgen` に差分が出ないこと。
-4. Frontend を変更した場合: `cd frontend && pnpm run type-check && pnpm run lint && pnpm run test`。
-5. Routing/build 設定または API 境界を変更した場合: `cd frontend && pnpm run build`。
+3. `backend-go/internal/adapter/repository/`・`backend-go/internal/adapter/query/`・`backend-go/db/` を変更した場合: DB の統合テストを、`TEST_DATABASE_URL` を渡して実行する(`cd backend-go && docker compose run --rm -e JWT_SECRET=dummy -e TEST_DATABASE_URL='postgres://postgres:password@db:5432/postgres?sslmode=disable' api-go go test -race -count=1 ./...`)。手順 2 の `go-checks.sh` は `TEST_DATABASE_URL` なしで走るため、これらのテストは黙ってスキップされる。
+4. `backend-go/db/queries/` を変更した場合: `cd backend-go && docker compose run --rm sqlc generate` を実行し、`internal/adapter/repository/sqlcgen` に差分が出ないこと。
+5. Frontend を変更した場合: `cd frontend && pnpm run type-check && pnpm run lint && pnpm run test`。
+6. Routing/build 設定または API 境界を変更した場合: `cd frontend && pnpm run build`。
 
 ## 対象外
 
 - `.env`, `.env.*`, `backend-go/.env*`, `frontend/.env*`, `secrets/**` の読み書き。
+- 旧 API(`backend/`)の名残として手元に残りうる秘密ファイル(`backend/.env*`, `backend/.kamal/secrets`, `backend/config/master.key`)の読み書き。
 - ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
 - 無関係なファイルの stage / commit / push。
 - `git push --force`, destructive reset, production deploy, secret rotation。
