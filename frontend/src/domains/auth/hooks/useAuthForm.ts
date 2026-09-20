@@ -1,7 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { validatePassword } from "../../../lib/password";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -11,11 +10,9 @@ const loginSchema = z.object({
 export const signupSchema = z.object({
   username: z.string().min(1, "Username is required"),
   email: z.string().email("Invalid email address"),
-  // 規則の判定は validatePassword に一本化(サーバーと同じメッセージ)。違反は ". " でつないで 1 つのエラーにする
-  password: z.string().superRefine((value, ctx) => {
-    const messages = validatePassword(value);
-    if (messages.length > 0) ctx.addIssue({ code: "custom", message: messages.join(". ") });
-  }),
+  // パスワードの規則(長さ・文字種)は backend の domain だけが判定する。ここでは入力の有無だけを確かめ、
+  // 規則違反はサーバーの 422 のメッセージで表示する
+  password: z.string().min(1, "Password is required"),
   passwordConfirmation: z.string().min(1, "Please confirm your password"),
 }).refine((data) => data.password === data.passwordConfirmation, {
   message: "Passwords don't match",

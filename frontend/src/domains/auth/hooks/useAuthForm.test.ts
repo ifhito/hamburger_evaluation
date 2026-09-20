@@ -25,23 +25,19 @@ describe("signupSchema", () => {
     expect(signupSchema.safeParse(valid).success).toBe(true);
   });
 
-  it("パスワードが複数の規則に違反しても、password のエラーは 1 件で、違反が \". \" でつながる", () => {
-    // "abc123" は短く(6 バイト)、記号もない
-    const errors = fieldErrors({ ...valid, password: "abc123", passwordConfirmation: "abc123" });
-    expect(errors).toEqual({
-      password: [
-        "Password is too short (minimum is 8 characters). Password must include letters, numbers and symbols",
-      ],
-    });
+  it("パスワードが空なら、入力の有無だけを理由にエラーにする", () => {
+    const errors = fieldErrors({ ...valid, password: "", passwordConfirmation: "" });
+    expect(errors.password).toEqual(["Password is required"]);
   });
 
-  it("パスワードの違反と確認欄の不一致は、別のフィールドに両方出る", () => {
-    const errors = fieldErrors({ ...valid, password: "abc123", passwordConfirmation: "different" });
-    expect(errors).toEqual({
-      password: [
-        "Password is too short (minimum is 8 characters). Password must include letters, numbers and symbols",
-      ],
-      passwordConfirmation: ["Passwords don't match"],
-    });
+  it("パスワードの強度は frontend では判定しない(規則の判定は backend だけが持つ)", () => {
+    // 短く、記号もない値でも、frontend のスキーマは通す。違反はサーバーの 422 で表示される
+    const weak = { ...valid, password: "abc", passwordConfirmation: "abc" };
+    expect(signupSchema.safeParse(weak).success).toBe(true);
+  });
+
+  it("確認欄が一致しなければ、確認欄のフィールドにエラーが出る", () => {
+    const errors = fieldErrors({ ...valid, passwordConfirmation: "different" });
+    expect(errors).toEqual({ passwordConfirmation: ["Passwords don't match"] });
   });
 });

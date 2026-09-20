@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { useSignupForm } from "../hooks/useAuthForm";
 import { ApiError } from "../../../api/client/buildApiClient";
-import { PASSWORD_MAX_BYTES, PASSWORD_MIN_BYTES } from "../../../lib/password";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -56,7 +55,7 @@ export default function SignupPage() {
           label={t("auth.signup.password")}
           type="password"
           autoComplete="new-password"
-          hint={t("auth.passwordHint", { min: PASSWORD_MIN_BYTES, max: PASSWORD_MAX_BYTES })}
+          hint={t("auth.passwordHint")}
           error={errors.password?.message}
           {...register("password")}
         />

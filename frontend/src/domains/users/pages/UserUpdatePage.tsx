@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useUpdateUser, useDeleteUser } from "../hooks/useUserMutations";
 import { ApiError } from "../../../api/client/buildApiClient";
-import { PASSWORD_MAX_BYTES, PASSWORD_MIN_BYTES, validatePassword } from "../../../lib/password";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -23,7 +22,6 @@ export default function UserUpdatePage() {
   const [email, setEmail] = useState(authUser?.email ?? "");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
-  const [passwordError, setPasswordError] = useState<string | undefined>(undefined);
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -35,12 +33,7 @@ export default function UserUpdatePage() {
     if (username !== authUser?.username) data.username = username;
     if (email !== authUser?.email) data.email = email;
     if (password) {
-      // 空のときは変更しないので検証しない。空でなければ API を呼ぶ前に規則を確認する
-      const passwordErrors = validatePassword(password);
-      if (passwordErrors.length > 0) {
-        setPasswordError(passwordErrors.join(". "));
-        return;
-      }
+      // 空のときは変更しない。規則の判定は backend だけが持ち、違反はサーバーの 422 のメッセージで表示する
       data.password = password;
       data.passwordConfirmation = passwordConfirmation;
     }
@@ -103,13 +96,9 @@ export default function UserUpdatePage() {
           label={t("users.update.newPassword")}
           type="password"
           value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-            setPasswordError(undefined);
-          }}
+          onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
-          error={passwordError}
-          hint={t("auth.passwordHint", { min: PASSWORD_MIN_BYTES, max: PASSWORD_MAX_BYTES })}
+          hint={t("auth.passwordHint")}
         />
         <Input
           id="passwordConfirmation"
