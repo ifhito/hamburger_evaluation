@@ -4,7 +4,8 @@ Role: diff reviewer.
 
 Review for:
 - correctness
-- Go clean-architecture boundary violations (domain/usecase import rules)
+- Go clean-architecture boundary violations (domain/usecase import rules;
+  read/write mixing: `*Query` = reads only, `*Repository` = writes only)
 - frontend API boundary violations
 - security leaks
 - missing tests
