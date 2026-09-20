@@ -1,6 +1,7 @@
 package usecase_test
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -128,6 +129,90 @@ func checkImports(src string, forbidden []string) ([]string, error) {
 	return violations, nil
 }
 
+// maxServiceMethods は、domain のサービス 1 つあたりの公開メソッド数の上限である。
+// サービスが肥大化するのを防ぐ歯止めで、超えるときは、ロジックをエンティティへ移す、
+// 集約を分ける、を先に検討する(domain/doc.go のルール)。上限を上げるときは、理由を
+// レビューで示す。
+const maxServiceMethods = 8
+
+// checkServiceRules は、domain のサービス(名前が Service で終わる struct)が、ルールに
+// 沿っていることを確かめ、違反の説明と、見つけたサービスの数を返す。ルールは、自分の集約の
+// repository をちょうど 1 つだけ持つこと、公開メソッドが maxServiceMethods 個までであること。
+func checkServiceRules(sources map[string]string) (violations []string, services int, err error) {
+	structs := map[string]*ast.StructType{}
+	methods := map[string]int{}
+	for name, src := range sources {
+		f, perr := parser.ParseFile(token.NewFileSet(), name, src, 0)
+		if perr != nil {
+			return nil, 0, perr
+		}
+		for _, decl := range f.Decls {
+			switch d := decl.(type) {
+			case *ast.GenDecl:
+				for _, spec := range d.Specs {
+					ts, ok := spec.(*ast.TypeSpec)
+					if !ok {
+						continue
+					}
+					if st, ok := ts.Type.(*ast.StructType); ok && strings.HasSuffix(ts.Name.Name, "Service") {
+						structs[ts.Name.Name] = st
+					}
+				}
+			case *ast.FuncDecl:
+				if d.Recv == nil || len(d.Recv.List) != 1 || !d.Name.IsExported() {
+					continue
+				}
+				recv := d.Recv.List[0].Type
+				if star, ok := recv.(*ast.StarExpr); ok {
+					recv = star.X
+				}
+				if id, ok := recv.(*ast.Ident); ok {
+					methods[id.Name]++
+				}
+			}
+		}
+	}
+	names := make([]string, 0, len(structs))
+	for name := range structs {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		want := strings.TrimSuffix(name, "Service") + "Repository"
+		fields, typeOK := 0, true
+		for _, field := range structs[name].Fields.List {
+			fields += max(1, len(field.Names))
+			if id, ok := field.Type.(*ast.Ident); !ok || id.Name != want {
+				typeOK = false
+			}
+		}
+		if fields != 1 || !typeOK {
+			violations = append(violations, fmt.Sprintf("%s は %s だけをちょうど 1 つ持たなければならない (他の集約の repository や他の依存を持たない)", name, want))
+		}
+		if methods[name] > maxServiceMethods {
+			violations = append(violations, fmt.Sprintf("%s の公開メソッドが %d 個ある (上限 %d 個。エンティティへの移動か集約の分割を先に検討する)", name, methods[name], maxServiceMethods))
+		}
+	}
+	return violations, len(names), nil
+}
+
+// checkNoRepositoryImport は、Go のソースが repository の実装パッケージ(adapter/repository。
+// その下の sqlcgen は含まない)を import していないことを確かめ、違反の説明を返す。
+func checkNoRepositoryImport(src string) ([]string, error) {
+	f, err := parser.ParseFile(token.NewFileSet(), "src.go", src, parser.ImportsOnly)
+	if err != nil {
+		return nil, err
+	}
+	var violations []string
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		if strings.HasSuffix(path, "/internal/adapter/repository") {
+			violations = append(violations, path+" を import している (repository の実装を呼ぶのは組み立て(cmd)だけ)")
+		}
+	}
+	return violations, nil
+}
+
 // productionSources は、dir にあるテスト以外の Go ファイルの (ファイル名, 内容) を返す。
 func productionSources(t *testing.T, dir string) map[string]string {
 	t.Helper()
@@ -243,6 +328,38 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		}
 	})
 
+	t.Run("実際の handler と query は repository に依存しない", func(t *testing.T) {
+		for _, dir := range []string{"../adapter/handler", "../adapter/query"} {
+			for name, src := range productionSources(t, dir) {
+				v, err := checkNoRepositoryDependency(src)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				imports, err := checkNoRepositoryImport(src)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				for _, msg := range append(v, imports...) {
+					t.Errorf("%s: %s", name, msg)
+				}
+			}
+		}
+	})
+
+	t.Run("実際の domain のサービスがルールに沿っている", func(t *testing.T) {
+		v, services, err := checkServiceRules(productionSources(t, "../domain"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, msg := range v {
+			t.Error(msg)
+		}
+		// 空振りで通らないよう、Shop / Review / User の 3 つのサービスが見つかることも確かめる。
+		if services < 3 {
+			t.Errorf("サービスは %d 個しか見つからない (3 個以上を期待)", services)
+		}
+	})
+
 	cases := []struct {
 		name, src, want string // want は期待する違反の説明の一部 (空なら違反なし)
 	}{
@@ -277,6 +394,53 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 	for _, tc := range dependencyCases {
 		t.Run(tc.name, func(t *testing.T) {
 			v, err := checkNoRepositoryDependency(tc.src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(v, "\n"); (tc.want == "") != (got == "") || !strings.Contains(got, tc.want) {
+				t.Errorf("違反 = %q, 期待 = %q", got, tc.want)
+			}
+		})
+	}
+
+	serviceSrc := func(methods int) string {
+		s := "package p\ntype XService struct{ repo XRepository }\n"
+		for i := 0; i < methods; i++ {
+			s += fmt.Sprintf("func (s *XService) M%d() {}\n", i)
+		}
+		return s
+	}
+	serviceCases := []struct {
+		name, src, want string
+	}{
+		{"自分の repository を 1 つだけ持てば違反なし", serviceSrc(1), ""},
+		{"公開メソッドが上限ちょうどなら違反なし", serviceSrc(maxServiceMethods), ""},
+		{"公開メソッドが上限を超えれば検出する", serviceSrc(maxServiceMethods + 1), "公開メソッドが"},
+		{"別の集約の repository を持てば検出する", "package p\ntype XService struct{ repo YRepository }", "XRepository だけをちょうど 1 つ"},
+		{"フィールドが 2 つあれば検出する", "package p\ntype XService struct {\n\trepo XRepository\n\tother YRepository\n}", "XRepository だけをちょうど 1 つ"},
+		{"依存を持たないサービスも検出する", "package p\ntype XService struct{}", "XRepository だけをちょうど 1 つ"},
+	}
+	for _, tc := range serviceCases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, _, err := checkServiceRules(map[string]string{"src.go": tc.src})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(v, "\n"); (tc.want == "") != (got == "") || !strings.Contains(got, tc.want) {
+				t.Errorf("違反 = %q, 期待 = %q", got, tc.want)
+			}
+		})
+	}
+
+	repositoryImportCases := []struct {
+		name, src, want string
+	}{
+		{"repository の実装パッケージの import を検出する", "package p\nimport \"example.com/x/internal/adapter/repository\"", "adapter/repository"},
+		{"sqlcgen の import は許す", "package p\nimport \"example.com/x/internal/adapter/repository/sqlcgen\"", ""},
+	}
+	for _, tc := range repositoryImportCases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := checkNoRepositoryImport(tc.src)
 			if err != nil {
 				t.Fatal(err)
 			}

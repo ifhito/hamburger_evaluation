@@ -9,11 +9,11 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// shopRepoFake（shops_test.go で宣言）の moderation 用メソッド群。この fake は
+// shopStoreFake（shops_test.go で宣言）の moderation 用メソッド群。この fake は
 // タイムスタンプを持たないので、id desc が ShopQuery.ListShopsForModeration の
 // created_at desc、id desc という順序の代わりを務める。
 
-func (f *shopRepoFake) CreateShop(_ context.Context, shop domain.Shop) (domain.Shop, error) {
+func (f *shopStoreFake) CreateShop(_ context.Context, shop domain.Shop) (domain.Shop, error) {
 	if f.err != nil {
 		return domain.Shop{}, f.err
 	}
@@ -26,7 +26,7 @@ func (f *shopRepoFake) CreateShop(_ context.Context, shop domain.Shop) (domain.S
 	return shop, nil
 }
 
-func (f *shopRepoFake) ListShopsForModeration(_ context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
+func (f *shopStoreFake) ListShopsForModeration(_ context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -41,7 +41,7 @@ func (f *shopRepoFake) ListShopsForModeration(_ context.Context, status *domain.
 	return out, nil
 }
 
-func (f *shopRepoFake) UpdateShopName(_ context.Context, id int64, name string) (domain.Shop, error) {
+func (f *shopStoreFake) UpdateShopName(_ context.Context, id int64, name string) (domain.Shop, error) {
 	if f.err != nil {
 		return domain.Shop{}, f.err
 	}
@@ -54,7 +54,7 @@ func (f *shopRepoFake) UpdateShopName(_ context.Context, id int64, name string) 
 	return domain.Shop{}, domain.ErrShopNotFound
 }
 
-func (f *shopRepoFake) UpdateShopStatus(_ context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
+func (f *shopStoreFake) UpdateShopStatus(_ context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
 	if f.err != nil {
 		return domain.Shop{}, f.err
 	}

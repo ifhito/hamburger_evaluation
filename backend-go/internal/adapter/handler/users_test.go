@@ -23,12 +23,12 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// userRepoFake は in-memory の usecase.UserQuery かつ domain.UserRepository で
+// userStoreFake は in-memory の usecase.UserQuery かつ domain.UserRepository で
 // ある（型の宣言と読み取りのメソッドは auth_test.go にある）。この位置には書き込み
 // 側の UpdateUserProfile / DiscardUser が定義されており、本物の repository の
 // エラーの対応づけを再現している。
 
-func (f *userRepoFake) UpdateUserProfile(_ context.Context, id int64, changes domain.ProfileChanges) (domain.User, error) {
+func (f *userStoreFake) UpdateUserProfile(_ context.Context, id int64, changes domain.ProfileChanges) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err
 	}
@@ -57,7 +57,7 @@ func (f *userRepoFake) UpdateUserProfile(_ context.Context, id int64, changes do
 	return rec.user, nil
 }
 
-func (f *userRepoFake) DiscardUser(_ context.Context, id int64) error {
+func (f *userStoreFake) DiscardUser(_ context.Context, id int64) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -71,11 +71,11 @@ func (f *userRepoFake) DiscardUser(_ context.Context, id int64) error {
 
 // newUsersRouter は、「同一の」in-memory のユーザー repository の上で auth と
 // users を router に配線するので、profile の変更がログインから見える。
-func newUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) string) {
+func newUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(int64) string) {
 	t.Helper()
 	repo, auth, codec := newAuthKit()
-	reviewRepo := newReviewRepoFake()
-	shopRepo := &shopRepoFake{}
+	reviewRepo := newReviewStoreFake()
+	shopRepo := &shopStoreFake{}
 	router := handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, domain.NewShopService(shopRepo)),
 		usecase.NewReviews(reviewRepo, domain.NewReviewService(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(repo, domain.NewUserService(repo), hasherFake{}), nil)
@@ -131,7 +131,7 @@ func userObjectID(t *testing.T, obj map[string]any) int64 {
 
 // newSeededUsersRouter は、alice(1)、discard 済みの ghost(2)、bob(3)、admin の
 // root(4) を seed した router を返す。discard 済みの id 2 が欠番になる。
-func newSeededUsersRouter(t *testing.T) (*userRepoFake, http.Handler, func(int64) string) {
+func newSeededUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(int64) string) {
 	t.Helper()
 	repo, router, token := newUsersRouter(t)
 	repo.seed("alice", "alice@example.com", "Password123!")
@@ -360,7 +360,7 @@ func TestUsersIndexIsNotFound(t *testing.T) {
 // AC3（既に使われている email は 422）、そして Rails parity の validation の
 // 境界ケース。
 func TestUpdateUser(t *testing.T) {
-	setup := func(t *testing.T) (*userRepoFake, http.Handler, string, string) {
+	setup := func(t *testing.T) (*userStoreFake, http.Handler, string, string) {
 		t.Helper()
 		repo, router, token := newUsersRouter(t)
 		alice := repo.seed("alice", "alice@example.com", "Password123!")

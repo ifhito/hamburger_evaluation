@@ -17,13 +17,13 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// fakeStoredReview は reviewRepoFake の中の review 1 行である。
+// fakeStoredReview は reviewStoreFake の中の review 1 行である。
 type fakeStoredReview struct {
 	review    domain.Review
 	discarded bool
 }
 
-// reviewRepoFake は in-memory の usecase.ReviewQuery かつ
+// reviewStoreFake は in-memory の usecase.ReviewQuery かつ
 // domain.ReviewRepository である。in-memory の fake は共有 DB の代役なので、
 // 読み書きで状態を共有するよう 1 つの型に保つ（読み書きの分離は、usecase の Query の
 // 引数型と domain のサービスの引数型がコンパイル時に保証する）。active な shop の feed の filter は、seed
@@ -32,7 +32,7 @@ type fakeStoredReview struct {
 // する（500 の経路）。listFilters は ListReviews が受け取った filter を呼び出し
 // 順に記録する（handler が usecase に渡した値と、呼ばれなかったことの検証用）。
 // lastLimit / lastOffset は最後の呼び出しの引数である。
-type reviewRepoFake struct {
+type reviewStoreFake struct {
 	shops                 map[int64]domain.Shop
 	links                 map[int64][]int64 // shopID -> 紐づく burger の id
 	burgers               map[int64]domain.ShopReviewBurger
@@ -45,12 +45,12 @@ type reviewRepoFake struct {
 }
 
 var (
-	_ usecase.ReviewQuery     = (*reviewRepoFake)(nil)
-	_ domain.ReviewRepository = (*reviewRepoFake)(nil)
+	_ usecase.ReviewQuery     = (*reviewStoreFake)(nil)
+	_ domain.ReviewRepository = (*reviewStoreFake)(nil)
 )
 
-func newReviewRepoFake() *reviewRepoFake {
-	return &reviewRepoFake{
+func newReviewStoreFake() *reviewStoreFake {
+	return &reviewStoreFake{
 		shops:     map[int64]domain.Shop{},
 		links:     map[int64][]int64{},
 		burgers:   map[int64]domain.ShopReviewBurger{},
@@ -63,7 +63,7 @@ func newReviewRepoFake() *reviewRepoFake {
 // ものは reviewBaseTime + n 分になる）。
 var reviewBaseTime = time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 
-func (f *reviewRepoFake) detailFor(review domain.Review) domain.ReviewDetail {
+func (f *reviewStoreFake) detailFor(review domain.Review) domain.ReviewDetail {
 	burger := f.burgers[review.BurgerID]
 	return domain.ReviewDetail{
 		Review: review,
@@ -72,7 +72,7 @@ func (f *reviewRepoFake) detailFor(review domain.Review) domain.ReviewDetail {
 	}
 }
 
-func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
+func (f *reviewStoreFake) ListReviews(_ context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
 	f.listFilters = append(f.listFilters, filter)
 	f.lastLimit, f.lastOffset = limit, offset
 	if f.err != nil {
@@ -130,7 +130,7 @@ func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewLis
 	return details, nil
 }
 
-func (f *reviewRepoFake) GetReview(_ context.Context, id int64) (domain.ReviewDetail, error) {
+func (f *reviewStoreFake) GetReview(_ context.Context, id int64) (domain.ReviewDetail, error) {
 	if f.err != nil {
 		return domain.ReviewDetail{}, f.err
 	}
@@ -140,7 +140,7 @@ func (f *reviewRepoFake) GetReview(_ context.Context, id int64) (domain.ReviewDe
 	return domain.ReviewDetail{}, domain.ErrReviewNotFound
 }
 
-func (f *reviewRepoFake) GetShop(_ context.Context, id int64) (domain.Shop, error) {
+func (f *reviewStoreFake) GetShop(_ context.Context, id int64) (domain.Shop, error) {
 	if f.err != nil {
 		return domain.Shop{}, f.err
 	}
@@ -150,7 +150,7 @@ func (f *reviewRepoFake) GetShop(_ context.Context, id int64) (domain.Shop, erro
 	return domain.Shop{}, domain.ErrShopNotFound
 }
 
-func (f *reviewRepoFake) GetShopBurger(_ context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error) {
+func (f *reviewStoreFake) GetShopBurger(_ context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error) {
 	if f.err != nil {
 		return domain.ShopReviewBurger{}, f.err
 	}
@@ -160,7 +160,7 @@ func (f *reviewRepoFake) GetShopBurger(_ context.Context, shopID, burgerID int64
 	return domain.ShopReviewBurger{}, domain.ErrBurgerNotFound
 }
 
-func (f *reviewRepoFake) CreateReview(_ context.Context, review domain.Review) (domain.Review, error) {
+func (f *reviewStoreFake) CreateReview(_ context.Context, review domain.Review) (domain.Review, error) {
 	if f.err != nil {
 		return domain.Review{}, f.err
 	}
@@ -171,7 +171,7 @@ func (f *reviewRepoFake) CreateReview(_ context.Context, review domain.Review) (
 	return review, nil
 }
 
-func (f *reviewRepoFake) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
+func (f *reviewStoreFake) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
 	if f.err != nil {
 		return domain.Review{}, domain.ShopReviewBurger{}, f.err
 	}
@@ -200,7 +200,7 @@ func (f *reviewRepoFake) CreateReviewForNamedBurger(ctx context.Context, shopID 
 	return created, burger, nil
 }
 
-func (f *reviewRepoFake) UpdateReviewContent(_ context.Context, id int64, rating int, comment string) (domain.Review, error) {
+func (f *reviewStoreFake) UpdateReviewContent(_ context.Context, id int64, rating int, comment string) (domain.Review, error) {
 	if f.err != nil {
 		return domain.Review{}, f.err
 	}
@@ -214,7 +214,7 @@ func (f *reviewRepoFake) UpdateReviewContent(_ context.Context, id int64, rating
 	return rec.review, nil
 }
 
-func (f *reviewRepoFake) UpdateReviewContentAndPhotoKey(_ context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+func (f *reviewStoreFake) UpdateReviewContentAndPhotoKey(_ context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
 	if f.err != nil {
 		return domain.Review{}, f.err
 	}
@@ -229,7 +229,7 @@ func (f *reviewRepoFake) UpdateReviewContentAndPhotoKey(_ context.Context, id in
 	return rec.review, nil
 }
 
-func (f *reviewRepoFake) DiscardReview(_ context.Context, id int64) error {
+func (f *reviewStoreFake) DiscardReview(_ context.Context, id int64) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -254,8 +254,8 @@ const (
 // （activeShopID と active2ShopID）、（creatorID が作成した）pending な shop、
 // rejected な shop。そして、Cheese burger（統計あり）は上記 4 件すべての shop に
 // 紐づき、Plain burger（統計なし）は pending な shop のみに紐づく。
-func seedReviewWorld(creatorID int64) *reviewRepoFake {
-	repo := newReviewRepoFake()
+func seedReviewWorld(creatorID int64) *reviewStoreFake {
+	repo := newReviewStoreFake()
 	repo.shops[activeShopID] = domain.Shop{ID: activeShopID, Name: "Active Diner", Status: domain.ShopStatusActive}
 	repo.shops[pendingShopID] = domain.Shop{ID: pendingShopID, Name: "Alice Pending", Status: domain.ShopStatusPending, CreatorID: shopPtr(creatorID)}
 	repo.shops[rejectedShopID] = domain.Shop{ID: rejectedShopID, Name: "Rejected Grill", Status: domain.ShopStatusRejected}
@@ -276,7 +276,7 @@ func seedReviewWorld(creatorID int64) *reviewRepoFake {
 // newReviewsRouter は、auth kit と与えられた review の fake で router を
 // 配線し、alice（id 1）、bob（id 2）、admin（id 3）用の Bearer ヘッダーを
 // 返す。fake の usernames の map は、それらの id に揃えられている。
-func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, aliceAuth, bobAuth, adminAuth string) {
+func newReviewsRouter(t *testing.T, repo *reviewStoreFake) (router http.Handler, aliceAuth, bobAuth, adminAuth string) {
 	t.Helper()
 	router, _, aliceAuth, bobAuth, adminAuth = newPhotoReviewsRouter(t, repo)
 	return router, aliceAuth, bobAuth, adminAuth
@@ -287,7 +287,7 @@ func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, 
 // store が、disk モードで cmd/api が配線するのと同じ handler.PhotoFileServer
 // ラッパーを通じて GET /photos/ の配下で配信される。newReviewsRouter は
 // これに委譲し、photoDir を捨てるだけである。
-func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, photoDir, aliceAuth, bobAuth, adminAuth string) {
+func newPhotoReviewsRouter(t *testing.T, repo *reviewStoreFake) (router http.Handler, photoDir, aliceAuth, bobAuth, adminAuth string) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
 	alice := users.seed("alice", "alice@example.com", "Password123!")
@@ -306,7 +306,7 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Hand
 		return "Bearer " + tok
 	}
 	photoDir = t.TempDir()
-	shopRepo := &shopRepoFake{}
+	shopRepo := &shopStoreFake{}
 	router = handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, domain.NewShopService(shopRepo)),
 		usecase.NewReviews(repo, domain.NewReviewService(repo), storage.NewDisk(photoDir, "/photos")),
 		usecase.NewUsers(users, domain.NewUserService(users), hasherFake{}), handler.PhotoFileServer(photoDir))
@@ -593,7 +593,7 @@ func TestListReviews(t *testing.T) {
 	})
 
 	t.Run("repository の失敗は 500 を返す", func(t *testing.T) {
-		failRepo := newReviewRepoFake()
+		failRepo := newReviewStoreFake()
 		failRepo.err = fmt.Errorf("db down")
 		failRouter, _, _, _ := newReviewsRouter(t, failRepo)
 		rec := do(failRouter, http.MethodGet, "/reviews", "", "")
