@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -86,8 +87,9 @@ func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, alic
 	if err != nil {
 		t.Fatalf("issue admin token: %v", err)
 	}
-	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo), usecase.NewReviews(newReviewRepoFake()),
-			usecase.NewUsers(users, hasherFake{})),
+	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo),
+			usecase.NewReviews(newReviewRepoFake(), storage.NewDisk(t.TempDir(), "/photos")),
+			usecase.NewUsers(users, hasherFake{}), nil),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID
 }
 
@@ -244,9 +246,9 @@ func TestGetShopDetail(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
 	want := `{"id":1,"name":"Active Diner","status":"active","moderation_note":null,"creator":null,"reviews":[` +
-		`{"id":9,"rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","user":{"id":3,"username":"bob"},` +
+		`{"id":9,"rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":3,"username":"bob"},` +
 		`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
-		`{"id":8,"rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","user":{"id":3,"username":"bob"},` +
+		`{"id":8,"rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":3,"username":"bob"},` +
 		`"burger":{"id":6,"name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}]}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)

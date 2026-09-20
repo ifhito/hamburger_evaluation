@@ -22,7 +22,12 @@ export function buildApiClient(getToken?: () => string | null) {
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    if (config.data && typeof config.data === "object") {
+    // 写真つきの multipart(FormData)はキー変換の対象外。オブジェクトとして変換すると壊れる。
+    if (
+      config.data &&
+      typeof config.data === "object" &&
+      !(config.data instanceof FormData)
+    ) {
       config.data = snakecaseKeys(config.data as Record<string, unknown>, {
         deep: true,
       });

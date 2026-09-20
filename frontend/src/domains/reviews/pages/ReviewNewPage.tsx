@@ -33,6 +33,7 @@ export default function ReviewNewPage() {
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
 
   if (!shopId) return <Navigate to="/shops" replace />;
 
@@ -40,7 +41,7 @@ export default function ReviewNewPage() {
     setServerError(null);
     setIsSubmitting(true);
     try {
-      const review = await create(data);
+      const review = await create(data, photo);
       void navigate(`/reviews/${review.id}`);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("reviews.new.error")]);
@@ -76,6 +77,17 @@ export default function ReviewNewPage() {
           error={errors.burgerName?.message}
           {...register("burgerName")}
         />
+        <div className={styles.field}>
+          <label htmlFor="photo" className={styles.fieldLabel}>
+            {t("reviews.photo.label")}
+          </label>
+          <input
+            id="photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+          />
+        </div>
         <div className={styles.actions}>
           <Button type="submit" isLoading={isSubmitting}>
             {t("reviews.new.submit")}

@@ -6,10 +6,12 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -24,6 +26,7 @@ type fakeReviewRepo struct {
 	createReview               func(ctx context.Context, review domain.Review) (domain.Review, error)
 	createReviewForNamedBurger func(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error)
 	updateReviewContent        func(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
+	updateReviewContentAndKey  func(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error)
 	discardReview              func(ctx context.Context, id int64) error
 }
 
@@ -76,6 +79,13 @@ func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id int64, rati
 	return f.updateReviewContent(ctx, id, rating, comment)
 }
 
+func (f *fakeReviewRepo) UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+	if f.updateReviewContentAndKey == nil {
+		panic("unexpected UpdateReviewContentAndPhotoKey call")
+	}
+	return f.updateReviewContentAndKey(ctx, id, rating, comment, photoKey)
+}
+
 func (f *fakeReviewRepo) DiscardReview(ctx context.Context, id int64) error {
 	if f.discardReview == nil {
 		panic("unexpected DiscardReview call")
@@ -109,7 +119,7 @@ func TestReviewsListPagination(t *testing.T) {
 					return []domain.ReviewDetail{}, nil
 				},
 			}
-			if _, err := usecase.NewReviews(repo).List(context.Background(), usecase.ReviewListFilter{}, tt.page, tt.perPage); err != nil {
+			if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).List(context.Background(), usecase.ReviewListFilter{}, tt.page, tt.perPage); err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}
 			if gotLimit != tt.wantLimit || gotOffset != tt.wantOffset {
@@ -133,7 +143,7 @@ func TestReviewsListFilterPassThrough(t *testing.T) {
 			return []domain.ReviewDetail{}, nil
 		},
 	}
-	if _, err := usecase.NewReviews(repo).List(context.Background(), want, 1, 20); err != nil {
+	if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).List(context.Background(), want, 1, 20); err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -148,7 +158,7 @@ func TestReviewsListFailure(t *testing.T) {
 			return nil, io.ErrUnexpectedEOF
 		},
 	}
-	if _, err := usecase.NewReviews(repo).List(context.Background(), usecase.ReviewListFilter{}, 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) {
+	if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).List(context.Background(), usecase.ReviewListFilter{}, 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("List error = %v, want %v", err, io.ErrUnexpectedEOF)
 	}
 }
@@ -170,7 +180,7 @@ func TestReviewsGet(t *testing.T) {
 			return domain.ReviewDetail{}, domain.ErrReviewNotFound
 		},
 	}
-	reviews := usecase.NewReviews(repo)
+	reviews := usecase.NewReviews(repo, &fakePhotoStorage{})
 
 	got, err := reviews.Get(context.Background(), detail.ID)
 	if err != nil {
@@ -226,7 +236,7 @@ func TestReviewsCreate(t *testing.T) {
 				return review, nil
 			},
 		}
-		got, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty")
+		got, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -246,7 +256,7 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("unknown shop yields ErrShopNotFound before anything else", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop}
-		if _, err := usecase.NewReviews(repo).Create(ctx, bob, 999, cheese.ID, "", 4, "ok"); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, 999, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
@@ -254,7 +264,7 @@ func TestReviewsCreate(t *testing.T) {
 	t.Run("AC2 rejected shop yields ErrForbidden before the burger lookup", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop} // getShopBurger unset: a lookup would panic
 		for _, viewer := range []domain.User{alice, bob, admin} {
-			if _, err := usecase.NewReviews(repo).Create(ctx, viewer, rejectedShop.ID, cheese.ID, "", 4, "ok"); !errors.Is(err, domain.ErrForbidden) {
+			if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, viewer, rejectedShop.ID, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
 			}
 		}
@@ -269,28 +279,28 @@ func TestReviewsCreate(t *testing.T) {
 				return review, nil
 			},
 		}
-		reviews := usecase.NewReviews(repo)
-		if _, err := reviews.Create(ctx, alice, pendingShop.ID, cheese.ID, "", 4, "ok"); err != nil {
+		reviews := usecase.NewReviews(repo, &fakePhotoStorage{})
+		if _, err := reviews.Create(ctx, alice, pendingShop.ID, cheese.ID, "", 4, "ok", nil); err != nil {
 			t.Errorf("creator: Create returned error: %v", err)
 		}
-		if _, err := reviews.Create(ctx, admin, pendingShop.ID, cheese.ID, "", 4, "ok"); err != nil {
+		if _, err := reviews.Create(ctx, admin, pendingShop.ID, cheese.ID, "", 4, "ok", nil); err != nil {
 			t.Errorf("admin: Create returned error: %v", err)
 		}
-		if _, err := usecase.NewReviews(&fakeReviewRepo{getShop: getShop}).Create(ctx, bob, pendingShop.ID, cheese.ID, "", 4, "ok"); !errors.Is(err, domain.ErrForbidden) {
+		if _, err := usecase.NewReviews(&fakeReviewRepo{getShop: getShop}, &fakePhotoStorage{}).Create(ctx, bob, pendingShop.ID, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrForbidden) {
 			t.Errorf("other user: error = %v, want %v", err, domain.ErrForbidden)
 		}
 	})
 
 	t.Run("unlinked burger yields ErrBurgerNotFound without an insert", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview unset
-		if _, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 999, "", 4, "ok"); !errors.Is(err, domain.ErrBurgerNotFound) {
+		if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 999, "", 4, "ok", nil); !errors.Is(err, domain.ErrBurgerNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrBurgerNotFound)
 		}
 	})
 
 	t.Run("AC4 invalid content yields ValidationError without an insert", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview unset
-		_, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, " ")
+		_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, " ", nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -316,7 +326,7 @@ func TestReviewsCreate(t *testing.T) {
 			},
 		}
 		// The name reaches the repository untrimmed (Rails never trims).
-		got, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 0, " Smash ", 4, "Juicy")
+		got, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, " Smash ", 4, "Juicy", nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -343,7 +353,7 @@ func TestReviewsCreate(t *testing.T) {
 				return review, nil
 			},
 		}
-		got, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, cheese.ID, "Ignored", 4, "ok")
+		got, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "Ignored", 4, "ok", nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -356,7 +366,7 @@ func TestReviewsCreate(t *testing.T) {
 		for name, burgerName := range map[string]string{"missing": "", "whitespace-only": "  \t "} {
 			t.Run(name, func(t *testing.T) {
 				repo := &fakeReviewRepo{getShop: getShop} // every write unset: a call panics
-				_, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 0, burgerName, 4, "ok")
+				_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, burgerName, 4, "ok", nil)
 				var vErr *domain.ValidationError
 				if !errors.As(err, &vErr) {
 					t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -370,7 +380,7 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("burger_name path validates content before the write", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop} // createReviewForNamedBurger unset: a call panics
-		_, err := usecase.NewReviews(repo).Create(ctx, bob, activeShop.ID, 0, "Smash", 0, " ")
+		_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, "Smash", 0, " ", nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -424,7 +434,7 @@ func TestReviewsUpdate(t *testing.T) {
 				return updated, nil
 			},
 		}
-		got, err := usecase.NewReviews(repo).Update(ctx, alice, stored.ID, 5, "Better")
+		got, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 5, "Better", nil)
 		if err != nil {
 			t.Fatalf("Update returned error: %v", err)
 		}
@@ -442,7 +452,7 @@ func TestReviewsUpdate(t *testing.T) {
 	t.Run("AC3 non-author gets ErrForbidden without a write", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}      // updateReviewContent unset
 		for _, viewer := range []domain.User{bob, admin} { // admin gets no pass
-			if _, err := usecase.NewReviews(repo).Update(ctx, viewer, stored.ID, 5, "x"); !errors.Is(err, domain.ErrForbidden) {
+			if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Update(ctx, viewer, stored.ID, 5, "x", nil); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
 			}
 		}
@@ -450,7 +460,7 @@ func TestReviewsUpdate(t *testing.T) {
 
 	t.Run("AC4 invalid content yields ValidationError without a write", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}
-		_, err := usecase.NewReviews(repo).Update(ctx, alice, stored.ID, 6, "ok")
+		_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 6, "ok", nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -462,7 +472,7 @@ func TestReviewsUpdate(t *testing.T) {
 
 	t.Run("unknown id yields ErrReviewNotFound", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}
-		if _, err := usecase.NewReviews(repo).Update(ctx, alice, 999, 5, "x"); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Update(ctx, alice, 999, 5, "x", nil); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Update error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
@@ -493,7 +503,7 @@ func TestReviewsDelete(t *testing.T) {
 				return nil
 			},
 		}
-		if err := usecase.NewReviews(repo).Delete(ctx, alice, stored.ID); err != nil {
+		if err := usecase.NewReviews(repo, &fakePhotoStorage{}).Delete(ctx, alice, stored.ID); err != nil {
 			t.Fatalf("Delete returned error: %v", err)
 		}
 		if discarded != stored.ID {
@@ -504,7 +514,7 @@ func TestReviewsDelete(t *testing.T) {
 	t.Run("AC3 non-author gets ErrForbidden without a write", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}      // discardReview unset
 		for _, viewer := range []domain.User{bob, admin} { // admin gets no pass
-			if err := usecase.NewReviews(repo).Delete(ctx, viewer, stored.ID); !errors.Is(err, domain.ErrForbidden) {
+			if err := usecase.NewReviews(repo, &fakePhotoStorage{}).Delete(ctx, viewer, stored.ID); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
 			}
 		}
@@ -512,7 +522,7 @@ func TestReviewsDelete(t *testing.T) {
 
 	t.Run("unknown id yields ErrReviewNotFound", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}
-		if err := usecase.NewReviews(repo).Delete(ctx, alice, 999); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := usecase.NewReviews(repo, &fakePhotoStorage{}).Delete(ctx, alice, 999); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Delete error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
@@ -524,8 +534,230 @@ func TestReviewsDelete(t *testing.T) {
 				return domain.ErrReviewNotFound // discarded between load and write
 			},
 		}
-		if err := usecase.NewReviews(repo).Delete(ctx, alice, stored.ID); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := usecase.NewReviews(repo, &fakePhotoStorage{}).Delete(ctx, alice, stored.ID); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Delete error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
+}
+
+// TestNewReviewsNilPhotoStorage pins the fail-loud constructor guard: a
+// nil PhotoStorage must panic at wiring time, never mid-request.
+func TestNewReviewsNilPhotoStorage(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("NewReviews with a nil PhotoStorage did not panic")
+		}
+	}()
+	usecase.NewReviews(&fakeReviewRepo{}, nil)
+}
+
+// fakePhotoStorage records Put/Delete keys in order; putErr fails Put.
+type fakePhotoStorage struct {
+	putErr  error
+	puts    []string
+	deletes []string
+}
+
+func (f *fakePhotoStorage) Put(_ context.Context, key, _ string, _ io.Reader) error {
+	if f.putErr != nil {
+		return f.putErr
+	}
+	f.puts = append(f.puts, key)
+	return nil
+}
+
+func (f *fakePhotoStorage) Delete(_ context.Context, key string) error {
+	f.deletes = append(f.deletes, key)
+	return nil
+}
+
+func (f *fakePhotoStorage) URL(key string) string { return "/photos/" + key }
+
+// TestReviewsCreatePhoto covers the S10 photo flow of Create: the blob
+// goes in under a random reviews/<hex><ext> key before the insert, the
+// key is persisted on the review, and a failed insert best-effort deletes
+// the just-uploaded blob so no orphan file remains.
+func TestReviewsCreatePhoto(t *testing.T) {
+	ctx := context.Background()
+	bob := domain.User{ID: 2, Username: "bob"}
+	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
+	cheese := domain.ShopReviewBurger{ID: 5, Name: "Cheese"}
+	upload := &photo.Processed{Data: []byte("img"), ContentType: "image/jpeg", Ext: ".jpg"}
+	getShop := func(_ context.Context, id int64) (domain.Shop, error) { return activeShop, nil }
+	getShopBurger := func(_ context.Context, _, _ int64) (domain.ShopReviewBurger, error) { return cheese, nil }
+
+	t.Run("stores the blob and persists its key", func(t *testing.T) {
+		photos := &fakePhotoStorage{}
+		var inserted domain.Review
+		repo := &fakeReviewRepo{
+			getShop:       getShop,
+			getShopBurger: getShopBurger,
+			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
+				inserted = review
+				review.ID = 42
+				return review, nil
+			},
+		}
+		got, err := usecase.NewReviews(repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", upload)
+		if err != nil {
+			t.Fatalf("Create returned error: %v", err)
+		}
+		if len(photos.puts) != 1 || len(photos.deletes) != 0 {
+			t.Fatalf("puts/deletes = %v/%v, want one put, no delete", photos.puts, photos.deletes)
+		}
+		key := photos.puts[0]
+		if !strings.HasPrefix(key, "reviews/") || !strings.HasSuffix(key, ".jpg") || len(key) != len("reviews/")+32+len(".jpg") {
+			t.Errorf("key = %q, want reviews/<32 hex>.jpg", key)
+		}
+		if inserted.PhotoKey == nil || *inserted.PhotoKey != key {
+			t.Errorf("inserted PhotoKey = %v, want %q", inserted.PhotoKey, key)
+		}
+		if got.PhotoURL == nil || *got.PhotoURL != "/photos/"+key {
+			t.Errorf("PhotoURL = %v, want %q", got.PhotoURL, "/photos/"+key)
+		}
+	})
+
+	t.Run("failed insert best-effort deletes the uploaded blob", func(t *testing.T) {
+		photos := &fakePhotoStorage{}
+		repo := &fakeReviewRepo{
+			getShop:       getShop,
+			getShopBurger: getShopBurger,
+			createReview: func(_ context.Context, _ domain.Review) (domain.Review, error) {
+				return domain.Review{}, io.ErrUnexpectedEOF
+			},
+		}
+		_, err := usecase.NewReviews(repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", upload)
+		if !errors.Is(err, io.ErrUnexpectedEOF) {
+			t.Fatalf("Create error = %v, want the DB error", err)
+		}
+		if len(photos.puts) != 1 || !reflect.DeepEqual(photos.deletes, photos.puts) {
+			t.Errorf("puts/deletes = %v/%v, want the uploaded key deleted", photos.puts, photos.deletes)
+		}
+	})
+
+	t.Run("failed Put surfaces without an insert", func(t *testing.T) {
+		photos := &fakePhotoStorage{putErr: io.ErrUnexpectedEOF}
+		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview unset: an insert would panic
+		if _, err := usecase.NewReviews(repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", upload); !errors.Is(err, io.ErrUnexpectedEOF) {
+			t.Fatalf("Create error = %v, want the storage error", err)
+		}
+	})
+}
+
+// TestReviewsUpdatePhoto covers the S10 replacement flow of Update: the
+// new blob goes in first, then content and photo_key switch via the ONE
+// atomic repository write, and only then is the OLD blob (from the load
+// snapshot) best-effort deleted; without an upload the content-only write
+// runs and the photo writes never happen.
+func TestReviewsUpdatePhoto(t *testing.T) {
+	ctx := context.Background()
+	alice := domain.User{ID: 1, Username: "alice"}
+	oldKey := "reviews/old.jpg"
+	stored := domain.ReviewDetail{
+		Review: domain.Review{ID: 9, Rating: 4, AuthorID: alice.ID, BurgerID: 5, PhotoKey: &oldKey},
+		User:   &domain.UserRef{ID: alice.ID, Username: "alice"},
+		Burger: &domain.ShopReviewBurger{ID: 5, Name: "Cheese"},
+	}
+	getReview := func(_ context.Context, id int64) (domain.ReviewDetail, error) { return stored, nil }
+	upload := &photo.Processed{Data: []byte("img"), ContentType: "image/png", Ext: ".png"}
+
+	t.Run("replaces content and key atomically and deletes the old blob after DB success", func(t *testing.T) {
+		photos := &fakePhotoStorage{}
+		var gotRating int
+		var gotComment string
+		repo := &fakeReviewRepo{
+			getReview: getReview,
+			// updateReviewContent stays unset: a separate content-only
+			// statement on the photo path would panic (the write must be
+			// the single atomic repository call).
+			updateReviewContentAndKey: func(_ context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+				gotRating, gotComment = rating, comment
+				review := stored.Review
+				review.Rating = rating
+				c := comment
+				review.Comment = &c
+				review.PhotoKey = photoKey
+				return review, nil
+			},
+		}
+		got, err := usecase.NewReviews(repo, photos).Update(ctx, alice, stored.ID, 5, "Better", upload)
+		if err != nil {
+			t.Fatalf("Update returned error: %v", err)
+		}
+		if gotRating != 5 || gotComment != "Better" {
+			t.Errorf("write = (%d, %q), want (5, Better)", gotRating, gotComment)
+		}
+		if len(photos.puts) != 1 || !strings.HasSuffix(photos.puts[0], ".png") {
+			t.Fatalf("puts = %v, want one .png key", photos.puts)
+		}
+		if !reflect.DeepEqual(photos.deletes, []string{oldKey}) {
+			t.Errorf("deletes = %v, want only the old key %q", photos.deletes, oldKey)
+		}
+		if got.PhotoURL == nil || *got.PhotoURL != "/photos/"+photos.puts[0] {
+			t.Errorf("PhotoURL = %v, want the new key's URL", got.PhotoURL)
+		}
+	})
+
+	t.Run("mid-update discard fails the atomic write, deletes the new blob, keeps the old", func(t *testing.T) {
+		photos := &fakePhotoStorage{}
+		repo := &fakeReviewRepo{
+			getReview: getReview,
+			// updateReviewContent stays unset: the atomic write failing
+			// means NO content statement ran, so no content change can be
+			// visible afterwards — a stray content-only call would panic.
+			updateReviewContentAndKey: func(_ context.Context, _ int64, _ int, _ string, _ *string) (domain.Review, error) {
+				return domain.Review{}, domain.ErrReviewNotFound // discarded between load and write
+			},
+		}
+		_, err := usecase.NewReviews(repo, photos).Update(ctx, alice, stored.ID, 5, "Better", upload)
+		if !errors.Is(err, domain.ErrReviewNotFound) {
+			t.Fatalf("Update error = %v, want %v", err, domain.ErrReviewNotFound)
+		}
+		if !reflect.DeepEqual(photos.deletes, photos.puts) {
+			t.Errorf("puts/deletes = %v/%v, want the new blob deleted and the old kept", photos.puts, photos.deletes)
+		}
+	})
+
+	t.Run("no upload takes the content-only write and leaves photo storage untouched", func(t *testing.T) {
+		photos := &fakePhotoStorage{}
+		repo := &fakeReviewRepo{
+			getReview: getReview,
+			// updateReviewContentAndKey unset: any photo-key write would
+			// panic.
+			updateReviewContent: func(_ context.Context, _ int64, _ int, _ string) (domain.Review, error) {
+				return stored.Review, nil
+			},
+		}
+		got, err := usecase.NewReviews(repo, photos).Update(ctx, alice, stored.ID, 5, "Better", nil)
+		if err != nil {
+			t.Fatalf("Update returned error: %v", err)
+		}
+		if len(photos.puts) != 0 || len(photos.deletes) != 0 {
+			t.Errorf("puts/deletes = %v/%v, want none", photos.puts, photos.deletes)
+		}
+		if got.PhotoURL == nil || *got.PhotoURL != "/photos/"+oldKey {
+			t.Errorf("PhotoURL = %v, want the kept old key's URL", got.PhotoURL)
+		}
+	})
+}
+
+// TestReviewsDeletePhoto covers the S10 tail of Delete: after a
+// successful discard the blob is best-effort deleted.
+func TestReviewsDeletePhoto(t *testing.T) {
+	ctx := context.Background()
+	alice := domain.User{ID: 1, Username: "alice"}
+	key := "reviews/gone.jpg"
+	photos := &fakePhotoStorage{}
+	repo := &fakeReviewRepo{
+		getReview: func(_ context.Context, id int64) (domain.ReviewDetail, error) {
+			return domain.ReviewDetail{Review: domain.Review{ID: id, AuthorID: alice.ID, PhotoKey: &key}}, nil
+		},
+		discardReview: func(_ context.Context, _ int64) error { return nil },
+	}
+	if err := usecase.NewReviews(repo, photos).Delete(ctx, alice, 9); err != nil {
+		t.Fatalf("Delete returned error: %v", err)
+	}
+	if !reflect.DeepEqual(photos.deletes, []string{key}) {
+		t.Errorf("deletes = %v, want %q", photos.deletes, key)
+	}
 }

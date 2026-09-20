@@ -58,7 +58,7 @@ func (r *ReviewRepository) ListReviews(ctx context.Context, filter usecase.Revie
 	reviews := make([]domain.ReviewDetail, 0, len(rows))
 	for _, row := range rows {
 		reviews = append(reviews, toReviewDetail(
-			row.ID, row.Rating, row.Comment, row.CreatedAt,
+			row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt,
 			row.UserID, row.UserUsername, row.BurgerID, row.BurgerName,
 			row.ReviewCount, row.AverageRating, row.WeightedScore, row.Confidence,
 		))
@@ -78,7 +78,7 @@ func (r *ReviewRepository) GetReview(ctx context.Context, id int64) (domain.Revi
 		return domain.ReviewDetail{}, fmt.Errorf("get review: %w", err)
 	}
 	return toReviewDetail(
-		row.ID, row.Rating, row.Comment, row.CreatedAt,
+		row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt,
 		row.UserID, row.UserUsername, row.BurgerID, row.BurgerName,
 		row.ReviewCount, row.AverageRating, row.WeightedScore, row.Confidence,
 	), nil
@@ -226,6 +226,49 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 	return toDomainReview(row), nil
 }
 
+// UpdateReviewContentAndPhotoKey persists rating, comment, and photo_key
+// of the still kept review under id, or domain.ErrReviewNotFound when it
+// is missing or discarded. The two existing column-scoped statements
+// (UpdateReviewContent, then UpdateReviewPhotoKey) and the burger_stats
+// recalculation run in ONE transaction, so a photo-carrying edit either
+// commits content, key, and stats together or nothing at all. The row
+// returned by the second statement already carries the first statement's
+// rating/comment (same transaction).
+func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+	var row sqlcgen.Review
+	err := withTx(ctx, r.db, "update review content and photo key", func(q *sqlcgen.Queries) error {
+		if _, err := q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
+			ID:      id,
+			Rating:  int16(rating),
+			Comment: pgtype.Text{String: comment, Valid: true},
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("update review content and photo key: %w", domain.ErrReviewNotFound)
+			}
+			return fmt.Errorf("update review content and photo key: %w", err)
+		}
+		var err error
+		row, err = q.UpdateReviewPhotoKey(ctx, sqlcgen.UpdateReviewPhotoKeyParams{
+			ID:       id,
+			PhotoKey: textOrNull(photoKey),
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("update review content and photo key: %w", domain.ErrReviewNotFound)
+			}
+			return fmt.Errorf("update review content and photo key: %w", err)
+		}
+		if err := recalculateBurgerStats(ctx, q, row.BurgerID); err != nil {
+			return fmt.Errorf("update review content and photo key: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return domain.Review{}, err
+	}
+	return toDomainReview(row), nil
+}
+
 // DiscardReview soft-deletes the review (stamps discarded_at, never a
 // hard DELETE). Missing and already-discarded reviews match no row and
 // yield domain.ErrReviewNotFound (the transaction is rolled back, so the
@@ -265,6 +308,7 @@ func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domai
 		Comment:  textOrNull(review.Comment),
 		UserID:   review.AuthorID,
 		BurgerID: review.BurgerID,
+		PhotoKey: textOrNull(review.PhotoKey),
 	})
 	if err != nil {
 		return sqlcgen.Review{}, fmt.Errorf("%s: %w", op, err)
@@ -351,13 +395,17 @@ func toDomainReview(row sqlcgen.Review) domain.Review {
 		comment := row.Comment.String
 		review.Comment = &comment
 	}
+	if row.PhotoKey.Valid {
+		key := row.PhotoKey.String
+		review.PhotoKey = &key
+	}
 	return review
 }
 
 // toReviewDetail maps the joined review columns (shared by the list and
 // detail queries) onto the domain payload; absent stats become zeros.
 func toReviewDetail(
-	id int64, rating int16, comment pgtype.Text, createdAt pgtype.Timestamptz,
+	id int64, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz,
 	userID int64, username string, burgerID int64, burgerName string,
 	reviewCount pgtype.Int8, averageRating, weightedScore, confidence pgtype.Float8,
 ) domain.ReviewDetail {
@@ -383,6 +431,10 @@ func toReviewDetail(
 	if comment.Valid {
 		c := comment.String
 		detail.Comment = &c
+	}
+	if photoKey.Valid {
+		key := photoKey.String
+		detail.PhotoKey = &key
 	}
 	return detail
 }

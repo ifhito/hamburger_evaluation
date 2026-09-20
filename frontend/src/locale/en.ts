@@ -72,6 +72,12 @@ const en = {
       cancel: "Cancel",
       error: "Failed to create review",
     },
+    photo: {
+      label: "Photo (optional)",
+      replaceLabel: "Replace Photo (optional)",
+      alt: "Review photo",
+      currentAlt: "Current review photo",
+    },
     edit: {
       title: "Edit Review",
       loading: "Loading\u2026",

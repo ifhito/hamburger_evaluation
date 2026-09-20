@@ -24,6 +24,11 @@ export default defineConfig(({ mode }) => {
             })
           },
         },
+        // Review photos are served from /photos on the API (no path rewrite).
+        '/photos': {
+          target: proxyTarget,
+          changeOrigin: true,
+        },
       },
     },
   }

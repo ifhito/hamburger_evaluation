@@ -20,3 +20,22 @@
   display: flex;
   gap: 0.75rem;
 }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fieldLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.currentPhoto {
+  max-width: 100%;
+  max-height: 12.5rem;
+  object-fit: contain;
+  align-self: flex-start;
+  border-radius: var(--radius);
+}

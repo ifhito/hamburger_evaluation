@@ -30,6 +30,7 @@ export default function ReviewEditPage() {
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
 
   useEffect(() => {
     if (review) {
@@ -41,7 +42,7 @@ export default function ReviewEditPage() {
     setServerError(null);
     setIsSubmitting(true);
     try {
-      await update(data);
+      await update(data, photo);
       void navigate(`/reviews/${id}`);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("reviews.edit.error")]);
@@ -67,6 +68,24 @@ export default function ReviewEditPage() {
             error={errors.comment?.message}
             {...register("comment")}
           />
+          <div className={styles.field}>
+            <label htmlFor="photo" className={styles.fieldLabel}>
+              {review?.photoUrl ? t("reviews.photo.replaceLabel") : t("reviews.photo.label")}
+            </label>
+            {review?.photoUrl && (
+              <img
+                src={review.photoUrl}
+                alt={t("reviews.photo.currentAlt")}
+                className={styles.currentPhoto}
+              />
+            )}
+            <input
+              id="photo"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+            />
+          </div>
           <div className={styles.actions}>
             <Button type="submit" isLoading={isSubmitting}>
               {t("reviews.edit.submit")}

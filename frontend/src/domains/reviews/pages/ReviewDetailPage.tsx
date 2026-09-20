@@ -48,6 +48,13 @@ export default function ReviewDetailPage() {
             <span className={styles.date}>{formatDate(review.createdAt)}</span>
           </div>
           <p className={styles.comment}>{review.comment}</p>
+          {review.photoUrl && (
+            <img
+              src={review.photoUrl}
+              alt={t("reviews.photo.alt")}
+              className={styles.photo}
+            />
+          )}
           {review.burger && (
             <p className={styles.burgerInfo}>
               {review.burger.name} · {t("reviews.detail.avgRating")}{" "}

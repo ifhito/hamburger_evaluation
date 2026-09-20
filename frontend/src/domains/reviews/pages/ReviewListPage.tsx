@@ -67,6 +67,14 @@ export default function ReviewListPage() {
               <span className={styles.date}>{formatDate(review.createdAt)}</span>
             </div>
             <p className={styles.comment}>{review.comment}</p>
+            {review.photoUrl && (
+              <img
+                src={review.photoUrl}
+                alt={t("reviews.photo.alt")}
+                loading="lazy"
+                className={styles.photo}
+              />
+            )}
             <div className={styles.meta}>
               {review.user && (
                 <Link to={`/users/${review.user.id}`}>{review.user.username}</Link>

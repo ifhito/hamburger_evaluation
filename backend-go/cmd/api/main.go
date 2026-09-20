@@ -18,6 +18,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -64,11 +65,26 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		jwtCodec,
 	)
 
+	// Review photo storage (S10): S3-compatible in s3 mode, else local
+	// disk, which the API also serves itself under GET /photos/ via
+	// handler.PhotoFileServer (the dir resolves relative to the working
+	// dir; the container mounts . as /app). photoFiles stays nil in s3
+	// mode.
+	var photos usecase.PhotoStorage
+	var photoFiles http.Handler
+	if cfg.PhotoStorage == "s3" {
+		photos = storage.NewS3(cfg.PhotoS3Endpoint, cfg.PhotoS3Bucket,
+			cfg.PhotoS3AccessKeyID, cfg.PhotoS3SecretAccessKey, cfg.PhotoPublicBaseURL)
+	} else {
+		photos = storage.NewDisk(cfg.PhotoDiskDir, cfg.PhotoPublicBaseURL)
+		photoFiles = handler.PhotoFileServer(cfg.PhotoDiskDir)
+	}
+
 	shops := usecase.NewShops(repository.NewShopRepository(pool))
-	reviews := usecase.NewReviews(repository.NewReviewRepository(pool))
+	reviews := usecase.NewReviews(repository.NewReviewRepository(pool), photos)
 	users := usecase.NewUsers(userRepo, infra.BcryptPasswordHasher{})
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users), ready)
+	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users, photoFiles), ready)
 }
 
 // serve runs an http.Server with explicit timeouts (never bare

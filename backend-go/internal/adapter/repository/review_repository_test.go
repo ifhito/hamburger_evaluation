@@ -864,3 +864,105 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		}
 	})
 }
+
+// TestReviewRepositoryPhotoKey covers the S10 photo_key persistence:
+// CreateReview stores the key, the joined read queries return it, and
+// UpdateReviewContentAndPhotoKey swaps content and key together on
+// still-kept reviews.
+func TestReviewRepositoryPhotoKey(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed repository test in short mode")
+	}
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	repo := repository.NewReviewRepository(conn)
+
+	alice := insertRow(ctx, t, conn,
+		`INSERT INTO users (email, username, password_digest) VALUES ($1, $2, 'x') RETURNING id`,
+		"alice@example.com", "alice")
+	shop := insertRow(ctx, t, conn,
+		`INSERT INTO shops (name, status) VALUES ($1, 1) RETURNING id`, "Active One")
+	burger := insertRow(ctx, t, conn,
+		`INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
+	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shop, burger); err != nil {
+		t.Fatalf("link shop and burger: %v", err)
+	}
+
+	comment := "Tasty"
+	created, err := repo.CreateReview(ctx, domain.Review{
+		Rating: 4, Comment: &comment, AuthorID: alice, BurgerID: burger, PhotoKey: strPtr("reviews/abc.jpg"),
+	})
+	if err != nil {
+		t.Fatalf("CreateReview returned error: %v", err)
+	}
+	if created.PhotoKey == nil || *created.PhotoKey != "reviews/abc.jpg" {
+		t.Fatalf("created PhotoKey = %v, want reviews/abc.jpg", created.PhotoKey)
+	}
+
+	t.Run("read queries carry photo_key", func(t *testing.T) {
+		detail, err := repo.GetReview(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("GetReview returned error: %v", err)
+		}
+		if detail.PhotoKey == nil || *detail.PhotoKey != "reviews/abc.jpg" {
+			t.Errorf("detail PhotoKey = %v, want reviews/abc.jpg", detail.PhotoKey)
+		}
+		list, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 10, 0)
+		if err != nil {
+			t.Fatalf("ListReviews returned error: %v", err)
+		}
+		if len(list) != 1 || list[0].PhotoKey == nil || *list[0].PhotoKey != "reviews/abc.jpg" {
+			t.Errorf("list = %+v, want one review with PhotoKey reviews/abc.jpg", list)
+		}
+	})
+
+	t.Run("UpdateReviewContentAndPhotoKey writes content and key together", func(t *testing.T) {
+		updated, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 5, "Even better", strPtr("reviews/both.png"))
+		if err != nil {
+			t.Fatalf("UpdateReviewContentAndPhotoKey returned error: %v", err)
+		}
+		if updated.Rating != 5 || updated.Comment == nil || *updated.Comment != "Even better" {
+			t.Errorf("updated = %+v, want rating 5 and the new comment", updated)
+		}
+		if updated.PhotoKey == nil || *updated.PhotoKey != "reviews/both.png" {
+			t.Errorf("updated PhotoKey = %v, want reviews/both.png", updated.PhotoKey)
+		}
+		// The committed row carries BOTH the content and the key (one
+		// transaction — never content without the key).
+		detail, err := repo.GetReview(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("GetReview after combined update returned error: %v", err)
+		}
+		if detail.Rating != 5 || detail.PhotoKey == nil || *detail.PhotoKey != "reviews/both.png" {
+			t.Errorf("stored = rating %d, key %v, want 5 and reviews/both.png", detail.Rating, detail.PhotoKey)
+		}
+	})
+
+	t.Run("keyless create stays NULL", func(t *testing.T) {
+		plain, err := repo.CreateReview(ctx, domain.Review{Rating: 3, Comment: &comment, AuthorID: alice, BurgerID: burger})
+		if err != nil {
+			t.Fatalf("CreateReview returned error: %v", err)
+		}
+		if plain.PhotoKey != nil {
+			t.Errorf("PhotoKey = %v, want nil", plain.PhotoKey)
+		}
+	})
+
+	t.Run("discarded review yields ErrReviewNotFound", func(t *testing.T) {
+		if err := repo.DiscardReview(ctx, created.ID); err != nil {
+			t.Fatalf("DiscardReview returned error: %v", err)
+		}
+		// The combined write rolls back: no content change survives.
+		if _, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 1, "ghost", strPtr("reviews/ghost.jpg")); !errors.Is(err, domain.ErrReviewNotFound) {
+			t.Fatalf("UpdateReviewContentAndPhotoKey error = %v, want %v", err, domain.ErrReviewNotFound)
+		}
+		var rating int16
+		var key *string
+		if err := conn.QueryRow(ctx, `SELECT rating, photo_key FROM reviews WHERE id = $1`, created.ID).Scan(&rating, &key); err != nil {
+			t.Fatalf("select discarded review: %v", err)
+		}
+		if rating == 1 || (key != nil && *key == "reviews/ghost.jpg") {
+			t.Errorf("discarded review row = rating %d, key %v; the failed combined write leaked a change", rating, key)
+		}
+	})
+}
