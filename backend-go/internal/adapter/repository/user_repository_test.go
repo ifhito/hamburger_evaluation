@@ -48,7 +48,7 @@ func TestUserRepository(t *testing.T) {
 		t.Fatalf("CreateUser = %+v, want %+v", created, wantUser)
 	}
 
-	t.Run("GetActiveUserByEmail returns user and digest", func(t *testing.T) {
+	t.Run("GetActiveUserByEmail は user と digest を返す", func(t *testing.T) {
 		creds, err := repo.GetActiveUserByEmail(ctx, "alice@example.com")
 		if err != nil {
 			t.Fatalf("GetActiveUserByEmail returned error: %v", err)
@@ -61,7 +61,7 @@ func TestUserRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("GetActiveUserByID returns user", func(t *testing.T) {
+	t.Run("GetActiveUserByID は user を返す", func(t *testing.T) {
 		user, err := repo.GetActiveUserByID(ctx, created.ID)
 		if err != nil {
 			t.Fatalf("GetActiveUserByID returned error: %v", err)
@@ -71,7 +71,7 @@ func TestUserRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown email and id yield ErrUserNotFound", func(t *testing.T) {
+	t.Run("存在しない email と id は ErrUserNotFound になる", func(t *testing.T) {
 		if _, err := repo.GetActiveUserByEmail(ctx, "nobody@example.com"); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Fatalf("GetActiveUserByEmail error = %v, want %v", err, domain.ErrUserNotFound)
 		}
@@ -80,7 +80,7 @@ func TestUserRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("duplicate email yields ErrEmailTaken", func(t *testing.T) {
+	t.Run("email が重複すると ErrEmailTaken になる", func(t *testing.T) {
 		_, err := repo.CreateUser(ctx, usecase.CreateUserParams{
 			Username:       "alice2",
 			Email:          "alice@example.com",
@@ -92,7 +92,7 @@ func TestUserRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("discarded user is excluded from active lookups", func(t *testing.T) {
+	t.Run("discard 済みの user は active な検索から除外される", func(t *testing.T) {
 		if _, err := conn.Exec(ctx, "UPDATE users SET discarded_at = now() WHERE id = $1", created.ID); err != nil {
 			t.Fatalf("discard user: %v", err)
 		}
@@ -148,7 +148,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	aliceShared := mustCreateReview(ctx, t, reviewRepo, 4, "good", alice, shared)
 	victimSolo := mustCreateReview(ctx, t, reviewRepo, 5, "only mine", victim, solo)
 
-	t.Run("ListActiveUsers returns kept users ordered by id", func(t *testing.T) {
+	t.Run("ListActiveUsers は kept の user を id 順に返す", func(t *testing.T) {
 		users, err := repo.ListActiveUsers(ctx)
 		if err != nil {
 			t.Fatalf("ListActiveUsers returned error: %v", err)
@@ -163,7 +163,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateUserProfile applies only the present fields", func(t *testing.T) {
+	t.Run("UpdateUserProfile は指定されたフィールドだけを更新する", func(t *testing.T) {
 		updated, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{Username: strPtr("bobby")})
 		if err != nil {
 			t.Fatalf("UpdateUserProfile returned error: %v", err)
@@ -181,7 +181,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateUserProfile applies several fields in one transaction", func(t *testing.T) {
+	t.Run("UpdateUserProfile は複数のフィールドを 1 つのトランザクションで更新する", func(t *testing.T) {
 		updated, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{
 			Email:          strPtr("bobby@example.com"),
 			PasswordDigest: strPtr("digest-bobby"),
@@ -201,7 +201,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateUserProfile with zero changes returns the current user", func(t *testing.T) {
+	t.Run("UpdateUserProfile は変更が 0 件なら現在の user を返す", func(t *testing.T) {
 		user, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{})
 		if err != nil {
 			t.Fatalf("UpdateUserProfile returned error: %v", err)
@@ -211,7 +211,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateUserProfile taken email yields ErrEmailTaken and rolls back", func(t *testing.T) {
+	t.Run("UpdateUserProfile で使用済みの email を指定すると ErrEmailTaken になり rollback される", func(t *testing.T) {
 		_, err := repo.UpdateUserProfile(ctx, bob, usecase.ProfileChanges{
 			Username: strPtr("sneaky"),
 			Email:    strPtr("alice@example.com"),
@@ -229,7 +229,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateUserProfile unknown and discarded ids yield ErrUserNotFound", func(t *testing.T) {
+	t.Run("UpdateUserProfile で存在しない id と discard 済みの id は ErrUserNotFound になる", func(t *testing.T) {
 		for name, id := range map[string]int64{"unknown": 99999, "discarded": ghost} {
 			if _, err := repo.UpdateUserProfile(ctx, id, usecase.ProfileChanges{Username: strPtr("x")}); !errors.Is(err, domain.ErrUserNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrUserNotFound)
@@ -240,7 +240,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("DiscardUser stamps the user and recalculates its burgers' stats", func(t *testing.T) {
+	t.Run("DiscardUser は user に discard 時刻を刻み、その user の burger の stats を再計算する", func(t *testing.T) {
 		if got := requireConsistentStats(ctx, t, conn, shared); got.ReviewCount != 2 {
 			t.Fatalf("shared stats before discard = %+v, want count 2", got)
 		}
@@ -281,7 +281,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("second and unknown discards yield ErrUserNotFound", func(t *testing.T) {
+	t.Run("2 回目の discard と存在しない id の discard は ErrUserNotFound になる", func(t *testing.T) {
 		if err := repo.DiscardUser(ctx, victim); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("second discard = %v, want %v", err, domain.ErrUserNotFound)
 		}
@@ -290,7 +290,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("read paths hide the discarded user's kept reviews", func(t *testing.T) {
+	t.Run("読み取り経路は discard 済みの user の kept な review を隠す", func(t *testing.T) {
 		// フィード：alice の review だけが残り、表示される stats は再計算された
 		// burger_stats の行（count 1）と一致する。
 		feed, err := reviewRepo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)

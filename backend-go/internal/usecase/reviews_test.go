@@ -103,12 +103,12 @@ func TestReviewsListPagination(t *testing.T) {
 		wantLimit     int32
 		wantOffset    int32
 	}{
-		{name: "defaults", page: 0, perPage: 0, wantLimit: 20, wantOffset: 0},
-		{name: "negative values fall back", page: -3, perPage: -1, wantLimit: 20, wantOffset: 0},
-		{name: "explicit page and per_page", page: 3, perPage: 5, wantLimit: 5, wantOffset: 10},
-		{name: "per_page above 100 is clamped", page: 1, perPage: 101, wantLimit: 100, wantOffset: 0},
-		{name: "huge page clamps offset instead of overflowing", page: 1 << 40, perPage: 100, wantLimit: 100, wantOffset: 1<<31 - 1},
-		{name: "page MaxInt64 with default per_page clamps offset", page: math.MaxInt64, perPage: 0, wantLimit: 20, wantOffset: math.MaxInt32},
+		{name: "page と per_page が 0 のときはデフォルト値になる", page: 0, perPage: 0, wantLimit: 20, wantOffset: 0},
+		{name: "負の値はデフォルト値にフォールバックする", page: -3, perPage: -1, wantLimit: 20, wantOffset: 0},
+		{name: "page と per_page を明示するとその値が使われる", page: 3, perPage: 5, wantLimit: 5, wantOffset: 10},
+		{name: "100 を超える per_page は 100 に clamp される", page: 1, perPage: 101, wantLimit: 100, wantOffset: 0},
+		{name: "巨大な page はオーバーフローせず offset を clamp する", page: 1 << 40, perPage: 100, wantLimit: 100, wantOffset: 1<<31 - 1},
+		{name: "page が MaxInt64 で per_page がデフォルトのとき offset を clamp する", page: math.MaxInt64, perPage: 0, wantLimit: 20, wantOffset: math.MaxInt32},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -224,7 +224,7 @@ func TestReviewsCreate(t *testing.T) {
 		return domain.ShopReviewBurger{}, domain.ErrBurgerNotFound
 	}
 
-	t.Run("AC1 authenticated post to active shop inserts and composes the payload", func(t *testing.T) {
+	t.Run("AC1 認証済みの投稿は active な shop に insert され payload が組み立てられる", func(t *testing.T) {
 		var inserted domain.Review
 		repo := &fakeReviewRepo{
 			getShop:       getShop,
@@ -254,14 +254,14 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown shop yields ErrShopNotFound before anything else", func(t *testing.T) {
+	t.Run("未知の shop は他の何より先に ErrShopNotFound を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop}
 		if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, 999, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
 
-	t.Run("AC2 rejected shop yields ErrForbidden before the burger lookup", func(t *testing.T) {
+	t.Run("AC2 rejected な shop は burger の lookup より先に ErrForbidden を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop} // getShopBurger は未設定：lookup があれば panic する
 		for _, viewer := range []domain.User{alice, bob, admin} {
 			if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, viewer, rejectedShop.ID, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrForbidden) {
@@ -270,7 +270,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 pending shop: creator and admin may post, others get ErrForbidden", func(t *testing.T) {
+	t.Run("AC2 pending な shop には creator と admin は投稿でき、それ以外は ErrForbidden になる", func(t *testing.T) {
 		repo := &fakeReviewRepo{
 			getShop:       getShop,
 			getShopBurger: getShopBurger,
@@ -291,14 +291,14 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("unlinked burger yields ErrBurgerNotFound without an insert", func(t *testing.T) {
+	t.Run("shop に紐付かない burger は insert せずに ErrBurgerNotFound を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview は未設定
 		if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 999, "", 4, "ok", nil); !errors.Is(err, domain.ErrBurgerNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrBurgerNotFound)
 		}
 	})
 
-	t.Run("AC4 invalid content yields ValidationError without an insert", func(t *testing.T) {
+	t.Run("AC4 不正な内容は insert せずに ValidationError を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview は未設定
 		_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, " ", nil)
 		var vErr *domain.ValidationError
@@ -311,7 +311,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("burger_name path find-or-creates through the repository and composes the payload", func(t *testing.T) {
+	t.Run("burger_name 経由では repository 越しに find-or-create し payload を組み立てる", func(t *testing.T) {
 		smash := domain.ShopReviewBurger{ID: 7, Name: " Smash "}
 		var gotShopID int64
 		var gotName string
@@ -345,7 +345,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("a positive burger_id wins over burger_name", func(t *testing.T) {
+	t.Run("正の burger_id は burger_name より優先される", func(t *testing.T) {
 		repo := &fakeReviewRepo{
 			getShop:       getShop,
 			getShopBurger: getShopBurger, // createReviewForNamedBurger は未設定：呼び出しは panic する
@@ -363,8 +363,8 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("neither burger_id nor a usable burger_name yields ValidationError without any write", func(t *testing.T) {
-		for name, burgerName := range map[string]string{"missing": "", "whitespace-only": "  \t "} {
+	t.Run("burger_id も使える burger_name もない場合は書き込みせずに ValidationError を返す", func(t *testing.T) {
+		for name, burgerName := range map[string]string{"burger_name が未指定": "", "burger_name が空白のみ": "  \t "} {
 			t.Run(name, func(t *testing.T) {
 				repo := &fakeReviewRepo{getShop: getShop} // すべての書き込みは未設定：呼び出しは panic する
 				_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, burgerName, 4, "ok", nil)
@@ -379,7 +379,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("burger_name path validates content before the write", func(t *testing.T) {
+	t.Run("burger_name 経由では書き込みの前に内容を validate する", func(t *testing.T) {
 		repo := &fakeReviewRepo{getShop: getShop} // createReviewForNamedBurger は未設定：呼び出しは panic する
 		_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, "Smash", 0, " ", nil)
 		var vErr *domain.ValidationError
@@ -422,7 +422,7 @@ func TestReviewsUpdate(t *testing.T) {
 		return domain.ReviewDetail{}, domain.ErrReviewNotFound
 	}
 
-	t.Run("AC3 author edit persists only rating and comment", func(t *testing.T) {
+	t.Run("AC3 author の edit は rating と comment だけを永続化する", func(t *testing.T) {
 		var gotID int64
 		var gotRating int
 		var gotComment string
@@ -452,7 +452,7 @@ func TestReviewsUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 non-author gets ErrForbidden without a write", func(t *testing.T) {
+	t.Run("AC3 author 以外は書き込みせずに ErrForbidden を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}      // updateReviewContent は未設定
 		for _, viewer := range []domain.User{bob, admin} { // admin でも通さない
 			if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Update(ctx, viewer, stored.ID, 5, "x", nil); !errors.Is(err, domain.ErrForbidden) {
@@ -461,7 +461,7 @@ func TestReviewsUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("AC4 invalid content yields ValidationError without a write", func(t *testing.T) {
+	t.Run("AC4 不正な内容は書き込みせずに ValidationError を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}
 		_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 6, "ok", nil)
 		var vErr *domain.ValidationError
@@ -473,7 +473,7 @@ func TestReviewsUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown id yields ErrReviewNotFound", func(t *testing.T) {
+	t.Run("未知の id は ErrReviewNotFound を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}
 		if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Update(ctx, alice, 999, 5, "x", nil); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Update error = %v, want %v", err, domain.ErrReviewNotFound)
@@ -498,7 +498,7 @@ func TestReviewsDelete(t *testing.T) {
 		return domain.ReviewDetail{}, domain.ErrReviewNotFound
 	}
 
-	t.Run("AC6 author delete discards the review", func(t *testing.T) {
+	t.Run("AC6 author の delete は review を discard する", func(t *testing.T) {
 		var discarded int64
 		repo := &fakeReviewRepo{
 			getReview: getReview,
@@ -515,7 +515,7 @@ func TestReviewsDelete(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 non-author gets ErrForbidden without a write", func(t *testing.T) {
+	t.Run("AC3 author 以外は書き込みせずに ErrForbidden を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}      // discardReview は未設定
 		for _, viewer := range []domain.User{bob, admin} { // admin でも通さない
 			if err := usecase.NewReviews(repo, &fakePhotoStorage{}).Delete(ctx, viewer, stored.ID); !errors.Is(err, domain.ErrForbidden) {
@@ -524,14 +524,14 @@ func TestReviewsDelete(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown id yields ErrReviewNotFound", func(t *testing.T) {
+	t.Run("未知の id は ErrReviewNotFound を返す", func(t *testing.T) {
 		repo := &fakeReviewRepo{getReview: getReview}
 		if err := usecase.NewReviews(repo, &fakePhotoStorage{}).Delete(ctx, alice, 999); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Delete error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
 
-	t.Run("concurrent discard race surfaces the repository not-found", func(t *testing.T) {
+	t.Run("discard の競合が起きたときは repository の not-found がそのまま返る", func(t *testing.T) {
 		repo := &fakeReviewRepo{
 			getReview: getReview,
 			discardReview: func(_ context.Context, _ int64) error {
@@ -592,7 +592,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 	getShop := func(_ context.Context, id int64) (domain.Shop, error) { return activeShop, nil }
 	getShopBurger := func(_ context.Context, _, _ int64) (domain.ShopReviewBurger, error) { return cheese, nil }
 
-	t.Run("stores the blob and persists its key", func(t *testing.T) {
+	t.Run("blob を保存し、その key を永続化する", func(t *testing.T) {
 		photos := &fakePhotoStorage{}
 		var inserted domain.Review
 		repo := &fakeReviewRepo{
@@ -623,7 +623,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 		}
 	})
 
-	t.Run("failed insert best-effort deletes the uploaded blob", func(t *testing.T) {
+	t.Run("insert が失敗したらアップロードした blob を best-effort で削除する", func(t *testing.T) {
 		photos := &fakePhotoStorage{}
 		repo := &fakeReviewRepo{
 			getShop:       getShop,
@@ -641,7 +641,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 		}
 	})
 
-	t.Run("failed Put surfaces without an insert", func(t *testing.T) {
+	t.Run("Put が失敗したら insert せずにそのエラーを返す", func(t *testing.T) {
 		photos := &fakePhotoStorage{putErr: io.ErrUnexpectedEOF}
 		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview は未設定：insert があれば panic する
 		if _, err := usecase.NewReviews(repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", upload); !errors.Is(err, io.ErrUnexpectedEOF) {
@@ -667,7 +667,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 	getReview := func(_ context.Context, id int64) (domain.ReviewDetail, error) { return stored, nil }
 	upload := &photo.Processed{Data: []byte("img"), ContentType: "image/png", Ext: ".png"}
 
-	t.Run("replaces content and key atomically and deletes the old blob after DB success", func(t *testing.T) {
+	t.Run("content と key を atomic に置き換え、DB 成功後に古い blob を削除する", func(t *testing.T) {
 		photos := &fakePhotoStorage{}
 		var gotRating int
 		var gotComment string
@@ -704,7 +704,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 		}
 	})
 
-	t.Run("mid-update discard fails the atomic write, deletes the new blob, keeps the old", func(t *testing.T) {
+	t.Run("更新中に discard されると atomic な書き込みが失敗し、新しい blob を削除して古い blob は残す", func(t *testing.T) {
 		photos := &fakePhotoStorage{}
 		repo := &fakeReviewRepo{
 			getReview: getReview,
@@ -725,7 +725,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 		}
 	})
 
-	t.Run("no upload takes the content-only write and leaves photo storage untouched", func(t *testing.T) {
+	t.Run("upload がなければ content だけの書き込みになり、photo storage には触れない", func(t *testing.T) {
 		photos := &fakePhotoStorage{}
 		repo := &fakeReviewRepo{
 			getReview: getReview,

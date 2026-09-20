@@ -50,13 +50,13 @@ func TestHealth(t *testing.T) {
 		wantBody   string // 完全一致させる body。空なら代わりにエラーの形を検証する
 	}{
 		{
-			name:       "AC1 healthy db returns 200 ok",
+			name:       "AC1 DB が正常なら 200 ok を返す",
 			pinger:     okPinger,
 			wantStatus: http.StatusOK,
 			wantBody:   `{"status":"ok"}`,
 		},
 		{
-			name:       "AC2 failing db returns 503 error shape",
+			name:       "AC2 DB が失敗すると 503 とエラーの形を返す",
 			pinger:     failPinger,
 			wantStatus: http.StatusServiceUnavailable,
 		},
@@ -94,16 +94,16 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 		wantStatus int
 		wantAllow  string
 	}{
-		{name: "unknown route returns 404", method: http.MethodGet, path: "/nope", wantStatus: http.StatusNotFound},
-		{name: "wrong method returns 405", method: http.MethodPost, path: "/up", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
-		{name: "GET /signup returns 405 Allow POST", method: http.MethodGet, path: "/signup", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
-		{name: "DELETE /shops returns 405 Allow GET, POST", method: http.MethodDelete, path: "/shops", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
-		{name: "DELETE /shops/1 returns 405 Allow GET", method: http.MethodDelete, path: "/shops/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
-		{name: "PATCH /reviews returns 405 Allow GET, POST", method: http.MethodPatch, path: "/reviews", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
-		{name: "PATCH /reviews/1 returns 405 Allow DELETE, GET, PUT", method: http.MethodPatch, path: "/reviews/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, GET, PUT"},
-		{name: "POST /users returns 405 Allow GET", method: http.MethodPost, path: "/users", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
-		{name: "GET /users/1 returns 405 Allow DELETE, PUT", method: http.MethodGet, path: "/users/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, PUT"},
-		{name: "GET /admin/shops/1/approve returns 405 Allow POST", method: http.MethodGet, path: "/admin/shops/1/approve", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
+		{name: "未知のルートは 404 を返す", method: http.MethodGet, path: "/nope", wantStatus: http.StatusNotFound},
+		{name: "誤ったメソッドは 405 を返す", method: http.MethodPost, path: "/up", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
+		{name: "GET /signup は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/signup", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
+		{name: "DELETE /shops は 405 を返し Allow は GET, POST になる", method: http.MethodDelete, path: "/shops", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
+		{name: "DELETE /shops/1 は 405 を返し Allow は GET になる", method: http.MethodDelete, path: "/shops/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
+		{name: "PATCH /reviews は 405 を返し Allow は GET, POST になる", method: http.MethodPatch, path: "/reviews", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
+		{name: "PATCH /reviews/1 は 405 を返し Allow は DELETE, GET, PUT になる", method: http.MethodPatch, path: "/reviews/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, GET, PUT"},
+		{name: "POST /users は 405 を返し Allow は GET になる", method: http.MethodPost, path: "/users", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
+		{name: "GET /users/1 は 405 を返し Allow は DELETE, PUT になる", method: http.MethodGet, path: "/users/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, PUT"},
+		{name: "GET /admin/shops/1/approve は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/admin/shops/1/approve", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

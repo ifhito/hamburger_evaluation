@@ -13,7 +13,7 @@ func TestLoadConfig(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "defaults applied",
+			name: "デフォルト値が適用される",
 			env: map[string]string{
 				"DATABASE_URL": "postgres://localhost/app",
 				"JWT_SECRET":   "test-only-secret",
@@ -30,7 +30,7 @@ func TestLoadConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "explicit values",
+			name: "明示した値が使われる",
 			env: map[string]string{
 				"PORT":                  "9090",
 				"DATABASE_URL":          "postgres://localhost/app",
@@ -53,7 +53,7 @@ func TestLoadConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "s3 mode with all variables",
+			name: "s3 モードで変数をすべて指定すると読み込める",
 			env: map[string]string{
 				"DATABASE_URL":               "postgres://localhost/app",
 				"JWT_SECRET":                 "test-only-secret",
@@ -79,7 +79,7 @@ func TestLoadConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid PHOTO_STORAGE fails",
+			name: "不正な PHOTO_STORAGE はエラーになる",
 			env: map[string]string{
 				"DATABASE_URL":  "postgres://localhost/app",
 				"JWT_SECRET":    "test-only-secret",
@@ -88,17 +88,17 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "missing DATABASE_URL fails",
+			name:    "DATABASE_URL がないとエラーになる",
 			env:     map[string]string{"JWT_SECRET": "test-only-secret"},
 			wantErr: true,
 		},
 		{
-			name:    "missing JWT_SECRET fails",
+			name:    "JWT_SECRET がないとエラーになる",
 			env:     map[string]string{"DATABASE_URL": "postgres://localhost/app"},
 			wantErr: true,
 		},
 		{
-			name: "non-duration JWT_TTL fails",
+			name: "duration でない JWT_TTL はエラーになる",
 			env: map[string]string{
 				"DATABASE_URL": "postgres://localhost/app",
 				"JWT_SECRET":   "test-only-secret",
@@ -107,7 +107,7 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "zero JWT_TTL fails",
+			name: "JWT_TTL が 0 だとエラーになる",
 			env: map[string]string{
 				"DATABASE_URL": "postgres://localhost/app",
 				"JWT_SECRET":   "test-only-secret",
@@ -116,7 +116,7 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "negative JWT_TTL fails",
+			name: "JWT_TTL が負の値だとエラーになる",
 			env: map[string]string{
 				"DATABASE_URL": "postgres://localhost/app",
 				"JWT_SECRET":   "test-only-secret",
@@ -125,7 +125,7 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "non-numeric DB_MAX_CONNS fails",
+			name: "数値でない DB_MAX_CONNS はエラーになる",
 			env: map[string]string{
 				"DATABASE_URL": "postgres://localhost/app",
 				"JWT_SECRET":   "test-only-secret",
@@ -134,7 +134,7 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "non-positive DB_MAX_CONNS fails",
+			name: "0 以下の DB_MAX_CONNS はエラーになる",
 			env: map[string]string{
 				"DATABASE_URL": "postgres://localhost/app",
 				"JWT_SECRET":   "test-only-secret",
@@ -173,7 +173,7 @@ func TestLoadConfigS3MissingVars(t *testing.T) {
 		"PHOTO_PUBLIC_BASE_URL",
 	}
 	for _, missing := range required {
-		t.Run("missing "+missing, func(t *testing.T) {
+		t.Run("s3 モードで必須の変数が欠けるとエラーになる: "+missing, func(t *testing.T) {
 			env := map[string]string{
 				"DATABASE_URL":               "postgres://localhost/app",
 				"JWT_SECRET":                 "test-only-secret",

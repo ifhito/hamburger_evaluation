@@ -18,16 +18,16 @@ func TestValidateReviewContent(t *testing.T) {
 		comment string
 		want    []string // nil = 有効
 	}{
-		{name: "valid", rating: 4, comment: "Tasty"},
-		{name: "boundary ratings 1 and 5 are valid", rating: 1, comment: "ok"},
-		{name: "rating 5 is valid", rating: 5, comment: "ok"},
-		{name: "rating 0 fails", rating: 0, comment: "ok", want: []string{"Rating must be in 1..5"}},
-		{name: "rating 6 fails", rating: 6, comment: "ok", want: []string{"Rating must be in 1..5"}},
-		{name: "negative rating fails", rating: -1, comment: "ok", want: []string{"Rating must be in 1..5"}},
-		{name: "empty comment fails", rating: 3, comment: "", want: []string{"Comment can't be blank"}},
-		{name: "whitespace-only comment fails", rating: 3, comment: " \t\n", want: []string{"Comment can't be blank"}},
+		{name: "有効な入力は検証を通る", rating: 4, comment: "Tasty"},
+		{name: "境界値の rating 1 と 5 は有効", rating: 1, comment: "ok"},
+		{name: "rating 5 は有効", rating: 5, comment: "ok"},
+		{name: "rating 0 は検証エラーになる", rating: 0, comment: "ok", want: []string{"Rating must be in 1..5"}},
+		{name: "rating 6 は検証エラーになる", rating: 6, comment: "ok", want: []string{"Rating must be in 1..5"}},
+		{name: "負の rating は検証エラーになる", rating: -1, comment: "ok", want: []string{"Rating must be in 1..5"}},
+		{name: "空の comment は検証エラーになる", rating: 3, comment: "", want: []string{"Comment can't be blank"}},
+		{name: "空白のみの comment は検証エラーになる", rating: 3, comment: " \t\n", want: []string{"Comment can't be blank"}},
 		{
-			name: "both fail with rating message first", rating: 0, comment: "",
+			name: "両方が不正なら rating のメッセージが先に来る", rating: 0, comment: "",
 			want: []string{"Rating must be in 1..5", "Comment can't be blank"},
 		},
 	}
@@ -55,7 +55,7 @@ func TestValidateReviewContent(t *testing.T) {
 // 保持し（決して trim しない）、author/burger を記録した review を返す。
 // 無効な入力は review を返さずに ValidationError を表に出す。
 func TestNewReview(t *testing.T) {
-	t.Run("valid input builds the review", func(t *testing.T) {
+	t.Run("有効な入力から review を作る", func(t *testing.T) {
 		review, err := domain.NewReview(4, " Tasty ", 7, 9)
 		if err != nil {
 			t.Fatalf("NewReview returned error: %v", err)
@@ -68,7 +68,7 @@ func TestNewReview(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid input fails validation", func(t *testing.T) {
+	t.Run("無効な入力は検証エラーになる", func(t *testing.T) {
 		_, err := domain.NewReview(0, "", 7, 9)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
@@ -87,10 +87,10 @@ func TestReviewCanBeModifiedBy(t *testing.T) {
 		viewer domain.User
 		want   bool
 	}{
-		{name: "author may modify", viewer: domain.User{ID: 7}, want: true},
-		{name: "other user may not", viewer: domain.User{ID: 8}, want: false},
-		{name: "admin gets no pass", viewer: domain.User{ID: 9, Admin: true}, want: false},
-		{name: "admin author may modify", viewer: domain.User{ID: 7, Admin: true}, want: true},
+		{name: "author は変更できる", viewer: domain.User{ID: 7}, want: true},
+		{name: "他のユーザーは変更できない", viewer: domain.User{ID: 8}, want: false},
+		{name: "admin でも特別扱いされず変更できない", viewer: domain.User{ID: 9, Admin: true}, want: false},
+		{name: "author である admin は変更できる", viewer: domain.User{ID: 7, Admin: true}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

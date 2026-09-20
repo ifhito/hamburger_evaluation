@@ -64,7 +64,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 		token func(t *testing.T) string
 	}{
 		{
-			name: "expired token",
+			name: "期限切れの token は拒否される",
 			token: func(t *testing.T) string {
 				expired := NewJWTCodec(testSecret, -time.Minute)
 				token, err := expired.Issue(42)
@@ -75,7 +75,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			},
 		},
 		{
-			name: "tampered signature",
+			name: "署名が改ざんされた token は拒否される",
 			token: func(t *testing.T) string {
 				token, err := codec.Issue(42)
 				if err != nil {
@@ -89,7 +89,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			},
 		},
 		{
-			name: "wrong secret",
+			name: "別の secret で署名された token は拒否される",
 			token: func(t *testing.T) string {
 				other := NewJWTCodec("another-secret", time.Hour)
 				token, err := other.Issue(42)
@@ -100,7 +100,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			},
 		},
 		{
-			name: "alg none",
+			name: "alg none の token は拒否される",
 			token: func(t *testing.T) string {
 				token, err := jwt.NewWithClaims(jwt.SigningMethodNone, claims).
 					SignedString(jwt.UnsafeAllowNoneSignatureType)
@@ -111,7 +111,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			},
 		},
 		{
-			name: "alg RS256",
+			name: "alg RS256 の token は拒否される",
 			token: func(t *testing.T) string {
 				key, err := rsa.GenerateKey(rand.Reader, 2048)
 				if err != nil {
@@ -125,7 +125,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			},
 		},
 		{
-			name: "missing exp",
+			name: "exp がない token は拒否される",
 			token: func(t *testing.T) string {
 				token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user_id": int64(42)}).
 					SignedString([]byte(testSecret))
@@ -136,7 +136,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			},
 		},
 		{
-			name: "missing user_id",
+			name: "user_id がない token は拒否される",
 			token: func(t *testing.T) string {
 				token, err := jwt.NewWithClaims(jwt.SigningMethodHS256,
 					jwt.MapClaims{"exp": time.Now().Add(time.Hour).Unix()}).
@@ -148,7 +148,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			},
 		},
 		{
-			name:  "garbage token",
+			name:  "でたらめな token は拒否される",
 			token: func(*testing.T) string { return "not.a.jwt" },
 		},
 	}

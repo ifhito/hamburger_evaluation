@@ -38,22 +38,22 @@ func TestBurgerStatsReviewerTrustScore(t *testing.T) {
 	}{
 		// review なし：newcomer の base は 0.5、rating が 3 件未満なので
 		// variance factor は 1.0 -> 0.5。
-		{name: "empty history is newcomer 0.5", ratings: nil, want: 0.5},
+		{name: "履歴が空なら newcomer の 0.5 になる", ratings: nil, want: 0.5},
 		// rating 3 件：regular の base は 0.7。平均 13/3、母分散は
 		// (2*(1/3)^2 + (2/3)^2)/3 = 2/9 ~= 0.2222 < 0.3 -> penalty 0.7、
 		// score は 0.7*0.7（~0.49）。
-		{name: "regular with low variance 4,4,5", ratings: []float64{4, 4, 5}, want: regularPenalized},
+		{name: "分散が低い regular（4,4,5）は penalty がかかる", ratings: []float64{4, 4, 5}, want: regularPenalized},
 		// 同一の rating 20 件：expert の base は 1.0、variance 0 < 0.3 ->
 		// penalty 0.7、score は 1.0*0.7 = 厳密に 0.7。
-		{name: "expert with zero variance 20x4", ratings: repeatRatings(4.0, 20), want: 0.7},
+		{name: "分散 0 の expert（20x4）は penalty がかかる", ratings: repeatRatings(4.0, 20), want: 0.7},
 		// 同一の rating 5 件：regular の base は 0.7、variance 0 -> 0.7*0.7。
-		{name: "regular with zero variance 5x5", ratings: repeatRatings(5.0, 5), want: regularPenalized},
+		{name: "分散 0 の regular（5x5）は penalty がかかる", ratings: repeatRatings(5.0, 5), want: regularPenalized},
 		// 平均 3、variance (4+1+1+4+0)/5 = 2.0 >= 0.3 -> penalty なし、
 		// regular は厳密に 0.7。
-		{name: "regular with varied ratings 1,2,4,5,3", ratings: []float64{1, 2, 4, 5, 3}, want: 0.7},
+		{name: "rating がばらつく regular（1,2,4,5,3）は penalty がかからない", ratings: []float64{1, 2, 4, 5, 3}, want: 0.7},
 		// 1 と 5 が交互に並ぶ rating 10 件：veteran の base は 0.9、平均 3、
 		// variance 4.0 >= 0.3 -> 厳密に 0.9。
-		{name: "veteran with varied ratings", ratings: []float64{1, 5, 1, 5, 1, 5, 1, 5, 1, 5}, want: 0.9},
+		{name: "rating がばらつく veteran は penalty がかからない", ratings: []float64{1, 5, 1, 5, 1, 5, 1, 5, 1, 5}, want: 0.9},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestBurgerStatsReviewerTrustScore(t *testing.T) {
 func TestBurgerStatsCalculateBurgerScore(t *testing.T) {
 	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
 
-	t.Run("empty facts return the zero score", func(t *testing.T) {
+	t.Run("fact が空ならゼロスコアを返す", func(t *testing.T) {
 		got := domain.CalculateBurgerScore(nil, now)
 		want := domain.BurgerScore{WeightedAverage: 0.0, Confidence: 0.0, SampleSize: 0}
 		if got != want {
@@ -78,7 +78,7 @@ func TestBurgerStatsCalculateBurgerScore(t *testing.T) {
 		}
 	})
 
-	t.Run("single fresh fact", func(t *testing.T) {
+	t.Run("fresh な fact 1 件のスコアを計算する", func(t *testing.T) {
 		// history [5] の trust：newcomer で 0.5、rating が 3 件未満なので
 		// variance factor はない。now における recency は exp(0) = 1 で、
 		// weight は 0.5。
@@ -97,7 +97,7 @@ func TestBurgerStatsCalculateBurgerScore(t *testing.T) {
 		}
 	})
 
-	t.Run("expert outweighs newcomer", func(t *testing.T) {
+	t.Run("expert は newcomer より weight が大きい", func(t *testing.T) {
 		// newcomer の fact：rating 1、history [1] -> trust 0.5。
 		// expert の fact：rating 5、history 20x3.0 + [5.0]（rating 21 件 ->
 		// expert の base 1.0）。平均 65/21、variance は
@@ -120,7 +120,7 @@ func TestBurgerStatsCalculateBurgerScore(t *testing.T) {
 		}
 	})
 
-	t.Run("recency halves the weight after 180 days", func(t *testing.T) {
+	t.Run("180 日経つと recency で weight が半分になる", func(t *testing.T) {
 		// history 10x1.0 + 10x5.0：rating 20 件 -> expert の base 1.0、平均 3、
 		// variance 4.0 >= 0.3 -> trust は厳密に 1.0。
 		trustedHistory := append(repeatRatings(1.0, 10), repeatRatings(5.0, 10)...)
@@ -149,7 +149,7 @@ func TestBurgerStatsCalculateBurgerScore(t *testing.T) {
 		}
 	})
 
-	t.Run("confidence rounds to 4 decimals", func(t *testing.T) {
+	t.Run("confidence は小数 4 桁に丸められる", func(t *testing.T) {
 		// 同じ trust 1.0 の reviewer、90 日前：weight = exp(-90*ln2/180)
 		// = 2^(-1/2) = 0.70710678118654752...
 		// Confidence = 0.1*0.6 + 0.4*0.7071067811865475...
@@ -168,7 +168,7 @@ func TestBurgerStatsCalculateBurgerScore(t *testing.T) {
 		}
 	})
 
-	t.Run("confidence caps at 1.0 with many trusted fresh reviews", func(t *testing.T) {
+	t.Run("信頼できる fresh な review が多いと confidence は 1.0 で頭打ちになる", func(t *testing.T) {
 		// trust 1.0 の fresh な fact 10 件：totalWeight 10 ->
 		// Confidence = min(10/10,1)*0.6 + min(10/10,1)*0.4 = 1.0 であり、
 		// [0,1] の clamp によって厳密に 1.0 のまま保たれる。
@@ -198,28 +198,28 @@ func TestBurgerStatsAverageRating(t *testing.T) {
 		ratings []float64
 		want    float64
 	}{
-		{name: "empty is 0.0", ratings: nil, want: 0.0},
+		{name: "空なら 0.0 になる", ratings: nil, want: 0.0},
 		// (4+5)/2 = 4.5、厳密。通常のケース：MRI の境界補正は発動しては
 		// ならず（(450+0.5)/100 = 4.505 > 4.5）、4.5 は 4.5 のまま。
-		{name: "mean of 4 and 5", ratings: []float64{4, 5}, want: 4.5},
+		{name: "4 と 5 の平均は 4.5 になる", ratings: []float64{4, 5}, want: 4.5},
 		// 13/3 = 4.3333... -> 4.33。通常のケース：過補正なし
 		// （(433+0.5)/100 = 4.335 > 4.3333...）なので、4.33 は 4.33 のまま。
-		{name: "rounds 13/3 to 4.33", ratings: []float64{4, 4, 5}, want: 4.33},
+		{name: "13 ÷ 3 は 4.33 に丸められる", ratings: []float64{4, 4, 5}, want: 4.33},
 		// MRI の numeric.c の round_half_up の境界：39x1 + 1x2 の合計は 41 で、
 		// 平均 41/40 の最も近い double は 1.0249999999999999（41.0/40*100 ==
 		// 102.49999999999999）であるため、math.Round だけでは 1.02 になる。
 		// MRI の (f+0.5)/scale <= x という補正が発動し（102.5/100 はまったく
 		// 同じ double であり、<= x が成り立つ）、1.03 に繰り上げられる。これは
 		// Ruby 3.3 と一致する：(41.0/40).round(2) == 1.03。
-		{name: "MRI boundary 41/40 rounds to 1.03", ratings: append(repeatRatings(1.0, 39), 2.0), want: 1.03},
+		{name: "MRI 境界の 41 ÷ 40 は 1.03 に丸められる", ratings: append(repeatRatings(1.0, 39), 2.0), want: 1.03},
 		// 同じ境界の形：31x4 + 9x5 の合計は 169 で、平均 169/40 は
 		// double として 4.2249999999999996（169.0/40*100 ==
 		// 422.49999999999994）であり、単純な丸めでは 4.22 になる。補正が発動して
 		// 4.23 になり、Ruby の (169.0/40).round(2) と一致する。
-		{name: "MRI boundary 169/40 rounds to 4.23", ratings: append(repeatRatings(4.0, 31), repeatRatings(5.0, 9)...), want: 4.23},
+		{name: "MRI 境界の 169 ÷ 40 は 4.23 に丸められる", ratings: append(repeatRatings(4.0, 31), repeatRatings(5.0, 9)...), want: 4.23},
 		// (4.0+4.25)/2 = 4.125（厳密に表現可能）-> 4.13：Ruby は half を
 		// 偶数丸め（4.12）ではなく、0 から遠ざかる方向へ丸める。
-		{name: "rounds halves away from zero", ratings: []float64{4.0, 4.25}, want: 4.13},
+		{name: "half は 0 から遠ざかる方向に丸められる", ratings: []float64{4.0, 4.25}, want: 4.13},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

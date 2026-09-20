@@ -108,22 +108,22 @@ func TestAuthSignupValidation(t *testing.T) {
 		wantMsgs []string
 	}{
 		{
-			name:     "blank username",
+			name:     "username が空だと検証エラーになる",
 			input:    usecase.SignupInput{Email: "a@example.com", Password: "password123"},
 			wantMsgs: []string{"Username can't be blank"},
 		},
 		{
-			name:     "blank email",
+			name:     "email が空だと検証エラーになる",
 			input:    usecase.SignupInput{Username: "alice", Password: "password123"},
 			wantMsgs: []string{"Email can't be blank"},
 		},
 		{
-			name:     "blank password",
+			name:     "password が空だと検証エラーになる",
 			input:    usecase.SignupInput{Username: "alice", Email: "a@example.com"},
 			wantMsgs: []string{"Password can't be blank"},
 		},
 		{
-			name: "password longer than 72 bytes",
+			name: "72 バイトを超える password は検証エラーになる",
 			input: usecase.SignupInput{
 				Username: "alice",
 				Email:    "a@example.com",
@@ -132,7 +132,7 @@ func TestAuthSignupValidation(t *testing.T) {
 			wantMsgs: []string{"Password is too long (maximum is 72 characters)"},
 		},
 		{
-			name: "password confirmation mismatch",
+			name: "password confirmation が password と一致しないと検証エラーになる",
 			input: usecase.SignupInput{
 				Username:             "alice",
 				Email:                "a@example.com",
@@ -142,7 +142,7 @@ func TestAuthSignupValidation(t *testing.T) {
 			wantMsgs: []string{"Password confirmation doesn't match Password"},
 		},
 		{
-			name:  "all fields blank",
+			name:  "全フィールドが空だと 3 件の検証エラーをまとめて返す",
 			input: usecase.SignupInput{},
 			wantMsgs: []string{
 				"Username can't be blank",
@@ -162,7 +162,7 @@ func TestAuthSignupValidation(t *testing.T) {
 }
 
 func TestAuthSignup(t *testing.T) {
-	t.Run("valid input creates non-admin user with hashed password and returns token", func(t *testing.T) {
+	t.Run("有効な入力なら、ハッシュ化した password で非 admin ユーザーを作成し token を返す", func(t *testing.T) {
 		var gotParams usecase.CreateUserParams
 		repo := &fakeUserRepo{
 			createUser: func(_ context.Context, params usecase.CreateUserParams) (domain.User, error) {
@@ -199,7 +199,7 @@ func TestAuthSignup(t *testing.T) {
 		}
 	})
 
-	t.Run("nil password confirmation is accepted", func(t *testing.T) {
+	t.Run("password confirmation が nil でも受け付ける", func(t *testing.T) {
 		repo := &fakeUserRepo{
 			createUser: func(_ context.Context, params usecase.CreateUserParams) (domain.User, error) {
 				return domain.User{ID: 2, Username: params.Username, Email: params.Email}, nil
@@ -216,7 +216,7 @@ func TestAuthSignup(t *testing.T) {
 		}
 	})
 
-	t.Run("duplicate email surfaces as validation error", func(t *testing.T) {
+	t.Run("email が重複していると検証エラーとして返る", func(t *testing.T) {
 		repo := &fakeUserRepo{
 			createUser: func(context.Context, usecase.CreateUserParams) (domain.User, error) {
 				return domain.User{}, fmt.Errorf("create user: %w", domain.ErrEmailTaken)
@@ -231,7 +231,7 @@ func TestAuthSignup(t *testing.T) {
 		assertValidationError(t, err, []string{"Email has already been taken"})
 	})
 
-	t.Run("other repository errors propagate", func(t *testing.T) {
+	t.Run("それ以外の repository エラーはそのまま伝播する", func(t *testing.T) {
 		repoErr := errors.New("connection lost")
 		repo := &fakeUserRepo{
 			createUser: func(context.Context, usecase.CreateUserParams) (domain.User, error) {
@@ -269,9 +269,9 @@ func TestAuthLogin(t *testing.T) {
 		wantErr   error
 		wantToken string
 	}{
-		{name: "correct credentials", email: "a@example.com", password: "password123", wantToken: "token-for-7"},
-		{name: "wrong password", email: "a@example.com", password: "nope", wantErr: domain.ErrInvalidCredentials},
-		{name: "unknown email", email: "b@example.com", password: "password123", wantErr: domain.ErrInvalidCredentials},
+		{name: "正しい認証情報なら token を返す", email: "a@example.com", password: "password123", wantToken: "token-for-7"},
+		{name: "password が誤っていると invalid credentials になる", email: "a@example.com", password: "nope", wantErr: domain.ErrInvalidCredentials},
+		{name: "未知の email だと invalid credentials になる", email: "b@example.com", password: "password123", wantErr: domain.ErrInvalidCredentials},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -294,7 +294,7 @@ func TestAuthLogin(t *testing.T) {
 		})
 	}
 
-	t.Run("unknown email still performs a dummy hash comparison", func(t *testing.T) {
+	t.Run("未知の email でもダミーのハッシュ比較を行う", func(t *testing.T) {
 		// タイミングのサイドチャネル対策：Compare の呼び出しがなければ、
 		// 未知の email の経路は誤ったパスワードの経路より測定できるほど
 		// 速く返り、email の列挙を許してしまう。
@@ -314,7 +314,7 @@ func TestAuthLogin(t *testing.T) {
 		}
 	})
 
-	t.Run("repository failure propagates, not invalid credentials", func(t *testing.T) {
+	t.Run("repository の失敗は invalid credentials にならずそのまま伝播する", func(t *testing.T) {
 		repoErr := errors.New("connection lost")
 		failing := &fakeUserRepo{
 			getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
@@ -361,9 +361,9 @@ func TestAuthAuthenticateToken(t *testing.T) {
 		token   string
 		wantErr error
 	}{
-		{name: "valid token of active user", token: "valid-active"},
-		{name: "invalid token", token: "tampered-or-expired", wantErr: domain.ErrUnauthenticated},
-		{name: "token of unknown or discarded user", token: "valid-discarded", wantErr: domain.ErrUnauthenticated},
+		{name: "active ユーザーの有効な token ならそのユーザーを返す", token: "valid-active"},
+		{name: "不正な token は unauthenticated になる", token: "tampered-or-expired", wantErr: domain.ErrUnauthenticated},
+		{name: "未知または discard 済みのユーザーの token は unauthenticated になる", token: "valid-discarded", wantErr: domain.ErrUnauthenticated},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -383,7 +383,7 @@ func TestAuthAuthenticateToken(t *testing.T) {
 		})
 	}
 
-	t.Run("repository failure propagates, not unauthenticated", func(t *testing.T) {
+	t.Run("repository の失敗は unauthenticated にならずそのまま伝播する", func(t *testing.T) {
 		repoErr := errors.New("connection lost")
 		failing := &fakeUserRepo{
 			getByID: func(context.Context, int64) (domain.User, error) {

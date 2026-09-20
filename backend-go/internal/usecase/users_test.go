@@ -112,27 +112,27 @@ func TestUsersUpdateValidation(t *testing.T) {
 		wantMsgs []string
 	}{
 		{
-			name:     "blank username",
+			name:     "username が空だと検証エラーになる",
 			input:    usecase.UpdateUserInput{Username: strPtr("")},
 			wantMsgs: []string{"Username can't be blank"},
 		},
 		{
-			name:     "blank email",
+			name:     "email が空だと検証エラーになる",
 			input:    usecase.UpdateUserInput{Email: strPtr("")},
 			wantMsgs: []string{"Email can't be blank"},
 		},
 		{
-			name:     "blank username and email collect both messages",
+			name:     "username と email が両方空だと両方のメッセージを集めて返す",
 			input:    usecase.UpdateUserInput{Username: strPtr(""), Email: strPtr("")},
 			wantMsgs: []string{"Username can't be blank", "Email can't be blank"},
 		},
 		{
-			name:     "password over 72 bytes",
+			name:     "72 バイトを超える password は検証エラーになる",
 			input:    usecase.UpdateUserInput{Password: strPtr(strings.Repeat("a", 73))},
 			wantMsgs: []string{"Password is too long (maximum is 72 characters)"},
 		},
 		{
-			name: "mismatched confirmation",
+			name: "confirmation が一致しないと検証エラーになる",
 			input: usecase.UpdateUserInput{
 				Password:             strPtr("newpassword1"),
 				PasswordConfirmation: strPtr("other"),
@@ -140,7 +140,7 @@ func TestUsersUpdateValidation(t *testing.T) {
 			wantMsgs: []string{"Password confirmation doesn't match Password"},
 		},
 		{
-			name:     "confirmation without password mismatches the absent password",
+			name:     "password なしの confirmation は存在しない password と一致せず検証エラーになる",
 			input:    usecase.UpdateUserInput{PasswordConfirmation: strPtr("stray")},
 			wantMsgs: []string{"Password confirmation doesn't match Password"},
 		},
@@ -165,27 +165,27 @@ func TestUsersUpdateChanges(t *testing.T) {
 		wantChanges usecase.ProfileChanges
 	}{
 		{
-			name:        "empty input is a no-op update",
+			name:        "空の入力は何も変更しない更新になる",
 			input:       usecase.UpdateUserInput{},
 			wantChanges: usecase.ProfileChanges{},
 		},
 		{
-			name:        "username only leaves the rest nil",
+			name:        "username だけの入力では他のフィールドは nil のままになる",
 			input:       usecase.UpdateUserInput{Username: strPtr("alice2")},
 			wantChanges: usecase.ProfileChanges{Username: strPtr("alice2")},
 		},
 		{
-			name:        "empty-string password is absent: no digest change, no error",
+			name:        "空文字列の password は存在しない扱いで、digest の変更もエラーもない",
 			input:       usecase.UpdateUserInput{Password: strPtr("")},
 			wantChanges: usecase.ProfileChanges{},
 		},
 		{
-			name:        "empty password with empty confirmation stays a no-op",
+			name:        "空の password と空の confirmation でも何も変更しない",
 			input:       usecase.UpdateUserInput{Password: strPtr(""), PasswordConfirmation: strPtr("")},
 			wantChanges: usecase.ProfileChanges{},
 		},
 		{
-			name: "present password is hashed",
+			name: "存在する password はハッシュ化される",
 			input: usecase.UpdateUserInput{
 				Password:             strPtr("newpassword1"),
 				PasswordConfirmation: strPtr("newpassword1"),
@@ -193,7 +193,7 @@ func TestUsersUpdateChanges(t *testing.T) {
 			wantChanges: usecase.ProfileChanges{PasswordDigest: strPtr("digest(newpassword1)")},
 		},
 		{
-			name:  "all fields together",
+			name:  "全フィールドを同時に更新できる",
 			input: usecase.UpdateUserInput{Username: strPtr("alice2"), Email: strPtr("alice2@example.com"), Password: strPtr("newpassword1")},
 			wantChanges: usecase.ProfileChanges{
 				Username:       strPtr("alice2"),
@@ -262,21 +262,21 @@ func TestUsersUpdateEmailTaken(t *testing.T) {
 // 403 より先）、本人のみのルール、そして所有者に対する discard の呼び出しで
 // ある。
 func TestUsersDelete(t *testing.T) {
-	t.Run("unknown target yields ErrUserNotFound even for a non-owner", func(t *testing.T) {
+	t.Run("未知の target は所有者でなくても ErrUserNotFound を返す", func(t *testing.T) {
 		repo := &fakeUsersRepo{getByID: activeUsersByID(usersViewer, usersOther)}
 		if err := usecase.NewUsers(repo, fakeHasher{}).Delete(context.Background(), usersViewer, 999); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("error = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})
 
-	t.Run("foreign target yields ErrForbidden without a discard", func(t *testing.T) {
+	t.Run("他人の target は discard せずに ErrForbidden を返す", func(t *testing.T) {
 		repo := &fakeUsersRepo{getByID: activeUsersByID(usersViewer, usersOther)}
 		if err := usecase.NewUsers(repo, fakeHasher{}).Delete(context.Background(), usersViewer, usersOther.ID); !errors.Is(err, domain.ErrForbidden) {
 			t.Errorf("error = %v, want %v", err, domain.ErrForbidden)
 		}
 	})
 
-	t.Run("owner discards self", func(t *testing.T) {
+	t.Run("本人は自分自身を discard できる", func(t *testing.T) {
 		var discarded int64
 		repo := &fakeUsersRepo{
 			getByID: activeUsersByID(usersViewer),

@@ -87,7 +87,7 @@ func TestProcess(t *testing.T) {
 		wantW, wantH    int
 	}{
 		{
-			name:            "large jpeg is resized to the 1600px long edge",
+			name:            "大きい jpeg は長辺 1600px にリサイズされる",
 			input:           encode(t, "jpeg", 2000, 1000),
 			wantContentType: "image/jpeg",
 			wantExt:         ".jpg",
@@ -95,7 +95,7 @@ func TestProcess(t *testing.T) {
 			wantH:           800,
 		},
 		{
-			name:            "small jpeg is not upscaled",
+			name:            "小さい jpeg は拡大されない",
 			input:           encode(t, "jpeg", 800, 400),
 			wantContentType: "image/jpeg",
 			wantExt:         ".jpg",
@@ -103,7 +103,7 @@ func TestProcess(t *testing.T) {
 			wantH:           400,
 		},
 		{
-			name:            "large portrait png is resized and stays png",
+			name:            "大きい縦長の png はリサイズされても png のまま",
 			input:           encode(t, "png", 900, 1800),
 			wantContentType: "image/png",
 			wantExt:         ".png",
@@ -111,7 +111,7 @@ func TestProcess(t *testing.T) {
 			wantH:           1600,
 		},
 		{
-			name:            "small png is not upscaled",
+			name:            "小さい png は拡大されない",
 			input:           encode(t, "png", 100, 50),
 			wantContentType: "image/png",
 			wantExt:         ".png",
@@ -119,7 +119,7 @@ func TestProcess(t *testing.T) {
 			wantH:           50,
 		},
 		{
-			name:            "webp is re-encoded as jpeg",
+			name:            "webp は jpeg に再エンコードされる",
 			input:           webpFixture,
 			wantContentType: "image/jpeg",
 			wantExt:         ".jpg",
@@ -267,14 +267,14 @@ func TestProcessExifOrientation(t *testing.T) {
 		// ラスタ TL=red TR=green BL=blue BR=yellow から導出したものである。
 		want [4][3]int
 	}{
-		{"orientation 1 passes through", 1, w, h, [4][3]int{red, green, blue, yellow}},
-		{"orientation 2 flips horizontally", 2, w, h, [4][3]int{green, red, yellow, blue}},
-		{"orientation 3 rotates 180", 3, w, h, [4][3]int{yellow, blue, green, red}},
-		{"orientation 4 flips vertically", 4, w, h, [4][3]int{blue, yellow, red, green}},
-		{"orientation 5 transposes", 5, h, w, [4][3]int{red, blue, green, yellow}},
-		{"orientation 6 rotates 90 clockwise", 6, h, w, [4][3]int{blue, red, yellow, green}},
-		{"orientation 7 transverses", 7, h, w, [4][3]int{yellow, green, blue, red}},
-		{"orientation 8 rotates 90 counter-clockwise", 8, h, w, [4][3]int{green, yellow, red, blue}},
+		{"orientation 1 はそのまま通る", 1, w, h, [4][3]int{red, green, blue, yellow}},
+		{"orientation 2 は左右反転する", 2, w, h, [4][3]int{green, red, yellow, blue}},
+		{"orientation 3 は 180 度回転する", 3, w, h, [4][3]int{yellow, blue, green, red}},
+		{"orientation 4 は上下反転する", 4, w, h, [4][3]int{blue, yellow, red, green}},
+		{"orientation 5 は transpose される", 5, h, w, [4][3]int{red, blue, green, yellow}},
+		{"orientation 6 は時計回りに 90 度回転する", 6, h, w, [4][3]int{blue, red, yellow, green}},
+		{"orientation 7 は transverse される", 7, h, w, [4][3]int{yellow, green, blue, red}},
+		{"orientation 8 は反時計回りに 90 度回転する", 8, h, w, [4][3]int{green, yellow, red, blue}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -313,8 +313,8 @@ func TestProcessOrientationSegmentWalk(t *testing.T) {
 		name string
 		pre  []byte
 	}{
-		{"XMP APP1 before the Exif APP1", xmpSeg},
-		{"0xFF fill byte before the Exif APP1", []byte{0xFF}},
+		{"Exif APP1 の前に XMP APP1 があっても補正が適用される", xmpSeg},
+		{"Exif APP1 の前に 0xFF のフィルバイトがあっても補正が適用される", []byte{0xFF}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -341,10 +341,10 @@ func TestProcessMalformedExifIsIgnored(t *testing.T) {
 	}{
 		// セグメント長は JPEG としては有効だが、TIFF ストリームが 8 バイトの
 		// ヘッダに満たないところで切れている。
-		{"truncated APP1 payload", exifAPP1([]byte("II*\x00"))},
-		{"IFD offset beyond the segment", exifAPP1(orientationTIFF(6, 0xFFFF))},
-		{"orientation value 0", exifAPP1(orientationTIFF(0, 8))},
-		{"orientation value 9", exifAPP1(orientationTIFF(9, 8))},
+		{"APP1 payload が切り詰められている場合は無視される", exifAPP1([]byte("II*\x00"))},
+		{"IFD オフセットがセグメントの範囲外の場合は無視される", exifAPP1(orientationTIFF(6, 0xFFFF))},
+		{"orientation 値 0 は無視される", exifAPP1(orientationTIFF(0, 8))},
+		{"orientation 値 9 は無視される", exifAPP1(orientationTIFF(9, 8))},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -367,17 +367,17 @@ func TestProcessRejections(t *testing.T) {
 		name  string
 		input []byte
 	}{
-		{name: "pdf magic bytes", input: append([]byte("%PDF-1.4\n"), bytes.Repeat([]byte{'x'}, 64)...)},
-		{name: "plain text", input: []byte("just some text, definitely not an image")},
-		{name: "empty payload", input: nil},
-		{name: "png magic bytes without image data", input: []byte("\x89PNG\r\n\x1a\ngarbage")},
-		{name: "width beyond 10000", input: pngHeader(t, 10001, 1, 8)},
-		{name: "height beyond 10000", input: pngHeader(t, 1, 10001, 8)},
-		{name: "pixel count beyond 24M", input: pngHeader(t, 5000, 5000, 8)},
+		{name: "pdf の magic bytes は拒否される", input: append([]byte("%PDF-1.4\n"), bytes.Repeat([]byte{'x'}, 64)...)},
+		{name: "プレーンテキストは拒否される", input: []byte("just some text, definitely not an image")},
+		{name: "空の payload は拒否される", input: nil},
+		{name: "画像データのない png magic bytes は拒否される", input: []byte("\x89PNG\r\n\x1a\ngarbage")},
+		{name: "幅が 10000 を超えると拒否される", input: pngHeader(t, 10001, 1, 8)},
+		{name: "高さが 10000 を超えると拒否される", input: pngHeader(t, 1, 10001, 8)},
+		{name: "ピクセル数が 24M を超えると拒否される", input: pngHeader(t, 5000, 5000, 8)},
 		// 4500x4500 は 20.25M ピクセルで maxPixels 未満だが、16-bit の
 		// truecolor（decode 後は 8 bytes/px）では推定値が約 162MB になり、
 		// 128MiB の decode メモリ上限を超える。
-		{name: "16-bit image under the pixel cap but over the decode memory limit", input: pngHeader(t, 4500, 4500, 16)},
+		{name: "ピクセル数の上限内でも decode メモリ上限を超える 16-bit 画像は拒否される", input: pngHeader(t, 4500, 4500, 16)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

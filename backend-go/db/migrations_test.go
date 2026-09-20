@@ -29,12 +29,12 @@ func TestMigrationsAcceptance(t *testing.T) {
 	// AC1：空の DB から、すべての migration を up すると table、制約、
 	// index が得られる。
 	dbtest.Apply(ctx, t, conn, ups)
-	t.Run("AC1_up_creates_schema", func(t *testing.T) {
+	t.Run("AC1 up すると schema が作られる", func(t *testing.T) {
 		assertSchemaPresent(ctx, t, conn)
 	})
 
 	// AC3：1..5 の範囲外の rating は CHECK 制約によって拒否される。
-	t.Run("AC3_rating_check_violation", func(t *testing.T) {
+	t.Run("AC3 範囲外の rating は CHECK 制約違反になる", func(t *testing.T) {
 		var userID, burgerID int64
 		if err := conn.QueryRow(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3) RETURNING id",
@@ -52,7 +52,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 
 	// AC4：同じ email を持つ 2 人目のユーザーは UNIQUE 制約によって
 	// 拒否される。
-	t.Run("AC4_email_unique_violation", func(t *testing.T) {
+	t.Run("AC4 同じ email は UNIQUE 制約違反になる", func(t *testing.T) {
 		const email = "ac4@example.com"
 		if _, err := conn.Exec(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3)",
@@ -67,7 +67,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 
 	// AC2：すべての migration を down すると空の database に戻る。
 	dbtest.Apply(ctx, t, conn, downs)
-	t.Run("AC2_down_returns_to_empty_schema", func(t *testing.T) {
+	t.Run("AC2 down すると空の schema に戻る", func(t *testing.T) {
 		var count int
 		if err := conn.QueryRow(ctx,
 			"SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'i', 'S', 'v', 'm')").Scan(&count); err != nil {
@@ -80,7 +80,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 
 	// down の後の re-up は成功しなければならない（up/down/re-up のサイクル）。
 	dbtest.Apply(ctx, t, conn, ups)
-	t.Run("reup_after_down_recreates_schema", func(t *testing.T) {
+	t.Run("down 後に再度 up すると schema が作られる", func(t *testing.T) {
 		assertSchemaPresent(ctx, t, conn)
 	})
 }

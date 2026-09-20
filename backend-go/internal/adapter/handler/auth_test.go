@@ -195,43 +195,43 @@ func TestSignupErrors(t *testing.T) {
 		wantBody   string // 完全一致させる body。空なら status のみを検証する
 	}{
 		{
-			name:       "AC2 taken email returns 422",
+			name:       "AC2 使用済みの email は 422 を返す",
 			setup:      func(repo *userRepoFake) { repo.seed("bob", "bob@example.com", "password123") },
 			body:       `{"username":"bob2","email":"bob@example.com","password":"password123"}`,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Email has already been taken"]}`,
 		},
 		{
-			name:       "blank fields return 422 with all messages",
+			name:       "空のフィールドはすべてのメッセージ付きで 422 を返す",
 			body:       `{"username":"","email":"","password":""}`,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Username can't be blank","Email can't be blank","Password can't be blank"]}`,
 		},
 		{
-			name:       "mismatched confirmation returns 422",
+			name:       "確認用パスワードが一致しないと 422 を返す",
 			body:       `{"username":"eve","email":"eve@example.com","password":"password123","password_confirmation":"other"}`,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Password confirmation doesn't match Password"]}`,
 		},
 		{
-			name:       "unknown extra fields are ignored",
+			name:       "未知の余分なフィールドは無視される",
 			body:       `{"username":"carol","email":"carol@example.com","password":"password123","future_field":true}`,
 			wantStatus: http.StatusCreated,
 		},
 		{
-			name:       "malformed JSON returns 400",
+			name:       "不正な JSON は 400 を返す",
 			body:       `{"username":`,
 			wantStatus: http.StatusBadRequest,
 			wantBody:   `{"error":"invalid JSON body"}`,
 		},
 		{
-			name:       "empty body returns 400",
+			name:       "空の body は 400 を返す",
 			body:       "",
 			wantStatus: http.StatusBadRequest,
 			wantBody:   `{"error":"invalid JSON body"}`,
 		},
 		{
-			name:       "repository failure returns 500",
+			name:       "repository の失敗は 500 を返す",
 			setup:      func(repo *userRepoFake) { repo.err = io.ErrUnexpectedEOF },
 			body:       `{"username":"dan","email":"dan@example.com","password":"password123"}`,
 			wantStatus: http.StatusInternalServerError,
@@ -266,36 +266,36 @@ func TestLogin(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name:       "AC3 correct credentials return 200 with token",
+			name:       "AC3 正しい認証情報は token 付きで 200 を返す",
 			body:       `{"email":"alice@example.com","password":"password123"}`,
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "AC3 wrong password returns 401",
+			name:       "AC3 誤ったパスワードは 401 を返す",
 			body:       `{"email":"alice@example.com","password":"wrong"}`,
 			wantStatus: http.StatusUnauthorized,
 			wantBody:   `{"error":"Invalid email or password"}`,
 		},
 		{
-			name:       "unknown email returns the same 401",
+			name:       "未知の email は同じ 401 を返す",
 			body:       `{"email":"nobody@example.com","password":"password123"}`,
 			wantStatus: http.StatusUnauthorized,
 			wantBody:   `{"error":"Invalid email or password"}`,
 		},
 		{
-			name:       "malformed JSON returns 400",
+			name:       "不正な JSON は 400 を返す",
 			body:       `not json`,
 			wantStatus: http.StatusBadRequest,
 			wantBody:   `{"error":"invalid JSON body"}`,
 		},
 		{
-			name:       "trailing garbage after JSON returns 400",
+			name:       "JSON の後ろに余分な文字列が続くと 400 を返す",
 			body:       `{"email":"a@x","password":"p"}garbage`,
 			wantStatus: http.StatusBadRequest,
 			wantBody:   `{"error":"invalid JSON body"}`,
 		},
 		{
-			name:       "repository failure returns 500",
+			name:       "repository の失敗は 500 を返す",
 			setup:      func(repo *userRepoFake) { repo.err = io.ErrUnexpectedEOF },
 			body:       `{"email":"alice@example.com","password":"password123"}`,
 			wantStatus: http.StatusInternalServerError,
@@ -367,20 +367,20 @@ func TestRequireAuth(t *testing.T) {
 		authHeader string
 		wantStatus int
 	}{
-		{name: "valid token passes", authHeader: "Bearer " + validToken, wantStatus: http.StatusOK},
-		{name: "lowercase bearer scheme passes (RFC 6750)", authHeader: "bearer " + validToken, wantStatus: http.StatusOK},
-		{name: "uppercase BEARER scheme passes (RFC 6750)", authHeader: "BEARER " + validToken, wantStatus: http.StatusOK},
-		{name: "extra whitespace after scheme passes (RFC 6750)", authHeader: "Bearer  " + validToken, wantStatus: http.StatusOK},
-		{name: "AC4 no token", authHeader: "", wantStatus: http.StatusUnauthorized},
-		{name: "AC4 non-Bearer scheme", authHeader: "Token " + validToken, wantStatus: http.StatusUnauthorized},
-		{name: "Basic scheme is rejected", authHeader: "Basic " + validToken, wantStatus: http.StatusUnauthorized},
-		{name: "bare token without scheme is rejected", authHeader: validToken, wantStatus: http.StatusUnauthorized},
-		{name: "AC4 empty bearer token", authHeader: "Bearer ", wantStatus: http.StatusUnauthorized},
-		{name: "AC4 tampered token", authHeader: "Bearer " + validToken + "x", wantStatus: http.StatusUnauthorized},
-		{name: "AC4 token signed with another secret", authHeader: "Bearer " + wrongSecretToken, wantStatus: http.StatusUnauthorized},
-		{name: "AC4 expired token", authHeader: "Bearer " + expiredToken, wantStatus: http.StatusUnauthorized},
-		{name: "token of unknown user", authHeader: "Bearer " + unknownToken, wantStatus: http.StatusUnauthorized},
-		{name: "AC5 token of discarded user", authHeader: "Bearer " + discardedToken, wantStatus: http.StatusUnauthorized},
+		{name: "有効なトークンは通る", authHeader: "Bearer " + validToken, wantStatus: http.StatusOK},
+		{name: "小文字の bearer スキームは通る (RFC 6750)", authHeader: "bearer " + validToken, wantStatus: http.StatusOK},
+		{name: "大文字の BEARER スキームは通る (RFC 6750)", authHeader: "BEARER " + validToken, wantStatus: http.StatusOK},
+		{name: "スキームの後ろに余分な空白があっても通る (RFC 6750)", authHeader: "Bearer  " + validToken, wantStatus: http.StatusOK},
+		{name: "AC4 トークンなしは拒否される", authHeader: "", wantStatus: http.StatusUnauthorized},
+		{name: "AC4 Bearer 以外のスキームは拒否される", authHeader: "Token " + validToken, wantStatus: http.StatusUnauthorized},
+		{name: "Basic スキームは拒否される", authHeader: "Basic " + validToken, wantStatus: http.StatusUnauthorized},
+		{name: "スキームなしの生のトークンは拒否される", authHeader: validToken, wantStatus: http.StatusUnauthorized},
+		{name: "AC4 空の Bearer トークンは拒否される", authHeader: "Bearer ", wantStatus: http.StatusUnauthorized},
+		{name: "AC4 改ざんされたトークンは拒否される", authHeader: "Bearer " + validToken + "x", wantStatus: http.StatusUnauthorized},
+		{name: "AC4 別の secret で署名されたトークンは拒否される", authHeader: "Bearer " + wrongSecretToken, wantStatus: http.StatusUnauthorized},
+		{name: "AC4 期限切れのトークンは拒否される", authHeader: "Bearer " + expiredToken, wantStatus: http.StatusUnauthorized},
+		{name: "未知のユーザーのトークンは拒否される", authHeader: "Bearer " + unknownToken, wantStatus: http.StatusUnauthorized},
+		{name: "AC5 discard 済みのユーザーのトークンは拒否される", authHeader: "Bearer " + discardedToken, wantStatus: http.StatusUnauthorized},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -434,9 +434,9 @@ func TestOptionalAuth(t *testing.T) {
 		authHeader string
 		wantViewer bool
 	}{
-		{name: "AC6 no token runs anonymously", authHeader: "", wantViewer: false},
-		{name: "AC6 invalid token runs anonymously", authHeader: "Bearer not-a-token", wantViewer: false},
-		{name: "AC6 valid token yields viewer", authHeader: "Bearer " + token, wantViewer: true},
+		{name: "AC6 トークンがなければ匿名のまま実行される", authHeader: "", wantViewer: false},
+		{name: "AC6 無効なトークンなら匿名のまま実行される", authHeader: "Bearer not-a-token", wantViewer: false},
+		{name: "AC6 有効なトークンなら viewer が得られる", authHeader: "Bearer " + token, wantViewer: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

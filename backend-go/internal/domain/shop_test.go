@@ -28,16 +28,16 @@ func TestShopVisibility(t *testing.T) {
 		shop   domain.Shop
 		want   bool
 	}{
-		{name: "anonymous sees active", viewer: nil, shop: activeShop, want: true},
-		{name: "anonymous cannot see pending", viewer: nil, shop: pendingOwn, want: false},
-		{name: "anonymous cannot see rejected", viewer: nil, shop: rejectedNoCreator, want: false},
-		{name: "user sees active", viewer: &alice, shop: activeShop, want: true},
-		{name: "user sees own pending", viewer: &alice, shop: pendingOwn, want: true},
-		{name: "user cannot see someone else's pending", viewer: &alice, shop: pendingOther, want: false},
-		{name: "user cannot see creatorless rejected", viewer: &alice, shop: rejectedNoCreator, want: false},
-		{name: "admin sees active", viewer: &admin, shop: activeShop, want: true},
-		{name: "admin sees any pending", viewer: &admin, shop: pendingOther, want: true},
-		{name: "admin sees rejected", viewer: &admin, shop: rejectedNoCreator, want: true},
+		{name: "匿名ユーザーは active な shop を見られる", viewer: nil, shop: activeShop, want: true},
+		{name: "匿名ユーザーは pending な shop を見られない", viewer: nil, shop: pendingOwn, want: false},
+		{name: "匿名ユーザーは rejected な shop を見られない", viewer: nil, shop: rejectedNoCreator, want: false},
+		{name: "ユーザーは active な shop を見られる", viewer: &alice, shop: activeShop, want: true},
+		{name: "ユーザーは自分の pending な shop を見られる", viewer: &alice, shop: pendingOwn, want: true},
+		{name: "ユーザーは他人の pending な shop を見られない", viewer: &alice, shop: pendingOther, want: false},
+		{name: "ユーザーは creator のない rejected な shop を見られない", viewer: &alice, shop: rejectedNoCreator, want: false},
+		{name: "admin は active な shop を見られる", viewer: &admin, shop: activeShop, want: true},
+		{name: "admin はどの pending な shop も見られる", viewer: &admin, shop: pendingOther, want: true},
+		{name: "admin は rejected な shop を見られる", viewer: &admin, shop: rejectedNoCreator, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -69,13 +69,13 @@ func TestShopCanBeReviewedBy(t *testing.T) {
 		shop   domain.Shop
 		want   bool
 	}{
-		{name: "anyone may review an active shop", viewer: bob, shop: activeShop, want: true},
-		{name: "creator may review own pending shop", viewer: alice, shop: pendingOwn, want: true},
-		{name: "other user may not review a pending shop", viewer: bob, shop: pendingOwn, want: false},
-		{name: "admin may review any pending shop", viewer: admin, shop: pendingOwn, want: true},
-		{name: "creatorless pending shop rejects regular users", viewer: bob, shop: pendingNoCreator, want: false},
-		{name: "rejected shop is never reviewable, even by its creator", viewer: alice, shop: rejectedOwn, want: false},
-		{name: "rejected shop is never reviewable, even by an admin", viewer: admin, shop: rejectedOwn, want: false},
+		{name: "誰でも active な shop に review できる", viewer: bob, shop: activeShop, want: true},
+		{name: "creator は自分の pending な shop に review できる", viewer: alice, shop: pendingOwn, want: true},
+		{name: "他のユーザーは pending な shop に review できない", viewer: bob, shop: pendingOwn, want: false},
+		{name: "admin はどの pending な shop にも review できる", viewer: admin, shop: pendingOwn, want: true},
+		{name: "creator のない pending な shop には一般ユーザーは review できない", viewer: bob, shop: pendingNoCreator, want: false},
+		{name: "rejected な shop は creator であっても決して review できない", viewer: alice, shop: rejectedOwn, want: false},
+		{name: "rejected な shop は admin であっても決して review できない", viewer: admin, shop: rejectedOwn, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -90,7 +90,7 @@ func TestShopCanBeReviewedBy(t *testing.T) {
 // creator が記録され moderation note のない pending な shop を返す。空および
 // ホワイトスペースのみの名前は、Rails のメッセージそのままで失敗する。
 func TestNewShopSubmission(t *testing.T) {
-	t.Run("valid name starts pending with creator", func(t *testing.T) {
+	t.Run("有効な名前なら creator 付きの pending な shop になる", func(t *testing.T) {
 		shop, err := domain.NewShopSubmission("New Shack", 7)
 		if err != nil {
 			t.Fatalf("NewShopSubmission returned error: %v", err)
@@ -107,7 +107,7 @@ func TestNewShopSubmission(t *testing.T) {
 	})
 
 	for _, name := range []string{"", "   ", "\t\n"} {
-		t.Run("blank name "+name+" fails validation", func(t *testing.T) {
+		t.Run("空白の名前 "+name+" は検証エラーになる", func(t *testing.T) {
 			_, err := domain.NewShopSubmission(name, 7)
 			var vErr *domain.ValidationError
 			if !errors.As(err, &vErr) {
@@ -132,7 +132,7 @@ func TestShopModerationTransitions(t *testing.T) {
 	}
 
 	for _, from := range statuses {
-		t.Run("approve from "+string(from)+" activates and clears note", func(t *testing.T) {
+		t.Run("approve は "+string(from)+" から active にして note を消す", func(t *testing.T) {
 			shop := domain.Shop{ID: 1, Name: "Shack", Status: from, ModerationNote: ptr("old note")}
 			got := shop.Approve()
 			if got.Status != domain.ShopStatusActive {
@@ -143,7 +143,7 @@ func TestShopModerationTransitions(t *testing.T) {
 			}
 		})
 
-		t.Run("reject from "+string(from)+" sets status and note", func(t *testing.T) {
+		t.Run("reject は "+string(from)+" から rejected にして note を設定する", func(t *testing.T) {
 			shop := domain.Shop{ID: 1, Name: "Shack", Status: from}
 			got := shop.Reject(ptr("needs fixes"))
 			if got.Status != domain.ShopStatusRejected {
@@ -155,14 +155,14 @@ func TestShopModerationTransitions(t *testing.T) {
 		})
 	}
 
-	t.Run("reject without note clears any previous note", func(t *testing.T) {
+	t.Run("note なしの reject は以前の note を消す", func(t *testing.T) {
 		shop := domain.Shop{ID: 1, Status: domain.ShopStatusRejected, ModerationNote: ptr("old note")}
 		if got := shop.Reject(nil); got.ModerationNote != nil {
 			t.Errorf("ModerationNote = %v, want nil", *got.ModerationNote)
 		}
 	})
 
-	t.Run("transitions keep visibility coherent", func(t *testing.T) {
+	t.Run("遷移しても可視性の整合性が保たれる", func(t *testing.T) {
 		anon := domain.ShopVisibilityFor(nil)
 		shop := domain.Shop{ID: 1, Status: domain.ShopStatusPending}
 		if approved := shop.Approve(); !anon.CanView(approved) {
