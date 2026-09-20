@@ -17,6 +17,8 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 const (
@@ -53,7 +55,15 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	}
 	defer pool.Close()
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool), ready)
+	jwtCodec := infra.NewJWTCodec(cfg.JWTSecret, cfg.JWTTTL)
+	auth := usecase.NewAuth(
+		repository.NewUserRepository(pool),
+		infra.BcryptPasswordHasher{},
+		jwtCodec,
+		jwtCodec,
+	)
+
+	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth), ready)
 }
 
 // serve runs an http.Server with explicit timeouts (never bare

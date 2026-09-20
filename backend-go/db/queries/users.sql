@@ -7,6 +7,14 @@ RETURNING *;
 SELECT * FROM users
 WHERE id = $1;
 
+-- name: GetActiveUserByEmail :one
+SELECT * FROM users
+WHERE email = $1 AND discarded_at IS NULL;
+
+-- name: GetActiveUserByID :one
+SELECT * FROM users
+WHERE id = $1 AND discarded_at IS NULL;
+
 -- name: ListUsers :many
 SELECT * FROM users
 ORDER BY id

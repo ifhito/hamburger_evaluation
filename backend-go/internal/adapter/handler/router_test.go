@@ -65,7 +65,7 @@ func TestHealth(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/up", nil)
-			handler.NewRouter(tt.pinger).ServeHTTP(rec, req)
+			newTestRouter(tt.pinger).ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
@@ -96,12 +96,13 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 	}{
 		{name: "unknown route returns 404", method: http.MethodGet, path: "/nope", wantStatus: http.StatusNotFound},
 		{name: "wrong method returns 405", method: http.MethodPost, path: "/up", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
+		{name: "GET /signup returns 405 Allow POST", method: http.MethodGet, path: "/signup", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(tt.method, tt.path, nil)
-			handler.NewRouter(okPinger).ServeHTTP(rec, req)
+			newTestRouter(okPinger).ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantStatus)
@@ -119,7 +120,7 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 // TestBodyLimit covers AC3: a POST with a 2 MiB body gets 413 with the
 // error JSON shape, and a subsequent request on the same client succeeds.
 func TestBodyLimit(t *testing.T) {
-	srv := httptest.NewServer(handler.NewRouter(okPinger))
+	srv := httptest.NewServer(newTestRouter(okPinger))
 	defer srv.Close()
 	client := srv.Client()
 
