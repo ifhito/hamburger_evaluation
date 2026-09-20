@@ -216,8 +216,9 @@ func TestListShopsRepoFailure(t *testing.T) {
 }
 
 // TestGetShopDetail は detail の body を厳密に検証する：snake_case の
-// フィールド、creator オブジェクト、そして user、burger、統計を inline で
-// 含む review。
+// フィールド、creator を持たない shop での creator の null、そして user、
+// burger、統計を inline で含む review（comment のない review は null、統計の
+// ない burger はゼロ）。
 func TestGetShopDetail(t *testing.T) {
 	repo := seedShops(1)
 	repo.reviews[1] = []domain.ShopReview{

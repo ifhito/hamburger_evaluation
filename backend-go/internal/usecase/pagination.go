@@ -3,7 +3,7 @@ package usecase
 import "math"
 
 // shop と review の一覧 use case で共有する、ページネーションの
-// 境界値（Rails parity）。
+// 境界値。
 const (
 	defaultPerPage = 20
 	maxPerPage     = 100

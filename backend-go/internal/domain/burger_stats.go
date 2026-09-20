@@ -51,8 +51,8 @@ type BurgerScore struct {
 // Reviews::ReviewerTrust#initialize のスコア clamp と組み合わせて移植する。
 // 基礎スコアは review 数から決まる（20 件以上は expert 1.0、10 件以上は
 // veteran 0.9、3 件以上は regular 0.7、それ以外は newcomer 0.5）。rating が
-// 3 件以上あり母分散が 0.3 未満の reviewer には 0.7 のペナルティが課される。
-// 結果は [0.0, 1.0] に clamp される。
+// 3 件以上あり母分散が 0.3 未満の reviewer は、基礎スコアに 0.7 が掛けられる
+// （0.7 を引くのではなく 0.7 倍）。結果は [0.0, 1.0] に clamp される。
 func ReviewerTrustScore(history ReviewerHistory) float64 {
 	count := len(history.Ratings)
 

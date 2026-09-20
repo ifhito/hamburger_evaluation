@@ -13,9 +13,10 @@ const jwtAlg = "HS256"
 
 // JWTCodec は、payload がちょうど
 // {"user_id": <number>, "exp": <unix>} である HS256 の JWT を発行・検証する。
-// これは Rails バックエンドおよび payload.user_id をデコードする frontend と
-// 一致している。usecase の TokenIssuer と TokenVerifier の interface を
-// 実装する。secret とトークンは決してログに出力してはならない。
+// この形式は旧 Rails バックエンドの発行形式に合わせたものである（frontend の
+// AuthProvider は payload をデコードするが、期限切れの判定に使うのは exp だけ
+// である）。usecase の TokenIssuer と TokenVerifier の interface を実装する。
+// secret とトークンは決してログに出力してはならない。
 type JWTCodec struct {
 	secret []byte
 	ttl    time.Duration

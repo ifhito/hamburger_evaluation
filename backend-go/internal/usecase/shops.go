@@ -20,8 +20,9 @@ type ShopRepository interface {
 	// GetShopWithCreator は shop とその creator を返す。Reviews は空の
 	// ままである。
 	GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error)
-	// ListShopReviews は、shop の burger に対する discard されていない
-	// review を、新しい順に返す（created_at desc、id desc）。
+	// ListShopReviews は、shop の burger に対する discard されていない review
+	// （author が discard 済みの user である review は除く）を、新しい順に
+	// 返す（created_at desc、id desc）。
 	ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
 	// CreateShop は新しい shop を永続化し、生成された id つきで返す。
 	CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error)
@@ -48,8 +49,9 @@ type Shops struct {
 func NewShops(repo ShopRepository) *Shops { return &Shops{repo: repo} }
 
 // List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
-// ものを、ページネーションして返す。範囲外の page/perPage は、clampPage の
-// 規則に従い、エラーにせずデフォルトにフォールバックする。
+// ものを、ページネーションして返す。範囲外の page/perPage は、エラーにせず
+// clampPage の規則で補正される（page < 1 は 1、perPage < 1 は 20、perPage の
+// 上限は 100）。
 func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.Shop, error) {
 	limit, offset := clampPage(page, perPage)
 	shops, err := s.repo.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)

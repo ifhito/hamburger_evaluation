@@ -135,7 +135,7 @@ func TestShopsListVisibilityDescriptor(t *testing.T) {
 
 // TestShopsGet は詳細の use case を扱う。見える shop は review つきの完全な
 // detail を返し、隠された shop と未知の id はどちらも
-// domain.ErrShopNotFound を返す（usecase レベルでの AC4）。
+// domain.ErrShopNotFound を返す（usecase レベルでの AC4 と AC6）。
 func TestShopsGet(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"}
 	admin := domain.User{ID: 2, Admin: true}

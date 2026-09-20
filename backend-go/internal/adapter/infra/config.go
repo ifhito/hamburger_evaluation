@@ -117,8 +117,10 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		cfg.PhotoS3Bucket = getenv("PHOTO_S3_BUCKET")
 		cfg.PhotoS3AccessKeyID = getenv("PHOTO_S3_ACCESS_KEY_ID")
 		cfg.PhotoS3SecretAccessKey = getenv("PHOTO_S3_SECRET_ACCESS_KEY")
-		// 最初に欠けている変数で fail-loud する。エラーメッセージには
-		// 変数名だけを含め、その値は決して含めない。
+		// 必須変数のいずれかが空なら fail-loud する。map の走査順は不定なので、
+		// 複数が欠けている場合にどの変数名が報告されるかは決まらない（エラーに
+		// 含めるのは 1 つだけ）。エラーメッセージには変数名だけを含め、その値は
+		// 決して含めない。
 		for name, value := range map[string]string{
 			"PHOTO_S3_ENDPOINT":          cfg.PhotoS3Endpoint,
 			"PHOTO_S3_BUCKET":            cfg.PhotoS3Bucket,

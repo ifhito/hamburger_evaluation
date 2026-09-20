@@ -1,7 +1,10 @@
-// Package usecase は、アプリケーションの use case と、それらが consume する
-// repository の interface（adapter/repository で実装される）を保持する。
+// Package usecase は、アプリケーションの use case（auth、shops、reviews、
+// users）と、それらが consume する interface（repository は
+// adapter/repository、パスワードのハッシュ化とトークンは adapter/infra、
+// 写真の blob storage は adapter/storage で実装される）を保持する。
 //
-// import するのは domain と標準ライブラリだけである。HTTP も SQL ドライバも
-// 使わず、adapter パッケージからの import もない。中身は後続の story で
-// 埋められる。
+// import するのは domain、photo（標準ライブラリと golang.org/x/image だけに
+// 依存する、アップロード画像の検証・正規化）、標準ライブラリだけである。
+// このパッケージ自身は HTTP も SQL ドライバも使わず、adapter パッケージから
+// の import もない。
 package usecase

@@ -7,8 +7,10 @@ import (
 
 // PhotoFileServer は disk 上の photo dir を読み取り専用で配信する：
 // http.Dir に対する http.FileServer は request を既に root に閉じ込めて
-// おり（".." は決して外へ出られない）、この wrapper はディレクトリへの
-// request を一覧表示ではなく 404 にするので、保存された key を列挙できない。
+// おり（".." は決して外へ出られない）、この wrapper は末尾が "/" の path
+// （ディレクトリ）への request を一覧表示ではなく 404 にするので、保存された
+// key を列挙できない（末尾に "/" のないディレクトリへの request は FileServer が
+// "/" 付きの path へ 301 で転送し、転送先が 404 になる）。
 // NewRouter の StripPrefix("/photos/") の背後にマウントされることを前提と
 // しており、これが見る path は root からの相対である。cmd/api ではなく
 // ここに置いているのは、router のテストが本番で配線される wrapper と

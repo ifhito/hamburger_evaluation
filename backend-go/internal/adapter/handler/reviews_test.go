@@ -222,10 +222,6 @@ func (f *reviewRepoFake) DiscardReview(_ context.Context, id int64) error {
 	return nil
 }
 
-// seedReviewWorld は、fake に S6 の fixture を入れる：active な shop、
-// （creatorID が作成した）pending な shop、rejected な shop。そして、両方の
-// active な shop に紐づく Cheese burger（統計あり）と、pending な shop のみに
-// 紐づく Plain burger（統計なし）。
 const (
 	activeShopID   = int64(1)
 	pendingShopID  = int64(2)
@@ -235,6 +231,10 @@ const (
 	plainBurgerID  = int64(6)
 )
 
+// seedReviewWorld は、fake に S6 の fixture を入れる：active な shop 2 件
+// （activeShopID と active2ShopID）、（creatorID が作成した）pending な shop、
+// rejected な shop。そして、Cheese burger（統計あり）は上記 4 件すべての shop に
+// 紐づき、Plain burger（統計なし）は pending な shop のみに紐づく。
 func seedReviewWorld(creatorID int64) *reviewRepoFake {
 	repo := newReviewRepoFake()
 	repo.shops[activeShopID] = domain.Shop{ID: activeShopID, Name: "Active Diner", Status: domain.ShopStatusActive}
@@ -245,8 +245,8 @@ func seedReviewWorld(creatorID int64) *reviewRepoFake {
 		ID: cheeseBurgerID, Name: "Cheese", AverageRating: 4.5, ReviewCount: 2, WeightedScore: 4.1, Confidence: 0.8,
 	}
 	repo.burgers[plainBurgerID] = domain.ShopReviewBurger{ID: plainBurgerID, Name: "Plain"}
-	// Cheese は active な shop の「両方」（link が重複するケース）と pending な
-	// shop で提供され、Plain は pending な shop のみで提供される。
+	// Cheese は active な shop の「両方」（link が重複するケース）と、pending な
+	// shop、rejected な shop で提供され、Plain は pending な shop のみで提供される。
 	repo.links[activeShopID] = []int64{cheeseBurgerID}
 	repo.links[active2ShopID] = []int64{cheeseBurgerID}
 	repo.links[pendingShopID] = []int64{cheeseBurgerID, plainBurgerID}
@@ -263,10 +263,11 @@ func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, 
 	return router, aliceAuth, bobAuth, adminAuth
 }
 
-// newPhotoReviewsRouter は newReviewsRouter に S10 の photo の配線を加えたもの
-// である：新しい temp dir を root とする本物の disk store（ファイルの assertion
-// 用に返される）が、disk モードで cmd/api が配線するのと同じ
-// handler.PhotoFileServer ラッパーを通じて GET /photos/ の配下で配信される。
+// newPhotoReviewsRouter は newReviewsRouter の本体である：新しい temp dir
+// （photoDir。ファイルの assertion 用に返される）を root とする本物の disk
+// store が、disk モードで cmd/api が配線するのと同じ handler.PhotoFileServer
+// ラッパーを通じて GET /photos/ の配下で配信される。newReviewsRouter は
+// これに委譲し、photoDir を捨てるだけである。
 func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, photoDir, aliceAuth, bobAuth, adminAuth string) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
@@ -678,7 +679,8 @@ func TestListReviewsFilters(t *testing.T) {
 	})
 }
 
-// containsJSONID は、body に "id":<id> の組が含まれているかどうかを返す。
+// containsJSONID は、body に `"id":<id>,` という並びが含まれているかどうかを返す。
+// review の id に限らず、埋め込まれた user や burger の id にも一致する。
 func containsJSONID(body string, id int64) bool {
 	needle := fmt.Sprintf(`"id":%d,`, id)
 	for i := 0; i+len(needle) <= len(body); i++ {

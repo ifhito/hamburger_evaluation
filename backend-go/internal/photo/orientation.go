@@ -13,9 +13,8 @@ const (
 	orientationTag = 0x0112
 	tiffTypeShort  = 3
 	// maxSegmentScan は、jpegOrientation が諦めるまでにたどる JPEG
-	// セグメントの数の上限である。EXIF APP1 は実在するどのファイルでも
-	// 先頭にあるので、妥当な上限を置けば、病的なセグメント連鎖に対する
-	// 保護にもなる。
+	// セグメントの数の上限である。EXIF APP1 は実在するファイルでは先頭付近に
+	// あるので、妥当な上限を置けば、病的なセグメント連鎖に対する保護にもなる。
 	maxSegmentScan = 32
 )
 

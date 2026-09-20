@@ -36,7 +36,7 @@ func New(t *testing.T) (*pgx.Conn, string) {
 // その database への open 済みの接続を URL とともに返す。database は
 // TEST_DATABASE_URL が指す Postgres インスタンスの内部に作成される
 // （database を作成・drop できるユーザーの maintenance database）ので、
-// 開発用 database やその volume に触れることなく、テストは常に空の database
+// 開発用 database の中身には触れることなく、テストは常に空の database
 // から始まる。TEST_DATABASE_URL が設定されていないときはテストを skip する。
 func NewEmpty(t *testing.T) (*pgx.Conn, string) {
 	t.Helper()

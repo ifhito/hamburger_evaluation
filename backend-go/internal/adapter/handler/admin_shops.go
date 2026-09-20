@@ -31,9 +31,8 @@ type rejectShopRequest struct {
 	ModerationNote *string `json:"moderation_note"`
 }
 
-// adminShopResponse は shop の投稿/moderation の payload である（Rails
-// ShopSerializer、frontend の AdminShop）。moderation note と creator を
-// 持ち、reviews は持たない shop である。
+// adminShopResponse は shop の投稿/moderation の payload である。id、name、
+// status、moderation_note、creator を持ち、reviews は持たない。
 type adminShopResponse struct {
 	ID             int64            `json:"id"`
 	Name           string           `json:"name"`
