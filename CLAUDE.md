@@ -20,9 +20,9 @@ Hamburger Evaluation は、ハンバーガーのレビューと評価を行う W
 hamburger_evaluation/
 ├── backend/    # Ruby on Rails 8 API
 ├── frontend/   # React 19 + TypeScript + Vite
-├── memory/     # project notes
-├── plan/       # planning documents
-└── plans/      # agent-generated plans
+├── memory/     # プロジェクトメモ
+├── plan/       # 計画ドキュメント
+└── plans/      # エージェントが生成した計画
 ```
 
 ## コミュニケーション
@@ -58,16 +58,16 @@ Backend は、Rails の慣習に近い形を保ちつつ、軽量な DDD と依�
 
 ```text
 backend/app/
-├── controllers/    # HTTP boundary: auth, policy checks, params, service calls
-├── domain/         # domain logic / value objects; no direct ActiveRecord dependency
-├── parameters/     # dry-struct input DTOs
-├── queries/        # read/query boundary; where/includes/find for read paths
-├── repositories/   # persistence boundary; CUD and ActiveRecord details
-├── services/       # application use cases
-├── jobs/           # async work; model lookup should go through repositories
-├── policies/       # Pundit policies
-├── serializers/    # JSON serializers
-└── models/         # ActiveRecord models kept as thin as practical
+├── controllers/    # HTTP 境界: 認証、policy チェック、パラメータ、service 呼び出し
+├── domain/         # ドメインロジック / 値オブジェクト。ActiveRecord への直接依存なし
+├── parameters/     # dry-struct による入力 DTO
+├── queries/        # 読み取り / query 境界。読み取り経路の where/includes/find
+├── repositories/   # 永続化境界。CUD と ActiveRecord の詳細
+├── services/       # アプリケーションのユースケース
+├── jobs/           # 非同期処理。model の参照は repository 経由にする
+├── policies/       # Pundit policy
+├── serializers/    # JSON serializer
+└── models/         # ActiveRecord model。できる限り薄く保つ
 ```
 
 ### Backend 設計ルール
@@ -86,11 +86,11 @@ backend/app/
 以下は `backend/` から実行します。
 
 ```bash
-# Start backend
+# backend を起動
 cd backend
 docker compose up --build
 
-# Full test suite. RAILS_ENV=test is required because compose defaults may differ.
+# フルテストスイート。compose のデフォルトが異なる場合があるため RAILS_ENV=test が必須。
 cd backend
 docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
 
@@ -125,11 +125,11 @@ SimpleCov は最低カバレッジを強制します。一部の spec のみを�
 
 ```text
 frontend/src/
-├── app/          # router, providers, app shell
-├── domains/      # auth, reviews, shops, users
-├── api/          # API client / HTTP boundary
-├── states/       # global state
-└── components/   # shared UI components
+├── app/          # router、provider、アプリシェル
+├── domains/      # auth、reviews、shops、users
+├── api/          # API クライアント / HTTP 境界
+├── states/       # グローバル state
+└── components/   # 共通 UI コンポーネント
 ```
 
 ### Frontend コマンド
@@ -137,7 +137,7 @@ frontend/src/
 以下は `frontend/` から実行します。
 
 ```bash
-# Start frontend
+# frontend を起動
 cd frontend
 docker compose up --build
 
@@ -145,15 +145,15 @@ docker compose up --build
 cd frontend
 pnpm run lint
 
-# Type check
+# 型チェック
 cd frontend
 pnpm run type-check
 
-# Test
+# テスト
 cd frontend
 pnpm run test
 
-# Build
+# ビルド
 cd frontend
 pnpm run build
 ```

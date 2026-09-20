@@ -114,11 +114,11 @@ docker compose run --rm api bin/brakeman --no-pager
 
 ```text
 frontend/src/
-├── app/          # Router / provider / app shell
+├── app/          # Router / provider / アプリシェル
 ├── domains/      # auth, reviews, shops, users などの機能単位
 ├── api/          # API client / HTTP 境界
-├── states/       # global state
-└── components/   # shared UI
+├── states/       # グローバル state
+└── components/   # 共通 UI
 ```
 
 ### Frontend コマンド
@@ -134,15 +134,15 @@ docker compose up --build
 cd frontend
 pnpm run lint
 
-# type check
+# 型チェック
 cd frontend
 pnpm run type-check
 
-# test
+# テスト
 cd frontend
 pnpm run test
 
-# build
+# ビルド
 cd frontend
 pnpm run build
 ```

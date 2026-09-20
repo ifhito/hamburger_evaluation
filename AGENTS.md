@@ -7,26 +7,26 @@ Ruby 3.3 / Rails 8 API と React 19 / TypeScript / Vite の SPA を PostgreSQL 1
 ## ビルドとテスト
 
 ```bash
-# install
+# インストール
 cd backend && docker compose build api
 cd frontend && pnpm install --frozen-lockfile
 
-# dev
+# 開発サーバー起動
 cd backend && docker compose up --build
 cd frontend && pnpm run dev
 
-# test
+# テスト
 cd backend && docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
 cd frontend && pnpm run test
 
-# typecheck
+# 型チェック
 cd frontend && pnpm run type-check
 
 # lint
 cd backend && docker compose run --rm api bin/rubocop -f github
 cd frontend && pnpm run lint
 
-# format
+# フォーマット
 cd backend && docker compose run --rm api bin/rubocop -A
 cd frontend && pnpm exec eslint . --fix
 ```
