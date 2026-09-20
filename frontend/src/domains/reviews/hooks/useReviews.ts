@@ -29,14 +29,20 @@ export function hasNextPage(pages: Review[][] | undefined): boolean {
   return last !== undefined && last.length >= PER_PAGE;
 }
 
+// useSWRInfinite に渡すキー関数を作る。前ページが最終ページなら null を返して読み込みを止める。
+// 次ページ判定は hasNextPage に一本化している。enabled が false なら、どのページも null を返して取得を止める
+export function getKey(params: ReviewSearchParams | undefined, enabled = true) {
+  return (index: number, previous: Review[] | null): string | null => {
+    if (!enabled) return null;
+    return previous && !hasNextPage([previous]) ? null : buildKey(params, index + 1);
+  };
+}
+
 // options.enabled: 呼び出し側が取得を止められる。例: user_id が不正なとき、そのまま呼ぶと 422 になり、
 // user_id を外して呼ぶと全件が返る。未指定なら常に取得する
 export function useReviews(params?: ReviewSearchParams, options?: { enabled?: boolean }) {
   const { data, error, isLoading, size, setSize } = useSWRInfinite<Review[]>(
-    (index, previous: Review[] | null) => {
-      if (options?.enabled === false) return null;
-      return previous && previous.length < PER_PAGE ? null : buildKey(params, index + 1);
-    },
+    getKey(params, options?.enabled !== false),
     async (url: string) => {
       const res = await reviewApiClient.get<Review[]>(url);
       if (!Array.isArray(res.data)) {
@@ -44,9 +50,12 @@ export function useReviews(params?: ReviewSearchParams, options?: { enabled?: bo
       }
       return res.data;
     },
-    // 読み込み済みの全ページを再検証する。SWR の mutate(フィルタ)は無限ロードのキーを飛ばすため、
-    // 書き込み後は一覧に戻ったときの再検証で最新にする(先頭ページだけだと後続ページが古いまま残る)。
-    // 代償として Load more のたびに読み込み済みの全ページを再取得する(リクエスト数はページ数に比例する)
+    // 読み込み済みの全ページを再検証する。SWR の mutate(フィルタ関数)は `$inf$` で始まる無限ロードの
+    // キーを飛ばす(swr 内部で /^\$(inf|sub)\$/ に一致するキーは除外される)ため、書き込み後の更新は
+    // 「一覧に戻ったときのマウント時の再検証」に頼る。既定の revalidateFirstPage だけだと先頭ページしか
+    // 再取得されず、新規投稿で押し出された 1 件が 2 ページ目のキャッシュから抜ける。それを防ぐために true にしている。
+    // 代償として、Load more のたびだけでなく、フォーカス復帰(5 秒スロットル)・再接続・エラーリトライでも、
+    // 読み込み済みの全ページを直列に再取得する(リクエスト数はページ数に比例する)
     { revalidateAll: true }
   );
 
@@ -60,7 +69,8 @@ export function useReviews(params?: ReviewSearchParams, options?: { enabled?: bo
     // 要求したページがまだ届いていない間
     isFetchingNextPage: !error && size > 1 && data !== undefined && data[size - 1] === undefined,
     fetchNextPage: () => {
-      void setSize((s) => s + 1);
+      // size は失敗時も n+1 のままなので (s) => s + 1 だと再クリックで n+2 に飛ぶ。読み込み済みページ数から数える
+      void setSize((data?.length ?? 0) + 1);
     },
   };
 }
