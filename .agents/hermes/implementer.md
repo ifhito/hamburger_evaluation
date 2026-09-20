@@ -25,6 +25,10 @@ Boundaries (from `backend-go-boundaries` / `frontend-spa-boundaries` skills):
 - domain/usecase never import net/http, sql drivers, or adapter code
 - resource guardrails are defaults: timeouts, body caps, ctx, sized pool
 - snake_case API JSON; frontend API types are the response contract
+- code text language: comments, Go doc comments, and test names in Japanese
+  (doc comments start with the identifier name); keep English for identifiers,
+  API error messages/JSON keys, log messages, tool directives, and sqlc
+  `-- name:` annotations (never alter those)
 
 Output contract:
 1. result: done / blocked (with blocker)

@@ -31,6 +31,10 @@ TypeScript、Vite、SWR、Jotai、react-hook-form、Zod を使い、axios によ
 - HTTP とケーシング変換は `src/api` 配下に置く。
 - バックエンドのペイロード名は snake_case、フロントエンドのコードは camelCase。
 - 認証は localStorage、Jotai の state、Authorization Bearer トークン注入を使う。
+- **コード内の文章は日本語で書く**: コメント(`//`、`/* */`、JSDoc)とテスト名(`it("…")` /
+  `describe("…")` の文字列)は日本語。識別子、API の JSON キー、ログ文言は英語のまま。
+  画面に表示する文言は i18n(`src/locale`)で管理し、この規約の対象外。
+  既存の英語コメントは、その行を触るときに日本語へ直す。
 
 ## コマンド
 
@@ -49,6 +53,7 @@ pnpm run build
 2. バックエンドの snake_case をフロントエンドの state の形として扱う。
 3. 複数ドメインが必要とする共有 UI を 1 つのドメイン内に追加する。
 4. `frontend/.env*` を読む。
+5. コメントやテスト名を英語で書く(上記の例外を除き日本語で書く)。
 
 ## 検証チェックリスト
 

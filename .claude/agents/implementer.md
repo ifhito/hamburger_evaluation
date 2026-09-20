@@ -30,6 +30,13 @@ own.
     ctx propagation, single sized pgxpool, pagination.
   - API JSON is snake_case; the TypeScript types under
     `frontend/src/domains/*/api/types.ts` are the response-shape contract.
+- **Language of code text**: write comments, Go doc comments, and test names
+  in Japanese (see "コード内の文章は日本語で書く" in `backend-go-boundaries`).
+  Go doc comments start with the identifier name (`// ShopRepository は…`).
+  Keep in English: identifiers, API error messages and JSON keys, log
+  messages, compiler/tool directives (`//go:build`, `//nolint`,
+  `// Code generated`), and sqlc `-- name: Xxx :one` annotations (never alter
+  those — they break `sqlc generate`).
 - Never touch `SETUP.md`, `plans/`, `memory/`, `plan/`, or `.env*`/secrets
   paths.
 

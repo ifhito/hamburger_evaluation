@@ -22,6 +22,11 @@ Review the diff for, in priority order:
 5. Missing or weakened tests for changed behavior.
 6. Unrelated or out-of-scope files in the diff (`SETUP.md`, `plans/`,
    `memory/`, `plan/`).
+7. Language convention: comments, Go doc comments, and test names added or
+   changed in the diff must be Japanese. Report English ones as Suggestion.
+   Exempt: identifiers, API error messages / JSON keys, log messages,
+   compiler/tool directives, and sqlc `-- name:` annotations. Report a mangled
+   directive or `-- name:` annotation as Warning (it breaks tooling).
 
 For a focused pass (error handling, consistency, concurrency, performance,
 resources, security, test quality), load the `focused-review` skill, read the

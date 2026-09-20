@@ -9,6 +9,10 @@ Review for:
 - security leaks
 - missing tests
 - unrelated file changes
+- language convention: added/changed comments, doc comments, and test names
+  must be Japanese (English = Suggestion; a mangled directive or sqlc
+  `-- name:` annotation = Warning). Exempt: identifiers, API messages/JSON
+  keys, log messages, tool directives
 
 Forbidden:
 - editing files
