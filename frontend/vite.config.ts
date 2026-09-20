@@ -2,9 +2,9 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
-  // '.' = the frontend dir (vite's cwd); avoids needing @types/node for process.cwd().
+  // '.' = frontend ディレクトリ（vite の cwd）。process.cwd() のために @types/node を必要としないようにする。
   const env = loadEnv(mode, '.', '')
-  // Dev-only proxy target for /api; defaults to the Go API on the host.
+  // /api の dev 専用 proxy 先。デフォルトはホスト上の Go API。
   const proxyTarget = env.VITE_API_PROXY_TARGET ?? 'http://host.docker.internal:8080'
   return {
     plugins: [react()],
@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
         },
-        // Review photos are served from /photos on the API (no path rewrite).
+        // レビュー写真は API の /photos から配信される（path の rewrite なし）。
         '/photos': {
           target: proxyTarget,
           changeOrigin: true,
