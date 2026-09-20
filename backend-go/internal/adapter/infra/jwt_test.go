@@ -82,9 +82,15 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Issue returned error: %v", err)
 				}
+				// HS256 署名は 32 バイト = 43 文字で、末尾文字の下位 2 ビットは padding
+				// (エンコーダは常に 0 を書く)。そのため末尾文字の index は必ず 4 の倍数で、
+				// 置換先の 'A'(末尾が 'A' なら 'E')も 4 の倍数かつ元と異なる。
+				// よって上位 4 ビット(データビット)が必ず変わり、どの署名でもデコード結果のバイト列が変わる。
+				// 'B' にしてはいけない: 'A' と 'B' は同じバイトにデコードされる(golang-jwt v5 の既定は
+				// 非 strict)ため、末尾が 'A' の署名(約 1/16)で改ざんが検出されず不安定になる。
 				last := "A"
 				if strings.HasSuffix(token, "A") {
-					last = "B"
+					last = "E"
 				}
 				return token[:len(token)-1] + last
 			},
