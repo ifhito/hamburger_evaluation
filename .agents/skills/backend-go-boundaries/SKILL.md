@@ -55,9 +55,11 @@ backend-go/
 
 - `domain` は stdlib のみを import する。`net/http` も `database/sql` も
   `pgx` も、`usecase`/`adapter` からの import も禁止。
-- `usecase` は `domain` と stdlib のみを import する。リポジトリのインターフェースは
-  `usecase` 側で宣言し(利用側で宣言する Go の慣習)、`adapter/repository`
-  が実装する。
+- `usecase` は `domain`、stdlib、および**副作用のない純粋な内部ライブラリ**
+  (例: 画像のデコード/リサイズを行う `internal/photo`。DB・HTTP・ファイル I/O に
+  依存しないもの)だけを import する。`adapter/*` や `net/http`・`database/sql`・`pgx` は
+  import しない。リポジトリのインターフェースは `usecase` 側で宣言し
+  (利用側で宣言する Go の慣習)、`adapter/repository` が実装する。
 - `handler` はリクエストのデコード/バリデーション、ユースケース呼び出し、
   レスポンスのエンコード、ドメインエラーから HTTP ステータスへのマッピングを行う。
   SQL もビジネスルールも書かない。
@@ -136,6 +138,7 @@ backend-go/
 ## 検証チェックリスト
 
 - [ ] `domain` と `usecase` に外向きの import(adapter/infra/pgx/net-http)がない。
+      `usecase` が import する内部ライブラリは、副作用のない純粋なものに限られる。
 - [ ] `db/queries/` を変更した場合、sqlc の出力を再生成しコミットした。
 - [ ] 変更したエンドポイントについて、レスポンス JSON をフロントエンドの API 型と突き合わせた。
 - [ ] 追加・変更したコメントとテスト名が日本語になっている(例外は「コード内の文章は日本語で書く」を参照)。
