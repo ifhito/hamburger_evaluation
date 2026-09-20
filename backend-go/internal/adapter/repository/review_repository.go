@@ -33,11 +33,13 @@ func NewReviewRepository(db beginnerDBTX) *ReviewRepository {
 var _ usecase.ReviewRepository = (*ReviewRepository)(nil)
 
 // ListReviews は公開 review フィードを返す。対象は、discard されておらず、
-// burger が少なくとも 1 つの active な shop に紐づいている review で、
-// filter（Rails の ReviewQuery との parity）で絞り込まれ、author、burger、
-// stats を 1 回のクエリで取得し（N+1 なし）、新しい順に並ぶ。keyword は
-// likeEscaper を通して ILIKE パラメータに渡され、SQL に連結されることは
-// ない。指定のない filter は NULL のままである。
+// かつ author（user）も discard されていない review のうち、burger が少なくとも
+// 1 つの active な shop に紐づいているものに限る。filter で絞り込まれ、その意味は
+// Rails の ReviewQuery に対応する（ただし shop の絞り込みは、対象の shop 自身も
+// active であることを要求する点で Rails より厳しい）。author、burger、stats を
+// 1 回のクエリで取得し（N+1 なし）、新しい順（created_at desc、id desc）に並ぶ。
+// keyword は likeEscaper を通して ILIKE パラメータに渡され、SQL に連結される
+// ことはない。指定のない filter は NULL のままである。
 func (r *ReviewRepository) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
 	params := sqlcgen.ListPublicReviewsParams{
 		PageLimit:  limit,
@@ -68,8 +70,9 @@ func (r *ReviewRepository) ListReviews(ctx context.Context, filter usecase.Revie
 }
 
 // GetReview は、discard されていない review 1 件を author、burger、stats
-// とともに返す。または domain.ErrReviewNotFound を返す。SQL は、存在しない
-// 行と discard 済みの行を同一に扱う。
+// とともに返す。または domain.ErrReviewNotFound を返す。author（user）が
+// discard 済みの review も対象外である。SQL は、存在しない行、discard 済みの
+// review、author が discard 済みの review をすべて同一に扱う。
 func (r *ReviewRepository) GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error) {
 	row, err := r.q.GetReviewDetail(ctx, id)
 	if err != nil {
@@ -322,7 +325,8 @@ func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domai
 	return row, nil
 }
 
-// recalculateBurgerStats は、burger の stats 行を、その kept な review から
+// recalculateBurgerStats は、burger の stats 行を、その burger の kept な review
+// のうち author（user）が discard されていないもの（ListBurgerReviewFacts）から、
 // domain の calculator を通して再計算し upsert する。呼び出し側の
 // トランザクション内で実行され、q は tx スコープでなければならない。この
 // helper 自身が、最初に LockBurgerForStats を通じて burger ごとの FOR UPDATE
@@ -330,7 +334,7 @@ func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domai
 // すでに保持しているロックの再取得は no-op である。1 つのトランザクションで
 // 「複数」の burger を再計算する呼び出し側（S8 の user discard フロー、
 // UserRepository.DiscardUser）は、burger の集合が重なってもデッドロックしない
-// ように、burger ごとに burger_id の昇順で呼び出さなければならない。kept な
+// ように、burger ごとに burger_id の昇順で呼び出さなければならない。対象の
 // review がゼロ件でも、ゼロの行は upsert される（Rails BurgerScore.empty）。
 func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID int64) error {
 	if _, err := q.LockBurgerForStats(ctx, burgerID); err != nil {

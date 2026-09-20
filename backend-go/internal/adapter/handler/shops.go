@@ -17,7 +17,7 @@ import (
 const shopNotFoundMessage = "Shop not found"
 
 // shopResponse は GET /shops のトップレベル配列の要素 1 つである
-// （frontend の Shop、domains/shops/api/types.ts、snake_case）。
+// （frontend の Shop、shared/lib/types/shop.ts、snake_case）。
 type shopResponse struct {
 	ID     int64  `json:"id"`
 	Name   string `json:"name"`

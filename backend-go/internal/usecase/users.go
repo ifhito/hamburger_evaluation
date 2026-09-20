@@ -106,8 +106,8 @@ func (in UpdateUserInput) validate() []string {
 }
 
 // Update は、issue #16 AC2 のチェック順序で対象ユーザーのプロフィールを
-// 編集する（このブランチの Rails の controller とは意図的に異なる。
-// その controller は path の id を無視して current_user に対して動作する）。
+// 編集する（退役済みの Rails の controller とは意図的に異なる。その
+// controller は path の id を無視して current_user に対して動作していた）。
 // load（存在しないユーザーと discard 済みのユーザーはどちらも 404。所有者で
 // なくても同じ）、domain の本人管理ルール（403）、入力の validation
 // （422）、そしてカラム限定の書き込みの順である。すでに使われている email は、

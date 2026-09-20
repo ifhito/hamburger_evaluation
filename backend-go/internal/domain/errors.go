@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-// Sentinel な認証エラー群。呼び出し側は errors.Is で照合する。
+// domain 層の sentinel エラー群（認証、重複、not found、認可）。呼び出し側は
+// errors.Is で照合する。
 var (
 	// ErrInvalidCredentials はログインの失敗を表す。未知の email と誤った
 	// パスワードは意図的に同じエラーへ対応させており、呼び出し側はどちらが

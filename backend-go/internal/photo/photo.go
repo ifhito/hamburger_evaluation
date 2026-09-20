@@ -56,8 +56,10 @@ const (
 var decodeSem = make(chan struct{}, 2)
 
 // bytesPerPixel は、ヘッダの color model から、ピクセルあたりの decode 後の
-// メモリコストを推定する。16-bit のモデルは 1 ピクセルあたり 8 バイトに
-// decode され、それ以外は 4 と仮定する（8-bit の RGBA/NRGBA で、よくある
+// メモリコストを保守的に見積もる。16-bit のモデル（RGBA64/NRGBA64/Gray16）は
+// 1 ピクセルあたり 8 バイトとして扱う。Gray16 は通常 2 バイトだが、tRNS chunk
+// があると NRGBA64 として decode され、color model からは区別できないため、
+// 上限の 8 に揃える。それ以外は 4 と仮定する（8-bit の RGBA/NRGBA で、よくある
 // ケースの中で最悪のもの）。
 func bytesPerPixel(m color.Model) int64 {
 	switch m {

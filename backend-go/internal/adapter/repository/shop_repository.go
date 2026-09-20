@@ -86,8 +86,10 @@ func (r *ShopRepository) GetShopWithCreator(ctx context.Context, id int64) (doma
 	return detail, nil
 }
 
-// ListShopReviews は、shop の discard されていない review を author、
-// burger、stats とともに新しい順に返す。単一の JOIN クエリである（N+1 なし）。
+// ListShopReviews は、shop に紐づく burger の、discard されていない review の
+// うち author（user）も discard されていないものを、author、burger、stats
+// とともに新しい順（created_at desc、id desc）に返す。discard 済みの user の
+// （まだ kept な）review は含まれない。単一の JOIN クエリである（N+1 なし）。
 func (r *ShopRepository) ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error) {
 	rows, err := r.q.ListShopReviews(ctx, shopID)
 	if err != nil {

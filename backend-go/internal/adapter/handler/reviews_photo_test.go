@@ -211,10 +211,10 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 	})
 
 	t.Run("終端の boundary を欠いて切り詰められた body は 400 を返す", func(t *testing.T) {
-		// field の part は完全だが、最後の boundary の末尾 "--\r\n" が切り
-		// 落とされている：HTTP としては完結しているが multipart としては途中で
-		// 切れている。Go 1.22 の NextPart はこれを「wrap された」io.EOF として
-		// 報告する。これを正常な終端として扱うと、photo が黙って捨てられたまま
+		// part はすべて完全だが、最後の boundary の末尾 "--\r\n" が切り落とされている：
+		// HTTP としては完結しているが multipart としては途中で切れている。Go 1.20
+		// 以降の NextPart はこれを「wrap された」io.EOF として報告する。これを
+		// 正常な終端として扱うと、切り詰められた body が完全な form として受理され、
 		// 201 を返してしまう。
 		full, contentType := multipartBody(t, fields, jpegBytes(t, 4096))
 		raw := full.Bytes()

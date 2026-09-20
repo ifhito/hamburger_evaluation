@@ -348,7 +348,7 @@ func TestReviewRepository(t *testing.T) {
 		if !updated.CreatedAt.Equal(t1) {
 			t.Errorf("CreatedAt = %v, want unchanged %v", updated.CreatedAt, t1)
 		}
-		// discarded_at には触れていない：review は依然としてフィードに含まれる。
+		// discarded_at には触れていない：review は依然として kept であり、GetReview で取得できる。
 		if _, err := repo.GetReview(ctx, rOld); err != nil {
 			t.Errorf("GetReview after update returned error: %v", err)
 		}

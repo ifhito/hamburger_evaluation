@@ -20,13 +20,14 @@ import (
 // ErrShopNotFound、ErrBurgerNotFound）を返す。
 type ReviewRepository interface {
 	// ListReviews は、burger が少なくとも 1 つの active な shop で提供されて
-	// いる、discard されていない review を返す。filter で絞り込み、author、
-	// burger、stats を結合し（N+1 なし）、新しい順（created_at desc、
-	// id desc）に並べる。
+	// いる、discard されていない review（author が discard 済みの user である
+	// review も除く）を返す。filter で絞り込み、author、burger、stats を
+	// 結合し（N+1 なし）、新しい順（created_at desc、id desc）に並べる。
 	ListReviews(ctx context.Context, filter ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error)
 	// GetReview は、author、burger、stats つきの、discard されていない
 	// review を 1 件返すか、（wrap された）domain.ErrReviewNotFound を返す。
-	// 存在しない review と discard 済みの review は区別できない。
+	// 存在しない review、discard 済みの review、author が discard 済みの
+	// user である review は区別できない。
 	GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error)
 	// GetShop は素の shop の行（creator なし、review なし）を返すか、
 	// （wrap された）domain.ErrShopNotFound を返す。
@@ -84,7 +85,9 @@ type ReviewListFilter struct {
 	// 一致である（Rails の keyword_search、comment ILIKE %escaped%）。
 	Keyword string
 	// ShopID は、shops_burgers 経由でその shop に burger が紐づいている review
-	// だけを残す（Rails の shops_and_burgers の join）。
+	// だけを残す（Rails の shops_and_burgers の join）。ただし対象の shop 自身も
+	// active でなければならず、active でない（または存在しない）shop の id を
+	// 指定すると結果は空になる。
 	ShopID *int64
 }
 
@@ -121,8 +124,9 @@ func (s *Reviews) List(ctx context.Context, filter ReviewListFilter, page, perPa
 	return reviews, nil
 }
 
-// Get は author、burger、stats つきの review を 1 件返す。存在しない review と
-// discard 済みの review は、どちらも domain.ErrReviewNotFound を返す。
+// Get は author、burger、stats つきの review を 1 件返す。存在しない review、
+// discard 済みの review、author が discard 済みの user である review は、
+// いずれも domain.ErrReviewNotFound を返す。
 func (s *Reviews) Get(ctx context.Context, id int64) (domain.ReviewDetail, error) {
 	detail, err := s.repo.GetReview(ctx, id)
 	if err != nil {
@@ -162,7 +166,8 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	} else if err := domain.ValidateBurgerName(burgerName); err != nil {
 		return domain.ReviewDetail{}, err
 	}
-	// BurgerID 0：repository が transaction 内でこれを解決する。
+	// burgerID が 0 以下のとき（burger_name の経路）は、この BurgerID は
+	// 使われない。repository が transaction 内で burger を解決して上書きする。
 	review, err := domain.NewReview(rating, comment, viewer.ID, burgerID)
 	if err != nil {
 		return domain.ReviewDetail{}, err

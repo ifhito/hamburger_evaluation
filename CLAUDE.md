@@ -152,5 +152,5 @@ shared/
 ```
 users    1 ──0..* reviews
 burgers  1 ──0..* reviews
-shops   *──────* burgers  (via shops_burgers)
+shops   *──────* burgers  (shops_burgers 経由)
 ```

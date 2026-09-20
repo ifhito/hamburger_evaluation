@@ -30,8 +30,10 @@ const burgerNotFoundMessage = "Burger not found"
 // 無視する。review が別の burger に移ることはない）。POST では、burger は
 // burger_id で指定し、それがない場合は burger_name で指定する
 // （find-or-create、frontend の契約、S6 P3-1）。優先順位は usecase の判断
-// である。欠けているフィールドはゼロ値にデコードされ、domain はそれを
-// 拒否する。400 ではなく Rails-parity の 422 になる。
+// である。欠けているフィールドはゼロ値にデコードされ、rating、comment、
+// （burger_id もない場合の）burger_name は domain が拒否するので 400 では
+// なく Rails-parity の 422 になる。POST の shop_id は存在しない shop として
+// 404 になる。
 type reviewParamsRequest struct {
 	Review struct {
 		Rating     int    `json:"rating"`
@@ -79,13 +81,15 @@ func isMultipart(r *http.Request) bool {
 
 // decodeReviewMultipart は multipart の body を r.MultipartReader 経由で
 // ストリーミングする。生のアップロードを丸ごとバッファすることはない。
-// text フィールドはフィールドごとの小さな cap で読み取られ、未知の part は
-// 無視され（NextPart がその body を破棄する）、photo part は 5 MiB の cap の
-// 下で photo.Process により検証・正規化される。false は、エラーレスポンスが
-// 既に書き込まれたことを意味する：グローバルな body cap が作動した場合は
-// 413、サイズ超過または画像でない写真には 422、不正な multipart（photo part
-// の重複を含む）には 400 である。rating/shop_id/burger_id が存在しない、
-// または数値でない場合は 0 にデコードされ、JSON の body と同じ
+// name が "photo" の part は 5 MiB の cap の下で photo.Process により検証・
+// 正規化される。それ以外の part は、名前が未知であっても readTextPart で
+// フィールドごとの小さな cap の下に text として読み取られ、既知の名前
+// （rating/comment/shop_id/burger_id/burger_name）の値だけが使われ、未知の
+// 名前の値は捨てられる。false は、エラーレスポンスが既に書き込まれたことを
+// 意味する：グローバルな body cap が作動した場合は 413、サイズ超過または
+// 画像でない写真には 422、不正な multipart（photo part の重複や、text
+// フィールドの cap 超過を含む）には 400 である。rating/shop_id/burger_id が
+// 存在しない、または数値でない場合は 0 にデコードされ、JSON の body と同じ
 // validation/not-found の経路に流れる。
 func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartReviewForm, bool) {
 	var form multipartReviewForm
@@ -159,8 +163,11 @@ func readTextPart(w http.ResponseWriter, part *multipart.Part) (string, bool) {
 
 // readPhotoPart は photo part を 5 MiB の cap の下で photo.Process へ
 // ストリーミングする。+1 の sentinel バイトにより、超過分をバッファせずに
-// "cap 超過" を検出する。サイズ検査を最初に行うので、巨大な画像でない
-// データは、中途半端にデコードされることなく too large として報告される。
+// "cap 超過" を検出する。Process の後、err の検査より先にサイズ超過を判定する
+// ので、cap を超えるまで読み込まれた画像は、途中までデコードされた結果の
+// エラーではなく too large として報告される。ただし Process は先頭の magic
+// bytes が jpeg/png/webp でなければ残りを読まずに ErrUnsupportedImage を
+// 返すため、巨大でも画像でないデータは too large ではなく unsupported になる。
 // ctx（request の context）は、Process 内の decode semaphore の待機を制限
 // する。false は、エラーレスポンスが既に書き込まれたことを意味する。
 func readPhotoPart(ctx context.Context, w http.ResponseWriter, part *multipart.Part) (*photo.Processed, bool) {
