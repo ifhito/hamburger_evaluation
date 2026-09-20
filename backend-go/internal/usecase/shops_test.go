@@ -13,38 +13,51 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// fakeShopRepo は、手書きの usecase.ShopRepository の test double である。
+// fakeShopQuery は、手書きの usecase.ShopQuery の test double である。
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
-type fakeShopRepo struct {
+type fakeShopQuery struct {
 	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error)
 	getShopWithCreator     func(ctx context.Context, id int64) (domain.ShopDetail, error)
 	listShopReviews        func(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
-	createShop             func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
 	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
-	updateShopName         func(ctx context.Context, id int64, name string) (domain.Shop, error)
-	updateShopStatus       func(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error)
 }
 
-func (f *fakeShopRepo) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
+func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
 	if f.listShops == nil {
 		panic("unexpected ListShops call")
 	}
 	return f.listShops(ctx, vis, keyword, limit, offset)
 }
 
-func (f *fakeShopRepo) GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error) {
+func (f *fakeShopQuery) GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error) {
 	if f.getShopWithCreator == nil {
 		panic("unexpected GetShopWithCreator call")
 	}
 	return f.getShopWithCreator(ctx, id)
 }
 
-func (f *fakeShopRepo) ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error) {
+func (f *fakeShopQuery) ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error) {
 	if f.listShopReviews == nil {
 		panic("unexpected ListShopReviews call")
 	}
 	return f.listShopReviews(ctx, shopID)
+}
+
+func (f *fakeShopQuery) ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
+	if f.listShopsForModeration == nil {
+		panic("unexpected ListShopsForModeration call")
+	}
+	return f.listShopsForModeration(ctx, status)
+}
+
+// fakeShopRepo は、手書きの usecase.ShopRepository（書き込み）の test double
+// である。未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
+// fail-loud する。
+type fakeShopRepo struct {
+	createShop       func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
+	updateShopName   func(ctx context.Context, id int64, name string) (domain.Shop, error)
+	updateShopStatus func(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error)
 }
 
 func (f *fakeShopRepo) CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error) {
@@ -52,13 +65,6 @@ func (f *fakeShopRepo) CreateShop(ctx context.Context, shop domain.Shop) (domain
 		panic("unexpected CreateShop call")
 	}
 	return f.createShop(ctx, shop)
-}
-
-func (f *fakeShopRepo) ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
-	if f.listShopsForModeration == nil {
-		panic("unexpected ListShopsForModeration call")
-	}
-	return f.listShopsForModeration(ctx, status)
 }
 
 func (f *fakeShopRepo) UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error) {
@@ -98,13 +104,13 @@ func TestShopsListPagination(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotLimit, gotOffset int32
-			repo := &fakeShopRepo{
+			query := &fakeShopQuery{
 				listShops: func(_ context.Context, _ domain.ShopVisibility, _ string, limit, offset int32) ([]domain.Shop, error) {
 					gotLimit, gotOffset = limit, offset
 					return []domain.Shop{}, nil
 				},
 			}
-			if _, err := usecase.NewShops(repo).List(context.Background(), nil, "", tt.page, tt.perPage); err != nil {
+			if _, err := usecase.NewShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", tt.page, tt.perPage); err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}
 			if gotLimit != tt.wantLimit || gotOffset != tt.wantOffset {
@@ -119,13 +125,13 @@ func TestShopsListPagination(t *testing.T) {
 func TestShopsListVisibilityDescriptor(t *testing.T) {
 	admin := domain.User{ID: 5, Admin: true}
 	var got domain.ShopVisibility
-	repo := &fakeShopRepo{
+	query := &fakeShopQuery{
 		listShops: func(_ context.Context, vis domain.ShopVisibility, _ string, _, _ int32) ([]domain.Shop, error) {
 			got = vis
 			return nil, nil
 		},
 	}
-	if _, err := usecase.NewShops(repo).List(context.Background(), &admin, "burger", 1, 20); err != nil {
+	if _, err := usecase.NewShops(query, &fakeShopRepo{}).List(context.Background(), &admin, "burger", 1, 20); err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
 	if !got.ViewAll || got.ViewerID != nil {
@@ -145,7 +151,7 @@ func TestShopsGet(t *testing.T) {
 	}
 	reviews := []domain.ShopReview{{ID: 3, Rating: 4, CreatedAt: time.Now()}}
 
-	repo := &fakeShopRepo{
+	query := &fakeShopQuery{
 		getShopWithCreator: func(_ context.Context, id int64) (domain.ShopDetail, error) {
 			if id == pending.ID {
 				return pending, nil
@@ -156,7 +162,7 @@ func TestShopsGet(t *testing.T) {
 			return reviews, nil
 		},
 	}
-	shops := usecase.NewShops(repo)
+	shops := usecase.NewShops(query, &fakeShopRepo{})
 
 	t.Run("creator は自分の pending な shop を review つきで見られる", func(t *testing.T) {
 		got, err := shops.Get(context.Background(), &alice, pending.ID)
@@ -189,13 +195,13 @@ func TestShopsGet(t *testing.T) {
 	})
 
 	t.Run("review の query が失敗したらそのエラーが伝播する", func(t *testing.T) {
-		failing := &fakeShopRepo{
-			getShopWithCreator: repo.getShopWithCreator,
+		failing := &fakeShopQuery{
+			getShopWithCreator: query.getShopWithCreator,
 			listShopReviews: func(_ context.Context, _ int64) ([]domain.ShopReview, error) {
 				return nil, io.ErrUnexpectedEOF
 			},
 		}
-		if _, err := usecase.NewShops(failing).Get(context.Background(), &alice, pending.ID); !errors.Is(err, io.ErrUnexpectedEOF) {
+		if _, err := usecase.NewShops(failing, &fakeShopRepo{}).Get(context.Background(), &alice, pending.ID); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("Get error = %v, want %v", err, io.ErrUnexpectedEOF)
 		}
 	})
@@ -214,7 +220,7 @@ func TestShopsCreate(t *testing.T) {
 				return shop, nil
 			},
 		}
-		got, err := usecase.NewShops(repo).Create(context.Background(), alice, "New Shack")
+		got, err := usecase.NewShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack")
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -230,7 +236,7 @@ func TestShopsCreate(t *testing.T) {
 	})
 
 	t.Run("空白の name は repository を呼ばずに ValidationError を返す", func(t *testing.T) {
-		_, err := usecase.NewShops(&fakeShopRepo{}).Create(context.Background(), alice, "   ")
+		_, err := usecase.NewShops(&fakeShopQuery{}, &fakeShopRepo{}).Create(context.Background(), alice, "   ")
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -243,7 +249,7 @@ func TestShopsCreate(t *testing.T) {
 				return domain.Shop{}, io.ErrUnexpectedEOF
 			},
 		}
-		if _, err := usecase.NewShops(repo).Create(context.Background(), alice, "New Shack"); !errors.Is(err, io.ErrUnexpectedEOF) {
+		if _, err := usecase.NewShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack"); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("Create error = %v, want %v", err, io.ErrUnexpectedEOF)
 		}
 	})
@@ -254,7 +260,7 @@ func TestShopsCreate(t *testing.T) {
 // domain.ErrForbidden を返す（ゼロ値の fake はどの呼び出しでも panic する）。
 func TestShopsAdminForbidden(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"} // 認証済みだが admin ではない
-	shops := usecase.NewShops(&fakeShopRepo{})
+	shops := usecase.NewShops(&fakeShopQuery{}, &fakeShopRepo{})
 	ctx := context.Background()
 
 	tests := []struct {
@@ -284,13 +290,13 @@ func TestShopsAdminList(t *testing.T) {
 
 	t.Run("status のフィルタはそのまま repository に渡される", func(t *testing.T) {
 		var got *domain.ShopStatus
-		repo := &fakeShopRepo{
+		query := &fakeShopQuery{
 			listShopsForModeration: func(_ context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
 				got = status
 				return []domain.ShopDetail{}, nil
 			},
 		}
-		if _, err := usecase.NewShops(repo).AdminList(ctx, admin, "pending"); err != nil {
+		if _, err := usecase.NewShops(query, &fakeShopRepo{}).AdminList(ctx, admin, "pending"); err != nil {
 			t.Fatalf("AdminList returned error: %v", err)
 		}
 		if got == nil || *got != domain.ShopStatusPending {
@@ -300,7 +306,7 @@ func TestShopsAdminList(t *testing.T) {
 
 	t.Run("status なしはフィルタなしを意味する", func(t *testing.T) {
 		called := false
-		repo := &fakeShopRepo{
+		query := &fakeShopQuery{
 			listShopsForModeration: func(_ context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
 				called = true
 				if status != nil {
@@ -309,7 +315,7 @@ func TestShopsAdminList(t *testing.T) {
 				return []domain.ShopDetail{}, nil
 			},
 		}
-		if _, err := usecase.NewShops(repo).AdminList(ctx, admin, ""); err != nil {
+		if _, err := usecase.NewShops(query, &fakeShopRepo{}).AdminList(ctx, admin, ""); err != nil {
 			t.Fatalf("AdminList returned error: %v", err)
 		}
 		if !called {
@@ -318,7 +324,7 @@ func TestShopsAdminList(t *testing.T) {
 	})
 
 	t.Run("未知の status は repository を呼ばずに空の一覧を返す", func(t *testing.T) {
-		got, err := usecase.NewShops(&fakeShopRepo{}).AdminList(ctx, admin, "bogus")
+		got, err := usecase.NewShops(&fakeShopQuery{}, &fakeShopRepo{}).AdminList(ctx, admin, "bogus")
 		if err != nil {
 			t.Fatalf("AdminList returned error: %v", err)
 		}
@@ -350,12 +356,14 @@ func TestShopsModeration(t *testing.T) {
 		status domain.ShopStatus
 		note   *string
 	}
-	// statusRepoFor は rejected の shop だけを返し、カラム限定の status の
-	// 書き込みを記録する。updateShopName は未設定のままなので、name に触れる
-	// status 遷移があればテストが panic する。
+	// rejectedQuery は rejected の shop だけを返す（それ以外の読み取りは panic
+	// する）。
+	rejectedQuery := &fakeShopQuery{getShopWithCreator: getRejected}
+	// statusRepoFor は、カラム限定の status の書き込みを記録する。
+	// updateShopName は未設定のままなので、name に触れる status 遷移があれば
+	// テストが panic する。
 	statusRepoFor := func(got *statusWrite) *fakeShopRepo {
 		return &fakeShopRepo{
-			getShopWithCreator: getRejected,
 			updateShopStatus: func(_ context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
 				*got = statusWrite{id: id, status: status, note: note}
 				stored := rejected.Shop
@@ -368,7 +376,7 @@ func TestShopsModeration(t *testing.T) {
 
 	t.Run("Approve は status と note だけを永続化する (rejected から active)", func(t *testing.T) {
 		var write statusWrite
-		got, err := usecase.NewShops(statusRepoFor(&write)).Approve(ctx, admin, rejected.ID)
+		got, err := usecase.NewShops(rejectedQuery, statusRepoFor(&write)).Approve(ctx, admin, rejected.ID)
 		if err != nil {
 			t.Fatalf("Approve returned error: %v", err)
 		}
@@ -383,7 +391,7 @@ func TestShopsModeration(t *testing.T) {
 	t.Run("Reject は status と note だけを永続化する", func(t *testing.T) {
 		var write statusWrite
 		note := strPtr("needs fixes")
-		got, err := usecase.NewShops(statusRepoFor(&write)).Reject(ctx, admin, rejected.ID, note)
+		got, err := usecase.NewShops(rejectedQuery, statusRepoFor(&write)).Reject(ctx, admin, rejected.ID, note)
 		if err != nil {
 			t.Fatalf("Reject returned error: %v", err)
 		}
@@ -401,7 +409,6 @@ func TestShopsModeration(t *testing.T) {
 		// updateShopStatus は未設定のままなので、status/note に触れる rename が
 		// あればテストが panic する。
 		repo := &fakeShopRepo{
-			getShopWithCreator: getRejected,
 			updateShopName: func(_ context.Context, id int64, name string) (domain.Shop, error) {
 				gotID, gotName = id, name
 				stored := rejected.Shop
@@ -409,7 +416,7 @@ func TestShopsModeration(t *testing.T) {
 				return stored, nil
 			},
 		}
-		got, err := usecase.NewShops(repo).AdminUpdateName(ctx, admin, rejected.ID, "Renamed")
+		got, err := usecase.NewShops(rejectedQuery, repo).AdminUpdateName(ctx, admin, rejected.ID, "Renamed")
 		if err != nil {
 			t.Fatalf("AdminUpdateName returned error: %v", err)
 		}
@@ -423,7 +430,7 @@ func TestShopsModeration(t *testing.T) {
 
 	t.Run("AdminUpdateName は lookup の前に空白の name を拒否する", func(t *testing.T) {
 		var err error
-		_, err = usecase.NewShops(&fakeShopRepo{}).AdminUpdateName(ctx, admin, rejected.ID, " ")
+		_, err = usecase.NewShops(&fakeShopQuery{}, &fakeShopRepo{}).AdminUpdateName(ctx, admin, rejected.ID, " ")
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -433,7 +440,7 @@ func TestShopsModeration(t *testing.T) {
 	t.Run("未知の id は書き込みせずに ErrShopNotFound を返す", func(t *testing.T) {
 		// 2 つの書き込みの振る舞いはどちらも未設定のままなので、lookup が
 		// 失敗した後の書き込みはどれもテストを panic させる。
-		shops := usecase.NewShops(&fakeShopRepo{getShopWithCreator: getRejected})
+		shops := usecase.NewShops(rejectedQuery, &fakeShopRepo{})
 		for name, call := range map[string]func() error{
 			"Approve":         func() error { _, err := shops.Approve(ctx, admin, 999); return err },
 			"Reject":          func() error { _, err := shops.Reject(ctx, admin, 999, nil); return err },

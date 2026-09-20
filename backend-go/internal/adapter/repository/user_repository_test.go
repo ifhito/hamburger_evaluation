@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
@@ -118,7 +119,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	conn, _ := dbtest.New(t)
 	repo := repository.NewUserRepository(conn)
 	reviewRepo := repository.NewReviewRepository(conn)
-	shopRepo := repository.NewShopRepository(conn)
+	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, $3, $4) RETURNING id`
 	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", "digest-alice", false)
@@ -302,7 +303,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 			t.Errorf("GetReview(alice) returned error: %v", err)
 		}
 		// shop の review：alice の review だけが一覧に載る。
-		shopReviews, err := shopRepo.ListShopReviews(ctx, shop)
+		shopReviews, err := shopQuery.ListShopReviews(ctx, shop)
 		if err != nil {
 			t.Fatalf("ListShopReviews returned error: %v", err)
 		}

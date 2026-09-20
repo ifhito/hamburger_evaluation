@@ -16,13 +16,16 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// shopRepoFake は in-memory の usecase.ShopRepository である。可視性は
-// domain の記述子そのもの（vis.CanView）を通して適用されるので、そのルールを
-// ここで再実装してはいない。keyword のマッチングは単純な case-fold の
-// 部分文字列一致である（メタ文字のセマンティクスは repository の統合テストが
-// 扱う）。err を設定するとすべての操作が失敗する（500 の経路）。listCalls は
-// ListShops が呼ばれた回数、lastLimit / lastOffset は最後の呼び出しの引数である
-// （handler が usecase に渡した値と、呼ばれなかったことの検証用）。
+// shopRepoFake は in-memory の usecase.ShopQuery かつ usecase.ShopRepository
+// である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
+// よう 1 つの型に保つ（読み書きの分離は usecase の引数型がコンパイル時に
+// 保証する）。可視性は domain の記述子そのもの（vis.CanView）を通して適用
+// されるので、そのルールをここで再実装してはいない。keyword のマッチングは
+// 単純な case-fold の部分文字列一致である（メタ文字のセマンティクスは
+// repository の統合テストが扱う）。err を設定するとすべての操作が失敗する
+// （500 の経路）。listCalls は ListShops が呼ばれた回数、lastLimit /
+// lastOffset は最後の呼び出しの引数である（handler が usecase に渡した値と、
+// 呼ばれなかったことの検証用）。
 type shopRepoFake struct {
 	shops                 []domain.ShopDetail // Reviews は未設定。下の reviews 経由で提供される
 	reviews               map[int64][]domain.ShopReview
@@ -30,6 +33,11 @@ type shopRepoFake struct {
 	listCalls             int
 	lastLimit, lastOffset int32
 }
+
+var (
+	_ usecase.ShopQuery      = (*shopRepoFake)(nil)
+	_ usecase.ShopRepository = (*shopRepoFake)(nil)
+)
 
 func (f *shopRepoFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
 	f.listCalls++
@@ -93,7 +101,7 @@ func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, alic
 	if err != nil {
 		t.Fatalf("issue admin token: %v", err)
 	}
-	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo),
+	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo, repo),
 			usecase.NewReviews(newReviewRepoFake(), storage.NewDisk(t.TempDir(), "/photos")),
 			usecase.NewUsers(users, hasherFake{}), nil),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID

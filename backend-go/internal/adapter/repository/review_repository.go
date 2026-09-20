@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -31,6 +33,11 @@ func NewReviewRepository(db beginnerDBTX) *ReviewRepository {
 }
 
 var _ usecase.ReviewRepository = (*ReviewRepository)(nil)
+
+// likeEscaper は LIKE のメタ文字をエスケープする（最初にバックスラッシュ）。
+// adapter/query の likeEscaper と同じ内容の暫定的な複製であり、ListReviews が
+// ReviewQuery へ移るときにこの変数ごと削除する。
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 // ListReviews は公開 review フィードを返す。対象は、discard されておらず、
 // かつ author（user）も discard されていない review のうち、burger が少なくとも
@@ -102,7 +109,7 @@ func (r *ReviewRepository) GetShop(ctx context.Context, id int64) (domain.Shop, 
 		}
 		return domain.Shop{}, fmt.Errorf("get shop: %w", err)
 	}
-	shop, err := toDomainShop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("get shop: %w", err)
 	}

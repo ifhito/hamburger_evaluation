@@ -7,12 +7,13 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// ShopRepository は shops 向けの consumer 側の永続化の契約である。
+// ShopQuery は shops 向けの consumer 側の読み取りの契約である。
 // 実装は visibility の記述子を SQL のパラメータに変換し（ルール自体は
 // domain.ShopVisibility にある）、smallint の status のエンコードを自分の
 // 内部に留め、id に一致する shop がないときは（wrap された）
-// domain.ErrShopNotFound を返す。
-type ShopRepository interface {
+// domain.ErrShopNotFound を返す。読み取り専用で、書き込みのメソッドは
+// 置かない（書き込みは ShopRepository）。
+type ShopQuery interface {
 	// ListShops は、keyword に一致する見える shop を、name、次に id の順で
 	// 返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別
 	// しない。空ならすべてに一致する）。
@@ -24,12 +25,19 @@ type ShopRepository interface {
 	// （author が discard 済みの user である review は除く）を、新しい順に
 	// 返す（created_at desc、id desc）。
 	ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
-	// CreateShop は新しい shop を永続化し、生成された id つきで返す。
-	CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error)
 	// ListShopsForModeration は、creator つきのすべての shop（Reviews は
 	// 空のまま）を新しい順（created_at desc、id desc）に返す。任意で 1 つの
 	// status に絞り込める（nil = すべて）。
 	ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
+}
+
+// ShopRepository は shops 向けの consumer 側の書き込みの契約である。
+// 実装は smallint の status のエンコードを自分の内部に留め、id に一致する
+// shop がないときは（wrap された）domain.ErrShopNotFound を返す。書き込み
+// 専用で、読み取りのメソッドは置かない（読み取りは ShopQuery）。
+type ShopRepository interface {
+	// CreateShop は新しい shop を永続化し、生成された id つきで返す。
+	CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error)
 	// UpdateShopName は、id の shop の name だけを永続化し、保存された行を
 	// 返す。カラム限定なので、並行する status の変更が古いスナップショットで
 	// 元に戻されることは決してない。
@@ -41,12 +49,16 @@ type ShopRepository interface {
 }
 
 // Shops は shop の use case を実装する。公開の一覧と詳細、ユーザーによる
-// 投稿、そして admin による moderation である。
+// 投稿、そして admin による moderation である。読み取りは query、書き込みは
+// repo だけを通す。
 type Shops struct {
-	repo ShopRepository
+	query ShopQuery
+	repo  ShopRepository
 }
 
-func NewShops(repo ShopRepository) *Shops { return &Shops{repo: repo} }
+func NewShops(query ShopQuery, repo ShopRepository) *Shops {
+	return &Shops{query: query, repo: repo}
+}
 
 // List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
 // ものを、ページネーションして返す。範囲外の page/perPage は、エラーにせず
@@ -54,7 +66,7 @@ func NewShops(repo ShopRepository) *Shops { return &Shops{repo: repo} }
 // 上限は 100）。
 func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.Shop, error) {
 	limit, offset := clampPage(page, perPage)
-	shops, err := s.repo.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
+	shops, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list shops: %w", err)
 	}
@@ -65,14 +77,14 @@ func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, p
 // 返す。存在しない shop と隠された shop は、どちらも domain.ErrShopNotFound を
 // 返すので、存在の有無は漏れない。
 func (s *Shops) Get(ctx context.Context, viewer *domain.User, id int64) (domain.ShopDetail, error) {
-	detail, err := s.repo.GetShopWithCreator(ctx, id)
+	detail, err := s.query.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("get shop: %w", err)
 	}
 	if !domain.ShopVisibilityFor(viewer).CanView(detail.Shop) {
 		return domain.ShopDetail{}, domain.ErrShopNotFound
 	}
-	reviews, err := s.repo.ListShopReviews(ctx, id)
+	reviews, err := s.query.ListShopReviews(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("list shop reviews: %w", err)
 	}
@@ -117,7 +129,7 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 			return []domain.ShopDetail{}, nil
 		}
 	}
-	shops, err := s.repo.ListShopsForModeration(ctx, filter)
+	shops, err := s.query.ListShopsForModeration(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("admin list shops: %w", err)
 	}
@@ -138,7 +150,7 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int6
 	// fetch はレスポンス用の creator（と、未知の id に対する 404）を
 	// 供給する。書き込み自体は name のカラムにしか触れないので、並行する
 	// status の変更を元に戻すことはない。
-	detail, err := s.repo.GetShopWithCreator(ctx, id)
+	detail, err := s.query.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}
@@ -177,7 +189,7 @@ func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *
 // カラム限定の書き込みなので、古いスナップショットから並行する rename を
 // 元に戻すことはない。
 func (s *Shops) moderate(ctx context.Context, id int64, transition func(domain.Shop) domain.Shop) (domain.ShopDetail, error) {
-	detail, err := s.repo.GetShopWithCreator(ctx, id)
+	detail, err := s.query.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)
 	}

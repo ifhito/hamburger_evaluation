@@ -17,6 +17,7 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
@@ -80,7 +81,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		photoFiles = handler.PhotoFileServer(cfg.PhotoDiskDir)
 	}
 
-	shops := usecase.NewShops(repository.NewShopRepository(pool))
+	shops := usecase.NewShops(query.NewShopQuery(pool), repository.NewShopRepository(pool))
 	reviews := usecase.NewReviews(repository.NewReviewRepository(pool), photos)
 	users := usecase.NewUsers(userRepo, infra.BcryptPasswordHasher{})
 

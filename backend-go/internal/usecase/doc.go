@@ -1,7 +1,8 @@
 // Package usecase は、アプリケーションの use case（auth、shops、reviews、
-// users）と、それらが consume する interface（repository は
-// adapter/repository、パスワードのハッシュ化とトークンは adapter/infra、
-// 写真の blob storage は adapter/storage で実装される）を保持する。
+// users）と、それらが consume する interface（読み取りの Query は
+// adapter/query、書き込みの repository は adapter/repository、パスワードの
+// ハッシュ化とトークンは adapter/infra、写真の blob storage は
+// adapter/storage で実装される）を保持する。
 //
 // import するのは domain、photo（標準ライブラリと golang.org/x/image だけに
 // 依存する、アップロード画像の検証・正規化）、標準ライブラリだけである。
