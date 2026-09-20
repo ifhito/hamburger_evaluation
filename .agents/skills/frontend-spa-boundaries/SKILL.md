@@ -1,6 +1,6 @@
 ---
 name: frontend-spa-boundaries
-description: Use when changing the React SPA, frontend API client, domain hooks, pages, forms, state, or frontend tests in hamburger_evaluation.
+description: hamburger_evaluation の React SPA(フロントエンドの API クライアント、ドメインフック、ページ、フォーム、state、フロントエンドテスト)を変更するときに使う。
 version: 1.0.0
 author: Hamburger Evaluation Agents
 license: MIT
@@ -12,29 +12,29 @@ metadata:
 
 # Frontend SPA Boundaries
 
-## Overview
+## 概要
 
-Use this skill for frontend changes under `frontend/`. The SPA uses React,
-TypeScript, Vite, SWR, Jotai, react-hook-form, Zod, and axios casing
-conversion at the HTTP boundary.
+`frontend/` 配下のフロントエンド変更にはこのスキルを使う。SPA は React、
+TypeScript、Vite、SWR、Jotai、react-hook-form、Zod を使い、axios による
+ケーシング変換を HTTP 境界で行う。
 
-## When to Use
+## 使いどころ
 
-- Editing `frontend/src` or frontend tests
-- Changing API request/response handling
-- Adding domain hooks, pages, forms, or shared UI
+- `frontend/src` やフロントエンドテストを編集するとき
+- API リクエスト/レスポンス処理を変更するとき
+- ドメインフック、ページ、フォーム、共有 UI を追加するとき
 
-## Rules
+## ルール
 
-- Keep feature code under `src/domains/*`.
-- Keep router/providers/app shell under `src/app`.
-- Keep HTTP and casing conversion under `src/api`.
-- Backend payload names are snake_case; frontend code is camelCase.
-- Auth uses localStorage, Jotai state, and Authorization Bearer token injection.
+- フィーチャーコードは `src/domains/*` 配下に置く。
+- ルーター/プロバイダー/アプリシェルは `src/app` 配下に置く。
+- HTTP とケーシング変換は `src/api` 配下に置く。
+- バックエンドのペイロード名は snake_case、フロントエンドのコードは camelCase。
+- 認証は localStorage、Jotai の state、Authorization Bearer トークン注入を使う。
 
-## Commands
+## コマンド
 
-Run from `frontend/`:
+`frontend/` から実行する:
 
 ```bash
 pnpm run type-check
@@ -43,16 +43,16 @@ pnpm run test
 pnpm run build
 ```
 
-## Common Pitfalls
+## よくある落とし穴
 
-1. Duplicating API casing conversion in feature code.
-2. Treating backend snake_case as frontend state shape.
-3. Adding shared UI inside a domain when multiple domains need it.
-4. Reading `frontend/.env*`.
+1. API のケーシング変換をフィーチャーコードで重複させる。
+2. バックエンドの snake_case をフロントエンドの state の形として扱う。
+3. 複数ドメインが必要とする共有 UI を 1 つのドメイン内に追加する。
+4. `frontend/.env*` を読む。
 
-## Verification Checklist
+## 検証チェックリスト
 
-- [ ] Type check passes for TypeScript changes.
-- [ ] Lint passes for frontend changes.
-- [ ] Vitest covers changed behavior.
-- [ ] Production build passes for route/build changes.
+- [ ] TypeScript の変更で型チェックが通る。
+- [ ] フロントエンドの変更で lint が通る。
+- [ ] 変更した挙動を Vitest がカバーしている。
+- [ ] ルート/ビルドの変更でプロダクションビルドが通る。

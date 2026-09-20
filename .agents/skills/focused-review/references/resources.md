@@ -1,43 +1,42 @@
 # Lens: Resources
 
-Memory and CPU incidents are unbounded-growth problems: every buffer, cache,
-pool, goroutine, and loop needs a bound and a release path. Ask of each
-resource: "what grows it?" and "what shrinks it?" — no answer to the second
-question is the finding.
+メモリと CPU のインシデントは無制限増加の問題である: すべてのバッファ、
+キャッシュ、プール、goroutine、ループには上限と解放パスが必要。各リソースに
+問う: 「何がこれを増やすか?」「何がこれを減らすか?」 — 後者に答えが
+ないことこそが指摘事項。
 
-## Hunt
+## 探すもの
 
-1. **Unclosed resources** — `resp.Body`, pgx `rows`, files, `time.NewTicker`
-   without `Stop`; `defer` inside a loop postponing release until function
-   exit; missing `Close` on early-return paths.
-2. **Unbounded in-memory growth** — package-level maps/slices appended per
-   request; caches without eviction or TTL; `io.ReadAll` on request/response
-   bodies without a size cap (`http.MaxBytesReader`); loading whole tables
-   into memory to filter in Go.
-3. **Goroutine pileup** — servers without read/write/idle timeouts; outbound
-   calls without ctx timeouts; each slow client parks goroutines and memory
-   until OOM.
-4. **Hot spinning** — `for {}` polling without sleep/backoff; retry loops
-   without backoff or attempt caps; tickers faster than the work they check.
-5. **Pool misconfiguration** — a connection/client created per request
-   instead of shared; `MaxConns` unset (fd exhaustion under load) or larger
-   than Postgres `max_connections`.
-6. **Hot-path allocation churn** — string concatenation in loops (use
-   `strings.Builder`); building large intermediate slices where streaming or
-   preallocation (`make(_, 0, n)`) fits.
-7. **Frontend leaks** — `setInterval`/subscriptions/listeners not cleaned up
-   in `useEffect` teardown; unbounded lists rendered without pagination or
-   virtualization; growing state arrays never truncated.
+1. **閉じられないリソース** — `resp.Body`、pgx の `rows`、ファイル、`Stop`
+   のない `time.NewTicker`。ループ内の `defer` が解放を関数終了まで先送り。
+   early return パスでの `Close` 漏れ。
+2. **無制限のメモリ増加** — リクエストごとに追記されるパッケージレベルの
+   map/slice。eviction も TTL もないキャッシュ。サイズ上限
+   (`http.MaxBytesReader`)なしのリクエスト/レスポンスボディへの
+   `io.ReadAll`。Go 側でフィルタするためにテーブル全体をメモリにロード。
+3. **goroutine の積み上がり** — read/write/idle タイムアウトのないサーバー。
+   ctx タイムアウトのない外部呼び出し。遅いクライアントごとに goroutine と
+   メモリが OOM まで滞留する。
+4. **ホットスピン** — sleep/バックオフなしでポーリングする `for {}`。
+   バックオフも試行上限もないリトライループ。チェック対象の仕事より速い ticker。
+5. **プールの設定ミス** — 共有ではなくリクエストごとに作られる
+   コネクション/クライアント。`MaxConns` 未設定(負荷時の fd 枯渇)、
+   または Postgres の `max_connections` より大きい。
+6. **ホットパスのアロケーション churn** — ループ内の文字列連結
+   (`strings.Builder` を使う)。ストリーミングや事前確保
+   (`make(_, 0, n)`)で足りる所での大きな中間 slice の構築。
+7. **フロントエンドのリーク** — `useEffect` の teardown で片付けられない
+   `setInterval`/サブスクリプション/リスナー。ページネーションも仮想化も
+   なしにレンダーされる無制限のリスト。切り詰められず増え続ける state 配列。
 
-## Do Not Flag
+## 指摘しないもの
 
-- Short-lived paths (CLI, tests, migrations) where the process exit is the
-  release path.
-- Bounded-by-construction data (config lists, enums).
-- GC or allocation micro-tuning without measurement — Suggestion + "profile
-  with pprof", never Critical on speculation.
+- プロセス終了が解放パスである短命なパス(CLI、テスト、マイグレーション)。
+- 構造上有界なデータ(config のリスト、enum)。
+- 測定なしの GC・アロケーションのマイクロチューニング — Suggestion +
+  「pprof でプロファイルを」。憶測で Critical にしない。
 
-## Grep Starters
+## Grep の起点
 
 ```bash
 grep -rn 'io.ReadAll\|NewTicker\|go func' backend-go/internal/ --include='*.go'

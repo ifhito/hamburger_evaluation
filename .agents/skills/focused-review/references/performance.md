@@ -1,40 +1,42 @@
 # Lens: Performance
 
-Review the *shape* of the work, not micro-optimizations: how many round trips,
-how much data, how often. Flag work that grows with data size on a hot path.
+マイクロ最適化ではなく、仕事の*形*をレビューする: ラウンドトリップの回数、
+データ量、頻度。ホットパスでデータサイズに比例して増える仕事を指摘する。
 
-## Hunt
+## 探すもの
 
-Backend:
+バックエンド:
 
-1. **N+1 queries** — a query inside a loop over query results. Fix with a
-   JOIN, a batch query (`WHERE id = ANY($1)`), or a precomputed map.
-2. **Unbounded result sets** — list queries with no `LIMIT`/pagination.
-3. **Missing indexes** — new `WHERE`/`ORDER BY`/`JOIN` columns without an
-   index in the migration; foreign keys are the usual omission.
-4. **Over-fetching** — `SELECT *` for three used columns; loading rows to
-   count them instead of `COUNT(*)`.
-5. **Per-request setup** — compiling regexes, reading config, opening
-   connections inside handlers instead of at construction.
-6. **O(n²) on request data** — nested membership scans over slices; use a map.
+1. **N+1 クエリ** — クエリ結果を回すループの中のクエリ。JOIN、バッチクエリ
+   (`WHERE id = ANY($1)`)、または事前計算した map で直す。
+2. **無制限の結果セット** — `LIMIT`/ページネーションのない一覧クエリ。
+3. **インデックスの欠落** — 新しい `WHERE`/`ORDER BY`/`JOIN` カラムに
+   マイグレーション内のインデックスがない。外部キーが典型的な抜け。
+4. **オーバーフェッチ** — 使うのは 3 カラムなのに `SELECT *`。`COUNT(*)` の
+   代わりに行をロードして数える。
+5. **リクエストごとのセットアップ** — 正規表現のコンパイル、config の読み込み、
+   コネクションのオープンを、構築時ではなくハンドラ内で行う。
+6. **リクエストデータ上の O(n²)** — slice に対するネストした所属チェックの
+   スキャン。map を使う。
 
-Frontend:
+フロントエンド:
 
-7. **Sequential independent awaits** — `await a(); await b();` with no
-   dependency; use `Promise.all`.
-8. **Fetch storms** — SWR keys rebuilt every render (inline objects);
-   revalidation broader than the mutation; fetching inside a loop over items.
-9. **Render waste that scales** — derived lists recomputed each render of a
-   user-scaled collection without memoization.
+7. **依存のない await の直列実行** — 依存関係がないのに `await a(); await b();`。
+   `Promise.all` を使う。
+8. **フェッチストーム** — レンダーのたびに再構築される SWR キー(インライン
+   オブジェクト)。mutation より広い revalidation。アイテムを回すループ内の
+   フェッチ。
+9. **スケールするレンダー浪費** — ユーザー規模のコレクションの派生リストを、
+   メモ化なしにレンダーごとに再計算。
 
-## Do Not Flag
+## 指摘しないもの
 
-- Cold paths: admin screens, one-shot scripts, migrations, tests.
-- Small bounded data where the simple version is clearer — say why it's fine
-  if the bound isn't obvious.
-- Anything needing a profiler to confirm — Suggestion + what to measure.
+- コールドパス: 管理画面、ワンショットのスクリプト、マイグレーション、テスト。
+- シンプルな書き方の方が明快な、小さく有界なデータ — 上限が自明でなければ
+  なぜ問題ないかを言う。
+- 確認にプロファイラが要るもの — Suggestion + 何を測定すべきか。
 
-## Grep Starters
+## Grep の起点
 
 ```bash
 grep -rn 'for .*range' backend-go/internal/adapter/repository/ --include='*.go'

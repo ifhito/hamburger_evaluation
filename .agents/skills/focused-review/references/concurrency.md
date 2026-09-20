@@ -1,39 +1,39 @@
 # Lens: Concurrency
 
-In-process parallelism: shared state, goroutine lifecycles, cancellation.
-(Database-level races belong to the consistency lens.)
+プロセス内の並行性: 共有状態、goroutine のライフサイクル、キャンセル。
+(データベースレベルの競合は consistency レンズの担当。)
 
-## Hunt
+## 探すもの
 
-1. **Unsynchronized shared state** — maps/slices/structs written from
-   multiple goroutines without a mutex; lazy init without `sync.Once`;
-   check-then-set on shared fields.
-2. **Goroutine leaks** — goroutines with no exit path: blocked forever on a
-   channel nobody reads, or looping without a `ctx.Done()` check.
-3. **Missing context propagation** — `context.Background()` deep in call
-   chains instead of the request ctx; DB/HTTP calls that outlive a canceled
-   request.
-4. **Unbounded fan-out** — a goroutine per item over user-scaled input with
-   no worker pool or semaphore.
-5. **WaitGroup/channel misuse** — `Add` after `Wait` races; send on a channel
-   after close; forgetting `close` where a `range` reads.
-6. **Frontend races** — state updates after unmount; concurrent mutations to
-   the same SWR key without serialization; stale closures capturing old
-   state in async callbacks.
+1. **同期されていない共有状態** — 複数の goroutine から mutex なしで
+   書き込まれる map/slice/struct。`sync.Once` なしの遅延初期化。
+   共有フィールドへの check-then-set。
+2. **goroutine リーク** — 出口のない goroutine: 誰も読まないチャネルで
+   永遠にブロック、あるいは `ctx.Done()` チェックのないループ。
+3. **context 伝播の欠落** — 呼び出しチェーンの奥でリクエスト ctx の代わりに
+   `context.Background()`。キャンセル済みリクエストより長生きする
+   DB/HTTP 呼び出し。
+4. **無制限のファンアウト** — ユーザー起因でスケールする入力に対して、
+   ワーカープールもセマフォもなしにアイテムごとの goroutine。
+5. **WaitGroup/チャネルの誤用** — `Wait` 後の `Add` の競合。close 後の
+   チャネル送信。`range` が読むところで `close` を忘れる。
+6. **フロントエンドの競合** — アンマウント後の state 更新。同一 SWR キーへの
+   直列化されていない並行 mutation。非同期コールバックが古い state を
+   捕まえる stale closure。
 
-## Do Not Flag
+## 指摘しないもの
 
-- Single-goroutine code paths — don't invent hypothetical parallelism.
-- Values that are write-once-before-share (configs built in main, then read).
-- `go test -race` noise candidates without a plausible interleaving — mark
-  Suggestion and say to run the race detector.
+- 単一 goroutine のコードパス — 仮想の並行性を発明しない。
+- 共有前に一度だけ書かれる値(main で構築されてから読まれる config)。
+- もっともらしいインターリービングのない `go test -race` ノイズ候補 —
+  Suggestion にして race detector の実行を促す。
 
-## Grep Starters
+## Grep の起点
 
 ```bash
 grep -rn 'go func' backend-go/internal/ --include='*.go'
 grep -rn 'context.Background()' backend-go/internal/ --include='*.go'
 ```
 
-`go test -race ./...` is the authoritative check; suggest it whenever this
-lens finds anything plausible.
+`go test -race ./...` が正式なチェック。このレンズがもっともらしいものを
+見つけたら必ずその実行を提案すること。

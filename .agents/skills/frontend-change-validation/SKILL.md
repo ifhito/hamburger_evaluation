@@ -1,6 +1,6 @@
 ---
 name: frontend-change-validation
-description: When frontend React behavior changes, validate types, lint, and tests.
+description: フロントエンドの React の挙動が変わったときに使う。型、lint、テストを検証する。
 allowed-tools: [Read, Grep, Glob, Bash(pnpm run:*)]
 version: 1.0.0
 author: Hamburger Evaluation Agents
@@ -13,43 +13,43 @@ metadata:
 
 # Frontend Change Validation
 
-## Overview
+## 概要
 
-Use this skill when frontend behavior, API calls, state, routing, or build
-configuration changes. The job is to validate TypeScript, lint, unit tests, and
-build when needed.
+フロントエンドの挙動、API 呼び出し、state、ルーティング、ビルド設定が
+変わったときにこのスキルを使う。仕事は TypeScript、lint、ユニットテスト、
+必要に応じてビルドを検証すること。
 
-## When to Use
+## 使いどころ
 
-- After changing React pages, hooks, API clients, forms, or state.
-- After changing route or Vite/TypeScript configuration.
-- Before reporting frontend work as finished.
+- React のページ、フック、API クライアント、フォーム、state を変更した後。
+- ルートや Vite/TypeScript の設定を変更した後。
+- フロントエンドの作業を完了と報告する前。
 
-## Job
+## 手順
 
-1. Read `references/frontend-change-validation.md`.
-2. Run the following script:
+1. `references/frontend-change-validation.md` を読む。
+2. 次のスクリプトを実行する:
 
 ```bash
 .agents/skills/frontend-change-validation/scripts/frontend-checks.sh
 ```
 
-3. If routing/build/API boundary changed, also run `pnpm run build` from `frontend/`.
+3. ルーティング/ビルド/API 境界が変わった場合は、`frontend/` から `pnpm run build` も実行する。
 
-## Output
+## 出力
 
-Return pass/fail per command. If failed, include the failing file/test and the
-shortest actionable error.
+コマンドごとに pass/fail を返す。失敗した場合は、失敗したファイル/テストと
+最短で対処可能なエラーを含める。
 
-## Common Pitfalls
+## よくある落とし穴
 
-1. Do not duplicate snake_case/camelCase conversion in feature code.
-2. Do not read `frontend/.env*`.
-3. Do not skip type-check for TypeScript changes.
+1. snake_case/camelCase 変換をフィーチャーコードで重複させない。
+2. `frontend/.env*` を読まない。
+3. TypeScript の変更で type-check をスキップしない。
 
-## Verification Checklist
+## 検証チェックリスト
 
-- [ ] Type check passed.
-- [ ] ESLint passed.
-- [ ] Vitest passed.
-- [ ] Build ran when route/build/API boundary changed.
+- [ ] 型チェックが通った。
+- [ ] ESLint が通った。
+- [ ] Vitest が通った。
+- [ ] ルート/ビルド/API 境界が変わった場合、ビルドを実行した。

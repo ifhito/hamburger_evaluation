@@ -1,6 +1,6 @@
 ---
 name: db-design
-description: Use when designing or changing the PostgreSQL schema — tables, constraints, indexes, migrations under backend-go/db. Enforces the domain/DB separation rule: schema and domain are designed separately and mapped in the repository layer.
+description: PostgreSQL スキーマの設計・変更(backend-go/db 配下のテーブル、制約、インデックス、マイグレーション)のときに使う。ドメイン/DB 分離ルール — スキーマとドメインは別々に設計し、リポジトリ層でマッピングする — を徹底する。
 allowed-tools: [Read, Grep, Glob, Bash(docker compose run:*), Bash(sqlc:*), Bash(git status:*), Bash(git diff:*)]
 version: 1.0.0
 author: Hamburger Evaluation Agents
@@ -13,56 +13,55 @@ metadata:
 
 # DB Design
 
-## The Separation Rule (read this first)
+## 分離ルール(まずこれを読む)
 
-**DB design and domain design are different activities with different
-masters, and must not mirror each other.**
+**DB 設計とドメイン設計は仕える主が異なる別々の活動であり、互いを
+鏡写しにしてはならない。**
 
-- The **schema** optimizes for data integrity and query shape: normalization,
-  constraints, indexes, storage-efficient representations (e.g. status as
-  smallint + CHECK).
-- The **domain** optimizes for behavior and invariants: value objects, state
-  machines, rules (e.g. `ShopStatus` with transition methods).
-- The **repository layer owns the mapping** between the two. sqlc row structs
-  never leave `adapter/`; domain types never gain fields "because the table
-  has them"; a schema change must not mechanically force a domain change,
-  nor vice versa.
+- **スキーマ**はデータ整合性とクエリの形に最適化する: 正規化、制約、
+  インデックス、ストレージ効率の良い表現(例: status を smallint + CHECK に)。
+- **ドメイン**は振る舞いと不変条件に最適化する: 値オブジェクト、状態機械、
+  ルール(例: 遷移メソッドを持つ `ShopStatus`)。
+- 両者の**マッピングはリポジトリ層が担う**。sqlc の行構造体を `adapter/` の
+  外に出さない。「テーブルにあるから」という理由でドメイン型にフィールドを
+  増やさない。スキーマ変更が機械的にドメイン変更を強制してはならず、
+  その逆も同様。
 
-Deriving one side from the other is the Rails habit this repo is
-deliberately leaving behind. When the two shapes drift apart, that is the
-design working, not a problem to fix.
+片方からもう片方を導出するのは、このリポジトリが意図的に捨てようとしている
+Rails の習慣である。両者の形が乖離していくのは設計が機能している証拠であり、
+直すべき問題ではない。
 
-## Schema Principles
+## スキーマの原則
 
-1. **Constraints live in the schema** — NOT NULL, CHECK, UNIQUE, FK.
-   Application validation is UX; the database is the last line of defense.
-   If an invariant can be expressed as a constraint, express it there too.
-2. **Every FK gets an index**, plus whatever the real `WHERE`/`ORDER BY`
-   needs. No speculative indexes — each one taxes every write.
-3. **Prefer boring types** — bigint ids, timestamptz, text, smallint + CHECK
-   for closed enums. Reach for jsonb/arrays only with a named reason.
-4. **Soft delete is a column (`discarded_at`)**, and every read path must
-   decide explicitly whether it sees discarded rows.
-5. **Naming**: snake_case, plural tables, `<table>_id` FKs, join tables as
-   `a_b` alphabetical.
+1. **制約はスキーマに置く** — NOT NULL、CHECK、UNIQUE、FK。
+   アプリケーション側のバリデーションは UX であり、データベースが最後の砦。
+   不変条件を制約として表現できるなら、そちらにも表現する。
+2. **すべての FK にインデックスを張る**。加えて実際の `WHERE`/`ORDER BY` が
+   必要とするものも。当て推量のインデックスは禁止 — 1 本ごとに全書き込みに税を課す。
+3. **退屈な型を選ぶ** — bigint の id、timestamptz、text、閉じた列挙には
+   smallint + CHECK。jsonb や配列に手を伸ばすのは理由を明示できるときだけ。
+4. **論理削除はカラム(`discarded_at`)で行い**、すべての読み取りパスが
+   削除済み行を見るかどうかを明示的に決める。
+5. **命名**: snake_case、テーブルは複数形、FK は `<table>_id`、
+   結合テーブルはアルファベット順の `a_b`。
 
-## Migration Rules
+## マイグレーションのルール
 
-- Migrations are plain SQL in `backend-go/db/migrations`, up/down paired,
-  and are the single source of truth for the schema.
-- Additive first: backfill and `NOT NULL`/constraint tightening are separate
-  steps from column creation — never one irreversible migration.
-- Destructive changes (drop column/table) get their own migration and an
-  explicit user decision.
-- After any schema or query change: `sqlc generate`, commit the output,
-  verify drift-zero with `git diff --exit-code`.
+- マイグレーションは `backend-go/db/migrations` の素の SQL で、up/down を
+  対にし、スキーマの単一の source of truth とする。
+- まず追加から: バックフィルと `NOT NULL`/制約の強化はカラム作成とは
+  別ステップにする — 不可逆なマイグレーション 1 本にまとめない。
+- 破壊的変更(カラム/テーブルの削除)は独立したマイグレーションにし、
+  ユーザーの明示的な判断を得る。
+- スキーマまたはクエリの変更後は必ず: `sqlc generate` を実行し、出力を
+  コミットし、`git diff --exit-code` でドリフトゼロを確認する。
 
-## Design Checklist (before the migration PR)
+## 設計チェックリスト(マイグレーション PR の前に)
 
-- [ ] Each invariant either has a constraint or a written reason why not.
-- [ ] FKs indexed; query-driven indexes named after the query they serve.
-- [ ] up/down both tested against an empty DB (see AC pattern in stories).
-- [ ] The domain model was designed from behavior, not from these tables —
-      and the mapping lives in `adapter/repository`.
-- [ ] Reviewed with the `focused-review` consistency lens if data is moved
-      or backfilled.
+- [ ] 各不変条件に制約があるか、なければ理由が書かれている。
+- [ ] FK にインデックスがある。クエリ駆動のインデックスは対象クエリにちなんで命名した。
+- [ ] up/down の両方を空の DB に対してテストした(ストーリーの AC パターン参照)。
+- [ ] ドメインモデルはこれらのテーブルからではなく振る舞いから設計した —
+      マッピングは `adapter/repository` にある。
+- [ ] データの移動やバックフィルがある場合、`focused-review` の consistency
+      レンズでレビューした。

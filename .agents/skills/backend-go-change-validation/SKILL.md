@@ -1,6 +1,6 @@
 ---
 name: backend-go-change-validation
-description: When Go API behavior under backend-go/ changes, validate formatting, vet, build, and tests.
+description: backend-go/ 配下の Go API の挙動が変わったときに使う。フォーマット、vet、ビルド、テストを検証する。
 allowed-tools: [Read, Grep, Glob, Bash(go:*), Bash(gofmt:*), Bash(sqlc:*), Bash(docker compose run:*)]
 version: 1.0.0
 author: Hamburger Evaluation Agents
@@ -13,22 +13,23 @@ metadata:
 
 # Backend Go Change Validation
 
-## Overview
+## 概要
 
-Use this skill when Go code under `backend-go/` changes. The job is to verify
-the clean-architecture boundaries from [[backend-go-boundaries]] and run the
-Go checks. The Go toolchain runs on the host (a single static toolchain);
-only repository integration tests need the Docker Compose database.
+`backend-go/` 配下の Go コードが変わったときにこのスキルを使う。仕事は
+[[backend-go-boundaries]] のクリーンアーキテクチャ境界を検証し、Go の
+チェックを実行すること。Go ツールチェーンはホスト上で動く(単一の静的
+ツールチェーン)。Docker Compose のデータベースが必要なのはリポジトリの
+統合テストだけ。
 
-## Checks
+## チェック
 
-Run everything from `backend-go/`, or use the bundled script:
+すべて `backend-go/` から実行するか、同梱スクリプトを使う:
 
 ```bash
 .agents/skills/backend-go-change-validation/scripts/go-checks.sh
 ```
 
-Which is equivalent to:
+これは以下と等価:
 
 ```bash
 cd backend-go
@@ -38,7 +39,7 @@ go build ./...                 # compile everything
 go test ./...                  # unit + handler tests (repository tests skip without DB)
 ```
 
-When `db/queries/` or `sqlc.yaml` changed, additionally:
+`db/queries/` または `sqlc.yaml` を変更した場合は、追加で:
 
 ```bash
 cd backend-go
@@ -46,24 +47,23 @@ sqlc generate
 git diff --exit-code -- internal/adapter/repository/sqlcgen   # no drift
 ```
 
-When repository implementations changed, run integration tests with the
-database up:
+リポジトリ実装を変更した場合は、データベースを起動して統合テストを実行する:
 
 ```bash
 cd backend-go
 docker compose run --rm api-go go test ./internal/adapter/repository/...
 ```
 
-## Boundary Spot-Checks
+## 境界の抜き打ちチェック
 
-Before finishing, grep for outward imports (each should return nothing):
+終える前に、外向きの import を grep する(いずれも何も返らないこと):
 
 ```bash
 grep -rE '"net/http"|database/sql|pgx|/adapter/|/usecase/' backend-go/internal/domain/
 grep -rE '"net/http"|database/sql|pgx|/adapter/'           backend-go/internal/usecase/
 ```
 
-## Reporting
+## 報告
 
-Report commands run with pass/fail, any skipped checks and why, and boundary
-violations found. A formatting or vet failure is a hard stop, not a note.
+実行したコマンドと pass/fail、スキップしたチェックとその理由、見つかった
+境界違反を報告する。フォーマットや vet の失敗はメモではなくハードストップ。

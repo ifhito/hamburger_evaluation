@@ -1,26 +1,26 @@
-# PR Self Review Reference
+# PR Self Review リファレンス
 
-## Scope
+## スコープ
 
-This skill reviews the working tree only. It does not decide whether to merge,
-close, or rewrite a PR.
+このスキルはワーキングツリーだけをレビューする。PR をマージ・クローズ・
+書き換えるかどうかは判断しない。
 
-## Procedure
+## 手順
 
-1. Inspect `git status --short --branch --untracked-files=all`.
-2. Inspect `git diff --check`.
-3. Inspect `git diff --stat`.
-4. If staged changes exist, inspect `git diff --cached --stat`.
-5. Separate files into:
-   - intended implementation,
-   - tests/checks/docs supporting that implementation,
-   - unrelated or pre-existing local files.
-6. Report missing validation based on changed area:
-   - backend: gofmt, go vet, go build, go test,
-   - frontend: type-check, lint, test,
-   - build/API boundary: frontend build.
+1. `git status --short --branch --untracked-files=all` を確認する。
+2. `git diff --check` を確認する。
+3. `git diff --stat` を確認する。
+4. ステージ済みの変更があれば `git diff --cached --stat` を確認する。
+5. ファイルを次に分類する:
+   - 意図した実装、
+   - その実装を支えるテスト/チェック/ドキュメント、
+   - 無関係または既存のローカルファイル。
+6. 変更エリアに基づいて不足している検証を報告する:
+   - backend: gofmt、go vet、go build、go test、
+   - frontend: type-check、lint、test、
+   - build/API 境界: frontend build。
 
-## Secret Paths
+## シークレットのパス
 
-Never read or include contents from `.env*`, `secrets/**`,
-`**/.kamal/**`, or `**/master.key`.
+`.env*`、`secrets/**`、`**/.kamal/**`、`**/master.key` の内容は
+決して読まない・含めない。

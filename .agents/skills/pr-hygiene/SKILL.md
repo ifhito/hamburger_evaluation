@@ -1,6 +1,6 @@
 ---
 name: pr-hygiene
-description: Use when preparing commits, updating PRs, reviewing diffs, or coordinating Claude/Codex/Hermes work in hamburger_evaluation.
+description: hamburger_evaluation でコミットの準備、PR の更新、差分レビュー、Claude/Codex/Hermes の作業調整をするときに使う。
 version: 1.0.0
 author: Hamburger Evaluation Agents
 license: MIT
@@ -12,19 +12,20 @@ metadata:
 
 # PR Hygiene
 
-## Overview
+## 概要
 
-Use this skill before staging, committing, pushing, or updating PRs. The repo
-may contain unrelated local files; keep agent changes explicit and scoped.
+ステージング、コミット、プッシュ、PR 更新の前にこのスキルを使う。リポジトリには
+無関係なローカルファイルが存在しうる。エージェントの変更は明示的かつ
+スコープ内に保つこと。
 
-## When to Use
+## 使いどころ
 
-- Before `git add`, `git commit`, or `git push`
-- Before editing a PR body or closing a PR
-- During diff review
-- When coordinating Claude Code, Codex, or Hermes Agent work
+- `git add`、`git commit`、`git push` の前
+- PR 本文の編集や PR クローズの前
+- 差分レビューのとき
+- Claude Code、Codex、Hermes Agent の作業を調整するとき
 
-## Workflow
+## ワークフロー
 
 ```bash
 git status --short --branch --untracked-files=all
@@ -32,33 +33,33 @@ git diff --check
 git diff --stat
 ```
 
-Stage explicit paths only. Do not include unrelated local files such as
-`SETUP.md` or `plans/*.md` unless the user requested them.
+明示したパスだけをステージする。ユーザーが求めない限り、`SETUP.md` や
+`plans/*.md` などの無関係なローカルファイルを含めない。
 
-## Secrets
+## シークレット
 
-Never read, stage, summarize, or commit:
+以下は決して読まない・ステージしない・要約しない・コミットしない:
 
-- `.env*` (in any directory)
+- `.env*`(どのディレクトリでも)
 - `secrets/**`
 - `**/.kamal/**`
 - `**/master.key`
 
-## PR Summary Shape
+## PR サマリの形
 
-PR bodies follow the [[pr-template]] skill: written in Japanese, with
-概要 / 関連 Issue / 変更内容 / テスト (実測のみ) / レビュー観点 / 備考.
+PR 本文は [[pr-template]] スキルに従う: 日本語で、
+概要 / 関連 Issue / 変更内容 / テスト (実測のみ) / レビュー観点 / 備考 の構成。
 
-## Common Pitfalls
+## よくある落とし穴
 
-1. Staging unrelated modified files.
-2. Reporting targeted tests as sufficient when full suite is required.
-3. Closing or editing PRs without user approval.
-4. Leaving generated agent files unverified.
+1. 無関係な変更済みファイルをステージする。
+2. フルスイートが必要な場面で、絞ったテストだけを十分と報告する。
+3. ユーザーの承認なしに PR をクローズ・編集する。
+4. エージェントが生成したファイルを未検証のまま残す。
 
-## Verification Checklist
+## 検証チェックリスト
 
-- [ ] `git status --short --branch` reviewed.
-- [ ] `git diff --check` passes.
-- [ ] Only intended paths are staged/committed.
-- [ ] PR body includes commands actually run.
+- [ ] `git status --short --branch` を確認した。
+- [ ] `git diff --check` が通る。
+- [ ] 意図したパスだけがステージ/コミットされている。
+- [ ] PR 本文に実際に実行したコマンドが含まれている。

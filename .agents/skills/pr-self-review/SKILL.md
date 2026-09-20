@@ -1,6 +1,6 @@
 ---
 name: pr-self-review
-description: When preparing a PR, run a scoped self-review before asking humans.
+description: PR を準備するときに使う。人間に依頼する前にスコープを絞ったセルフレビューを実行する。
 allowed-tools: [Read, Grep, Glob, Bash(git status:*), Bash(git diff:*)]
 version: 1.0.0
 author: Hamburger Evaluation Agents
@@ -13,45 +13,45 @@ metadata:
 
 # PR Self Review
 
-## Overview
+## 概要
 
-Use this skill to review the current working tree before a PR update or human
-review request. The job is to find unrelated changes, risky diffs, and missing
-validation evidence.
+PR 更新や人間へのレビュー依頼の前に、現在のワーキングツリーをレビューする
+ためにこのスキルを使う。仕事は、無関係な変更、リスクの高い差分、検証
+エビデンスの欠落を見つけること。
 
-## When to Use
+## 使いどころ
 
-- Before opening or updating a PR.
-- Before asking the user to review generated changes.
-- Before staging or committing agent-generated work.
+- PR を開く・更新する前。
+- 生成された変更のレビューをユーザーに頼む前。
+- エージェントが生成した作業をステージ・コミットする前。
 
-## Job
+## 手順
 
-1. Read `references/pr-self-review.md`.
-2. Run the following script:
+1. `references/pr-self-review.md` を読む。
+2. 次のスクリプトを実行する:
 
 ```bash
 .agents/skills/pr-self-review/scripts/pr-self-review.sh
 ```
 
-3. Summarize only:
-   - changed files grouped by intent,
-   - possible unrelated files,
-   - missing checks,
-   - top review risks.
+3. 以下だけを要約する:
+   - 意図ごとにグループ化した変更ファイル、
+   - 無関係の可能性があるファイル、
+   - 不足しているチェック、
+   - 主要なレビューリスク。
 
-## Output
+## 出力
 
-Return at most five bullets, each with severity and filepath when applicable.
+最大 5 個の箇条書きで返す。各項目に重大度と、該当する場合はファイルパスを付ける。
 
-## Common Pitfalls
+## よくある落とし穴
 
-1. Do not stage files as part of this skill.
-2. Do not edit PR text as part of this skill.
-3. Do not read secrets or env files.
+1. このスキルの一部としてファイルをステージしない。
+2. このスキルの一部として PR 本文を編集しない。
+3. シークレットや env ファイルを読まない。
 
-## Verification Checklist
+## 検証チェックリスト
 
-- [ ] Git status and diff check were inspected.
-- [ ] Unrelated files were called out.
-- [ ] Required checks were listed from actual evidence.
+- [ ] git status と diff check を確認した。
+- [ ] 無関係なファイルを指摘した。
+- [ ] 必要なチェックを実際のエビデンスに基づいて列挙した。

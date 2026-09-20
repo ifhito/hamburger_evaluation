@@ -1,6 +1,6 @@
 ---
 name: focused-review
-description: Generic focused-review lenses — fail-loud, consistency, concurrency, performance, resources (memory/CPU/leaks), security, test quality. Use when reviewing a diff for one of these concerns, or to pick the right lenses for what a diff touches.
+description: 汎用のフォーカスレビュー・レンズ集 — fail-loud、consistency、concurrency、performance、resources(メモリ/CPU/リーク)、security、test quality。差分をこれらの観点のいずれかでレビューするとき、または差分が触れる範囲に合うレンズを選ぶときに使う。
 allowed-tools: [Read, Grep, Glob, Bash(git status:*), Bash(git diff:*)]
 version: 1.0.0
 author: Hamburger Evaluation Agents
@@ -13,48 +13,47 @@ metadata:
 
 # Focused Review
 
-## Overview
+## 概要
 
-A catalog of generic review lenses. Each lens fixes attention on one class of
-defect; a focused pass finds what a do-everything review skims past. Pick the
-lenses that match what the diff touches, read only those references, and
-review with that checklist.
+汎用のレビューレンズのカタログ。各レンズは 1 種類の欠陥に注意を固定する。
+焦点を絞ったパスは、何でも見ようとするレビューが読み飛ばすものを見つける。
+差分が触れる範囲に合うレンズを選び、そのリファレンスだけを読み、その
+チェックリストでレビューする。
 
-## Picking Lenses
+## レンズの選び方
 
-| Lens | Read when the diff touches | Reference |
+| レンズ | 差分がこれに触れるなら読む | リファレンス |
 |------|---------------------------|-----------|
-| Fail loud | error handling, external calls, parsing, async work | `references/fail-loud.md` |
-| Consistency | writes, transactions, migrations, derived data | `references/consistency.md` |
-| Concurrency | goroutines, channels, shared state, caches | `references/concurrency.md` |
-| Performance | queries, list endpoints, loops over data, UI fetching | `references/performance.md` |
-| Resources | buffers, caches, pools, goroutine lifecycles, long-running work | `references/resources.md` |
-| Security | auth, input handling, SQL, file paths, secrets | `references/security.md` |
-| Test quality | new or changed tests, or behavior changes without tests | `references/test-quality.md` |
+| Fail loud | エラーハンドリング、外部呼び出し、パース、非同期処理 | `references/fail-loud.md` |
+| Consistency | 書き込み、トランザクション、マイグレーション、派生データ | `references/consistency.md` |
+| Concurrency | goroutine、チャネル、共有状態、キャッシュ | `references/concurrency.md` |
+| Performance | クエリ、一覧エンドポイント、データを回すループ、UI のフェッチ | `references/performance.md` |
+| Resources | バッファ、キャッシュ、プール、goroutine のライフサイクル、長時間処理 | `references/resources.md` |
+| Security | 認証・認可、入力処理、SQL、ファイルパス、シークレット | `references/security.md` |
+| Test quality | 新規/変更されたテスト、またはテストなしの挙動変更 | `references/test-quality.md` |
 
-Default to the 2–3 lenses the diff most obviously touches. Run every lens only
-when explicitly asked for an exhaustive pass.
+デフォルトでは、差分が最も明らかに触れている 2〜3 個のレンズに絞る。
+全レンズを走らせるのは、網羅的なパスを明示的に求められたときだけ。
 
-## Shared Rules (apply to every lens)
+## 共通ルール(すべてのレンズに適用)
 
-Output:
+出力:
 
-- Findings as Critical / Warning / Suggestion, each with `filepath:line`,
-  the concrete failure (inputs/state → wrong outcome), and the fix.
-- If a lens finds nothing, say so in one line. Never pad.
-- Issues outside the chosen lenses go to a normal review pass — note them in
-  one line, do not expand.
+- 指摘は Critical / Warning / Suggestion に分類し、それぞれに `filepath:line`、
+  具体的な故障(入力/状態 → 誤った結果)、修正方法を付ける。
+- レンズが何も見つけなければ、1 行でそう言う。水増しは決してしない。
+- 選んだレンズの外の問題は通常のレビューパスに回す — 1 行でメモするに
+  とどめ、深掘りしない。
 
-Suppressing false positives:
+偽陽性の抑制:
 
-- Each reference has a "do not flag" list; respect it.
-- Uncertain findings are Suggestions with what to measure or test, never
-  Criticals on speculation.
-- Do not report style nits that gofmt, go vet, or ESLint would catch.
+- 各リファレンスには「do not flag」リストがある。それを尊重する。
+- 確信のない指摘は、何を測定・テストすべきかを添えた Suggestion にする。
+  憶測で Critical にしない。
+- gofmt、go vet、ESLint が捕まえるスタイルの細かい指摘は報告しない。
 
-## Repo Grounding
+## リポジトリへの接地
 
-Concrete patterns in the references assume this repo's stack: Go
-(`backend-go/`, net/http + sqlc + pgx) and React/TypeScript (`frontend/`,
-SWR + axios). The principles are stack-agnostic; update the patterns if the
-stack changes.
+リファレンス内の具体的なパターンはこのリポジトリのスタックを前提とする: Go
+(`backend-go/`、net/http + sqlc + pgx)と React/TypeScript(`frontend/`、
+SWR + axios)。原則はスタック非依存。スタックが変わったらパターンを更新すること。

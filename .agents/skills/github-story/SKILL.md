@@ -1,6 +1,6 @@
 ---
 name: github-story
-description: Create a GitHub issue as a user story with PRD-lite structure — requirements, spec, acceptance criteria, and definition of done. Use when the user wants to file a story, plan a feature as an issue, or turn a discussion into a ticket.
+description: GitHub issue を PRD-lite 構造のユーザーストーリー(要件、仕様、受け入れ条件、完了の定義)として作成する。ユーザーがストーリーを起票したい、機能を issue として計画したい、議論をチケットにしたいときに使う。
 allowed-tools: [Read, Grep, Glob, Bash(git log:*), Bash(gh issue:*), Bash(gh label:*)]
 version: 1.0.0
 author: Hamburger Evaluation Agents
@@ -13,31 +13,30 @@ metadata:
 
 # GitHub Story
 
-## Overview
+## 概要
 
-Turn a feature idea into a GitHub issue that works as a contract: the
-orchestrator's Frame step consumes the acceptance criteria directly, and the
-definition of done maps onto this repo's pipeline. A story issue is the
-upstream artifact of the whole harness.
+機能のアイデアを、契約として機能する GitHub issue に変える: オーケストレーターの
+Frame ステップは受け入れ条件を直接取り込み、完了の定義はこのリポジトリの
+パイプラインにマップされる。ストーリー issue はハーネス全体の上流成果物である。
 
-## Procedure
+## 手順
 
-1. **Elicit** — before writing, resolve with the user (ask only what changes
-   the story):
-   - Who is the user of this change, and what can they do after it?
-   - What is explicitly OUT of scope?
-   - Error/edge behavior: what happens when it fails?
-   - Any API/schema impact? (drives spec section and sizing)
-2. **Draft** — fill the template below. Show the draft to the user before
-   creating anything.
-3. **Split check** — if the story needs more than roughly 3 implementer
-   tasks or touches backend and frontend with independent value, propose
-   splitting into multiple stories linked from a parent.
-4. **Create** — `gh issue create --title "<title>" --body-file <draft>` with
-   labels: `story` plus area labels (`backend-go`, `frontend`). Report the
-   issue URL.
+1. **引き出す** — 書き始める前に、ユーザーと以下を確定する(ストーリーを
+   変えることだけを聞く):
+   - この変更のユーザーは誰で、変更後に何ができるようになるのか?
+   - 明示的にスコープ外なのは何か?
+   - エラー/エッジの挙動: 失敗したら何が起きるのか?
+   - API/スキーマへの影響はあるか?(仕様セクションとサイジングを左右する)
+2. **下書き** — 下のテンプレートを埋める。何かを作成する前に下書きを
+   ユーザーに見せる。
+3. **分割チェック** — ストーリーがおよそ 3 個を超える実装タスクを要する、
+   またはバックエンドとフロントエンドに独立した価値を持って触れる場合、
+   親からリンクされた複数ストーリーへの分割を提案する。
+4. **作成** — `gh issue create --title "<title>" --body-file <draft>` に
+   ラベルを付ける: `story` + エリアラベル(`backend-go`、`frontend`)。
+   issue の URL を報告する。
 
-## Story Template
+## ストーリーテンプレート
 
 ```markdown
 ## 背景 / 課題          ← why this matters, in the user's world
@@ -55,16 +54,15 @@ upstream artifact of the whole harness.
 ## 依存 / リスク         ← other stories, migrations, external services
 ```
 
-## Acceptance Criteria Rules
+## 受け入れ条件のルール
 
-- Each criterion is observable from outside (API response, UI state) — never
-  "code is clean" or "implemented correctly".
-- Error paths are first-class: a story with only happy-path criteria is
-  incomplete.
-- If a criterion can't be phrased as a test, it belongs in 未解決の問い, not
-  in 受け入れ条件.
+- 各条件は外部から観測可能であること(API レスポンス、UI の状態)—
+  「コードがきれい」「正しく実装されている」は不可。
+- エラーパスは第一級市民: ハッピーパスの条件しかないストーリーは不完全。
+- テストとして表現できない条件は、受け入れ条件ではなく 未解決の問い に
+  属する。
 
-## Standard DoD (adapt, don't skip)
+## 標準 DoD(調整はしても省略はしない)
 
 - [ ] 受け入れ条件それぞれに対応するテストが存在し green
 - [ ] backend-go: go-checks.sh 通過 / frontend: type-check + lint + test 通過
@@ -72,9 +70,9 @@ upstream artifact of the whole harness.
 - [ ] Draft PR → ready → merge 済み(PR に `Closes #<issue>`)
 - [ ] ドキュメント更新(API 一覧・CLAUDE.md 等、該当時)
 
-## Handoff
+## 引き継ぎ
 
-When implementation starts, the orchestrator reads the issue
-(`gh issue view <n>`), uses 受け入れ条件 as acceptance criteria in its task
-specs, and puts `Closes #<n>` in the draft PR body. 未解決の問い must be
-empty or explicitly deferred before implementation begins.
+実装が始まるとき、オーケストレーターは issue を読み(`gh issue view <n>`)、
+受け入れ条件をタスク仕様の acceptance criteria として使い、draft PR の
+本文に `Closes #<n>` を入れる。実装開始前に 未解決の問い は空か、明示的に
+先送りされていなければならない。

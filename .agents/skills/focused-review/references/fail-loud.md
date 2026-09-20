@@ -1,34 +1,34 @@
 # Lens: Fail Loud
 
-An operation that cannot do its job must say so — to the caller, the user, or
-the logs with enough context to act. A silent wrong answer is worse than a
-loud crash.
+仕事を果たせなかった操作は、そのことを言わなければならない — 呼び出し元、
+ユーザー、あるいは対処可能なコンテキスト付きでログに。静かな誤答は
+騒がしいクラッシュより悪い。
 
-## Hunt (by severity)
+## 探すもの(重大度順)
 
-1. **Swallowed errors** — Go: `_ = doThing()`, `val, _ := parse(x)`,
-   `if err != nil { log.Println(err) }` then continuing on the success path,
-   blank `recover()`. TS: empty `catch {}`, `.catch(() => {})`,
-   `catch (e) { console.log(e) }` with execution continuing.
-2. **Masking defaults** — failure converted to a plausible value: `0`, `""`,
-   `[]`, `nil` returned on error; `?? fallback` hiding a failed fetch; parse
-   failure treated as "no data".
-3. **Degraded 200s** — handler responds success with partial/empty data after
-   a dependency failed.
-4. **Lost context** — Go: `errors.New` where `fmt.Errorf("...: %w", err)`
-   belongs; rethrow that discards the original error.
-5. **Fire-and-forget async** — un-awaited promises; goroutines whose error
-   nobody reads; background work with no failure path.
-6. **Catch-all too low** — broad recovery at a low layer so callers never
-   learn something failed.
+1. **握りつぶされたエラー** — Go: `_ = doThing()`、`val, _ := parse(x)`、
+   `if err != nil { log.Println(err) }` の後に成功パスを続行、
+   空の `recover()`。TS: 空の `catch {}`、`.catch(() => {})`、
+   `catch (e) { console.log(e) }` の後に実行を続行。
+2. **失敗を隠すデフォルト値** — 失敗がもっともらしい値に変換される: エラー時に
+   `0`、`""`、`[]`、`nil` を返す。フェッチ失敗を隠す `?? fallback`。パース
+   失敗を「データなし」として扱う。
+3. **劣化した 200** — 依存先が失敗した後に、部分的/空のデータで成功を
+   返すハンドラ。
+4. **失われるコンテキスト** — Go: `fmt.Errorf("...: %w", err)` にすべき所の
+   `errors.New`。元のエラーを捨てて投げ直す rethrow。
+5. **投げっぱなしの非同期** — await されない promise。エラーを誰も読まない
+   goroutine。失敗パスのないバックグラウンド処理。
+6. **低すぎる層での catch-all** — 低い層での広すぎるリカバリにより、
+   呼び出し元が失敗を知る術を失う。
 
-## Do Not Flag
+## 指摘しないもの
 
-- Documented best-effort work (cache warm, metrics, logging).
-- Cleanup-path errors (`defer f.Close()` on a read-only file).
-- A default that is specified behavior, stated in a comment or test.
+- 文書化されたベストエフォートな処理(キャッシュのウォーム、メトリクス、ロギング)。
+- クリーンアップパスのエラー(読み取り専用ファイルへの `defer f.Close()`)。
+- コメントやテストで仕様として明記されたデフォルト値。
 
-## Grep Starters
+## Grep の起点
 
 ```bash
 grep -rn ', _ :=\|_ = ' backend-go/internal/ --include='*.go'

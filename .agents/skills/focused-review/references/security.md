@@ -1,39 +1,42 @@
 # Lens: Security
 
-Assume every request is hostile and every identifier is someone else's. The
-question per endpoint is: who can call this, with what data, and what can they
-reach that isn't theirs?
+すべてのリクエストは敵意を持ち、すべての識別子は他人のものだと仮定する。
+エンドポイントごとの問いはこれ: 誰が、どんなデータで呼べて、自分のものでは
+ない何に届くのか?
 
-## Hunt
+## 探すもの
 
-1. **Missing/wrong authorization** — new endpoint without an authz check;
-   IDOR: acting on `params.id` without verifying ownership; authz decided
-   from client-supplied fields (e.g. an `admin` flag in the body).
-2. **Injection** — SQL built by string concatenation/`fmt.Sprintf` instead of
-   sqlc parameters; user input in shell commands or file paths
-   (`filepath.Clean` + base-dir check for anything path-like).
-3. **Input trust at the boundary** — handlers passing unvalidated input
-   inward; missing length/range checks on user-scaled fields; mass
-   assignment: decoding request JSON straight into a persistence struct so
-   extra fields (role, status) sneak through.
-4. **JWT pitfalls** — algorithm not pinned on verify; missing expiry check;
-   secrets from code instead of env; tokens or credentials written to logs.
-5. **Secrets and PII in output** — error responses echoing internals (SQL,
-   paths, stack traces); serializers exposing fields the endpoint shouldn't
-   (email, password hash) — check what the response struct includes, not what
-   the client renders.
-6. **Frontend** — user content into `dangerouslySetInnerHTML`; tokens in URLs;
-   auth state trusted for authorization (UI hiding is not access control).
+1. **認可の欠落/誤り** — authz チェックのない新規エンドポイント。
+   IDOR: 所有権を検証せずに `params.id` に対して操作する。クライアントが
+   送ってきたフィールド(例: ボディ内の `admin` フラグ)で authz を決める。
+2. **インジェクション** — sqlc のパラメータではなく文字列連結や
+   `fmt.Sprintf` で組み立てた SQL。シェルコマンドやファイルパスへの
+   ユーザー入力(パスらしきものには `filepath.Clean` + ベースディレクトリ
+   チェック)。
+3. **境界での入力の信用** — 未検証の入力を内側へ渡すハンドラ。ユーザー起因で
+   スケールするフィールドの長さ/範囲チェックの欠落。マスアサインメント:
+   リクエスト JSON を永続化用 struct に直接デコードし、余分なフィールド
+   (role、status)がすり抜ける。
+4. **JWT の落とし穴** — 検証時にアルゴリズムを固定しない。有効期限チェックの
+   欠落。env ではなくコードからのシークレット。トークンや資格情報を
+   ログに書く。
+5. **出力へのシークレットと PII** — 内部情報(SQL、パス、スタックトレース)を
+   エコーするエラーレスポンス。エンドポイントが公開すべきでない
+   フィールド(email、パスワードハッシュ)を露出するシリアライザ —
+   クライアントが描画するものではなく、レスポンス struct が含むものを
+   確認する。
+6. **フロントエンド** — ユーザーコンテンツを `dangerouslySetInnerHTML` へ。
+   URL 内のトークン。認可のために auth state を信用する(UI で隠すのは
+   アクセス制御ではない)。
 
-## Do Not Flag
+## 指摘しないもの
 
-- Internal tooling explicitly out of the request path.
-- Defense-in-depth suggestions on already-safe code — Suggestion, not
-  Critical.
-- Missing rate-limiting/CSRF where the platform layer handles it — verify
-  before flagging.
+- リクエストパスの外にあると明示された内部ツール。
+- すでに安全なコードへの多層防御の提案 — Critical ではなく Suggestion。
+- プラットフォーム層が担う場所でのレートリミット/CSRF の欠如 — 指摘する前に
+  確認する。
 
-## Grep Starters
+## Grep の起点
 
 ```bash
 grep -rn 'Sprintf.*SELECT\|Sprintf.*INSERT\|Sprintf.*UPDATE\|Sprintf.*DELETE' backend-go/

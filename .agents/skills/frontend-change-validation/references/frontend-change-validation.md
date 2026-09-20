@@ -1,18 +1,18 @@
-# Frontend Change Validation Reference
+# Frontend Change Validation リファレンス
 
-## Boundary Review
+## 境界レビュー
 
-Check changed frontend files for these repo-specific rules:
+変更されたフロントエンドファイルを、このリポジトリ固有のルールで確認する:
 
-1. Feature behavior should stay under the relevant domain.
-2. HTTP and casing conversion should stay at the API boundary.
-3. Backend JSON is snake_case; frontend state and props are camelCase.
-4. Auth token behavior uses localStorage, Jotai state, and axios Bearer injection.
-5. Shared UI should not be duplicated across domains.
+1. フィーチャーの挙動は該当ドメインの配下にとどめる。
+2. HTTP とケーシング変換は API 境界にとどめる。
+3. バックエンドの JSON は snake_case、フロントエンドの state と props は camelCase。
+4. 認証トークンの挙動は localStorage、Jotai の state、axios の Bearer 注入を使う。
+5. 共有 UI をドメイン間で重複させない。
 
-## Checks
+## チェック
 
-Run from `frontend/`:
+`frontend/` から実行する:
 
 ```bash
 pnpm run type-check
@@ -20,7 +20,7 @@ pnpm run lint
 pnpm run test
 ```
 
-Run build when routing, Vite config, TypeScript config, or API boundary changed:
+ルーティング、Vite 設定、TypeScript 設定、API 境界が変わった場合はビルドを実行する:
 
 ```bash
 pnpm run build

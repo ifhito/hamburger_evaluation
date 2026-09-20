@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: Review uncommitted changes with the reviewer agent, auto-fix Critical/Warning findings with the implementer agent, and re-review until clean. Use before committing or when the user asks to "review and fix".
+description: 未コミットの変更を reviewer エージェントでレビューし、Critical/Warning の指摘を implementer エージェントで自動修正し、クリーンになるまで再レビューする。コミット前や、ユーザーが「レビューして直して」と頼んだときに使う。
 version: 1.0.0
 author: Hamburger Evaluation Agents
 license: MIT
@@ -12,51 +12,52 @@ metadata:
 
 # Review Fix Loop
 
-## Overview
+## 概要
 
-Automates the review → fix → re-review cycle over the current working tree
-using the repo's `reviewer` and `implementer` agents. The loop stops when a
-round produces no Critical/Warning findings, or after 3 rounds.
+このリポジトリの `reviewer`/`implementer` エージェントを使って、現在の
+ワーキングツリーに対するレビュー → 修正 → 再レビューのサイクルを自動化する。
+ループは、Critical/Warning の指摘が出ないラウンドが来たとき、または
+3 ラウンド経過で止まる。
 
-## How to Run
+## 実行方法
 
-Invoke the saved workflow (this skill is your authorization to call it):
+保存済みワークフローを起動する(このスキルがその呼び出しの認可となる):
 
-- `Workflow` tool with `name: "review-fix"`.
-- Pass any user-requested focus area as `args` (a plain string), e.g.
-  `args: "authorization checks in the reviews endpoints"`. To focus on one
-  lens from the [[focused-review]] skill, name it, e.g.
-  `args: "apply the focused-review consistency lens"`.
+- `Workflow` ツールに `name: "review-fix"` を指定する。
+- ユーザーが指定したフォーカスエリアがあれば `args`(プレーンな文字列)で
+  渡す。例: `args: "authorization checks in the reviews endpoints"`。
+  [[focused-review]] スキルの特定のレンズに絞る場合はその名前を挙げる。例:
+  `args: "apply the focused-review consistency lens"`。
 
-Do not re-implement the loop manually with the Agent tool; the workflow is the
-single source of truth for round limits and finding schema.
+Agent ツールでループを手動再実装しないこと。ラウンド上限と指摘スキーマの
+単一の source of truth はワークフローである。
 
-## After the Workflow Returns
+## ワークフローが返った後
 
-Report in Japanese. The user sees ONLY what needs their judgment:
+日本語で報告する。ユーザーに見せるのは、ユーザーの判断が必要なものだけ:
 
-1. **Present `userDecisions` first**, ordered P1 → P2 → P3, each as one
-   decision question with options, a recommendation, and impact. At most 5
-   up front; overflow in an appendix. P1 items block the work.
-2. **Auto-fixed findings**: one summary line per round (count + what kind).
-   Do not ask the user to re-approve them.
-3. **`discarded` (false positives)**: one line noting the count; evidence
-   stays available on request. Never present them as questions.
-4. `status: "converged"` — the round had no confirmed Critical, so fixes
-   were applied and the loop ended without another review round (by design;
-   do not restart it). `status: "no-auto-fixable"` means everything left
-   needs the user — say so plainly. `status: "max-rounds-reached"` — list
-   still-open items and stop; do not keep looping on your own.
-5. Remind that full validation still runs via the stop sensors
-   (`python3 .claude/hooks/stop-sensors.py`) — the loop only runs cheap
-   targeted checks.
+1. **まず `userDecisions` を提示する**。P1 → P2 → P3 の順で、それぞれを
+   選択肢・推奨・影響を添えた 1 つの判断質問として示す。冒頭は最大 5 件、
+   あふれた分は付録へ。P1 は作業をブロックする。
+2. **自動修正された指摘**: ラウンドごとに 1 行のサマリ(件数 + 種類)。
+   ユーザーに再承認を求めない。
+3. **`discarded`(偽陽性)**: 件数を 1 行で記す。エビデンスは求めに応じて
+   提示できる。決して質問として提示しない。
+4. `status: "converged"` — そのラウンドに確定した Critical がなかったため、
+   修正を適用してループはもう一度のレビューラウンドなしに終了した
+   (設計どおり。再開しないこと)。`status: "no-auto-fixable"` は残りが
+   すべてユーザー待ちという意味 — 率直にそう言う。
+   `status: "max-rounds-reached"` — 未解決項目を列挙して止まる。自分で
+   ループを続けないこと。
+5. 完全な検証は stop sensors(`python3 .claude/hooks/stop-sensors.py`)で
+   引き続き実行されることを念押しする — このループは安価で絞った
+   チェックしか走らせない。
 
-## Guardrails
+## ガードレール
 
-- The loop never stages, commits, or pushes; that stays with the main session
-  and the `pr-hygiene` skill.
-- Suggestions are intentionally not auto-fixed — auto-applying opinions is how
-  scope creep starts. Surface them instead.
-- If the same finding survives two rounds, treat it as a disagreement between
-  reviewer and implementer and escalate to the user rather than burning the
-  last round.
+- このループは決してステージ・コミット・プッシュしない。それはメイン
+  セッションと `pr-hygiene` スキルの領分。
+- Suggestion は意図的に自動修正しない — 意見の自動適用はスコープクリープの
+  始まり。代わりに提示する。
+- 同じ指摘が 2 ラウンド生き残ったら、reviewer と implementer の見解の相違と
+  みなし、最後のラウンドを浪費せずユーザーにエスカレーションする。

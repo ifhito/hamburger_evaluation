@@ -1,6 +1,6 @@
 ---
 name: backend-go-boundaries
-description: Use when changing the Go API under backend-go/ — handlers, usecases, domain, repositories, sqlc queries, or Go tests in hamburger_evaluation.
+description: hamburger_evaluation の backend-go/ 配下の Go API(ハンドラ、ユースケース、ドメイン、リポジトリ、sqlc クエリ、Go テスト)を変更するときに使う。
 version: 1.0.0
 author: Hamburger Evaluation Agents
 license: MIT
@@ -12,13 +12,13 @@ metadata:
 
 # Backend Go Boundaries
 
-## Overview
+## 概要
 
-Use this skill for changes under `backend-go/`. The Go API serves the React
-SPA in `frontend/` and follows clean architecture. Stack: Go 1.22+ standard
-`net/http` routing + `sqlc` + PostgreSQL 16. No web framework, no ORM.
+`backend-go/` 配下の変更にはこのスキルを使う。この Go API は `frontend/` の
+React SPA にサービスを提供し、クリーンアーキテクチャに従う。スタック: Go 1.22+ の
+標準 `net/http` ルーティング + `sqlc` + PostgreSQL 16。Web フレームワークも ORM も使わない。
 
-## Layout and Dependency Rule
+## レイアウトと依存関係のルール
 
 ```text
 backend-go/
@@ -38,85 +38,85 @@ backend-go/
 └── go.mod
 ```
 
-Dependencies point inward only: `handler → usecase → domain`.
+依存は内側にのみ向く: `handler → usecase → domain`。
 
-## Domain–DB Separation
+## ドメインと DB の分離
 
-**Domain design and DB design are separate activities and must not mirror
-each other.** The schema serves data integrity and query shape; the domain
-serves behavior and invariants; `adapter/repository` owns the mapping
-between them.
+**ドメイン設計と DB 設計は別の活動であり、互いを鏡写しにしてはならない。**
+スキーマはデータ整合性とクエリの形に奉仕し、ドメインは振る舞いと不変条件に
+奉仕する。両者のマッピングは `adapter/repository` が担う。
 
-- Domain types never copy table row shapes; they are designed from behavior
-  (value objects, state transitions), not from columns.
-- sqlc row structs and `pgtype`/`sql` types never leave `adapter/`.
-- A schema change must not mechanically force a domain change, nor vice
-  versa — divergence between the two shapes is expected and healthy.
-- Schema work follows the `db-design` skill.
+- ドメイン型はテーブル行の形をコピーしない。カラムからではなく、振る舞い
+  (値オブジェクト、状態遷移)から設計する。
+- sqlc の行構造体や `pgtype`/`sql` 型を `adapter/` の外に出さない。
+- スキーマ変更が機械的にドメイン変更を強制してはならず、その逆も同様 —
+  両者の形が乖離するのは想定内であり、健全なこと。
+- スキーマ作業は `db-design` スキルに従う。
 
-- `domain` imports stdlib only. No `net/http`, no `database/sql`, no `pgx`,
-  no imports from `usecase`/`adapter`.
-- `usecase` imports `domain` and stdlib only. Repository interfaces are
-  declared in `usecase` (consumer side, Go convention), implemented in
-  `adapter/repository`.
-- `handler` decodes/validates requests, calls a usecase, encodes responses,
-  and maps domain errors to HTTP status. No SQL, no business rules.
-- `adapter/repository` is the only layer that touches sqlc/pgx. Queries live
-  in `db/queries/*.sql`; regenerate with `sqlc generate`, commit the result.
+- `domain` は stdlib のみを import する。`net/http` も `database/sql` も
+  `pgx` も、`usecase`/`adapter` からの import も禁止。
+- `usecase` は `domain` と stdlib のみを import する。リポジトリのインターフェースは
+  `usecase` 側で宣言し(利用側で宣言する Go の慣習)、`adapter/repository`
+  が実装する。
+- `handler` はリクエストのデコード/バリデーション、ユースケース呼び出し、
+  レスポンスのエンコード、ドメインエラーから HTTP ステータスへのマッピングを行う。
+  SQL もビジネスルールも書かない。
+- `adapter/repository` は sqlc/pgx に触れる唯一の層。クエリは
+  `db/queries/*.sql` に置き、`sqlc generate` で再生成して結果をコミットする。
 
-## API Contract Rules
+## API 契約のルール
 
-- JSON is snake_case; the frontend converts casing at its HTTP boundary.
-  The TypeScript types under `frontend/src/domains/*/api/types.ts` are the
-  source of truth for response shapes — keep them in sync field-for-field.
-- Auth is a custom JWT Bearer scheme (`Authorization: Bearer <token>`).
-- Errors use `{"error": "..."}` (single) or `{"errors": [...]}` (validation)
-  with conventional status codes (401/403/404/422).
-- Authorization rules live in `domain`/`usecase` (e.g. review editable only by
-  its author, shop moderation admin-only), not in handlers.
+- JSON は snake_case。ケーシング変換はフロントエンドの HTTP 境界で行う。
+  `frontend/src/domains/*/api/types.ts` 配下の TypeScript 型が
+  レスポンス形状の source of truth — フィールド単位で同期を保つこと。
+- 認証はカスタム JWT Bearer 方式(`Authorization: Bearer <token>`)。
+- エラーは `{"error": "..."}`(単一)または `{"errors": [...]}`(バリデーション)で、
+  慣例的なステータスコード(401/403/404/422)を使う。
+- 認可ルール(例: レビューは作者のみ編集可、ショップのモデレーションは管理者のみ)は
+  `domain`/`usecase` に置き、ハンドラには置かない。
 
-## Runtime Resource Guardrails
+## 実行時リソースのガードレール
 
-Memory/CPU problems are configuration debt; these are defaults, not
-optimizations:
+メモリ/CPU の問題は設定の負債である。以下は最適化ではなくデフォルト:
 
-- `http.Server` always sets `ReadHeaderTimeout`, `ReadTimeout`,
-  `WriteTimeout`, and `IdleTimeout`. Never bare `http.ListenAndServe` —
-  slow clients pile up goroutines forever without timeouts.
-- Request bodies are capped with `http.MaxBytesReader` (default 1 MiB)
-  before decoding.
-- Every DB/outbound call takes the request `ctx`; long operations get an
-  explicit `context.WithTimeout`.
-- One `pgxpool` created in `main`, with explicit `MaxConns` sized against
-  Postgres `max_connections` — never a pool or connection per request.
-- Graceful shutdown via `server.Shutdown(ctx)` on SIGTERM, then close the
-  pool, so deploys don't drop in-flight requests or leak connections.
-- List endpoints paginate by default (`LIMIT` + offset/cursor); "return
-  everything" is a decision, not a default.
-- Containers declare memory limits, and the process respects them
-  (`GOMEMLIMIT`, and `GOMAXPROCS` matching the CPU quota).
+- `http.Server` は必ず `ReadHeaderTimeout`、`ReadTimeout`、
+  `WriteTimeout`、`IdleTimeout` を設定する。素の `http.ListenAndServe` は禁止 —
+  タイムアウトがないと遅いクライアントが goroutine を際限なく積み上げる。
+- リクエストボディはデコード前に `http.MaxBytesReader`(デフォルト 1 MiB)で
+  上限を設ける。
+- すべての DB/外部呼び出しはリクエストの `ctx` を受け取る。長時間の処理には
+  明示的な `context.WithTimeout` を設定する。
+- `pgxpool` は `main` で 1 つだけ作り、Postgres の `max_connections` に対して
+  適切な `MaxConns` を明示する — リクエストごとのプールやコネクションは禁止。
+- SIGTERM で `server.Shutdown(ctx)` によるグレースフルシャットダウンを行い、
+  その後プールを閉じる。デプロイで処理中のリクエストを落としたり
+  コネクションをリークさせたりしないため。
+- 一覧系エンドポイントはデフォルトでページネーションする(`LIMIT` +
+  offset/cursor)。「全件返す」は意思決定であって、デフォルトではない。
+- コンテナはメモリ上限を宣言し、プロセスはそれを尊重する
+  (`GOMEMLIMIT`、および CPU クォータに合わせた `GOMAXPROCS`)。
 
-## Testing
+## テスト
 
-- Table-driven tests throughout.
-- `usecase`: unit tests with hand-written fake repositories (small structs in
-  the test file — no mock framework).
-- `handler`: `net/http/httptest` against the router with a fake usecase.
-- `adapter/repository`: integration tests against real PostgreSQL via
-  `docker compose` — skip with `testing.Short()`.
+- 全体をテーブル駆動テストで書く。
+- `usecase`: 手書きのフェイクリポジトリ(テストファイル内の小さな構造体 —
+  モックフレームワークは使わない)によるユニットテスト。
+- `handler`: フェイクのユースケースを使い、ルーターに対して `net/http/httptest` でテスト。
+- `adapter/repository`: `docker compose` で実際の PostgreSQL に対する
+  統合テスト — `testing.Short()` でスキップ可能にする。
 
-## Common Pitfalls
+## よくある落とし穴
 
-1. Editing files under `sqlcgen/` by hand instead of changing `db/queries/`.
-2. Leaking `pgx`/`sql` types or sqlc row structs above the repository layer —
-   map them to domain types at the repository boundary.
-3. Business rules drifting into handlers because "it's just one if".
-4. Response field names diverging from the frontend API types (breaks the SPA).
-5. Introducing a router/DI framework — stdlib is a decision, not an accident.
+1. `db/queries/` を変更する代わりに `sqlcgen/` 配下のファイルを手で編集してしまう。
+2. `pgx`/`sql` 型や sqlc の行構造体をリポジトリ層より上にリークさせる —
+   リポジトリ境界でドメイン型へマッピングすること。
+3. 「if 一つだけだから」とビジネスルールがハンドラに流れ込む。
+4. レスポンスのフィールド名がフロントエンドの API 型から乖離する(SPA が壊れる)。
+5. ルーターや DI フレームワークを導入する — stdlib の採用は偶然ではなく意思決定。
 
-## Verification Checklist
+## 検証チェックリスト
 
-- [ ] `domain` and `usecase` have no outward imports (adapter/infra/pgx/net-http).
-- [ ] sqlc output regenerated and committed if `db/queries/` changed.
-- [ ] Response JSON verified against the frontend API types for changed endpoints.
-- [ ] Checks in [[backend-go-change-validation]] pass.
+- [ ] `domain` と `usecase` に外向きの import(adapter/infra/pgx/net-http)がない。
+- [ ] `db/queries/` を変更した場合、sqlc の出力を再生成しコミットした。
+- [ ] 変更したエンドポイントについて、レスポンス JSON をフロントエンドの API 型と突き合わせた。
+- [ ] [[backend-go-change-validation]] のチェックが通る。

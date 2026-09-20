@@ -1,38 +1,36 @@
 # Lens: Test Quality
 
-A test earns its keep by failing when the behavior breaks. Review tests by
-asking: "what bug would this catch?" — a test with no answer is weight, not
-safety.
+テストは、挙動が壊れたときに落ちることで存在価値を得る。テストのレビューは
+「このテストはどんなバグを捕まえるか?」と問うこと — 答えのないテストは
+安全ではなく重りである。
 
-## Hunt
+## 探すもの
 
-1. **Tests that can't fail** — no assertion; asserting the value just
-   constructed; conditions that are tautologically true; Go: forgetting
-   `t.Errorf` in a table loop branch.
-2. **Mocking the unit under test** — the fake implements the very logic being
-   tested, so the test verifies the fake.
-3. **Implementation-coupled tests** — asserting internal call order or
-   private state instead of observable behavior; these break on refactors and
-   pass on bugs.
-4. **Missing failure paths** — only the happy path tested: no not-found, no
-   unauthorized, no validation-error, no empty-input case for changed
-   behavior.
-5. **Missing boundary rows** — table tests without empty/nil/zero/limit
-   cases where the code branches on them.
-6. **Flakiness sources** — sleeps instead of synchronization; time.Now or
-   randomness without injection; order-dependent tests sharing mutable
-   fixtures or DB rows.
-7. **Behavior changed, tests untouched** — a diff that changes logic while
-   every existing test passes unmodified deserves suspicion: either coverage
-   was missing or the change is untested.
+1. **落ちようがないテスト** — アサーションがない。作ったばかりの値を
+   アサートしている。トートロジー的に真になる条件。Go: テーブルループの
+   分岐で `t.Errorf` を忘れる。
+2. **テスト対象そのもののモック** — フェイクがテスト対象のロジックそのものを
+   実装しており、テストがフェイクを検証している。
+3. **実装に密結合したテスト** — 観測可能な挙動ではなく内部の呼び出し順や
+   private な状態をアサートする。リファクタで壊れ、バグでは通る。
+4. **失敗パスの欠落** — ハッピーパスだけのテスト: 変更された挙動に対する
+   not-found なし、unauthorized なし、validation-error なし、空入力
+   ケースなし。
+5. **境界ケースの行の欠落** — コードが分岐しているのに empty/nil/zero/limit
+   ケースのないテーブルテスト。
+6. **フレーキーさの源** — 同期の代わりの sleep。注入なしの time.Now や
+   乱数。可変なフィクスチャや DB 行を共有する順序依存のテスト。
+7. **挙動が変わったのにテストが無傷** — ロジックを変える差分で既存テストが
+   一つも変更されずに全部通るのは疑わしい: カバレッジが欠けていたか、
+   変更がテストされていないかのどちらか。
 
-## Do Not Flag
+## 指摘しないもの
 
-- A single smoke test on trivial glue — minimal is fine, absent is not.
-- Table tests intentionally scoped to the changed branch.
-- Test helpers/fixtures with mild duplication — clarity beats DRY in tests.
+- 自明なグルーコードへの単一のスモークテスト — 最小限は良いが、皆無は駄目。
+- 変更した分岐に意図的にスコープを絞ったテーブルテスト。
+- 軽い重複のあるテストヘルパー/フィクスチャ — テストでは DRY より明快さが勝つ。
 
-## Grep Starters
+## Grep の起点
 
 ```bash
 grep -rn 'time.Sleep' backend-go/ --include='*_test.go'

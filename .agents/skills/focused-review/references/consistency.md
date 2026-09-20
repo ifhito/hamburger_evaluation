@@ -1,39 +1,38 @@
 # Lens: Consistency
 
-Every multi-step write must be atomic, every concurrent write safe, and
-everything else out of the transaction. Ask of each write path: "what state
-remains if this dies halfway?" and "what if two of these run at once?"
+複数ステップの書き込みはすべてアトミックに、並行書き込みはすべて安全に、
+それ以外はすべてトランザクションの外に。各書き込みパスに問う: 「途中で
+死んだらどんな状態が残るか?」「同時に 2 つ走ったらどうなるか?」
 
-## Hunt
+## 探すもの
 
-1. **Missing atomicity** — related writes without a transaction (parent +
-   child, write + projection, delete + cleanup). Half committing is
-   corruption.
-2. **Read-modify-write races** — load, compute, save loses concurrent
-   updates. Prefer atomic SQL (`SET count = count + 1`), a `WHERE` guard on
-   expected state, or `SELECT ... FOR UPDATE` in the tx.
-3. **Foreign work inside the tx** — HTTP calls, file I/O, sleeps while
-   holding locks; a slow dependency becomes a database stall.
-4. **Rollback not guaranteed** — pgx `Begin` without `defer tx.Rollback(ctx)`
-   before `Commit`; early returns leaking an open tx.
-5. **Retry without idempotency** — retried operations that double-insert or
-   double-count; look for the unique constraint or upsert backing the retry.
-6. **Check-then-act uniqueness** — SELECT-then-INSERT instead of a unique
-   index + `ON CONFLICT`.
-7. **Stale projections** — derived data (counts, stats) updated outside the
-   tx that changed its sources, or recomputed from a stale snapshot.
-8. **Migration safety** — irreversible backfill+constraint in one step;
-   long migrations locking hot tables.
+1. **アトミック性の欠如** — トランザクションなしの関連書き込み(親 + 子、
+   書き込み + プロジェクション、削除 + クリーンアップ)。半分だけの
+   コミットは破損である。
+2. **read-modify-write の競合** — load、compute、save は並行更新を失う。
+   アトミックな SQL(`SET count = count + 1`)、期待状態への `WHERE` ガード、
+   または tx 内の `SELECT ... FOR UPDATE` を優先する。
+3. **tx 内の無関係な仕事** — ロック保持中の HTTP 呼び出し、ファイル I/O、
+   sleep。遅い依存先がデータベースのストールになる。
+4. **ロールバックが保証されない** — `Commit` の前に `defer tx.Rollback(ctx)`
+   のない pgx `Begin`。開いたままの tx をリークさせる early return。
+5. **冪等性のないリトライ** — リトライされると二重 INSERT や二重カウントに
+   なる操作。リトライを支える unique 制約か upsert を探す。
+6. **check-then-act の一意性** — unique インデックス + `ON CONFLICT` の
+   代わりに SELECT-then-INSERT。
+7. **古いプロジェクション** — 派生データ(カウント、統計)がソースを変更した
+   tx の外で更新される、あるいは古いスナップショットから再計算される。
+8. **マイグレーションの安全性** — バックフィル + 制約を不可逆な 1 ステップに
+   まとめる。ホットなテーブルをロックする長時間マイグレーション。
 
-## Do Not Flag
+## 指摘しないもの
 
-- Single-statement writes (already atomic).
-- Deliberately eventual projections with documented staleness and a rebuild
-  path.
-- Post-commit advisory work (notifications, cache invalidation) — that is the
-  correct place for it.
+- 単一ステートメントの書き込み(すでにアトミック)。
+- ステールさが文書化され再構築パスのある、意図的に結果整合な
+  プロジェクション。
+- コミット後の付随的な仕事(通知、キャッシュ無効化)— それが正しい置き場所。
 
-## Grep Starters
+## Grep の起点
 
 ```bash
 grep -rn 'Begin\|BeginTx' backend-go/internal/ --include='*.go'

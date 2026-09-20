@@ -1,6 +1,6 @@
 ---
 name: pr-template
-description: Use when creating or updating any pull request description in this repo. PR bodies are written in Japanese with a fixed section structure; evidence-backed test results are mandatory.
+description: このリポジトリでプルリクエストの説明を作成・更新するときに使う。PR 本文は固定のセクション構成で日本語で書く。実測に基づくテスト結果は必須。
 allowed-tools: [Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(gh pr:*)]
 version: 1.0.0
 author: Hamburger Evaluation Agents
@@ -13,7 +13,7 @@ metadata:
 
 # PR Template
 
-## Rules
+## ルール
 
 1. **PR タイトルと本文は日本語で書く**(コード識別子・コマンド・パスは原文のまま)。
 2. **概要は「やさしい説明」で書く**: 専門用語や内部用語を使わず、このプロジェクトを知らない人が読んでも「何ができるようになるのか / 何が変わるのか」が分かる言葉で 2〜4 行。技術的な詳細・実装の言葉は変更内容欄に書く。
@@ -25,7 +25,7 @@ metadata:
 6. 規模ゲートで「大」判定の PR は、レビュー観点欄に**推奨レビュー順**(どのファイルからどの順で読むか)を書く。
 7. 末尾の attribution(Generated with Claude Code / セッションリンク)はハーネスの規約どおり付与する。
 
-## Template
+## テンプレート
 
 ```markdown
 ## 概要
@@ -56,7 +56,7 @@ Closes #<番号>
 <!-- マイグレーション有無、先送り事項(P3等)、フォローアップ、既知の制約 -->
 ```
 
-## When Updating an Existing PR
+## 既存 PR を更新するとき
 
 - 追加コミットで内容が変わったら本文も追従させる(テスト欄に最新の実測を追記)。
 - レビュー往復で決まったこと(採用した修正方針・棄却理由)は備考に残す。
