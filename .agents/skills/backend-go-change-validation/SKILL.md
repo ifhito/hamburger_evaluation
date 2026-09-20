@@ -47,11 +47,12 @@ sqlc generate
 git diff --exit-code -- internal/adapter/repository/sqlcgen   # no drift
 ```
 
-リポジトリ実装を変更した場合は、データベースを起動して統合テストを実行する:
+リポジトリ実装を変更した場合は、データベースを起動して統合テストを実行する。
+`TEST_DATABASE_URL` を渡さないと、統合テストは黙ってスキップされる(検証したことにならない):
 
 ```bash
 cd backend-go
-docker compose run --rm api-go go test ./internal/adapter/repository/...
+docker compose run --rm -e JWT_SECRET=dummy -e TEST_DATABASE_URL='postgres://postgres:password@db:5432/postgres?sslmode=disable' api-go go test ./internal/adapter/repository/...
 ```
 
 ## 境界の抜き打ちチェック

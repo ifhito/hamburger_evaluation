@@ -2,63 +2,72 @@
 
 ## 技術スタック
 
-Ruby 3.3 / Rails 8 API と React 19 / TypeScript / Vite の SPA を PostgreSQL 16 で動かす monorepo。
+Go 1.22+ の API(標準 `net/http` + sqlc + pgx)と React 19 / TypeScript / Vite の SPA を PostgreSQL 16 で動かす monorepo。API のエンドポイント一覧とデータベーススキーマは `CLAUDE.md` を参照する。
 
 ## ビルドとテスト
 
 ```bash
 # インストール
-cd backend && docker compose build api
+cd backend-go && docker compose build api-go
 cd frontend && pnpm install --frozen-lockfile
 
-# 開発サーバー起動
-cd backend && docker compose up --build
+# 開発サーバー起動(API は JWT_SECRET が未設定だと起動時に落ちる。docker compose up の前に export する)
+cd backend-go && docker compose up --build
 cd frontend && pnpm run dev
 
 # テスト
-cd backend && docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
+.agents/skills/backend-go-change-validation/scripts/go-checks.sh   # gofmt / go vet / go build / go test(リポジトリのルートから)
 cd frontend && pnpm run test
 
 # 型チェック
 cd frontend && pnpm run type-check
 
 # lint
-cd backend && docker compose run --rm api bin/rubocop -f github
 cd frontend && pnpm run lint
 
 # フォーマット
-cd backend && docker compose run --rm api bin/rubocop -A
+cd backend-go && gofmt -w .
 cd frontend && pnpm exec eslint . --fix
+
+# sqlc の再生成(db/queries/ を変更したとき)
+cd backend-go && docker compose run --rm sqlc generate
 ```
 
 ## 規約
 
-- Backend は host Ruby ではなく Docker Compose 経由で検証する。
-  なぜ: ローカル Ruby 差異ではなく CI と同じ Rails/PostgreSQL 前提で判断するため。
+- Backend の DB を使うコマンド(起動、マイグレーション、sqlc、seed)は Docker Compose 経由で実行する。
+  なぜ: 開発用 DB と同じ PostgreSQL 16 の前提で判断するため。
 
-- 認証は `devise_token_auth` ではなく custom JWT Bearer token を使う。
+- DB の統合テストは、compose の `db` サービスを起動し `TEST_DATABASE_URL` を渡して実行する。
+  なぜ: `TEST_DATABASE_URL` がないとテストは黙ってスキップされ、検証したつもりになるため。
+
+- 認証は custom JWT Bearer token を使う。
   なぜ: 現行実装が login/signup のレスポンス token と axios interceptor を前提にしているため。
 
-- Rails domain code は ActiveRecord に直接依存させない。
-  なぜ: 評価ロジックや値オブジェクトを DB 永続化の詳細から分離するため。
+- Backend はクリーンアーキテクチャ(handler → usecase → domain)を守り、`domain` は標準ライブラリだけを import する。
+  なぜ: 評価ロジックや値オブジェクトを HTTP や DB 永続化の詳細から分離するため。
 
-- Controllers/jobs から直接 read/write の ActiveRecord 呼び出しを増やさない。
-  なぜ: read は query、write は repository、use case は service に寄せて境界を保つため。
+- usecase は、永続化を読むときは `*Query`、書くときは `*Repository` を通す。詳細は `.agents/skills/backend-go-boundaries` を参照する。
+  なぜ: 読み取りは query、書き込みは repository に分けて、usecase から永続化の詳細を切り離して境界を保つため。
 
-- Backend API は snake_case、frontend code は camelCase にする。
-  なぜ: Rails の自然な JSON 形と TypeScript 側の自然な状態形を HTTP 境界で変換するため。
+- sqlc の生成コード(`sqlcgen/`)は手で編集せず、`db/queries/` を変更して再生成する。
+  なぜ: SQL と生成コードの食い違いを防ぐため。
+
+- Backend API は snake_case、frontend code は camelCase にする。変換は HTTP 境界(`frontend/src/api/client/buildApiClient.ts`)で行う。
+  なぜ: Go API の自然な JSON 形と TypeScript 側の自然な状態形を HTTP 境界で変換するため。
 
 ## エージェントが終了前に必ず実行しなければならないプログラム的チェック
 
 1. `git status --short --branch --untracked-files=all` と `git diff --check`。
-2. Backend を変更した場合: `cd backend && docker compose run --rm -e RAILS_ENV=test api bundle exec rspec`。
-3. Backend を変更した場合: `cd backend && docker compose run --rm api bin/rubocop -f github` と `cd backend && docker compose run --rm api bin/brakeman --no-pager`。
-4. Frontend を変更した場合: `cd frontend && pnpm run type-check && pnpm run lint && pnpm run test`。
-5. Routing/build 設定または API 境界を変更した場合: `cd frontend && pnpm run build`。
+2. Backend を変更した場合: `.agents/skills/backend-go-change-validation/scripts/go-checks.sh`(リポジトリのルートから)。
+3. `backend-go/internal/adapter/repository/`・`backend-go/internal/adapter/query/`・`backend-go/db/` を変更した場合: DB の統合テストを、`TEST_DATABASE_URL` を渡して実行する(`cd backend-go && docker compose run --rm -e JWT_SECRET=dummy -e TEST_DATABASE_URL='postgres://postgres:password@db:5432/postgres?sslmode=disable' api-go go test -race -count=1 ./...`)。手順 2 の `go-checks.sh` は `TEST_DATABASE_URL` なしで走るため、これらのテストは黙ってスキップされる。
+4. `backend-go/db/queries/` を変更した場合: `cd backend-go && docker compose run --rm sqlc generate` を実行し、`internal/adapter/repository/sqlcgen` に差分が出ないこと。
+5. Frontend を変更した場合: `cd frontend && pnpm run type-check && pnpm run lint && pnpm run test`。
+6. Routing/build 設定または API 境界を変更した場合: `cd frontend && pnpm run build`。
 
 ## 対象外
 
-- `.env`, `.env.*`, `backend/.env*`, `frontend/.env*`, `secrets/**`, `backend/.kamal/secrets`, `backend/config/master.key` の読み書き。
+- `.env`, `.env.*`, `backend-go/.env*`, `frontend/.env*`, `secrets/**` の読み書き。
 - ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
 - 無関係なファイルの stage / commit / push。
 - `git push --force`, destructive reset, production deploy, secret rotation。
