@@ -6,34 +6,37 @@ import (
 	"image"
 )
 
-// exifHeader prefixes the TIFF stream inside a JPEG APP1 segment.
+// exifHeader は JPEG の APP1 セグメント内で TIFF ストリームの先頭に付く。
 var exifHeader = []byte("Exif\x00\x00")
 
 const (
 	orientationTag = 0x0112
 	tiffTypeShort  = 3
-	// maxSegmentScan caps how many JPEG segments jpegOrientation walks
-	// before giving up; EXIF APP1 sits at the front of any real file, so a
-	// sane bound also protects against pathological segment chains.
+	// maxSegmentScan は、jpegOrientation が諦めるまでにたどる JPEG
+	// セグメントの数の上限である。EXIF APP1 は実在するどのファイルでも
+	// 先頭にあるので、妥当な上限を置けば、病的なセグメント連鎖に対する
+	// 保護にもなる。
 	maxSegmentScan = 32
 )
 
-// jpegOrientation extracts the EXIF Orientation value (1-8) from raw JPEG
-// bytes. It is a deliberate best-effort parser: a photo with missing,
-// truncated, or otherwise malformed EXIF must still be accepted, so ANY
-// unexpected shape (no APP1, bad lengths, bogus offsets, out-of-range
-// value) returns 1 — "no correction" — and never an error or a panic. The
-// usual fail-loud rule does not apply here by design. All reads are
-// bounded by explicit length checks against the input slice.
+// jpegOrientation は、生の JPEG バイト列から EXIF Orientation の値（1-8）を
+// 取り出す。これは意図的な best-effort のパーサである。EXIF が欠けている、
+// 切り詰められている、あるいはその他の形で壊れている写真でも受け入れられ
+// なければならないので、いかなる想定外の形（APP1 がない、長さが不正、
+// オフセットがでたらめ、値が範囲外）でも 1（「補正なし」）を返し、error を
+// 返すことも panic することも決してない。通常の fail-loud のルールは、設計上、
+// ここには適用されない。すべての読み取りは、入力スライスに対する明示的な
+// 長さチェックによって範囲が制限されている。
 func jpegOrientation(data []byte) int {
-	// SOI marker (0xFFD8) starts every JPEG.
+	// SOI マーカー（0xFFD8）はすべての JPEG の先頭にある。
 	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
 		return 1
 	}
 	i := 2
 	for seg := 0; seg < maxSegmentScan; seg++ {
-		// 0xFF fill bytes may pad the stream before a marker; the marker
-		// byte is the first non-0xFF after a run of 0xFF bytes.
+		// マーカーの前に 0xFF のフィルバイトが詰められていることがある。
+		// マーカーバイトは、0xFF が連続した後の最初の 0xFF 以外のバイト
+		// である。
 		for i+1 < len(data) && data[i] == 0xFF && data[i+1] == 0xFF {
 			i++
 		}
@@ -41,13 +44,14 @@ func jpegOrientation(data []byte) int {
 			return 1
 		}
 		marker := data[i+1]
-		// Standalone markers (no length field): TEM, RSTn. Not expected
-		// before SOS, but skipping them keeps the walk honest.
+		// 単独のマーカー（長さフィールドなし）：TEM、RSTn。SOS より前には
+		// 現れないはずだが、読み飛ばしておくと走査が正しく保たれる。
 		if marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7) {
 			i += 2
 			continue
 		}
-		// SOS: entropy-coded image data begins, no APP1 was found.
+		// SOS：エントロピー符号化された画像データが始まり、APP1 は
+		// 見つからなかった。
 		if marker == 0xDA {
 			return 1
 		}
@@ -56,8 +60,8 @@ func jpegOrientation(data []byte) int {
 			return 1
 		}
 		if marker == 0xE1 {
-			// APP1 also carries non-Exif payloads (e.g. XMP); only stop
-			// the walk for a segment that starts with the Exif header.
+			// APP1 は Exif 以外のペイロード（例：XMP）も運ぶ。Exif ヘッダで
+			// 始まるセグメントに対してのみ走査を止める。
 			payload := data[i+4 : i+2+length]
 			if len(payload) >= len(exifHeader) && bytes.Equal(payload[:len(exifHeader)], exifHeader) {
 				return exifOrientation(payload)
@@ -68,8 +72,9 @@ func jpegOrientation(data []byte) int {
 	return 1
 }
 
-// exifOrientation parses an APP1 payload ("Exif\0\0" + TIFF stream) and
-// returns the IFD0 Orientation tag value, or 1 for anything malformed.
+// exifOrientation は、APP1 のペイロード（"Exif\0\0" + TIFF ストリーム）を
+// パースし、IFD0 の Orientation タグの値を返す。壊れているものについては 1 を
+// 返す。
 func exifOrientation(seg []byte) int {
 	if len(seg) < len(exifHeader) || !bytes.Equal(seg[:len(exifHeader)], exifHeader) {
 		return 1
@@ -107,8 +112,8 @@ func exifOrientation(seg []byte) int {
 		if bo.Uint16(e[2:4]) != tiffTypeShort || bo.Uint32(e[4:8]) != 1 {
 			return 1
 		}
-		// A SHORT with count 1 is stored inline in the first two value
-		// bytes, in the stream's byte order.
+		// count が 1 の SHORT は、値フィールドの先頭 2 バイトに、ストリームの
+		// バイトオーダーでインラインに格納される。
 		v := int(bo.Uint16(e[8:10]))
 		if v < 1 || v > 8 {
 			return 1
@@ -118,10 +123,10 @@ func exifOrientation(seg []byte) int {
 	return 1
 }
 
-// orient rewrites img so a viewer that ignores EXIF sees it upright, given
-// the EXIF Orientation value o (1-8). Orientation 1 (and anything out of
-// range) passes img through without allocating. The output is a plain
-// NRGBA pixel copy; values 5-8 swap width and height.
+// orient は、EXIF Orientation の値 o（1-8）を受けて、EXIF を無視する
+// ビューアでも正立して見えるように img を書き直す。Orientation が 1（および
+// 範囲外のもの）の場合は、アロケーションせずに img をそのまま通す。出力は
+// 単純な NRGBA のピクセルコピーであり、値が 5-8 のときは幅と高さが入れ替わる。
 func orient(img image.Image, o int) image.Image {
 	if o <= 1 || o > 8 {
 		return img
@@ -138,19 +143,19 @@ func orient(img image.Image, o int) image.Image {
 		for x := 0; x < w; x++ {
 			var dx, dy int
 			switch o {
-			case 2: // flip horizontal
+			case 2: // 水平方向に反転
 				dx, dy = w-1-x, y
-			case 3: // rotate 180
+			case 3: // 180 度回転
 				dx, dy = w-1-x, h-1-y
-			case 4: // flip vertical
+			case 4: // 垂直方向に反転
 				dx, dy = x, h-1-y
 			case 5: // transpose
 				dx, dy = y, x
-			case 6: // rotate 90 clockwise
+			case 6: // 時計回りに 90 度回転
 				dx, dy = h-1-y, x
 			case 7: // transverse
 				dx, dy = h-1-y, w-1-x
-			case 8: // rotate 90 counter-clockwise
+			case 8: // 反時計回りに 90 度回転
 				dx, dy = y, w-1-x
 			}
 			dst.Set(dx, dy, img.At(b.Min.X+x, b.Min.Y+y))

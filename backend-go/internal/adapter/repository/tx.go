@@ -9,18 +9,19 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 )
 
-// beginnerDBTX is the connection dependency of the transactional
-// repositories (reviews, users): the sqlc query surface plus Begin, so
-// each write can wrap the write and the burger_stats recalculation in one
-// transaction. Both *pgxpool.Pool and *pgx.Conn satisfy it.
+// beginnerDBTX は、トランザクションを扱う repository（reviews、users）の
+// 接続への依存である。sqlc のクエリ用インターフェースに Begin を加えたもので、
+// 各書き込みがその書き込みと burger_stats の再計算を 1 つのトランザクション
+// で包めるようにする。*pgxpool.Pool と *pgx.Conn のどちらもこれを満たす。
 type beginnerDBTX interface {
 	sqlcgen.DBTX
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// withTx runs fn with a tx-scoped Queries inside a single transaction:
-// Begin, fn, Commit, with a rollback on any failure. op prefixes the
-// begin/commit errors ("<op>: begin: ..."); fn wraps its own errors.
+// withTx は、tx スコープの Queries を使って fn を単一のトランザクション内で
+// 実行する。Begin、fn、Commit の順に行い、いずれかが失敗したら rollback
+// する。op は begin/commit のエラーの接頭辞になる（"<op>: begin: ..."）。
+// fn は自身のエラーを自分でラップする。
 func withTx(ctx context.Context, db beginnerDBTX, op string, fn func(q *sqlcgen.Queries) error) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {

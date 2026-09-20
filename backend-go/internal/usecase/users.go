@@ -8,39 +8,42 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// ProfileChanges carries the optional column-scoped profile updates of
-// UsersRepository.UpdateUserProfile: a nil field is left untouched. The
-// password arrives pre-hashed, like CreateUserParams — repositories never
-// see plaintext.
+// ProfileChanges は、UsersRepository.UpdateUserProfile の、任意のカラム限定の
+// プロフィール更新を保持する。nil のフィールドは変更されない。パスワードは、
+// CreateUserParams と同様にハッシュ化済みの状態で渡される。repository が平文を
+// 目にすることはない。
 type ProfileChanges struct {
 	Username       *string
 	Email          *string
 	PasswordDigest *string
 }
 
-// UsersRepository is the consumer-side persistence contract for the user
-// management use cases. Implementations map storage errors to domain
-// errors: the lookup and the writes return (a wrapped)
-// domain.ErrUserNotFound when no active (non-discarded) user matches, and
-// UpdateUserProfile returns (a wrapped) domain.ErrEmailTaken on an email
-// unique violation.
+// UsersRepository は、ユーザー管理の use case 向けの consumer 側の永続化の
+// 契約である。実装は storage のエラーを domain のエラーに対応させる。
+// lookup と書き込みは、active な（discard されていない）ユーザーが一致しない
+// とき（wrap された）domain.ErrUserNotFound を返し、UpdateUserProfile は
+// email の unique violation に対して（wrap された）domain.ErrEmailTaken を
+// 返す。
 type UsersRepository interface {
-	// ListActiveUsers returns every kept user, id ascending (no
-	// pagination — Rails parity: the index returns all kept users).
+	// ListActiveUsers は kept なユーザーをすべて id の昇順で返す
+	// （ページネーションなし。Rails parity：index は kept なユーザーを
+	// すべて返す）。
 	ListActiveUsers(ctx context.Context) ([]domain.User, error)
-	// GetActiveUserByID returns the non-discarded user with the given id.
+	// GetActiveUserByID は、指定された id の、discard されていないユーザーを
+	// 返す。
 	GetActiveUserByID(ctx context.Context, id int64) (domain.User, error)
-	// UpdateUserProfile applies the present fields of changes to the
-	// still kept user under id atomically and returns the stored user;
-	// zero present fields are a plain lookup (200 no-op, Rails parity).
+	// UpdateUserProfile は、id の、まだ kept なユーザーに changes の存在する
+	// フィールドを atomic に適用し、保存されたユーザーを返す。存在する
+	// フィールドがゼロ個なら単なる lookup になる
+	// （200 の no-op、Rails parity）。
 	UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (domain.User, error)
-	// DiscardUser soft-deletes the user (never a hard DELETE) and keeps
-	// the derived burger stats consistent.
+	// DiscardUser はユーザーを soft delete し（hard DELETE は決して行わない）、
+	// 導出された burger の stats の整合性を保つ。
 	DiscardUser(ctx context.Context, id int64) error
 }
 
-// Users implements the user management use cases: the public index and
-// the self-only profile update and account deletion.
+// Users は、ユーザー管理の use case を実装する。公開の index と、本人のみが
+// 行えるプロフィールの更新およびアカウントの削除である。
 type Users struct {
 	repo   UsersRepository
 	hasher PasswordHasher
@@ -50,7 +53,7 @@ func NewUsers(repo UsersRepository, hasher PasswordHasher) *Users {
 	return &Users{repo: repo, hasher: hasher}
 }
 
-// List returns every kept user, id ascending.
+// List は kept なユーザーをすべて id の昇順で返す。
 func (s *Users) List(ctx context.Context) ([]domain.User, error) {
 	users, err := s.repo.ListActiveUsers(ctx)
 	if err != nil {
@@ -59,9 +62,9 @@ func (s *Users) List(ctx context.Context) ([]domain.User, error) {
 	return users, nil
 }
 
-// UpdateUserInput is the profile update input. Every field is optional
-// (nil when absent from the request); absent fields are left untouched —
-// a partial update, matching Rails strong params.
+// UpdateUserInput はプロフィール更新の入力である。すべてのフィールドは任意で
+// （リクエストに含まれなければ nil）、含まれないフィールドは変更されない。
+// Rails の strong params に合わせた部分更新である。
 type UpdateUserInput struct {
 	Username             *string
 	Email                *string
@@ -69,15 +72,16 @@ type UpdateUserInput struct {
 	PasswordConfirmation *string
 }
 
-// passwordPresent reports whether the input asks for a password change.
-// Rails has_secure_password nuance: a password provided as the EMPTY
-// STRING is treated as absent (`password=("")` leaves the digest
-// untouched and raises no error), so nil and "" both mean "no change".
+// passwordPresent は、入力がパスワードの変更を求めているかどうかを返す。
+// Rails の has_secure_password の微妙な挙動：「空文字列」で渡された
+// パスワードは存在しないものとして扱われる（`password=("")` は digest に
+// 触れず、エラーも起こさない）ので、nil と "" はどちらも "no change" を
+// 意味する。
 func (in UpdateUserInput) passwordPresent() bool {
 	return in.Password != nil && *in.Password != ""
 }
 
-// validate returns Rails-parity full messages, empty when valid.
+// validate は Rails parity の full message を返す。valid なら空である。
 func (in UpdateUserInput) validate() []string {
 	var msgs []string
 	if in.Username != nil && *in.Username == "" {
@@ -101,13 +105,13 @@ func (in UpdateUserInput) validate() []string {
 	return msgs
 }
 
-// Update edits the target user's profile in the issue #16 AC2 check
-// order (deliberately diverging from this branch's Rails controller,
-// which ignores the path id and operates on current_user): load
-// (404 for missing and discarded alike — even for a non-owner), the
-// domain self-management rule (403), input validation (422), then the
-// column-scoped write. A taken email surfaces as *domain.ValidationError,
-// like signup.
+// Update は、issue #16 AC2 のチェック順序で対象ユーザーのプロフィールを
+// 編集する（このブランチの Rails の controller とは意図的に異なる。
+// その controller は path の id を無視して current_user に対して動作する）。
+// load（存在しないユーザーと discard 済みのユーザーはどちらも 404。所有者で
+// なくても同じ）、domain の本人管理ルール（403）、入力の validation
+// （422）、そしてカラム限定の書き込みの順である。すでに使われている email は、
+// signup と同様に *domain.ValidationError として返される。
 func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, input UpdateUserInput) (domain.User, error) {
 	target, err := s.repo.GetActiveUserByID(ctx, targetID)
 	if err != nil {
@@ -137,9 +141,9 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, 
 	return updated, nil
 }
 
-// Delete soft-deletes the target user's account: load (404, even for a
-// non-owner), the domain self-management rule (403), then the discard —
-// never a hard DELETE.
+// Delete は対象ユーザーのアカウントを soft delete する。load（404。所有者で
+// なくても同じ）、domain の本人管理ルール（403）、そして discard の順で
+// 行い、hard DELETE は決して行わない。
 func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID int64) error {
 	target, err := s.repo.GetActiveUserByID(ctx, targetID)
 	if err != nil {

@@ -1,8 +1,8 @@
-// Package dbtest provides the shared scaffold for DB-backed tests: a
-// per-run PostgreSQL database created via TEST_DATABASE_URL, optionally
-// migrated with the SQL files in db/migrations, and dropped through
-// t.Cleanup. It is test-only support code and must never be imported by
-// production packages.
+// Package dbtest は DB を使うテスト向けの共通の足場を提供する。
+// TEST_DATABASE_URL を通して実行ごとに作成される PostgreSQL の database で、
+// 必要に応じて db/migrations の SQL ファイルで migrate され、t.Cleanup を通して
+// drop される。これはテスト専用のサポートコードであり、本番のパッケージから
+// 決して import してはならない。
 package dbtest
 
 import (
@@ -20,10 +20,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// New creates a fresh per-run database, applies all up migrations, and
-// returns an open connection to it together with its URL. The database is
-// dropped and the connection closed via t.Cleanup. It skips the test when
-// TEST_DATABASE_URL is not set.
+// New は、実行ごとの新しい database を作成し、すべての up migration を
+// 適用して、その database への open 済みの接続を URL とともに返す。
+// database の drop と接続の close は t.Cleanup を通して行われる。
+// TEST_DATABASE_URL が設定されていないときはテストを skip する。
 func New(t *testing.T) (*pgx.Conn, string) {
 	t.Helper()
 	conn, testURL := NewEmpty(t)
@@ -32,13 +32,12 @@ func New(t *testing.T) (*pgx.Conn, string) {
 	return conn, testURL
 }
 
-// NewEmpty creates a fresh per-run database without applying migrations and
-// returns an open connection to it together with its URL. The database is
-// created inside the Postgres instance TEST_DATABASE_URL points at (a
-// maintenance database whose user may create and drop databases) so tests
-// always start from an empty database without touching the development
-// database or its volume. It skips the test when TEST_DATABASE_URL is not
-// set.
+// NewEmpty は、実行ごとの新しい database を migration を適用せずに作成し、
+// その database への open 済みの接続を URL とともに返す。database は
+// TEST_DATABASE_URL が指す Postgres インスタンスの内部に作成される
+// （database を作成・drop できるユーザーの maintenance database）ので、
+// 開発用 database やその volume に触れることなく、テストは常に空の database
+// から始まる。TEST_DATABASE_URL が設定されていないときはテストを skip する。
 func NewEmpty(t *testing.T) (*pgx.Conn, string) {
 	t.Helper()
 	adminURL := os.Getenv("TEST_DATABASE_URL")
@@ -72,11 +71,10 @@ func NewEmpty(t *testing.T) (*pgx.Conn, string) {
 	return conn, testURL
 }
 
-// LoadMigrations returns the *.up.sql files in ascending order and the
-// *.down.sql files in descending order, as absolute paths under
-// db/migrations. It fails the test if any file does not match
-// <version>_<name>.{up,down}.sql or if any version does not have exactly one
-// up and one down file.
+// LoadMigrations は、*.up.sql ファイルを昇順で、*.down.sql ファイルを降順で、
+// db/migrations 配下の絶対パスとして返す。いずれかのファイルが
+// <version>_<name>.{up,down}.sql に一致しない場合、またはいずれかの version に
+// up と down のファイルがちょうど 1 つずつない場合、テストを失敗させる。
 func LoadMigrations(t *testing.T) (ups, downs []string) {
 	t.Helper()
 	dir := migrationsDir(t)
@@ -127,8 +125,8 @@ func LoadMigrations(t *testing.T) (ups, downs []string) {
 	return ups, downs
 }
 
-// Apply applies the given migration files in order, failing the test on the
-// first error.
+// Apply は、与えられた migration ファイルを順に適用し、最初のエラーで
+// テストを失敗させる。
 func Apply(ctx context.Context, t *testing.T, conn *pgx.Conn, files []string) {
 	t.Helper()
 	for _, file := range files {
@@ -142,8 +140,8 @@ func Apply(ctx context.Context, t *testing.T, conn *pgx.Conn, files []string) {
 	}
 }
 
-// migrationsDir resolves db/migrations relative to this source file so that
-// callers do not depend on their own package location.
+// migrationsDir は、db/migrations をこのソースファイルからの相対で解決する。
+// これにより、呼び出し側は自身のパッケージの位置に依存しない。
 func migrationsDir(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
@@ -153,16 +151,16 @@ func migrationsDir(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "..", "db", "migrations")
 }
 
-// testDBName returns a per-run database name. The pid/timestamp suffix keeps
-// concurrent or aborted runs from colliding while staying a valid lowercase
-// PostgreSQL identifier.
+// testDBName は、実行ごとの database 名を返す。pid/timestamp の接尾辞により、
+// 並行または中断された実行同士が衝突せず、しかも有効な小文字の PostgreSQL
+// 識別子であり続ける。
 func testDBName() string {
 	return fmt.Sprintf("hamburger_evaluation_go_test_%d_%d", os.Getpid(), time.Now().UnixNano())
 }
 
-// parseMigrationName splits a migration file name into its numeric version
-// prefix (e.g. "000001") and direction ("up" or "down"). ok is false when the
-// name does not match <digits>_<name>.up.sql / .down.sql.
+// parseMigrationName は、migration のファイル名を、数字の version 接頭辞
+// （例："000001"）と direction（"up" または "down"）に分割する。名前が
+// <digits>_<name>.up.sql / .down.sql に一致しないとき、ok は false になる。
 func parseMigrationName(name string) (version, direction string, ok bool) {
 	switch {
 	case strings.HasSuffix(name, ".up.sql"):
@@ -184,7 +182,7 @@ func parseMigrationName(name string) (version, direction string, ok bool) {
 	return version, direction, true
 }
 
-// withDatabase returns rawURL with its database (path) replaced by name.
+// withDatabase は、rawURL の database（path）を name に置き換えたものを返す。
 func withDatabase(rawURL, name string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -194,7 +192,7 @@ func withDatabase(rawURL, name string) (string, error) {
 	return u.String(), nil
 }
 
-// mustExec executes sql on conn and fails the test on error.
+// mustExec は conn 上で sql を実行し、エラーのときテストを失敗させる。
 func mustExec(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string) {
 	t.Helper()
 	if _, err := conn.Exec(ctx, sql); err != nil {

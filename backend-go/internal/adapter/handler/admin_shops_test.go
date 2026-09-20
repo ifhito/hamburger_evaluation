@@ -9,9 +9,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// The moderation methods of shopRepoFake (declared in shops_test.go). The
-// fake has no timestamps, so id desc stands in for the repository's
-// created_at desc, id desc ordering.
+// shopRepoFake（shops_test.go で宣言）の moderation 用メソッド群。この fake は
+// タイムスタンプを持たないので、id desc が repository の created_at desc、
+// id desc という順序の代わりを務める。
 
 func (f *shopRepoFake) CreateShop(_ context.Context, shop domain.Shop) (domain.Shop, error) {
 	if f.err != nil {
@@ -68,9 +68,9 @@ func (f *shopRepoFake) UpdateShopStatus(_ context.Context, id int64, status doma
 	return domain.Shop{}, domain.ErrShopNotFound
 }
 
-// TestCreateShop covers POST /shops: RequireAuth gates it, a blank or
-// missing name is the Rails-parity 422, and success answers 201 with the
-// admin shop shape carrying the viewer as creator.
+// TestCreateShop は POST /shops を扱う：RequireAuth がこれをゲートし、空または
+// 欠落した name は Rails parity の 422 であり、成功時は viewer を creator
+// として持つ admin shop の形で 201 を返す。
 func TestCreateShop(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -147,15 +147,14 @@ func TestCreateShop(t *testing.T) {
 	})
 }
 
-// TestAdminShopsForbidden pins the HTTP mapping of the usecase-side
-// authorization: every admin endpoint answers 403 for an authenticated
-// non-admin (with no way to probe shop existence) and 401 without a
-// token.
+// TestAdminShopsForbidden は、usecase 側の認可の HTTP へのマッピングを
+// 固定する。すべての admin エンドポイントは、認証済みの非 admin に対して 403 を
+// 返し（shop の存在を探る手段はない）、トークンがなければ 401 を返す。
 func TestAdminShopsForbidden(t *testing.T) {
 	endpoints := []struct {
 		method string
 		path   string
-		body   string // PUT needs a well-formed body; malformed JSON is 400 by convention
+		body   string // PUT には整形式の body が必要。不正な JSON は慣例として 400 になる
 	}{
 		{method: http.MethodGet, path: "/admin/shops"},
 		{method: http.MethodPut, path: "/admin/shops/1", body: `{"shop":{"name":"x"}}`},
@@ -189,9 +188,9 @@ func TestAdminShopsForbidden(t *testing.T) {
 	})
 }
 
-// TestAdminListShops covers GET /admin/shops: every shop newest first in
-// the admin shop shape, the pending/active/rejected filter, and an
-// unknown filter value degrading to an empty array.
+// TestAdminListShops は GET /admin/shops を扱う：すべての shop を admin shop の
+// 形で新しい順に返すこと、pending/active/rejected の filter、そして未知の
+// filter の値が空配列に縮退すること。
 func TestAdminListShops(t *testing.T) {
 	repo := seedShops(1)
 	repo.shops[2].Shop.ModerationNote = shopPtr("needs fixes")
@@ -240,9 +239,9 @@ func TestAdminListShops(t *testing.T) {
 	}
 }
 
-// TestAdminUpdateShop covers PUT /admin/shops/{id}: rename with the admin
-// shop shape, the Rails-parity 422 for a blank name, and the uniform 404
-// for unknown and non-numeric ids.
+// TestAdminUpdateShop は PUT /admin/shops/{id} を扱う：admin shop の形での
+// rename、空の name に対する Rails parity の 422、そして未知の id と非数値の id
+// に対する一様な 404。
 func TestAdminUpdateShop(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -294,10 +293,10 @@ func TestAdminUpdateShop(t *testing.T) {
 	}
 }
 
-// TestAdminApproveShop covers POST /admin/shops/{id}/approve: 200 with
-// status active and the note cleared (also from rejected — re-approval),
-// any request body ignored, 404 for unknown ids, and the approved shop
-// becoming anonymously visible.
+// TestAdminApproveShop は POST /admin/shops/{id}/approve を扱う：status が
+// active で note がクリアされた 200（rejected からの再承認でも同様）、
+// どのような request body も無視されること、未知の id には 404、そして
+// 承認された shop が匿名でも見えるようになること。
 func TestAdminApproveShop(t *testing.T) {
 	repo := seedShops(1)
 	repo.shops[2].Shop.ModerationNote = shopPtr("needs fixes")
@@ -339,9 +338,10 @@ func TestAdminApproveShop(t *testing.T) {
 	})
 }
 
-// TestAdminRejectShop covers POST /admin/shops/{id}/reject: the top-level
-// optional moderation_note is echoed, an entirely empty body rejects with
-// a null note, and the rejected shop leaves the anonymous list.
+// TestAdminRejectShop は POST /admin/shops/{id}/reject を扱う：トップレベルの
+// 任意の moderation_note がそのまま返されること、body が完全に空なら note が
+// null で reject されること、そして reject された shop が匿名の一覧から
+// 消えること。
 func TestAdminRejectShop(t *testing.T) {
 	router, _, adminAuth, _ := newShopsRouter(t, seedShops(1))
 

@@ -1,8 +1,9 @@
 services:
   api-go:
     build: .
-    # Build then exec so the compiled binary is PID 1 and receives SIGTERM
-    # from `docker stop` (go run would not forward it to the API process).
+    # ビルドしてから exec することで、コンパイルされたバイナリが PID 1 になり、
+    # `docker stop` からの SIGTERM を受け取る（go run はそれを API プロセスに
+    # 転送しない）。
     command: ["sh", "-c", "go build -o /tmp/api ./cmd/api && exec /tmp/api"]
     volumes:
       - .:/app
@@ -16,16 +17,18 @@ services:
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable
-      # The api fails loudly at boot when JWT_SECRET is unset; export it
-      # before `docker compose up` (e.g. `export JWT_SECRET=...`).
-      # JWT_SECRET must be set; tokens are signed and verified with this secret.
+      # JWT_SECRET が未設定だと api は起動時に fail-loud する。
+      # `docker compose up` の前に export しておくこと
+      # （例：`export JWT_SECRET=...`）。
+      # JWT_SECRET は必ず設定しなければならない。トークンはこの secret で
+      # 署名および検証される。
       JWT_SECRET: ${JWT_SECRET:-}
       GOMEMLIMIT: 920MiB
     mem_limit: 1g
 
-  # Usage: docker compose run --rm migrate up
-  #        docker compose run --rm migrate down -all
-  # Target another database (e.g. the test one) with:
+  # 使い方：docker compose run --rm migrate up
+  #         docker compose run --rm migrate down -all
+  # 別のデータベース（例：テスト用のもの）を対象にするには：
   #   MIGRATE_DATABASE_URL=postgres://postgres:password@db:5432/hamburger_evaluation_go_test?sslmode=disable \
   #     docker compose run --rm migrate up
   migrate:
@@ -43,10 +46,11 @@ services:
         "-database", "${MIGRATE_DATABASE_URL:-postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable}",
       ]
 
-  # Usage: docker compose run --rm seed   (after `migrate up`)
-  # Idempotent dev fixtures (admin + alice/bob/charlie, shops, burgers,
-  # reviews, burger_stats); see cmd/seed/main.go. Target another database
-  # with DATABASE_URL=... docker compose run --rm seed
+  # 使い方：docker compose run --rm seed   （`migrate up` の後）
+  # 冪等な開発用 fixture（admin + alice/bob/charlie、shops、burgers、
+  # reviews、burger_stats）。cmd/seed/main.go を参照。
+  # DATABASE_URL=... docker compose run --rm seed で、別のデータベースを
+  # 対象にできる。
   seed:
     build: .
     profiles: ["tools"]
@@ -61,7 +65,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable}
 
-  # Usage: docker compose run --rm sqlc generate
+  # 使い方：docker compose run --rm sqlc generate
   sqlc:
     image: sqlc/sqlc:1.27.0
     profiles: ["tools"]

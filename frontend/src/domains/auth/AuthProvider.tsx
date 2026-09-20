@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authApi.logout();
     } catch {
-      // clear local state regardless
+      // エラーは無視し、いずれにせよローカルの状態をクリアする
     }
     removeToken();
     removeStoredUser();

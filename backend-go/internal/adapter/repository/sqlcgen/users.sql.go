@@ -51,9 +51,9 @@ WHERE id = $1 AND discarded_at IS NULL
 RETURNING id
 `
 
-// Column-scoped soft delete: only stamps discarded_at, and only once —
-// an already-discarded user matches no row, surfacing as not found
-// (mirrors DiscardReview).
+// 列を限定した soft delete：discarded_at にタイムスタンプを設定するだけで、
+// しかも 1 回だけ行う。すでに discard 済みの user はどの行にもマッチせず、
+// not found として現れる（DiscardReview に対応する）。
 func (q *Queries) DiscardUser(ctx context.Context, id int64) (int64, error) {
 	row := q.db.QueryRow(ctx, discardUser, id)
 	err := row.Scan(&id)
@@ -129,8 +129,8 @@ WHERE discarded_at IS NULL
 ORDER BY id
 `
 
-// User index: every kept user, id ascending. No LIMIT/OFFSET — Rails
-// parity: the index returns all kept users unpaginated.
+// user の一覧：kept な user すべて、id の昇順。LIMIT/OFFSET はない。
+// Rails parity：一覧は kept な user をすべて、ページネーションなしで返す。
 func (q *Queries) ListActiveUsers(ctx context.Context) ([]User, error) {
 	rows, err := q.db.Query(ctx, listActiveUsers)
 	if err != nil {
@@ -173,8 +173,8 @@ type UpdateUserEmailParams struct {
 	Email string
 }
 
-// Column-scoped profile update: touches only email (see
-// UpdateUserUsername for the rationale).
+// 列を限定したプロフィール更新：email だけを更新する（理由は
+// UpdateUserUsername を参照）。
 func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUserEmail, arg.ID, arg.Email)
 	var i User
@@ -204,8 +204,8 @@ type UpdateUserPasswordDigestParams struct {
 	PasswordDigest string
 }
 
-// Column-scoped profile update: touches only password_digest (see
-// UpdateUserUsername for the rationale).
+// 列を限定したプロフィール更新：password_digest だけを更新する（理由は
+// UpdateUserUsername を参照）。
 func (q *Queries) UpdateUserPasswordDigest(ctx context.Context, arg UpdateUserPasswordDigestParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUserPasswordDigest, arg.ID, arg.PasswordDigest)
 	var i User
@@ -235,9 +235,9 @@ type UpdateUserUsernameParams struct {
 	Username string
 }
 
-// Column-scoped profile update: touches only username, and only while
-// the user is still kept, so a concurrent email/password change or soft
-// delete is never reverted from a stale snapshot.
+// 列を限定したプロフィール更新：username だけを更新し、user がまだ kept な
+// 間だけ更新するので、並行する email/password の変更や soft delete が古い
+// スナップショットによって元に戻されることはない。
 func (q *Queries) UpdateUserUsername(ctx context.Context, arg UpdateUserUsernameParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUserUsername, arg.ID, arg.Username)
 	var i User

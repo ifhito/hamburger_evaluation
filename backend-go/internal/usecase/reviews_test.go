@@ -15,9 +15,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// fakeReviewRepo is a hand-written usecase.ReviewRepository test double.
-// Unset behaviors panic so tests fail loudly on unexpected calls —
-// especially writes outside the tested flow.
+// fakeReviewRepo は、手書きの usecase.ReviewRepository の test double である。
+// 未設定の振る舞いは panic するので、想定外の呼び出し、特にテスト対象の
+// フローの外での書き込みに対して、テストは fail-loud する。
 type fakeReviewRepo struct {
 	listReviews                func(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error)
 	getReview                  func(ctx context.Context, id int64) (domain.ReviewDetail, error)
@@ -93,9 +93,9 @@ func (f *fakeReviewRepo) DiscardReview(ctx context.Context, id int64) error {
 	return f.discardReview(ctx, id)
 }
 
-// TestReviewsListPagination pins the same fallback rules as Shops.List:
-// page defaults to 1, per_page to 20, per_page is capped at 100, huge
-// pages clamp the offset instead of overflowing.
+// TestReviewsListPagination は Shops.List と同じフォールバック規則を固定する。
+// page のデフォルトは 1、per_page のデフォルトは 20、per_page は 100 が上限で、
+// 巨大な page はオーバーフローせずに offset を clamp する。
 func TestReviewsListPagination(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -129,9 +129,9 @@ func TestReviewsListPagination(t *testing.T) {
 	}
 }
 
-// TestReviewsListFilterPassThrough pins that List hands the filter to the
-// repository untouched: the usecase neither normalizes nor validates the
-// filter values (the handler decides presence, the SQL does the matching).
+// TestReviewsListFilterPassThrough は、List が filter を変更せずに repository へ
+// 渡すことを固定する。usecase は filter の値を正規化も validate もしない
+// （指定の有無は handler が決め、一致の判定は SQL が行う）。
 func TestReviewsListFilterPassThrough(t *testing.T) {
 	rating := 4
 	shopID := int64(7)
@@ -151,7 +151,7 @@ func TestReviewsListFilterPassThrough(t *testing.T) {
 	}
 }
 
-// TestReviewsListFailure: a repository failure propagates wrapped.
+// TestReviewsListFailure：repository の失敗は wrap されて伝播する。
 func TestReviewsListFailure(t *testing.T) {
 	repo := &fakeReviewRepo{
 		listReviews: func(_ context.Context, _ usecase.ReviewListFilter, _, _ int32) ([]domain.ReviewDetail, error) {
@@ -163,9 +163,9 @@ func TestReviewsListFailure(t *testing.T) {
 	}
 }
 
-// TestReviewsGet covers the detail use case: found reviews pass through,
-// missing/discarded ones surface domain.ErrReviewNotFound (issue #14 AC6
-// at the usecase level).
+// TestReviewsGet は詳細の use case を扱う。見つかった review はそのまま通り、
+// 存在しない、または discard 済みの review は domain.ErrReviewNotFound を
+// 返す（usecase レベルでの issue #14 AC6）。
 func TestReviewsGet(t *testing.T) {
 	detail := domain.ReviewDetail{
 		Review: domain.Review{ID: 9, Rating: 4, AuthorID: 1, BurgerID: 5, CreatedAt: time.Now()},
@@ -195,9 +195,9 @@ func TestReviewsGet(t *testing.T) {
 	}
 }
 
-// TestReviewsCreate covers the submission flow and its exact check order:
-// shop 404 → reviewable 403 → burger 404 → validation 422 → insert. The
-// fake's unset behaviors turn out-of-order calls into panics.
+// TestReviewsCreate は投稿のフローと、その厳密なチェック順序を扱う。
+// shop 404 → reviewable 403 → burger 404 → validation 422 → insert である。
+// fake の未設定の振る舞いにより、順序どおりでない呼び出しは panic になる。
 func TestReviewsCreate(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"}
 	bob := domain.User{ID: 2, Username: "bob"}
@@ -262,7 +262,7 @@ func TestReviewsCreate(t *testing.T) {
 	})
 
 	t.Run("AC2 rejected shop yields ErrForbidden before the burger lookup", func(t *testing.T) {
-		repo := &fakeReviewRepo{getShop: getShop} // getShopBurger unset: a lookup would panic
+		repo := &fakeReviewRepo{getShop: getShop} // getShopBurger は未設定：lookup があれば panic する
 		for _, viewer := range []domain.User{alice, bob, admin} {
 			if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, viewer, rejectedShop.ID, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
@@ -292,14 +292,14 @@ func TestReviewsCreate(t *testing.T) {
 	})
 
 	t.Run("unlinked burger yields ErrBurgerNotFound without an insert", func(t *testing.T) {
-		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview unset
+		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview は未設定
 		if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 999, "", 4, "ok", nil); !errors.Is(err, domain.ErrBurgerNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrBurgerNotFound)
 		}
 	})
 
 	t.Run("AC4 invalid content yields ValidationError without an insert", func(t *testing.T) {
-		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview unset
+		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview は未設定
 		_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, " ", nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
@@ -317,7 +317,7 @@ func TestReviewsCreate(t *testing.T) {
 		var gotName string
 		var gotReview domain.Review
 		repo := &fakeReviewRepo{
-			getShop: getShop, // getShopBurger and createReview unset: any call panics
+			getShop: getShop, // getShopBurger と createReview は未設定：どの呼び出しも panic する
 			createReviewForNamedBurger: func(_ context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
 				gotShopID, gotName, gotReview = shopID, burgerName, review
 				review.ID = 44
@@ -325,7 +325,8 @@ func TestReviewsCreate(t *testing.T) {
 				return review, smash, nil
 			},
 		}
-		// The name reaches the repository untrimmed (Rails never trims).
+		// name は trim されないまま repository に届く（Rails は決して
+		// trim しない）。
 		got, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, " Smash ", 4, "Juicy", nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
@@ -347,7 +348,7 @@ func TestReviewsCreate(t *testing.T) {
 	t.Run("a positive burger_id wins over burger_name", func(t *testing.T) {
 		repo := &fakeReviewRepo{
 			getShop:       getShop,
-			getShopBurger: getShopBurger, // createReviewForNamedBurger unset: a call panics
+			getShopBurger: getShopBurger, // createReviewForNamedBurger は未設定：呼び出しは panic する
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 				review.ID = 45
 				return review, nil
@@ -365,7 +366,7 @@ func TestReviewsCreate(t *testing.T) {
 	t.Run("neither burger_id nor a usable burger_name yields ValidationError without any write", func(t *testing.T) {
 		for name, burgerName := range map[string]string{"missing": "", "whitespace-only": "  \t "} {
 			t.Run(name, func(t *testing.T) {
-				repo := &fakeReviewRepo{getShop: getShop} // every write unset: a call panics
+				repo := &fakeReviewRepo{getShop: getShop} // すべての書き込みは未設定：呼び出しは panic する
 				_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, burgerName, 4, "ok", nil)
 				var vErr *domain.ValidationError
 				if !errors.As(err, &vErr) {
@@ -379,7 +380,7 @@ func TestReviewsCreate(t *testing.T) {
 	})
 
 	t.Run("burger_name path validates content before the write", func(t *testing.T) {
-		repo := &fakeReviewRepo{getShop: getShop} // createReviewForNamedBurger unset: a call panics
+		repo := &fakeReviewRepo{getShop: getShop} // createReviewForNamedBurger は未設定：呼び出しは panic する
 		_, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, "Smash", 0, " ", nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
@@ -392,7 +393,8 @@ func TestReviewsCreate(t *testing.T) {
 	})
 }
 
-// reviewDetailFor builds the stored detail the edit/delete tests load.
+// reviewDetailFor は、edit/delete のテストが load する、保存済みの detail を
+// 組み立てる。
 func reviewDetailFor(authorID int64) domain.ReviewDetail {
 	comment := "Old"
 	return domain.ReviewDetail{
@@ -403,9 +405,10 @@ func reviewDetailFor(authorID int64) domain.ReviewDetail {
 	}
 }
 
-// TestReviewsUpdate covers the edit flow: author-only (AC3, admin gets no
-// pass), validation before the write, the column-scoped write itself
-// (discardReview stays unset so any discard panics), and the 404s.
+// TestReviewsUpdate は edit のフローを扱う。author のみ（AC3、admin でも
+// 通らない）、書き込みの前の validation、カラム限定の書き込みそのもの
+// （discardReview は未設定のままなので、どの discard も panic する）、
+// そして 404 である。
 func TestReviewsUpdate(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"}
 	bob := domain.User{ID: 2, Username: "bob"}
@@ -450,8 +453,8 @@ func TestReviewsUpdate(t *testing.T) {
 	})
 
 	t.Run("AC3 non-author gets ErrForbidden without a write", func(t *testing.T) {
-		repo := &fakeReviewRepo{getReview: getReview}      // updateReviewContent unset
-		for _, viewer := range []domain.User{bob, admin} { // admin gets no pass
+		repo := &fakeReviewRepo{getReview: getReview}      // updateReviewContent は未設定
+		for _, viewer := range []domain.User{bob, admin} { // admin でも通さない
 			if _, err := usecase.NewReviews(repo, &fakePhotoStorage{}).Update(ctx, viewer, stored.ID, 5, "x", nil); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
 			}
@@ -478,9 +481,10 @@ func TestReviewsUpdate(t *testing.T) {
 	})
 }
 
-// TestReviewsDelete covers the soft-delete flow: author-only (AC3),
-// discard called exactly for the loaded review (updateReviewContent stays
-// unset so any content write panics), and the 404s.
+// TestReviewsDelete は soft delete のフローを扱う。author のみ（AC3）、
+// load した review そのものに対して discard が呼ばれること
+// （updateReviewContent は未設定のままなので、どの content の書き込みも
+// panic する）、そして 404 である。
 func TestReviewsDelete(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"}
 	bob := domain.User{ID: 2, Username: "bob"}
@@ -512,8 +516,8 @@ func TestReviewsDelete(t *testing.T) {
 	})
 
 	t.Run("AC3 non-author gets ErrForbidden without a write", func(t *testing.T) {
-		repo := &fakeReviewRepo{getReview: getReview}      // discardReview unset
-		for _, viewer := range []domain.User{bob, admin} { // admin gets no pass
+		repo := &fakeReviewRepo{getReview: getReview}      // discardReview は未設定
+		for _, viewer := range []domain.User{bob, admin} { // admin でも通さない
 			if err := usecase.NewReviews(repo, &fakePhotoStorage{}).Delete(ctx, viewer, stored.ID); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
 			}
@@ -531,7 +535,7 @@ func TestReviewsDelete(t *testing.T) {
 		repo := &fakeReviewRepo{
 			getReview: getReview,
 			discardReview: func(_ context.Context, _ int64) error {
-				return domain.ErrReviewNotFound // discarded between load and write
+				return domain.ErrReviewNotFound // load から書き込みまでの間に discard された
 			},
 		}
 		if err := usecase.NewReviews(repo, &fakePhotoStorage{}).Delete(ctx, alice, stored.ID); !errors.Is(err, domain.ErrReviewNotFound) {
@@ -540,8 +544,9 @@ func TestReviewsDelete(t *testing.T) {
 	})
 }
 
-// TestNewReviewsNilPhotoStorage pins the fail-loud constructor guard: a
-// nil PhotoStorage must panic at wiring time, never mid-request.
+// TestNewReviewsNilPhotoStorage は、fail-loud なコンストラクタのガードを
+// 固定する。nil の PhotoStorage は、リクエストの途中ではなく、配線時に
+// panic しなければならない。
 func TestNewReviewsNilPhotoStorage(t *testing.T) {
 	defer func() {
 		if recover() == nil {
@@ -551,7 +556,8 @@ func TestNewReviewsNilPhotoStorage(t *testing.T) {
 	usecase.NewReviews(&fakeReviewRepo{}, nil)
 }
 
-// fakePhotoStorage records Put/Delete keys in order; putErr fails Put.
+// fakePhotoStorage は Put/Delete の key を順に記録し、putErr は Put を
+// 失敗させる。
 type fakePhotoStorage struct {
 	putErr  error
 	puts    []string
@@ -573,10 +579,10 @@ func (f *fakePhotoStorage) Delete(_ context.Context, key string) error {
 
 func (f *fakePhotoStorage) URL(key string) string { return "/photos/" + key }
 
-// TestReviewsCreatePhoto covers the S10 photo flow of Create: the blob
-// goes in under a random reviews/<hex><ext> key before the insert, the
-// key is persisted on the review, and a failed insert best-effort deletes
-// the just-uploaded blob so no orphan file remains.
+// TestReviewsCreatePhoto は Create の S10 の写真フローを扱う。blob は insert の
+// 前にランダムな reviews/<hex><ext> の key で保存され、その key は review に
+// 永続化され、insert が失敗した場合はアップロードしたばかりの blob を
+// best-effort で削除するので、孤立ファイルは残らない。
 func TestReviewsCreatePhoto(t *testing.T) {
 	ctx := context.Background()
 	bob := domain.User{ID: 2, Username: "bob"}
@@ -637,18 +643,18 @@ func TestReviewsCreatePhoto(t *testing.T) {
 
 	t.Run("failed Put surfaces without an insert", func(t *testing.T) {
 		photos := &fakePhotoStorage{putErr: io.ErrUnexpectedEOF}
-		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview unset: an insert would panic
+		repo := &fakeReviewRepo{getShop: getShop, getShopBurger: getShopBurger} // createReview は未設定：insert があれば panic する
 		if _, err := usecase.NewReviews(repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", upload); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("Create error = %v, want the storage error", err)
 		}
 	})
 }
 
-// TestReviewsUpdatePhoto covers the S10 replacement flow of Update: the
-// new blob goes in first, then content and photo_key switch via the ONE
-// atomic repository write, and only then is the OLD blob (from the load
-// snapshot) best-effort deleted; without an upload the content-only write
-// runs and the photo writes never happen.
+// TestReviewsUpdatePhoto は Update の S10 の置き換えフローを扱う。新しい blob が
+// 先に保存され、次に content と photo_key が「1 つの」atomic な repository の
+// 書き込みで切り替わり、そのあとではじめて「古い」blob（load のスナップ
+// ショットのもの）が best-effort で削除される。upload がなければ content
+// だけの書き込みが走り、写真の書き込みは決して起こらない。
 func TestReviewsUpdatePhoto(t *testing.T) {
 	ctx := context.Background()
 	alice := domain.User{ID: 1, Username: "alice"}
@@ -667,9 +673,9 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 		var gotComment string
 		repo := &fakeReviewRepo{
 			getReview: getReview,
-			// updateReviewContent stays unset: a separate content-only
-			// statement on the photo path would panic (the write must be
-			// the single atomic repository call).
+			// updateReviewContent は未設定のままである。写真の経路で
+			// content だけの別の文を実行すれば panic する（書き込みは
+			// 単一の atomic な repository の呼び出しでなければならない）。
 			updateReviewContentAndKey: func(_ context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
 				gotRating, gotComment = rating, comment
 				review := stored.Review
@@ -702,11 +708,12 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 		photos := &fakePhotoStorage{}
 		repo := &fakeReviewRepo{
 			getReview: getReview,
-			// updateReviewContent stays unset: the atomic write failing
-			// means NO content statement ran, so no content change can be
-			// visible afterwards — a stray content-only call would panic.
+			// updateReviewContent は未設定のままである。atomic な書き込みが
+			// 失敗したということは content の文が「一切」実行されていない
+			// ので、あとから content の変更が見えることはありえない。
+			// 紛れ込んだ content だけの呼び出しは panic する。
 			updateReviewContentAndKey: func(_ context.Context, _ int64, _ int, _ string, _ *string) (domain.Review, error) {
-				return domain.Review{}, domain.ErrReviewNotFound // discarded between load and write
+				return domain.Review{}, domain.ErrReviewNotFound // load から書き込みまでの間に discard された
 			},
 		}
 		_, err := usecase.NewReviews(repo, photos).Update(ctx, alice, stored.ID, 5, "Better", upload)
@@ -722,8 +729,8 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 		photos := &fakePhotoStorage{}
 		repo := &fakeReviewRepo{
 			getReview: getReview,
-			// updateReviewContentAndKey unset: any photo-key write would
-			// panic.
+			// updateReviewContentAndKey は未設定：photo_key のどんな書き込みも
+			// panic する。
 			updateReviewContent: func(_ context.Context, _ int64, _ int, _ string) (domain.Review, error) {
 				return stored.Review, nil
 			},
@@ -741,8 +748,8 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 	})
 }
 
-// TestReviewsDeletePhoto covers the S10 tail of Delete: after a
-// successful discard the blob is best-effort deleted.
+// TestReviewsDeletePhoto は Delete の S10 の末尾部分を扱う。discard が成功
+// した後に、blob は best-effort で削除される。
 func TestReviewsDeletePhoto(t *testing.T) {
 	ctx := context.Background()
 	alice := domain.User{ID: 1, Username: "alice"}

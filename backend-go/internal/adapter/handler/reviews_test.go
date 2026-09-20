@@ -16,19 +16,19 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// fakeStoredReview is one review row inside reviewRepoFake.
+// fakeStoredReview は reviewRepoFake の中の review 1 行である。
 type fakeStoredReview struct {
 	review    domain.Review
 	discarded bool
 }
 
-// reviewRepoFake is an in-memory usecase.ReviewRepository. The active-shop
-// feed filter is derived from the seeded shops and links (mirroring the
-// SQL EXISTS; the SQL itself is covered by the repository integration
-// tests). Setting err fails every operation (500 paths).
+// reviewRepoFake は in-memory の usecase.ReviewRepository である。active な
+// shop の feed の filter は、seed された shops と links から導出される（SQL の
+// EXISTS を再現するもので、SQL 自体は repository の統合テストが扱う）。err を
+// 設定するとすべての操作が失敗する（500 の経路）。
 type reviewRepoFake struct {
 	shops     map[int64]domain.Shop
-	links     map[int64][]int64 // shopID -> linked burger ids
+	links     map[int64][]int64 // shopID -> 紐づく burger の id
 	burgers   map[int64]domain.ShopReviewBurger
 	usernames map[int64]string
 	seq       int64
@@ -46,8 +46,8 @@ func newReviewRepoFake() *reviewRepoFake {
 	}
 }
 
-// reviewBaseTime anchors the deterministic created_at values (creation n
-// gets reviewBaseTime + n minutes).
+// reviewBaseTime は、決定的な created_at の値の基準となる（n 番目に作成された
+// ものは reviewBaseTime + n 分になる）。
 var reviewBaseTime = time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 
 func (f *reviewRepoFake) detailFor(review domain.Review) domain.ReviewDetail {
@@ -72,9 +72,9 @@ func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewLis
 			activeBurgers[burgerID] = true
 		}
 	}
-	// The filter mirrors the SQL narg predicates: exact rating, literal
-	// case-insensitive comment substring, shops_burgers link (the exact SQL
-	// is covered by the repository integration tests).
+	// この filter は SQL の narg の述語を再現する：rating の完全一致、comment
+	// に対する大文字小文字を区別しないリテラルな部分文字列一致、
+	// shops_burgers の link（正確な SQL は repository の統合テストが扱う）。
 	matches := func(review domain.Review) bool {
 		if filter.Rating != nil && review.Rating != *filter.Rating {
 			return false
@@ -83,7 +83,7 @@ func (f *reviewRepoFake) ListReviews(_ context.Context, filter usecase.ReviewLis
 			!strings.Contains(strings.ToLower(*review.Comment), strings.ToLower(filter.Keyword))) {
 			return false
 		}
-		// Like the SQL, the filter shop must itself be active.
+		// SQL と同様に、filter の shop 自体が active でなければならない。
 		if filter.ShopID != nil && (f.shops[*filter.ShopID].Status != domain.ShopStatusActive ||
 			!slices.Contains(f.links[*filter.ShopID], review.BurgerID)) {
 			return false
@@ -159,7 +159,7 @@ func (f *reviewRepoFake) CreateReviewForNamedBurger(ctx context.Context, shopID 
 	var burger domain.ShopReviewBurger
 	found := false
 	for _, burgerID := range f.links[shopID] {
-		// Lowest id wins, mirroring the SQL's ORDER BY b.id LIMIT 1.
+		// id が最小のものが勝つ。SQL の ORDER BY b.id LIMIT 1 を再現している。
 		if b := f.burgers[burgerID]; b.Name == burgerName && (!found || b.ID < burger.ID) {
 			burger, found = b, true
 		}
@@ -222,10 +222,10 @@ func (f *reviewRepoFake) DiscardReview(_ context.Context, id int64) error {
 	return nil
 }
 
-// seedReviewWorld fills the fake with the S6 fixture: an active, a
-// pending (created by creatorID), and a rejected shop; a Cheese burger
-// (with stats) linked to both active shops and a Plain burger (no stats)
-// linked only to the pending shop.
+// seedReviewWorld は、fake に S6 の fixture を入れる：active な shop、
+// （creatorID が作成した）pending な shop、rejected な shop。そして、両方の
+// active な shop に紐づく Cheese burger（統計あり）と、pending な shop のみに
+// 紐づく Plain burger（統計なし）。
 const (
 	activeShopID   = int64(1)
 	pendingShopID  = int64(2)
@@ -245,8 +245,8 @@ func seedReviewWorld(creatorID int64) *reviewRepoFake {
 		ID: cheeseBurgerID, Name: "Cheese", AverageRating: 4.5, ReviewCount: 2, WeightedScore: 4.1, Confidence: 0.8,
 	}
 	repo.burgers[plainBurgerID] = domain.ShopReviewBurger{ID: plainBurgerID, Name: "Plain"}
-	// Cheese is served by BOTH active shops (the duplicate-link case) and
-	// by the pending shop; Plain only by the pending shop.
+	// Cheese は active な shop の「両方」（link が重複するケース）と pending な
+	// shop で提供され、Plain は pending な shop のみで提供される。
 	repo.links[activeShopID] = []int64{cheeseBurgerID}
 	repo.links[active2ShopID] = []int64{cheeseBurgerID}
 	repo.links[pendingShopID] = []int64{cheeseBurgerID, plainBurgerID}
@@ -254,19 +254,19 @@ func seedReviewWorld(creatorID int64) *reviewRepoFake {
 	return repo
 }
 
-// newReviewsRouter wires the router with the auth kit and the given
-// review fake, returning Bearer headers for alice (id 1), bob (id 2), and
-// an admin (id 3). The fake's usernames map is aligned with those ids.
+// newReviewsRouter は、auth kit と与えられた review の fake で router を
+// 配線し、alice（id 1）、bob（id 2）、admin（id 3）用の Bearer ヘッダーを
+// 返す。fake の usernames の map は、それらの id に揃えられている。
 func newReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, aliceAuth, bobAuth, adminAuth string) {
 	t.Helper()
 	router, _, aliceAuth, bobAuth, adminAuth = newPhotoReviewsRouter(t, repo)
 	return router, aliceAuth, bobAuth, adminAuth
 }
 
-// newPhotoReviewsRouter is newReviewsRouter plus the S10 photo wiring: a
-// real disk store rooted in a fresh temp dir (returned for file
-// assertions), served under GET /photos/ through the same
-// handler.PhotoFileServer wrapper cmd/api wires in disk mode.
+// newPhotoReviewsRouter は newReviewsRouter に S10 の photo の配線を加えたもの
+// である：新しい temp dir を root とする本物の disk store（ファイルの assertion
+// 用に返される）が、disk モードで cmd/api が配線するのと同じ
+// handler.PhotoFileServer ラッパーを通じて GET /photos/ の配下で配信される。
 func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Handler, photoDir, aliceAuth, bobAuth, adminAuth string) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
@@ -292,10 +292,10 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewRepoFake) (router http.Hand
 	return router, photoDir, token(alice.ID), token(bob.ID), token(admin.ID)
 }
 
-// TestCreateReview covers AC1 and AC2 at the HTTP level: posting to an
-// active shop yields 201 with the exact payload and the review appears in
-// the feed and detail; rejected and foreign-pending shops yield 403 while
-// the creator and an admin may post to a pending shop.
+// TestCreateReview は HTTP レベルで AC1 と AC2 を扱う：active な shop への
+// 投稿は正確な payload を伴う 201 を返し、その review は feed と detail に
+// 現れる。rejected な shop と他人の pending な shop は 403 を返し、一方で
+// creator と admin は pending な shop に投稿できる。
 func TestCreateReview(t *testing.T) {
 	t.Run("AC1 authenticated post to active shop returns 201 and appears in list and detail", func(t *testing.T) {
 		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
@@ -366,7 +366,7 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusNotFound || rec.Body.String() != `{"error":"Shop not found"}` {
 			t.Errorf("unknown shop = %d %s, want 404 Shop not found", rec.Code, rec.Body)
 		}
-		// Plain exists but is not served by the active shop.
+		// Plain は存在するが、active な shop では提供されていない。
 		rec = do(router, http.MethodPost, "/reviews",
 			fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d,"burger_id":%d}}`, activeShopID, plainBurgerID), aliceAuth)
 		if rec.Code != http.StatusNotFound || rec.Body.String() != `{"error":"Burger not found"}` {
@@ -400,7 +400,7 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		// The created burger (fake id 7) carries zero stats.
+		// 作成された burger（fake の id 7）の統計はゼロである。
 		want := `{"id":1,"rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
 			`"burger":{"id":7,"name":"Veggie","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}`
 		if got := rec.Body.String(); got != want {
@@ -484,14 +484,15 @@ func TestCreateReview(t *testing.T) {
 	})
 }
 
-// doResult carries a recorded status/body pair for table helpers.
+// doResult は、テーブル駆動テストの helper 用に、記録された status/body の
+// 組を保持する。
 type doResult struct {
 	code int
 	body string
 }
 
-// seedFeed posts the standard fixture reviews through the API: alice
-// reviews Cheese (active shops) and Plain (pending-only shop).
+// seedFeed は、標準の fixture の review を API 経由で投稿する：alice は Cheese
+// （active な shop）と Plain（pending のみの shop）を review する。
 func seedFeed(t *testing.T, router http.Handler, aliceAuth string) (cheeseReviewID, plainReviewID int64) {
 	t.Helper()
 	post := func(shopID, burgerID int64, comment string) {
@@ -506,9 +507,9 @@ func seedFeed(t *testing.T, router http.Handler, aliceAuth string) (cheeseReview
 	return 1, 2
 }
 
-// TestListReviews covers AC5 and the feed semantics: only reviews of
-// burgers served by an active shop appear (each exactly once despite the
-// duplicate active link), newest first, paginated.
+// TestListReviews は AC5 と feed のセマンティクスを扱う：active な shop で
+// 提供されている burger の review だけが現れ（active な link が重複していても
+// それぞれちょうど 1 回だけ）、新しい順で、pagination される。
 func TestListReviews(t *testing.T) {
 	repo := seedReviewWorld(1)
 	router, aliceAuth, _, _ := newReviewsRouter(t, repo)
@@ -541,7 +542,8 @@ func TestListReviews(t *testing.T) {
 	})
 
 	t.Run("newest first and paginated", func(t *testing.T) {
-		// A second cheese review (id 3, later created_at) must come first.
+		// 2 件目の cheese の review（id 3、より後の created_at）が
+		// 先頭に来なければならない。
 		body := fmt.Sprintf(`{"review":{"rating":5,"comment":"Again","shop_id":%d,"burger_id":%d}}`, active2ShopID, cheeseBurgerID)
 		if rec := do(router, http.MethodPost, "/reviews", body, aliceAuth); rec.Code != http.StatusCreated {
 			t.Fatalf("post: status = %d (body %s)", rec.Code, rec.Body)
@@ -561,8 +563,8 @@ func TestListReviews(t *testing.T) {
 		if got := rec.Body.String(); got != `[]` {
 			t.Errorf("far page = %s, want []", got)
 		}
-		// Non-numeric and oversized values fall back / clamp instead of
-		// erroring (exact clamp values are pinned in the usecase tests).
+		// 数値でない値と大きすぎる値は、エラーにならず fallback / clamp される
+		// （正確な clamp の値は usecase のテストで固定されている）。
 		rec = do(router, http.MethodGet, "/reviews?page=abc&per_page=9999", "", "")
 		if rec.Code != http.StatusOK {
 			t.Errorf("clamped request status = %d, want 200 (body %s)", rec.Code, rec.Body)
@@ -580,26 +582,27 @@ func TestListReviews(t *testing.T) {
 	})
 }
 
-// TestListReviewsFilters covers the GET /reviews rating/keyword/shop_id
-// query filters (Rails ReviewQuery parity): each filter alone, their AND
-// combination, a no-match `[]` (never null), empty values counting as
-// absent, and the fail-loud 422 for non-integer rating/shop_id (a
-// deliberate divergence from Rails' silent cast-to-0).
+// TestListReviewsFilters は GET /reviews の rating/keyword/shop_id の query
+// filter（Rails ReviewQuery parity）を扱う：各 filter 単独、それらの AND 結合、
+// 一致なしの場合の `[]`（決して null ではない）、空の値が未指定として
+// 扱われること、そして整数でない rating/shop_id に対する fail-loud な 422
+// （Rails の、黙って 0 に cast する挙動からの意図的な乖離）。
 func TestListReviewsFilters(t *testing.T) {
 	repo := seedReviewWorld(1)
 	router, aliceAuth, _, _ := newReviewsRouter(t, repo)
-	// Review 1: rating 4 "On cheese" (Cheese, active shops); review 2:
-	// rating 4 "On plain" (Plain, pending-only, hidden from the feed).
+	// review 1：rating 4 の "On cheese"（Cheese、active な shop）。review 2：
+	// rating 4 の "On plain"（Plain、pending のみ、feed からは隠される）。
 	seedFeed(t, router, aliceAuth)
-	// Review 3: rating 5 "Smoky veggie dream" on a new Veggie burger (fake
-	// id 7) linked only to the second active shop.
+	// review 3：新しい Veggie burger（fake の id 7）に対する rating 5 の
+	// "Smoky veggie dream"。その burger は 2 つ目の active な shop にのみ
+	// 紐づく。
 	body := fmt.Sprintf(`{"review":{"rating":5,"comment":"Smoky veggie dream","shop_id":%d,"burger_name":"Veggie"}}`, active2ShopID)
 	if rec := do(router, http.MethodPost, "/reviews", body, aliceAuth); rec.Code != http.StatusCreated {
 		t.Fatalf("seed veggie post: status = %d (body %s)", rec.Code, rec.Body)
 	}
 	const (
-		onCheese = `"On cheese"` // the comments identify the reviews
-		onPlain  = `"On plain"`  // (ids collide with user/burger ids)
+		onCheese = `"On cheese"` // comment で review を識別する
+		onPlain  = `"On plain"`  // （id は user/burger の id と衝突する）
 		smoky    = `"Smoky veggie dream"`
 	)
 
@@ -675,7 +678,7 @@ func TestListReviewsFilters(t *testing.T) {
 	})
 }
 
-// containsJSONID reports whether body contains the "id":<id> pair.
+// containsJSONID は、body に "id":<id> の組が含まれているかどうかを返す。
 func containsJSONID(body string, id int64) bool {
 	needle := fmt.Sprintf(`"id":%d,`, id)
 	for i := 0; i+len(needle) <= len(body); i++ {
@@ -686,8 +689,8 @@ func containsJSONID(body string, id int64) bool {
 	return false
 }
 
-// TestGetReviewNotFound covers the uniform review 404: unknown ids,
-// non-numeric ids, and discarded reviews share the exact body.
+// TestGetReviewNotFound は一様な review の 404 を扱う：未知の id、数値でない
+// id、discard 済みの review は、まったく同じ body を共有する。
 func TestGetReviewNotFound(t *testing.T) {
 	router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
@@ -707,9 +710,9 @@ func TestGetReviewNotFound(t *testing.T) {
 	}
 }
 
-// TestUpdateReview covers AC3 at the HTTP level: the author edits with
-// 200 and the change is reflected; everyone else (admin included) gets
-// 403; validation failures 422; unknown reviews 404.
+// TestUpdateReview は HTTP レベルで AC3 を扱う：author は 200 で編集でき、その
+// 変更が反映される。それ以外の全員（admin を含む）は 403 になり、validation の
+// 失敗は 422、未知の review は 404 になる。
 func TestUpdateReview(t *testing.T) {
 	router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(1))
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
@@ -761,17 +764,17 @@ func TestUpdateReview(t *testing.T) {
 	})
 }
 
-// TestUpdateReviewIgnoresShopAndBurgerID pins the PUT tampering rule: a
-// review never moves to another shop or burger, so shop_id/burger_id in
-// an edit body are silently ignored — the response (and a subsequent GET)
-// still shows the original burger with only rating/comment updated.
+// TestUpdateReviewIgnoresShopAndBurgerID は PUT の改ざんに関するルールを
+// 固定する：review は別の shop や burger に移ることが決してないので、edit の
+// body に含まれる shop_id/burger_id は黙って無視される。response（とその後の
+// GET）は、rating/comment だけが更新された元の burger を示し続ける。
 func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 	router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
 	path := fmt.Sprintf("/reviews/%d", cheeseReviewID)
 
-	// pendingShopID/plainBurgerID exist but differ from the review's
-	// original active shop and Cheese burger.
+	// pendingShopID/plainBurgerID は存在するが、その review の元の active な
+	// shop と Cheese burger とは異なる。
 	body := fmt.Sprintf(`{"review":{"rating":2,"comment":"Tampered","shop_id":%d,"burger_id":%d}}`,
 		pendingShopID, plainBurgerID)
 	rec := do(router, http.MethodPut, path, body, aliceAuth)
@@ -788,7 +791,7 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 		t.Errorf("detail after tampered edit = %s, want %s", detail.Body, want)
 	}
 
-	// Bogus ids are just as inert.
+	// でたらめな id も同様に効果を持たない。
 	rec = do(router, http.MethodPut, path, `{"review":{"rating":2,"comment":"Tampered","shop_id":999,"burger_id":888}}`, aliceAuth)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("bogus ids: status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
@@ -798,9 +801,9 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 	}
 }
 
-// TestDeleteReview covers AC3/AC6 at the HTTP level: only the author may
-// soft-delete (204, no body); afterwards the review is gone from detail
-// and feed, and a second delete 404s.
+// TestDeleteReview は HTTP レベルで AC3/AC6 を扱う：soft delete できるのは
+// author だけであり（204、body なし）、その後、その review は detail と
+// feed から消え、2 回目の delete は 404 になる。
 func TestDeleteReview(t *testing.T) {
 	router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(1))
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
@@ -835,9 +838,9 @@ func TestDeleteReview(t *testing.T) {
 	})
 }
 
-// TestReviewsRequireAuth pins the 401 boundary: every write without a
-// token is rejected before any repository access, while the reads stay
-// open.
+// TestReviewsRequireAuth は 401 の境界を固定する：トークンなしのすべての
+// 書き込みは repository へのアクセスより前に拒否され、一方で読み取りは
+// 開かれたままである。
 func TestReviewsRequireAuth(t *testing.T) {
 	router, _, _, _ := newReviewsRouter(t, seedReviewWorld(1))
 	const unauthorized = `{"error":"Unauthorized"}`

@@ -7,13 +7,14 @@ import (
 	"time"
 )
 
-// dbPingTimeout bounds the health-check DB ping (resource guardrail: DB
-// calls take the request ctx with an explicit short timeout).
+// dbPingTimeout は health check の DB ping に上限を設ける（resource
+// guardrail：DB 呼び出しは request の ctx に明示的な短い timeout を付けて
+// 使う）。
 const dbPingTimeout = 2 * time.Second
 
-// Pinger reports database connectivity. *pgxpool.Pool satisfies it; tests
-// inject fakes. The health check stays this minimal on purpose — it does
-// not need domain/usecase machinery.
+// Pinger は database の接続性を報告する。*pgxpool.Pool がこれを満たし、
+// テストでは fake を注入する。health check は意図的にここまで最小にして
+// いる。domain/usecase の仕組みは必要ない。
 type Pinger interface {
 	Ping(ctx context.Context) error
 }
@@ -22,8 +23,8 @@ type healthResponse struct {
 	Status string `json:"status"`
 }
 
-// handleHealth serves GET /up: 200 {"status":"ok"} when the DB ping
-// succeeds, 503 {"error":"..."} when it fails.
+// handleHealth は GET /up を処理する：DB の ping が成功したときは
+// 200 {"status":"ok"}、失敗したときは 503 {"error":"..."}。
 func handleHealth(db Pinger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), dbPingTimeout)

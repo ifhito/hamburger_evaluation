@@ -13,8 +13,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// fakeShopRepo is a hand-written usecase.ShopRepository test double.
-// Unset behaviors panic so tests fail loudly on unexpected calls.
+// fakeShopRepo は、手書きの usecase.ShopRepository の test double である。
+// 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
+// fail-loud する。
 type fakeShopRepo struct {
 	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error)
 	getShopWithCreator     func(ctx context.Context, id int64) (domain.ShopDetail, error)
@@ -76,8 +77,9 @@ func (f *fakeShopRepo) UpdateShopStatus(ctx context.Context, id int64, status do
 
 func int64Ptr(v int64) *int64 { return &v }
 
-// TestShopsListPagination pins the fallback rules: page defaults to 1,
-// per_page to 20, per_page is capped at 100, and none of them error.
+// TestShopsListPagination は、フォールバック規則を固定する。page の
+// デフォルトは 1、per_page のデフォルトは 20、per_page は 100 が上限で、
+// いずれもエラーにならない。
 func TestShopsListPagination(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -112,8 +114,8 @@ func TestShopsListPagination(t *testing.T) {
 	}
 }
 
-// TestShopsListVisibilityDescriptor asserts List derives the descriptor
-// from the viewer and hands it to the repository unchanged.
+// TestShopsListVisibilityDescriptor は、List が viewer から記述子を導出し、
+// それを変更せずに repository へ渡すことをアサートする。
 func TestShopsListVisibilityDescriptor(t *testing.T) {
 	admin := domain.User{ID: 5, Admin: true}
 	var got domain.ShopVisibility
@@ -131,9 +133,9 @@ func TestShopsListVisibilityDescriptor(t *testing.T) {
 	}
 }
 
-// TestShopsGet covers the detail use case: visible shops return the full
-// detail with reviews; hidden shops and unknown ids both surface
-// domain.ErrShopNotFound (AC4 at the usecase level).
+// TestShopsGet は詳細の use case を扱う。見える shop は review つきの完全な
+// detail を返し、隠された shop と未知の id はどちらも
+// domain.ErrShopNotFound を返す（usecase レベルでの AC4）。
 func TestShopsGet(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"}
 	admin := domain.User{ID: 2, Admin: true}
@@ -199,9 +201,9 @@ func TestShopsGet(t *testing.T) {
 	})
 }
 
-// TestShopsCreate covers the submission use case: a valid name yields a
-// pending shop with the viewer as creator; a blank name fails validation
-// without touching the repository (the fake would panic).
+// TestShopsCreate は投稿の use case を扱う。有効な name は viewer を creator と
+// する pending の shop を返し、空白の name は repository に触れずに validation
+// に失敗する（fake は panic する）。
 func TestShopsCreate(t *testing.T) {
 	alice := domain.User{ID: 1, Username: "alice"}
 
@@ -247,11 +249,11 @@ func TestShopsCreate(t *testing.T) {
 	})
 }
 
-// TestShopsAdminForbidden pins the authorization boundary: every admin
-// operation returns domain.ErrForbidden for non-admin viewers before any
-// repository access (the zero fake panics on any call).
+// TestShopsAdminForbidden は認可の境界を固定する。admin のすべての操作は、
+// admin でない viewer に対して、repository へのアクセスの前に
+// domain.ErrForbidden を返す（ゼロ値の fake はどの呼び出しでも panic する）。
 func TestShopsAdminForbidden(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"} // authenticated, not admin
+	alice := domain.User{ID: 1, Username: "alice"} // 認証済みだが admin ではない
 	shops := usecase.NewShops(&fakeShopRepo{})
 	ctx := context.Background()
 
@@ -273,9 +275,9 @@ func TestShopsAdminForbidden(t *testing.T) {
 	}
 }
 
-// TestShopsAdminList covers the moderation list: known statuses become
-// the repository filter, no status means all, and an unknown status
-// short-circuits to an empty result without a repository call.
+// TestShopsAdminList は moderation の一覧を扱う。既知の status は repository の
+// フィルタになり、status なしはすべてを意味し、未知の status は repository を
+// 呼ばずに空の結果へ short-circuit する。
 func TestShopsAdminList(t *testing.T) {
 	admin := domain.User{ID: 2, Admin: true}
 	ctx := context.Background()
@@ -326,10 +328,9 @@ func TestShopsAdminList(t *testing.T) {
 	})
 }
 
-// TestShopsModeration covers the admin write operations: each persists
-// only its own columns (status/note for the transitions, name for the
-// rename — the fake panics on any other write), and unknown ids surface
-// domain.ErrShopNotFound.
+// TestShopsModeration は admin の書き込み操作を扱う。それぞれ自分のカラム
+// だけを永続化し（遷移では status/note、rename では name。fake はそれ以外の
+// 書き込みで panic する）、未知の id は domain.ErrShopNotFound を返す。
 func TestShopsModeration(t *testing.T) {
 	admin := domain.User{ID: 2, Admin: true}
 	ctx := context.Background()
@@ -343,15 +344,15 @@ func TestShopsModeration(t *testing.T) {
 		}
 		return domain.ShopDetail{}, domain.ErrShopNotFound
 	}
-	// statusWrite records the arguments of one UpdateShopStatus call.
+	// statusWrite は 1 回の UpdateShopStatus の呼び出しの引数を記録する。
 	type statusWrite struct {
 		id     int64
 		status domain.ShopStatus
 		note   *string
 	}
-	// statusRepoFor serves only the rejected shop and records the
-	// column-scoped status write; updateShopName stays unset, so a status
-	// transition touching the name panics the test.
+	// statusRepoFor は rejected の shop だけを返し、カラム限定の status の
+	// 書き込みを記録する。updateShopName は未設定のままなので、name に触れる
+	// status 遷移があればテストが panic する。
 	statusRepoFor := func(got *statusWrite) *fakeShopRepo {
 		return &fakeShopRepo{
 			getShopWithCreator: getRejected,
@@ -397,8 +398,8 @@ func TestShopsModeration(t *testing.T) {
 	t.Run("AdminUpdateName persists only the name", func(t *testing.T) {
 		var gotID int64
 		var gotName string
-		// updateShopStatus stays unset, so a rename touching status/note
-		// panics the test.
+		// updateShopStatus は未設定のままなので、status/note に触れる rename が
+		// あればテストが panic する。
 		repo := &fakeShopRepo{
 			getShopWithCreator: getRejected,
 			updateShopName: func(_ context.Context, id int64, name string) (domain.Shop, error) {
@@ -430,8 +431,8 @@ func TestShopsModeration(t *testing.T) {
 	})
 
 	t.Run("unknown id yields ErrShopNotFound without any write", func(t *testing.T) {
-		// Both write behaviors stay unset: any write after the failed
-		// lookup panics the test.
+		// 2 つの書き込みの振る舞いはどちらも未設定のままなので、lookup が
+		// 失敗した後の書き込みはどれもテストを panic させる。
 		shops := usecase.NewShops(&fakeShopRepo{getShopWithCreator: getRejected})
 		for name, call := range map[string]func() error{
 			"Approve":         func() error { _, err := shops.Approve(ctx, admin, 999); return err },

@@ -13,15 +13,15 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// strPtr returns a pointer to s, for usecase.ProfileChanges fields.
+// strPtr は、usecase.ProfileChanges のフィールド用に、s へのポインタを返す。
 func strPtr(s string) *string { return &s }
 
-// TestUserRepository exercises the repository against a real PostgreSQL,
-// using the shared dbtest scaffold: a per-run database is created inside
-// the compose Postgres instance, migrated up, and dropped afterwards. It
-// requires TEST_DATABASE_URL to point at a maintenance database whose user
-// may create and drop databases; without it the test skips (inside
-// dbtest.New).
+// TestUserRepository は、repository を実際の PostgreSQL に対して検証する。
+// 共有の dbtest のスキャフォールドを使い、実行ごとのデータベースを compose の
+// Postgres インスタンス内に作成して migrate up し、終了後に drop する。
+// TEST_DATABASE_URL が、そのユーザーがデータベースを作成・drop できる
+// メンテナンス用データベースを指している必要がある。設定がなければ、テストは
+// スキップされる（dbtest.New の内部で）。
 func TestUserRepository(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -105,11 +105,11 @@ func TestUserRepository(t *testing.T) {
 	})
 }
 
-// TestUserRepositoryManagement exercises the S8 user-management
-// persistence: the kept-only listing, the column-scoped transactional
-// profile update, the soft delete with same-transaction burger_stats
-// recalculation, and the read-side exclusion of discarded users' reviews
-// from the feed, the review detail, and the shop reviews.
+// TestUserRepositoryManagement は、S8 の user 管理の永続化を検証する。
+// kept のみの一覧、カラム単位でトランザクションを伴うプロフィール更新、
+// 同一トランザクション内での burger_stats の再計算を伴う soft delete、
+// そして、discard 済みの user の review をフィード、review の詳細、shop の
+// review から読み取り側で除外することである。
 func TestUserRepositoryManagement(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -129,10 +129,10 @@ func TestUserRepositoryManagement(t *testing.T) {
 		t.Fatalf("discard ghost: %v", err)
 	}
 
-	// One active shop serving two burgers: "shared" is reviewed by the
-	// victim AND alice, "solo" only by the victim — after the victim's
-	// discard, shared must drop to alice's review alone and solo must go
-	// to the zero stats row.
+	// active な shop 1 つが 2 つの burger を提供している："shared" は victim と
+	// alice の両方が review し、"solo" は victim だけが review した。victim の
+	// discard 後、shared は alice の review だけに減り、solo は stats がゼロの
+	// 行にならなければならない。
 	shop := insertRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
@@ -171,7 +171,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if want := (domain.User{ID: bob, Username: "bobby", Email: "bob@example.com"}); updated != want {
 			t.Fatalf("UpdateUserProfile = %+v, want %+v", updated, want)
 		}
-		// The untouched columns are untouched in storage too.
+		// 更新していないカラムは、ストレージ上でも変更されていない。
 		var email, digest string
 		if err := conn.QueryRow(ctx, `SELECT email, password_digest FROM users WHERE id = $1`, bob).Scan(&email, &digest); err != nil {
 			t.Fatalf("select bob: %v", err)
@@ -219,7 +219,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if !errors.Is(err, domain.ErrEmailTaken) {
 			t.Fatalf("UpdateUserProfile error = %v, want %v", err, domain.ErrEmailTaken)
 		}
-		// The username change of the same call was rolled back with it.
+		// 同じ呼び出しの username の変更も、一緒に rollback された。
 		var username string
 		if err := conn.QueryRow(ctx, `SELECT username FROM users WHERE id = $1`, bob).Scan(&username); err != nil {
 			t.Fatalf("select bob: %v", err)
@@ -247,7 +247,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if err := repo.DiscardUser(ctx, victim); err != nil {
 			t.Fatalf("DiscardUser returned error: %v", err)
 		}
-		// Soft delete: the row still exists with discarded_at stamped.
+		// soft delete：行はまだ存在し、discarded_at に時刻が刻まれている。
 		var discardedAt *time.Time
 		if err := conn.QueryRow(ctx, `SELECT discarded_at FROM users WHERE id = $1`, victim).Scan(&discardedAt); err != nil {
 			t.Fatalf("select discarded user: %v", err)
@@ -258,8 +258,8 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if _, err := repo.GetActiveUserByID(ctx, victim); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("GetActiveUserByID after discard = %v, want %v", err, domain.ErrUserNotFound)
 		}
-		// Rails parity: the victim's reviews themselves stay kept — hiding
-		// is purely read-side.
+		// Rails parity：victim の review 自体は kept のままである。非表示化は
+		// 純粋に読み取り側で行われる。
 		var keptReviews int
 		if err := conn.QueryRow(ctx, `SELECT count(*) FROM reviews WHERE user_id = $1 AND discarded_at IS NULL`, victim).Scan(&keptReviews); err != nil {
 			t.Fatalf("count victim reviews: %v", err)
@@ -267,12 +267,13 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if keptReviews != 2 {
 			t.Errorf("victim kept reviews = %d, want 2 (reviews must not be discarded)", keptReviews)
 		}
-		// shared drops to alice's review alone; alice's review is unaffected.
+		// shared は alice の review だけに減る。alice の review は
+		// 影響を受けない。
 		sharedStats := requireConsistentStats(ctx, t, conn, shared)
 		if sharedStats.ReviewCount != 1 || sharedStats.AverageRating != 4.0 {
 			t.Errorf("shared stats after discard = %+v, want only alice's rating 4", sharedStats)
 		}
-		// solo, reviewed only by the victim, goes to the zero row.
+		// solo は、victim だけが review したので、ゼロの行になる。
 		soloStats := requireConsistentStats(ctx, t, conn, solo)
 		want := storedBurgerStats{ReviewCount: 0, AverageRating: 0.0, WeightedScore: 0.0, Confidence: 0.0, CalculatedAt: soloStats.CalculatedAt}
 		if soloStats != want {
@@ -290,8 +291,8 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("read paths hide the discarded user's kept reviews", func(t *testing.T) {
-		// Feed: only alice's review remains, and its displayed stats match
-		// the recalculated burger_stats row (count 1).
+		// フィード：alice の review だけが残り、表示される stats は再計算された
+		// burger_stats の行（count 1）と一致する。
 		feed, err := reviewRepo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
@@ -304,8 +305,8 @@ func TestUserRepositoryManagement(t *testing.T) {
 			t.Errorf("displayed review count = %d, want burger_stats %d = %d displayed reviews",
 				feed[0].Burger.ReviewCount, sharedStats.ReviewCount, len(feed))
 		}
-		// Detail: the discarded author's review is indistinguishable from a
-		// missing one; alice's stays reachable.
+		// 詳細：discard 済みの author の review は、存在しない review と
+		// 区別がつかない。alice の review には引き続き到達できる。
 		if _, err := reviewRepo.GetReview(ctx, victimShared.ID); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("GetReview(victim shared) = %v, want %v", err, domain.ErrReviewNotFound)
 		}
@@ -315,7 +316,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if _, err := reviewRepo.GetReview(ctx, aliceShared.ID); err != nil {
 			t.Errorf("GetReview(alice) returned error: %v", err)
 		}
-		// Shop reviews: only alice's review is listed.
+		// shop の review：alice の review だけが一覧に載る。
 		shopReviews, err := shopRepo.ListShopReviews(ctx, shop)
 		if err != nil {
 			t.Fatalf("ListShopReviews returned error: %v", err)

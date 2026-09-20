@@ -1,19 +1,19 @@
-// Command seed populates the development database with idempotent fixture
-// data (issue #17 R5): an admin user, three regular users, three approved
-// shops plus one pending shop, two burgers per approved shop, and a fixed
-// set of reviews. burger_stats is recalculated afterwards with the same
-// domain calculator the app uses, so GET responses are coherent.
+// Command seed は開発用 database に idempotent な fixture データを投入する
+// （issue #17 R5）。admin ユーザー 1 人、一般ユーザー 3 人、承認済みの shop
+// 3 件と pending の shop 1 件、承認済みの shop ごとに burger 2 件、そして
+// 固定された review 群である。その後、アプリが使うのと同じ domain の
+// calculator で burger_stats を再計算するので、GET のレスポンスは整合する。
 //
-// All fixture passwords are "password123" — these are well-known dev
-// fixtures, not secrets. Run it via docker compose:
+// すべての fixture のパスワードは "password123" である。これらはよく知られた
+// 開発用 fixture であり、secret ではない。docker compose で実行する：
 //
 //	docker compose run --rm migrate up
 //	docker compose run --rm seed
 //
-// Re-running is safe: users are keyed by email, shops by name, burgers by
-// (shop, name), and reviews by (user, burger), so nothing is duplicated.
-// The whole seed runs in one transaction and fails loud (non-zero exit)
-// on any error.
+// 再実行しても安全である。ユーザーは email、shop は name、burger は
+// (shop, name)、review は (user, burger) をキーとするので、何も重複しない。
+// seed 全体は 1 つの transaction で実行され、いかなるエラーでも fail-loud
+// する（終了コードは 0 以外）。
 package main
 
 import (
@@ -30,7 +30,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// devPassword is the shared password of every fixture user (dev-only).
+// devPassword は、すべての fixture ユーザーに共通のパスワードである
+// （開発専用）。
 const devPassword = "password123"
 
 func main() {
@@ -56,7 +57,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck // no-op after commit
+	defer tx.Rollback(ctx) //nolint:errcheck // commit 後は no-op になる
 
 	if err := seed(ctx, tx); err != nil {
 		return err
@@ -67,9 +68,9 @@ func run(ctx context.Context) error {
 	return nil
 }
 
-// seed inserts every fixture inside the given transaction. Reviews are
-// assigned deterministically (unlike the Rails seeds' sampling) so repeat
-// runs converge on the same state.
+// seed は、与えられた transaction の中ですべての fixture を挿入する。
+// review は（Rails の seeds のサンプリングとは異なり）決定的に割り当てられる
+// ので、繰り返し実行しても同じ状態に収束する。
 func seed(ctx context.Context, tx pgx.Tx) error {
 	admin, err := seedUser(ctx, tx, "admin@example.com", "admin", true)
 	if err != nil {
@@ -88,7 +89,8 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		return err
 	}
 
-	// Shop status encoding mirrors db/migrations/000002: 0=pending, 1=active.
+	// shop の status のエンコーディングは db/migrations/000002 に対応する：
+	// 0=pending, 1=active。
 	shakeShack, err := seedShop(ctx, tx, "Shake Shack 渋谷", 1, admin)
 	if err != nil {
 		return err
@@ -101,7 +103,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	if err != nil {
 		return err
 	}
-	// One pending shop to exercise the moderation flow; it gets no burgers.
+	// moderation のフローを試すための pending の shop 1 件。burger は持たない。
 	if _, err := seedShop(ctx, tx, "バーガースタンド 下北沢（審査待ち）", 0, alice); err != nil {
 		return err
 	}
@@ -129,7 +131,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 
 	type reviewSpec struct {
 		userID  int64
-		burger  int // index into burgers
+		burger  int // burgers へのインデックス
 		rating  int16
 		comment string
 	}
@@ -150,8 +152,8 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		}
 	}
 
-	// Ascending burger id order, matching the multi-burger recalculation
-	// convention in the review repository.
+	// burger の id の昇順。review repository における複数 burger の再計算の
+	// 規約に合わせている。
 	for _, burgerID := range burgers {
 		if err := recalculateBurgerStats(ctx, tx, burgerID); err != nil {
 			return err
@@ -160,9 +162,9 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
-// seedUser finds the user by email or creates it with the shared dev
-// password hashed exactly like signup does (bcrypt at the default cost,
-// see internal/adapter/infra/password.go).
+// seedUser は email でユーザーを探し、なければ、signup とまったく同じように
+// ハッシュ化した共通の開発用パスワードでユーザーを作成する（デフォルトの cost
+// での bcrypt。internal/adapter/infra/password.go を参照）。
 func seedUser(ctx context.Context, tx pgx.Tx, email, username string, admin bool) (int64, error) {
 	var id int64
 	err := tx.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&id)
@@ -186,8 +188,8 @@ func seedUser(ctx context.Context, tx pgx.Tx, email, username string, admin bool
 	return id, nil
 }
 
-// seedShop finds the shop by name (the seed's natural key — the schema has
-// no unique constraint on it) or creates it with the given status.
+// seedShop は name で shop を探し（seed の natural key である。schema には
+// これに対する unique 制約がない）、なければ与えられた status で作成する。
 func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID int64) (int64, error) {
 	var id int64
 	err := tx.QueryRow(ctx, `SELECT id FROM shops WHERE name = $1`, name).Scan(&id)
@@ -207,9 +209,9 @@ func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creator
 	return id, nil
 }
 
-// seedBurger finds the shop's burger by name via shops_burgers (the same
-// per-shop natural key CreateReviewForNamedBurger uses) or creates the
-// burger and its link.
+// seedBurger は shops_burgers を経由して name で shop の burger を探し
+// （CreateReviewForNamedBurger が使うのと同じ shop ごとの natural key）、
+// なければ burger とその link を作成する。
 func seedBurger(ctx context.Context, tx pgx.Tx, shopID int64, name string) (int64, error) {
 	var id int64
 	err := tx.QueryRow(ctx,
@@ -237,8 +239,9 @@ func seedBurger(ctx context.Context, tx pgx.Tx, shopID int64, name string) (int6
 	return id, nil
 }
 
-// seedReview inserts a review unless the user already has a kept review of
-// the burger (the seed's natural key; the app itself allows several).
+// seedReview は、ユーザーがその burger に対する kept な review をすでに持って
+// いない限り review を挿入する（seed の natural key。アプリ自体は複数件を
+// 許可する）。
 func seedReview(ctx context.Context, tx pgx.Tx, userID, burgerID int64, rating int16, comment string) error {
 	var exists bool
 	err := tx.QueryRow(ctx,
@@ -263,11 +266,12 @@ func seedReview(ctx context.Context, tx pgx.Tx, userID, burgerID int64, rating i
 	return nil
 }
 
-// recalculateBurgerStats recomputes and upserts one burger's stats row from
-// its kept reviews, mirroring the repository's recalculateBurgerStats: the
-// same SQL as db/queries/burger_stats.sql and the same pure domain
-// calculator, so seeded stats match what the app would store. No FOR UPDATE
-// lock: the seed is a one-shot tool with no concurrent writers.
+// recalculateBurgerStats は、1 つの burger の stats 行を、その kept な review
+// から再計算して upsert する。repository の recalculateBurgerStats を再現して
+// おり、db/queries/burger_stats.sql と同じ SQL、同じ純粋な domain の
+// calculator を使うので、seed された stats はアプリが保存するものと一致する。
+// FOR UPDATE ロックはない。seed は 1 回限りのツールで、同時に書き込むものが
+// いないからである。
 func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) error {
 	rows, err := tx.Query(ctx,
 		`SELECT r.rating, r.created_at, r.user_id
@@ -299,8 +303,8 @@ func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) erro
 		return fmt.Errorf("list facts for burger %d: %w", burgerID, err)
 	}
 
-	// Reviewer-trust histories: each fact author's kept ratings across all
-	// burgers, grouped by user.
+	// Reviewer-trust の履歴：各 fact の author がすべての burger にわたって
+	// つけた kept な rating を、ユーザーごとにまとめたもの。
 	historyByUser := make(map[int64][]float64, len(factRows))
 	userIDs := make([]int64, 0, len(factRows))
 	for _, row := range factRows {

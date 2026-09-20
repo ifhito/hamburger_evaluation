@@ -1,6 +1,6 @@
-// Command api is the composition root: it loads config, builds the single
-// pgx pool, wires the HTTP handlers, and runs the server with resource
-// guardrails and graceful shutdown.
+// Command api は composition root である。config を読み込み、唯一の
+// pgx pool を構築し、HTTP handler を配線し、resource guardrail と
+// graceful shutdown を備えた server を実行する。
 package main
 
 import (
@@ -30,7 +30,7 @@ const (
 	shutdownTimeout   = 10 * time.Second
 )
 
-// main stays thin: signal handling, config, then the testable run().
+// main は薄いままにしておく：signal の処理、config、そしてテスト可能な run()。
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -44,11 +44,11 @@ func main() {
 	}
 }
 
-// run builds the pool and handlers, then serves until ctx is canceled
-// (SIGTERM/SIGINT in production). The pool is created exactly once here
-// and closed after the server has shut down. ready, if non-nil, is called
-// with the bound address once the listener is accepting (tests use it with
-// PORT=0 for an ephemeral port).
+// run は pool と handler を構築し、ctx が cancel されるまで（本番では
+// SIGTERM/SIGINT）serve する。pool はここでちょうど 1 回だけ作成され、
+// server の shutdown 後に close される。ready が nil でなければ、listener が
+// accept を開始した時点で、bind されたアドレスを渡して呼び出される（テストでは
+// ephemeral port を得るために PORT=0 とともに使う）。
 func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	pool, err := infra.NewPool(ctx, cfg)
 	if err != nil {
@@ -65,11 +65,11 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		jwtCodec,
 	)
 
-	// Review photo storage (S10): S3-compatible in s3 mode, else local
-	// disk, which the API also serves itself under GET /photos/ via
-	// handler.PhotoFileServer (the dir resolves relative to the working
-	// dir; the container mounts . as /app). photoFiles stays nil in s3
-	// mode.
+	// Review 写真の storage（S10）：s3 モードでは S3 互換、それ以外では
+	// ローカル disk であり、後者は API 自身も handler.PhotoFileServer を通して
+	// GET /photos/ 配下で配信する（dir は作業ディレクトリからの相対で
+	// 解決される。container は . を /app としてマウントする）。s3 モードでは
+	// photoFiles は nil のままである。
 	var photos usecase.PhotoStorage
 	var photoFiles http.Handler
 	if cfg.PhotoStorage == "s3" {
@@ -87,9 +87,10 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, shops, reviews, users, photoFiles), ready)
 }
 
-// serve runs an http.Server with explicit timeouts (never bare
-// ListenAndServe) until ctx is canceled, then shuts down gracefully so
-// in-flight requests complete, and returns nil on a clean shutdown.
+// serve は、明示的な timeout を設定した http.Server（素の ListenAndServe は
+// 決して使わない）を ctx が cancel されるまで実行し、その後 graceful に
+// shutdown して in-flight のリクエストを完了させ、正常に shutdown できたときは
+// nil を返す。
 func serve(ctx context.Context, port string, h http.Handler, ready func(addr string)) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort("", port))
 	if err != nil {
@@ -112,7 +113,7 @@ func serve(ctx context.Context, port string, h http.Handler, ready func(addr str
 
 	select {
 	case err := <-errCh:
-		// Serve failed before shutdown was requested.
+		// shutdown が要求される前に Serve が失敗した。
 		return fmt.Errorf("serve: %w", err)
 	case <-ctx.Done():
 	}

@@ -5,51 +5,54 @@ import (
 	"time"
 )
 
-// Burger statistics derived from reviews (issue #15, S7). This file is a
-// pure port of the Rails domain logic in
+// review から導出される burger の統計（issue #15、S7）。このファイルは
 // backend/app/domain/reviews/{burger_score_calculator,
-// reviewer_trust_evaluator, reviewer_trust, burger_score}.rb and
-// backend/app/domain/burgers/burger_entity.rb: identical inputs must
-// produce identical outputs. The Rails ReviewerTrust level label
-// (newcomer/regular/veteran/expert) is deliberately not ported — only the
-// numeric score feeds the outputs.
+// reviewer_trust_evaluator, reviewer_trust, burger_score}.rb と
+// backend/app/domain/burgers/burger_entity.rb にある Rails の domain
+// ロジックを純粋に移植したものであり、同一の入力は同一の出力を生成しなければ
+// ならない。Rails の ReviewerTrust の level ラベル
+// （newcomer/regular/veteran/expert）は意図的に移植していない。出力に
+// 反映されるのは数値のスコアだけである。
 
 const (
-	// recencyHalfLifeDays mirrors BurgerScoreCalculator::RECENCY_HALF_LIFE_DAYS.
+	// recencyHalfLifeDays は BurgerScoreCalculator::RECENCY_HALF_LIFE_DAYS に
+	// 対応する。
 	recencyHalfLifeDays = 180.0
-	// lowVarianceThreshold mirrors ReviewerTrustEvaluator::LOW_VARIANCE_THRESHOLD.
+	// lowVarianceThreshold は ReviewerTrustEvaluator::LOW_VARIANCE_THRESHOLD に
+	// 対応する。
 	lowVarianceThreshold = 0.3
-	// lowVariancePenalty mirrors ReviewerTrustEvaluator::LOW_VARIANCE_PENALTY.
+	// lowVariancePenalty は ReviewerTrustEvaluator::LOW_VARIANCE_PENALTY に
+	// 対応する。
 	lowVariancePenalty = 0.7
 )
 
-// ReviewerHistory is the kept ratings of one reviewer across all burgers
-// (Rails Reviews::ReviewerHistory).
+// ReviewerHistory は、1 人の reviewer がすべての burger にわたってつけた kept
+// な rating である（Rails Reviews::ReviewerHistory）。
 type ReviewerHistory struct{ Ratings []float64 }
 
-// ReviewFact is one kept review as input to the score calculation
-// (Rails Reviews::ReviewFact).
+// ReviewFact は、スコア計算への入力となる kept な review 1 件である
+// （Rails Reviews::ReviewFact）。
 type ReviewFact struct {
 	Rating          float64
 	CreatedAt       time.Time
 	ReviewerHistory ReviewerHistory
 }
 
-// BurgerScore is the weighted score output (Rails Reviews::BurgerScore):
-// the constructor there rounds/clamps, so the fields here always hold the
-// already-rounded values.
+// BurgerScore は重み付きスコアの出力である（Rails Reviews::BurgerScore）。
+// Rails 側のコンストラクタが丸めと clamp を行うので、ここのフィールドは常に
+// 丸め済みの値を保持する。
 type BurgerScore struct {
-	WeightedAverage float64 // rounded to 2 decimals
-	Confidence      float64 // clamped to [0,1], rounded to 4 decimals
+	WeightedAverage float64 // 小数 2 桁に丸める
+	Confidence      float64 // [0,1] に clamp し、小数 4 桁に丸める
 	SampleSize      int
 }
 
-// ReviewerTrustScore ports Reviews::ReviewerTrustEvaluator#call combined
-// with the score clamp in Reviews::ReviewerTrust#initialize. The base
-// score comes from the review count (>=20 expert 1.0, >=10 veteran 0.9,
-// >=3 regular 0.7, else newcomer 0.5); reviewers with 3+ ratings whose
-// population variance is below 0.3 are penalized by 0.7. The result is
-// clamped to [0.0, 1.0].
+// ReviewerTrustScore は、Reviews::ReviewerTrustEvaluator#call を、
+// Reviews::ReviewerTrust#initialize のスコア clamp と組み合わせて移植する。
+// 基礎スコアは review 数から決まる（20 件以上は expert 1.0、10 件以上は
+// veteran 0.9、3 件以上は regular 0.7、それ以外は newcomer 0.5）。rating が
+// 3 件以上あり母分散が 0.3 未満の reviewer には 0.7 のペナルティが課される。
+// 結果は [0.0, 1.0] に clamp される。
 func ReviewerTrustScore(history ReviewerHistory) float64 {
 	count := len(history.Ratings)
 
@@ -86,12 +89,12 @@ func ReviewerTrustScore(history ReviewerHistory) float64 {
 	return clampFloat(base*factor, 0.0, 1.0)
 }
 
-// CalculateBurgerScore ports Reviews::BurgerScoreCalculator#call with the
-// rounding/clamping from Reviews::BurgerScore#initialize. Each fact is
-// weighted by reviewer trust times an exponential recency decay with a
-// 180-day half-life; daysAgo may be negative for future timestamps —
-// mirroring Rails, it is not clamped. Empty input yields the zero score
-// (Reviews::BurgerScore.empty).
+// CalculateBurgerScore は、Reviews::BurgerScoreCalculator#call を、
+// Reviews::BurgerScore#initialize の丸め/clamp とともに移植する。各 fact は
+// reviewer の trust に、半減期 180 日の指数的な recency 減衰を掛けたもので
+// 重み付けされる。未来のタイムスタンプに対しては daysAgo が負になりうるが、
+// Rails と同様に clamp しない。空の入力はゼロスコア
+// （Reviews::BurgerScore.empty）を返す。
 func CalculateBurgerScore(facts []ReviewFact, now time.Time) BurgerScore {
 	if len(facts) == 0 {
 		return BurgerScore{WeightedAverage: 0.0, Confidence: 0.0, SampleSize: 0}
@@ -118,9 +121,8 @@ func CalculateBurgerScore(facts []ReviewFact, now time.Time) BurgerScore {
 	}
 }
 
-// AverageRating ports Burgers::BurgerEntity#average_rating: the plain
-// arithmetic mean of the ratings rounded to 2 decimals, 0.0 when there
-// are no reviews.
+// AverageRating は Burgers::BurgerEntity#average_rating を移植する。rating の
+// 単純な算術平均を小数 2 桁に丸めたもので、review がない場合は 0.0 である。
 func AverageRating(facts []ReviewFact) float64 {
 	if len(facts) == 0 {
 		return 0.0
@@ -132,22 +134,22 @@ func AverageRating(facts []ReviewFact) float64 {
 	return roundHalfAwayFromZero(sum/float64(len(facts)), 100)
 }
 
-// recencyFactor ports BurgerScoreCalculator#recency_factor:
-// exp(-daysAgo * ln(2) / 180) where daysAgo is the (possibly negative)
-// elapsed time in fractional days.
+// recencyFactor は BurgerScoreCalculator#recency_factor を移植する。
+// exp(-daysAgo * ln(2) / 180) であり、daysAgo は（負になりうる）経過時間を
+// 小数の日数で表したものである。
 func recencyFactor(createdAt, now time.Time) float64 {
 	daysAgo := now.Sub(createdAt).Seconds() / 86400.0
 	return math.Exp(-daysAgo * math.Ln2 / recencyHalfLifeDays)
 }
 
-// roundHalfAwayFromZero mirrors Ruby Float#round (half away from zero) by
-// porting MRI numeric.c round_half_up: scale is 100 for 2 decimals and
-// 10000 for 4 decimals. Beyond math.Round(value*scale), MRI applies a
-// correction for decimal boundaries whose nearest double sits just below
-// the exact boundary (e.g. 41.0/40 -> 1.0249999999999999): when the next
-// rounding step up/down, mapped back through the scale, still does not
-// exceed the original value, the result is bumped one step towards away
-// from zero — exactly reproducing Ruby's Float#round output.
+// roundHalfAwayFromZero は、MRI の numeric.c の round_half_up を移植することで
+// Ruby の Float#round（half away from zero）を再現する。scale は小数 2 桁なら
+// 100、小数 4 桁なら 10000 である。math.Round(value*scale) に加えて、MRI は、
+// 最も近い double が厳密な境界のすぐ下にある小数の境界（例：41.0/40 ->
+// 1.0249999999999999）に対する補正を適用する。次の丸めステップ（上方向/
+// 下方向）を scale を通して元に戻した値が、それでも元の値を超えないとき、
+// 結果は 0 から遠ざかる方向へ 1 ステップ進められ、Ruby の Float#round の出力を
+// 正確に再現する。
 func roundHalfAwayFromZero(value, scale float64) float64 {
 	f := math.Round(value * scale)
 	if value > 0 {
@@ -162,7 +164,7 @@ func roundHalfAwayFromZero(value, scale float64) float64 {
 	return f / scale
 }
 
-// clampFloat mirrors Ruby Comparable#clamp for floats.
+// clampFloat は float 向けの Ruby Comparable#clamp を再現する。
 func clampFloat(value, low, high float64) float64 {
 	if value < low {
 		return low

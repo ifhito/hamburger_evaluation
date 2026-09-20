@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
             })
           },
         },
-        // Review photos are served from /photos on the API (no path rewrite).
+        // レビュー写真は API の /photos から配信される（path の rewrite なし）。
         '/photos': {
           target: proxyTarget,
           changeOrigin: true,

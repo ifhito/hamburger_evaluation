@@ -15,7 +15,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 )
 
-// insertRow inserts via sql (which must RETURN id) and returns the new id.
+// insertRow は sql（id を RETURN する必要がある）で insert し、新しい id を
+// 返す。
 func insertRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, args ...any) int64 {
 	t.Helper()
 	var id int64
@@ -25,7 +26,7 @@ func insertRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, ar
 	return id
 }
 
-// shopIDs extracts the ids of shops for order-insensitive comparisons.
+// shopIDs は、順序に依存しない比較のために shop の id を取り出す。
 func shopIDs(shops []domain.Shop) []int64 {
 	ids := make([]int64, 0, len(shops))
 	for _, s := range shops {
@@ -40,7 +41,8 @@ func sortedIDs(ids ...int64) []int64 {
 	return ids
 }
 
-// shopNames extracts names preserving order, for keyword/order assertions.
+// shopNames は、keyword と順序のアサーションのために、順序を保ったまま
+// name を取り出す。
 func shopNames(shops []domain.Shop) []string {
 	names := make([]string, 0, len(shops))
 	for _, s := range shops {
@@ -49,10 +51,10 @@ func shopNames(shops []domain.Shop) []string {
 	return names
 }
 
-// TestShopRepository exercises the shop read repository against a real
-// PostgreSQL via the shared dbtest scaffold (skips without
-// TEST_DATABASE_URL). It covers issue #12 AC1–AC3 and AC5 at the SQL
-// level plus pagination, ordering, and both detail queries.
+// TestShopRepository は、shop の読み取り repository を、共有の dbtest の
+// スキャフォールドを通じて実際の PostgreSQL に対して検証する
+// （TEST_DATABASE_URL がなければスキップする）。issue #12 の AC1–AC3 と AC5 を
+// SQL レベルで扱うほか、pagination、順序、両方の詳細クエリを扱う。
 func TestShopRepository(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -66,7 +68,7 @@ func TestShopRepository(t *testing.T) {
 	carol := insertRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
-	// status codes: 0=pending, 1=active, 2=rejected.
+	// status のコード：0=pending、1=active、2=rejected。
 	deltaDiner := insertRow(ctx, t, conn, insertShop, "Delta Diner", 1, nil, carol)
 	alicePending := insertRow(ctx, t, conn, insertShop, "Alpha Pending", 0, nil, alice)
 	golfRejected := insertRow(ctx, t, conn, insertShop, "Golf Grill", 2, "needs fixes", nil)
@@ -172,7 +174,7 @@ func TestShopRepository(t *testing.T) {
 		if got := list(t, anon, `'; DROP TABLE shops;--`, 100, 0); len(got) != 0 {
 			t.Errorf("shops = %v, want empty", got)
 		}
-		// The table must still be intact.
+		// テーブルは依然として無傷でなければならない。
 		if got := shopIDs(list(t, anon, "", 100, 0)); !reflect.DeepEqual(got, activeIDs) {
 			t.Errorf("ids after injection attempt = %v, want %v", got, activeIDs)
 		}
@@ -237,7 +239,7 @@ func TestShopRepository(t *testing.T) {
 		t2 := time.Date(2024, 5, 2, 10, 0, 0, 0, time.UTC)
 		r1 := insertRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
 		r2 := insertRow(ctx, t, conn, insertReview, 3, nil, carol, cheese, nil, t2)
-		r3 := insertRow(ctx, t, conn, insertReview, 4, nil, alice, plain, nil, t2) // same time as r2: id desc breaks the tie
+		r3 := insertRow(ctx, t, conn, insertReview, 4, nil, alice, plain, nil, t2) // r2 と同時刻：id desc で同順位を解消する
 		insertRow(ctx, t, conn, insertReview, 1, "discarded", alice, cheese, time.Now(), t2)
 		insertRow(ctx, t, conn, insertReview, 2, "other shop", alice, other, nil, t2)
 		if _, err := conn.Exec(ctx,
@@ -255,7 +257,7 @@ func TestShopRepository(t *testing.T) {
 			{
 				ID: r3, Rating: 4, CreatedAt: t2,
 				User:   &domain.UserRef{ID: alice, Username: "alice"},
-				Burger: &domain.ShopReviewBurger{ID: plain, Name: "Plain"}, // no stats row: zeros
+				Burger: &domain.ShopReviewBurger{ID: plain, Name: "Plain"}, // stats 行なし：ゼロ
 			},
 			{
 				ID: r2, Rating: 3, CreatedAt: t2,
@@ -273,8 +275,8 @@ func TestShopRepository(t *testing.T) {
 		}
 		for i := range want {
 			got := reviews[i]
-			// Compare timestamps by instant (driver returns them in the
-			// session time zone), then align for the DeepEqual below.
+			// タイムスタンプは instant で比較し（driver はセッションの
+			// タイムゾーンで返す）、そのうえで下の DeepEqual のために揃える。
 			if !got.CreatedAt.Equal(want[i].CreatedAt) {
 				t.Errorf("review[%d].CreatedAt = %v, want %v", i, got.CreatedAt, want[i].CreatedAt)
 			}
@@ -290,10 +292,10 @@ func TestShopRepository(t *testing.T) {
 	})
 }
 
-// TestShopModerationRepository exercises the S5 submission and moderation
-// persistence against a real PostgreSQL: creating pending shops, the
-// admin moderation list (ordering, filter, creator join), the moderation
-// update, and the visibility consequences of approve/reject.
+// TestShopModerationRepository は、S5 の投稿と moderation の永続化を、実際の
+// PostgreSQL に対して検証する。pending の shop の作成、admin の moderation
+// 一覧（順序、filter、creator の join）、moderation の update、そして
+// approve/reject が visibility にもたらす結果である。
 func TestShopModerationRepository(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -307,9 +309,9 @@ func TestShopModerationRepository(t *testing.T) {
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id, created_at)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`
-	// status codes: 0=pending, 1=active, 2=rejected. Explicit created_at
-	// values pin the moderation-list ordering; old1/old2 share one instant
-	// so id desc must break the tie.
+	// status のコード：0=pending、1=active、2=rejected。created_at の値を
+	// 明示することで moderation 一覧の順序を固定する。old1/old2 は同一の
+	// instant を共有するので、id desc が同順位を解消しなければならない。
 	tOld := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	tNew := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
 	old1 := insertRow(ctx, t, conn, insertShop, "Old One", 1, nil, alice, tOld)
@@ -339,8 +341,8 @@ func TestShopModerationRepository(t *testing.T) {
 			t.Errorf("creator = %+v, want alice", detail.Creator)
 		}
 
-		// The S4 visibility rule holds for a freshly created shop: the
-		// creator sees it in the list, anonymous viewers do not.
+		// S4 の visibility のルールは、作成直後の shop でも成り立つ：
+		// creator には一覧に見え、匿名の viewer には見えない。
 		anonShops, err := repo.ListShops(ctx, anon, "Fresh Shack", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
@@ -356,7 +358,7 @@ func TestShopModerationRepository(t *testing.T) {
 			t.Errorf("creator list = %v, want the created shop", ownShops)
 		}
 
-		// Remove it again so the ordering assertions below stay exact.
+		// 下の順序のアサーションが厳密なままになるよう、これを再度削除する。
 		if _, err := conn.Exec(ctx, `DELETE FROM shops WHERE id = $1`, created.ID); err != nil {
 			t.Fatalf("delete created shop: %v", err)
 		}
@@ -446,10 +448,10 @@ func TestShopModerationRepository(t *testing.T) {
 	t.Run("column-scoped writes never revert a concurrent update", func(t *testing.T) {
 		shop := insertRow(ctx, t, conn, insertShop, "Race Shack", 0, nil, alice, tNew)
 
-		// Lost-update regression, direction 1: a stale renamer read its
-		// snapshot before a concurrent approve. The old full-row write
-		// would restore status pending and revert the approval; the
-		// column-scoped rename must leave status and note alone.
+		// lost-update の回帰、方向 1：古い rename 側は、並行する approve の
+		// 前にスナップショットを読んだ。旧来の行全体の書き込みは status を
+		// pending に戻して approve を巻き戻してしまうが、カラム単位の rename は
+		// status と note に手を付けてはならない。
 		stale, err := repo.GetShopWithCreator(ctx, shop)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
@@ -457,11 +459,11 @@ func TestShopModerationRepository(t *testing.T) {
 		if stale.Status != domain.ShopStatusPending {
 			t.Fatalf("snapshot status = %q, want pending", stale.Status)
 		}
-		next := stale.Shop.Approve() // the concurrent admin approves
+		next := stale.Shop.Approve() // 並行する admin が approve する
 		if _, err := repo.UpdateShopStatus(ctx, shop, next.Status, next.ModerationNote); err != nil {
 			t.Fatalf("UpdateShopStatus returned error: %v", err)
 		}
-		renamed, err := repo.UpdateShopName(ctx, shop, "Race Shack Renamed") // the stale renamer writes
+		renamed, err := repo.UpdateShopName(ctx, shop, "Race Shack Renamed") // 古い rename 側が書き込む
 		if err != nil {
 			t.Fatalf("UpdateShopName returned error: %v", err)
 		}
@@ -469,8 +471,8 @@ func TestShopModerationRepository(t *testing.T) {
 			t.Errorf("after stale rename = %+v, want new name AND active with nil note", renamed)
 		}
 
-		// Direction 2: a status write from a snapshot taken before a
-		// concurrent rename must leave the new name intact.
+		// 方向 2：並行する rename の前に取得したスナップショットからの status の
+		// 書き込みは、新しい name をそのまま保たなければならない。
 		note := "spam"
 		next = stale.Shop.Reject(&note)
 		rejected, err := repo.UpdateShopStatus(ctx, shop, next.Status, next.ModerationNote)
@@ -489,8 +491,8 @@ func TestShopModerationRepository(t *testing.T) {
 			t.Errorf("stored = %+v, want renamed and rejected", stored.Shop)
 		}
 
-		// Remove it again so the ordering assertions of sibling subtests
-		// stay exact regardless of execution order.
+		// 兄弟サブテストの順序のアサーションが、実行順序にかかわらず厳密な
+		// ままになるよう、これを再度削除する。
 		if _, err := conn.Exec(ctx, `DELETE FROM shops WHERE id = $1`, shop); err != nil {
 			t.Fatalf("delete race shop: %v", err)
 		}

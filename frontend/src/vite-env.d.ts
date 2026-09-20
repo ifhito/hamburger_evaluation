@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** API base URL for the SPA; defaults to '/api' (same-origin proxy). */
+  /** SPA 用の API ベース URL。デフォルトは '/api'（同一オリジンのプロキシ）。 */
   readonly VITE_API_BASE_URL?: string
 }
 

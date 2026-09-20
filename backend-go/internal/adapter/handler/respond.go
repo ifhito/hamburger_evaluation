@@ -1,7 +1,6 @@
-// Package handler holds the HTTP boundary: routing, middleware, and
-// net/http handlers. It maps errors to the API error shape
-// {"error":"..."} (single) or {"errors":[...]} (list) and never contains
-// business rules or SQL.
+// Package handler は HTTP の境界（routing、middleware、net/http の
+// handler）を担う。エラーを API のエラー形式 {"error":"..."}（単一）または
+// {"errors":[...]}（リスト）に対応させ、業務ルールや SQL は決して含まない。
 package handler
 
 import (
@@ -16,15 +15,15 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-// errorsResponse is the list shape {"errors":[...]}, reserved for
-// validation failures (422).
+// errorsResponse は {"errors":[...]} というリスト形式であり、validation の
+// 失敗（422）専用に予約されている。
 type errorsResponse struct {
 	Errors []string `json:"errors"`
 }
 
-// writeJSON encodes v as JSON with the given status. Marshal failures for
-// the small static payloads used here are programming errors; log and fall
-// back to a JSON 500.
+// writeJSON は v を、指定された status の JSON としてエンコードする。ここで
+// 使う小さな静的 payload の marshal の失敗はプログラミングエラーであるため、
+// ログに記録し、JSON の 500 にフォールバックする。
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
@@ -39,36 +38,36 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_, _ = w.Write(body)
 }
 
-// writeError writes the single-error JSON shape {"error":"..."}.
+// writeError は単一エラーの JSON 形式 {"error":"..."} を書き込む。
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, errorResponse{Error: msg})
 }
 
-// decodeJSON decodes the request body into dst and reports whether it
-// succeeded; on failure the error response has already been written: 413
-// when the body-cap MaxBytesReader tripped, 400 for malformed or empty
-// JSON. It deliberately tolerates unknown fields — clients send extras
-// such as password_confirmation-adjacent fields.
+// decodeJSON は request の body を dst にデコードし、成功したかどうかを返す。
+// 失敗した場合、エラーレスポンスは既に書き込まれている：body cap の
+// MaxBytesReader が作動したときは 413、不正または空の JSON には 400 である。
+// 未知のフィールドは意図的に許容する。client は password_confirmation に
+// 隣接するフィールドのような余分なフィールドを送ってくるためである。
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return decodeJSONBody(w, r, dst, false)
 }
 
-// decodeOptionalJSON is the decodeJSON variant for endpoints whose body is
-// optional (e.g. the reject moderation note): an empty body succeeds and
-// leaves dst untouched instead of answering 400, matching Rails where
-// absent params are simply nil. Everything else behaves like decodeJSON.
+// decodeOptionalJSON は、body が任意の endpoint（例：reject の moderation
+// note）向けの decodeJSON の派生版である。空の body は 400 を返す代わりに
+// 成功となり、dst には手を加えない。これは、存在しない params が単に nil に
+// なる Rails に合わせたものである。それ以外は decodeJSON と同じ動作をする。
 func decodeOptionalJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return decodeJSONBody(w, r, dst, true)
 }
 
-// decodeJSONBody is the shared core of decodeJSON and decodeOptionalJSON;
-// allowEmpty makes an empty body (io.EOF on the first Decode) a success
-// that leaves dst untouched.
+// decodeJSONBody は decodeJSON と decodeOptionalJSON の共通の中核である。
+// allowEmpty により、空の body（最初の Decode で io.EOF になる）は、dst に
+// 手を加えない成功として扱われる。
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, allowEmpty bool) bool {
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(dst); err != nil {
 		if allowEmpty && errors.Is(err, io.EOF) {
-			return true // empty body: nothing to decode
+			return true // 空の body：デコードするものがない
 		}
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
@@ -78,9 +77,9 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, allowEmpty 
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return false
 	}
-	// Reject trailing garbage after the JSON value: a second Decode must
-	// hit clean end-of-stream, otherwise the body was not a single JSON
-	// document.
+	// JSON 値の後ろに続くゴミを拒否する：2 回目の Decode は正常な
+	// end-of-stream に達しなければならず、そうでなければ body は単一の
+	// JSON ドキュメントではなかったことになる。
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return false

@@ -10,8 +10,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 )
 
-// TestDiskPutReadBack asserts Put writes the exact bytes under root/key,
-// creating parent directories, and leaves no temp files behind.
+// TestDiskPutReadBack は、Put が root/key の下に正確なバイト列を書き込み、
+// 親ディレクトリを作成し、一時ファイルを残さないことを検証する。
 func TestDiskPutReadBack(t *testing.T) {
 	root := t.TempDir()
 	d := storage.NewDisk(root, "/photos")
@@ -35,8 +35,8 @@ func TestDiskPutReadBack(t *testing.T) {
 	}
 }
 
-// TestDiskPutOverwrites asserts a second Put atomically replaces the
-// stored bytes.
+// TestDiskPutOverwrites は、2 回目の Put が保存済みのバイト列をアトミックに
+// 置き換えることを検証する。
 func TestDiskPutOverwrites(t *testing.T) {
 	root := t.TempDir()
 	d := storage.NewDisk(root, "/photos")
@@ -54,8 +54,8 @@ func TestDiskPutOverwrites(t *testing.T) {
 	}
 }
 
-// TestDiskDelete asserts Delete removes the file and that deleting a
-// missing key is nil (idempotent).
+// TestDiskDelete は、Delete がファイルを削除すること、および存在しない
+// キーの削除が nil になること（冪等）を検証する。
 func TestDiskDelete(t *testing.T) {
 	root := t.TempDir()
 	d := storage.NewDisk(root, "/photos")
@@ -84,8 +84,8 @@ func TestDiskURL(t *testing.T) {
 	}
 }
 
-// TestDiskKeyValidation asserts traversal-shaped keys are rejected by Put
-// and Delete alike, and that nothing escapes the root.
+// TestDiskKeyValidation は、traversal の形をしたキーが Put と Delete の
+// どちらでも拒否され、root の外には何も出ないことを検証する。
 func TestDiskKeyValidation(t *testing.T) {
 	root := t.TempDir()
 	d := storage.NewDisk(root, "/photos")

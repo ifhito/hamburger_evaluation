@@ -6,12 +6,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// BcryptPasswordHasher hashes and verifies passwords with bcrypt,
-// matching Rails has_secure_password digests. It implements the
-// usecase PasswordHasher interface.
+// BcryptPasswordHasher は bcrypt でパスワードのハッシュ化と検証を行い、
+// Rails の has_secure_password の digest と一致する。usecase の
+// PasswordHasher interface を実装する。
 type BcryptPasswordHasher struct{}
 
-// Hash returns the bcrypt digest of password at the default cost.
+// Hash は、デフォルトの cost での password の bcrypt digest を返す。
 func (BcryptPasswordHasher) Hash(password string) (string, error) {
 	digest, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -20,7 +20,7 @@ func (BcryptPasswordHasher) Hash(password string) (string, error) {
 	return string(digest), nil
 }
 
-// Compare returns nil when password matches digest.
+// Compare は password が digest に一致するとき nil を返す。
 func (BcryptPasswordHasher) Compare(digest, password string) error {
 	return bcrypt.CompareHashAndPassword([]byte(digest), []byte(password))
 }

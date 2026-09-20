@@ -8,13 +8,13 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// route declares one path's handlers by HTTP method, plus optional
-// middleware applied to every method of the path. methodMiddleware
-// overrides that path-level middleware for individual methods, so one
-// path can e.g. serve GET behind OptionalAuth and POST behind
-// RequireAuth without duplicate ServeMux patterns. Routes are data so
-// the 405 fallback (with its Allow header) is derived instead of
-// hand-rolled.
+// route は 1 つの path の handler を HTTP method ごとに宣言し、加えて、その
+// path のすべての method に適用される省略可能な middleware を宣言する。
+// methodMiddleware は、個々の method についてその path 単位の middleware を
+// 上書きするので、1 つの path が、重複する ServeMux パターンなしに、
+// 例：GET を OptionalAuth の背後で、POST を RequireAuth の背後で提供できる。
+// route をデータにしているので、405 のフォールバック（Allow ヘッダー付き）は
+// 手書きではなく導出される。
 type route struct {
 	path             string
 	methods          map[string]http.HandlerFunc
@@ -22,13 +22,13 @@ type route struct {
 	methodMiddleware map[string]func(http.Handler) http.Handler
 }
 
-// NewRouter builds the HTTP handler tree: stdlib Go 1.22 method-pattern
-// mux wrapped in the global body-cap middleware. Unknown routes get 404
-// and wrong methods 405, both in the JSON error shape. photoFiles, when
-// non-nil (disk photo storage, S10), serves review photos under GET
-// /photos/ — registered on the mux directly so the JSON 404 catch-all
-// does not swallow it; in s3 mode it is nil and photo URLs point at the
-// bucket's public domain instead.
+// NewRouter は HTTP handler のツリーを構築する：stdlib の Go 1.22 の
+// method パターン mux を、グローバルな body cap の middleware で包んだもの
+// である。未知の route は 404、誤った method は 405 を返し、どちらも JSON の
+// エラー形式である。photoFiles は nil でない場合（disk への写真保存、S10）、
+// GET /photos/ の配下で review の写真を配信する。JSON の 404 の catch-all に
+// 飲み込まれないよう mux に直接登録しており、s3 モードでは nil で、写真の
+// URL は代わりに bucket の公開ドメインを指す。
 func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	if photoFiles != nil {
@@ -39,8 +39,8 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *use
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(auth)}},
 		{path: "/login", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogin(auth)}},
 		{path: "/logout", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogout}, middleware: RequireAuth(auth)},
-		// GET stays anonymous-friendly (OptionalAuth); only submitting a
-		// shop requires a login, hence the per-method override.
+		// GET は匿名でも使える（OptionalAuth）ままで、ログインが必要なのは
+		// shop の投稿だけであり、そのため method ごとの上書きを行う。
 		{
 			path: "/shops",
 			methods: map[string]http.HandlerFunc{
@@ -51,8 +51,8 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *use
 			methodMiddleware: map[string]func(http.Handler) http.Handler{http.MethodPost: RequireAuth(auth)},
 		},
 		{path: "/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodGet: handleGetShop(shops)}, middleware: OptionalAuth(auth)},
-		// The review feed and detail stay anonymous-friendly; only the
-		// writes (POST/PUT/DELETE) require a login.
+		// review のフィードと詳細は匿名でも使える。ログインが必要なのは
+		// 書き込み（POST/PUT/DELETE）だけである。
 		{
 			path: "/reviews",
 			methods: map[string]http.HandlerFunc{
@@ -75,9 +75,9 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *use
 				http.MethodDelete: RequireAuth(auth),
 			},
 		},
-		// The user index is public (Rails parity, no auth at all); editing
-		// and deleting an account require a login, and the self-only rule
-		// itself lives in the usecase (ErrForbidden).
+		// user の一覧は公開である（Rails parity、認証はまったくなし）。
+		// account の編集と削除にはログインが必要で、本人のみというルール
+		// 自体は usecase にある（ErrForbidden）。
 		{path: "/users", methods: map[string]http.HandlerFunc{http.MethodGet: handleListUsers(users)}},
 		{
 			path: "/users/{id}",
@@ -87,8 +87,8 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *use
 			},
 			middleware: RequireAuth(auth),
 		},
-		// Moderation endpoints: RequireAuth only authenticates; the
-		// admin decision itself lives in the usecase (ErrForbidden).
+		// moderation の endpoint：RequireAuth は認証だけを行い、
+		// admin かどうかの判断自体は usecase にある（ErrForbidden）。
 		{path: "/admin/shops", methods: map[string]http.HandlerFunc{http.MethodGet: handleAdminListShops(shops)}, middleware: RequireAuth(auth)},
 		{path: "/admin/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodPut: handleAdminUpdateShop(shops)}, middleware: RequireAuth(auth)},
 		{path: "/admin/shops/{id}/approve", methods: map[string]http.HandlerFunc{http.MethodPost: handleApproveShop(shops)}, middleware: RequireAuth(auth)},
@@ -97,11 +97,11 @@ func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *use
 	return limitBody(mux)
 }
 
-// registerRoutes registers each route's "METHOD path" patterns (each
-// wrapped in its per-method middleware when declared, else the path-level
-// middleware), a per-path method-less fallback answering 405 with a
-// comma-joined sorted Allow header of exactly the declared methods, and
-// the catch-all JSON 404.
+// registerRoutes は、各 route の "METHOD path" パターン（method ごとの
+// middleware が宣言されていればそれで、なければ path 単位の middleware で
+// 包む）、宣言された method だけをカンマ区切りでソートした Allow ヘッダー
+// 付きで 405 を返す path ごとの method なしのフォールバック、そして JSON の
+// 404 の catch-all を登録する。
 func registerRoutes(mux *http.ServeMux, routes []route) {
 	for _, rt := range routes {
 		allowed := make([]string, 0, len(rt.methods))
@@ -125,7 +125,8 @@ func registerRoutes(mux *http.ServeMux, routes []route) {
 		})
 	}
 
-	// Catch-all for unmatched paths, replacing the stdlib plain-text 404.
+	// 一致しない path 用の catch-all で、stdlib のプレーンテキストの 404 を
+	// 置き換える。
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})

@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// fakeS3 records the inputs; no network involved.
+// fakeS3 は入力を記録する。ネットワークは関与しない。
 type fakeS3 struct {
 	put    *s3.PutObjectInput
 	delete *s3.DeleteObjectInput
@@ -25,8 +25,8 @@ func (f *fakeS3) DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, opt
 	return &s3.DeleteObjectOutput{}, nil
 }
 
-// TestS3Put asserts bucket, key, content type, and body are forwarded to
-// PutObject.
+// TestS3Put は、bucket、key、content type、body が PutObject に渡される
+// ことを検証する。
 func TestS3Put(t *testing.T) {
 	fake := &fakeS3{}
 	s := &S3{client: fake, bucket: "photos", baseURL: "https://photos.example.com"}
@@ -71,7 +71,8 @@ func TestS3Delete(t *testing.T) {
 	}
 }
 
-// TestS3URL covers NewS3's trailing-slash trim and URL construction.
+// TestS3URL は、NewS3 による末尾スラッシュの除去と、URL の組み立てをカバー
+// する。
 func TestS3URL(t *testing.T) {
 	s := NewS3("https://acct.r2.cloudflarestorage.com", "photos", "id", "secret", "https://photos.example.com/")
 	if got := s.URL("reviews/1/a.jpg"); got != "https://photos.example.com/reviews/1/a.jpg" {
@@ -79,8 +80,8 @@ func TestS3URL(t *testing.T) {
 	}
 }
 
-// TestS3KeyValidation asserts the shared traversal guard applies before
-// any client call.
+// TestS3KeyValidation は、共有の traversal ガードが client の呼び出しより前に
+// 適用されることを検証する。
 func TestS3KeyValidation(t *testing.T) {
 	fake := &fakeS3{}
 	s := &S3{client: fake, bucket: "photos", baseURL: "https://photos.example.com"}

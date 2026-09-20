@@ -56,10 +56,10 @@ WHERE id = $1 AND discarded_at IS NULL
 RETURNING burger_id
 `
 
-// Column-scoped soft delete: only stamps discarded_at, and only once —
-// an already-discarded review matches no row, surfacing as not found.
-// Returns burger_id so the caller can recalculate that burger's stats in
-// the same transaction.
+// 列を限定した soft delete：discarded_at にタイムスタンプを設定するだけで、
+// しかも 1 回だけ行う。すでに discard 済みの review はどの行にもマッチせず、
+// not found として現れる。burger_id を返すので、呼び出し元は同じ
+// トランザクション内でその burger の統計を再計算できる。
 func (q *Queries) DiscardReview(ctx context.Context, id int64) (int64, error) {
 	row := q.db.QueryRow(ctx, discardReview, id)
 	var burger_id int64
@@ -95,11 +95,10 @@ type GetReviewDetailRow struct {
 	Confidence    pgtype.Float8
 }
 
-// One non-discarded review of a non-discarded user with author, burger,
-// and stats — serves both the public detail endpoint and the
-// load-for-authorization of edit and delete (user_id carries the
-// ownership check). A discarded author makes the review indistinguishable
-// from a missing one (S8).
+// discard されていない user の、discard されていない review 1 件（author、
+// burger、統計付き）。公開の詳細 endpoint と、編集・削除の認可のための
+// 読み込み（user_id が所有者チェックを担う）の両方に使われる。author が
+// discard 済みの review は、存在しない review と区別がつかなくなる（S8）。
 func (q *Queries) GetReviewDetail(ctx context.Context, id int64) (GetReviewDetailRow, error) {
 	row := q.db.QueryRow(ctx, getReviewDetail, id)
 	var i GetReviewDetailRow
@@ -174,22 +173,25 @@ type ListPublicReviewsRow struct {
 	Confidence    pgtype.Float8
 }
 
-// Global review feed: non-discarded reviews of non-discarded users whose
-// burger is served by at least one active shop (status 1), with author,
-// burger, and stats in one query (no N+1). EXISTS instead of a plain JOIN
-// on shops_burgers so a burger linked to several active shops still
-// yields exactly one row. The u.discarded_at filter hides discarded
-// users' (still kept) reviews from the feed (S8).
-// The three narg filters mirror Rails ReviewQuery (NULL = absent, ANDed):
-// filter_rating is an exact rating match (bigint so out-of-range values
-// compare false instead of overflowing the smallint column);
-// comment_pattern is a pre-escaped ILIKE pattern over comment
-// (keyword_search; a NULL comment never matches, like Rails);
-// filter_shop_id keeps reviews whose burger is linked to that shop
-// (Rails' shops_and_burgers join), again via EXISTS to avoid row
-// multiplication; the filter shop must itself be active (status 1) —
-// stricter than Rails, whose shop filter was status-blind, and
-// consistent with the feed EXISTS's existing active-shop rule.
+// 全体の review フィード：discard されていない user の、discard されていない
+// review のうち、その burger が少なくとも 1 つの active な shop（status 1）で
+// 提供されているもの。author、burger、統計を 1 つのクエリで取得する
+// （N+1 なし）。shops_burgers に対する単純な JOIN ではなく EXISTS を使うのは、
+// 複数の active な shop に紐づく burger でも、ちょうど 1 行だけが返るように
+// するためである。u.discarded_at フィルタは、discard 済みの user の
+// （まだ kept な）review をフィードから隠す（S8）。
+// 3 つの narg フィルタは Rails の ReviewQuery に対応する
+// （NULL = 未指定、AND で結合される）：
+// filter_rating は rating の完全一致である（範囲外の値が smallint 列で
+// オーバーフローせず、比較結果が false になるよう bigint にしている）。
+// comment_pattern は comment に対する、あらかじめエスケープ済みの ILIKE
+// パターンである（keyword_search。NULL の comment は Rails と同様に決して
+// マッチしない）。
+// filter_shop_id は、burger がその shop に紐づいている review を残す
+// （Rails の shops_and_burgers の join）。ここでも行の重複を避けるために
+// EXISTS を使う。フィルタ対象の shop 自身も active（status 1）でなければ
+// ならない。これは shop フィルタが status を考慮しなかった Rails より厳しく、
+// フィードの EXISTS に既にある active な shop のルールとも一貫している。
 func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsParams) ([]ListPublicReviewsRow, error) {
 	rows, err := q.db.Query(ctx, listPublicReviews,
 		arg.FilterRating,
@@ -236,11 +238,11 @@ WHERE user_id = $1 AND discarded_at IS NULL
 ORDER BY burger_id
 `
 
-// The distinct burgers the user's kept reviews touch, for the S8
-// user-discard stats recalculation. The ascending burger_id ORDER BY is
-// load-bearing: recalculateBurgerStats locks each burger FOR UPDATE, and
-// all multi-burger callers must lock in ascending burger_id order so
-// overlapping burger sets cannot deadlock.
+// user の kept な review が対象とする、重複を除いた burger。S8 の
+// user discard に伴う統計再計算のために使う。burger_id 昇順の ORDER BY は
+// 欠かせない。recalculateBurgerStats は各 burger を FOR UPDATE でロックし、
+// 複数の burger を扱う呼び出し元はすべて burger_id の昇順でロックしなければ
+// ならない。そうすれば、burger の集合が重なってもデッドロックしない。
 func (q *Queries) ListUserKeptReviewBurgerIDs(ctx context.Context, userID int64) ([]int64, error) {
 	rows, err := q.db.Query(ctx, listUserKeptReviewBurgerIDs, userID)
 	if err != nil {
@@ -276,9 +278,9 @@ type UpdateReviewContentParams struct {
 	Comment pgtype.Text
 }
 
-// Column-scoped edit: touches only rating and comment (never
-// discarded_at), and only while the review is still kept, so an edit can
-// neither resurrect nor race a concurrent soft delete.
+// 列を限定した編集：rating と comment だけを更新し（discarded_at は決して
+// 更新しない）、review がまだ kept な間だけ更新するので、編集が並行する
+// soft delete を復活させることも、それと競合することもない。
 func (q *Queries) UpdateReviewContent(ctx context.Context, arg UpdateReviewContentParams) (Review, error) {
 	row := q.db.QueryRow(ctx, updateReviewContent, arg.ID, arg.Rating, arg.Comment)
 	var i Review
@@ -309,9 +311,10 @@ type UpdateReviewPhotoKeyParams struct {
 	PhotoKey pgtype.Text
 }
 
-// Column-scoped photo replacement (S10): touches only photo_key (never
-// rating/comment/discarded_at), and only while the review is still kept.
-// photo_key does not affect burger_stats, so no recalculation is needed.
+// 列を限定した写真の差し替え（S10）：photo_key だけを更新し
+// （rating/comment/discarded_at は決して更新しない）、review がまだ kept な
+// 間だけ更新する。photo_key は burger_stats に影響しないので、
+// 再計算は不要である。
 func (q *Queries) UpdateReviewPhotoKey(ctx context.Context, arg UpdateReviewPhotoKeyParams) (Review, error) {
 	row := q.db.QueryRow(ctx, updateReviewPhotoKey, arg.ID, arg.PhotoKey)
 	var i Review

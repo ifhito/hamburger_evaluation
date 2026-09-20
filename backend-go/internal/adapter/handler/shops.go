@@ -11,19 +11,21 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// shopNotFoundMessage is the shared 404 body for missing and hidden shops
-// (and non-numeric ids), so responses never reveal whether a shop exists.
+// shopNotFoundMessage は、存在しない shop と隠された shop（および数値でない
+// id）に共通の 404 body であり、shop が存在するかどうかをレスポンスから
+// 決して明かさないようにする。
 const shopNotFoundMessage = "Shop not found"
 
-// shopResponse is one element of the GET /shops top-level array
-// (frontend Shop in domains/shops/api/types.ts, snake_case).
+// shopResponse は GET /shops のトップレベル配列の要素 1 つである
+// （frontend の Shop、domains/shops/api/types.ts、snake_case）。
 type shopResponse struct {
 	ID     int64  `json:"id"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
 }
 
-// shopDetailResponse is the GET /shops/{id} body (frontend ShopDetail).
+// shopDetailResponse は GET /shops/{id} の body である
+// （frontend の ShopDetail）。
 type shopDetailResponse struct {
 	ID             int64                `json:"id"`
 	Name           string               `json:"name"`
@@ -43,10 +45,10 @@ type shopReviewResponse struct {
 	Rating    int     `json:"rating"`
 	Comment   *string `json:"comment"`
 	CreatedAt string  `json:"created_at"`
-	// PhotoURL is the public URL of the review's photo, null when none is
-	// attached (S10). For the reviews embedded in GET /shops/{id} it stays
-	// null in this story: the Shops usecase is deliberately not wired to
-	// photo storage.
+	// PhotoURL は review の写真の公開 URL で、添付がない場合は null である
+	// （S10）。GET /shops/{id} に埋め込まれる review では、この story では
+	// null のままである。Shops usecase は意図的に写真の storage へ配線
+	// されていない。
 	PhotoURL *string               `json:"photo_url"`
 	User     *userRefResponse      `json:"user"`
 	Burger   *reviewBurgerResponse `json:"burger"`
@@ -61,8 +63,8 @@ type reviewBurgerResponse struct {
 	Confidence    float64 `json:"confidence"`
 }
 
-// viewerPtr converts the OptionalAuth context viewer into the usecase's
-// optional form (nil = anonymous).
+// viewerPtr は OptionalAuth が context に置いた viewer を、usecase の
+// 省略可能な形（nil = 匿名）に変換する。
 func viewerPtr(r *http.Request) *domain.User {
 	if viewer, ok := ViewerFrom(r.Context()); ok {
 		return &viewer
@@ -70,8 +72,9 @@ func viewerPtr(r *http.Request) *domain.User {
 	return nil
 }
 
-// queryInt parses the named query parameter as an int, returning 0 (the
-// usecase's fall-back-to-default marker) when absent or not a number.
+// queryInt は指定された名前の query parameter を int としてパースし、
+// 存在しない、または数値でない場合は 0（デフォルトへのフォールバックを示す
+// usecase のマーカー）を返す。
 func queryInt(r *http.Request, name string) int {
 	n, err := strconv.Atoi(r.URL.Query().Get(name))
 	if err != nil {
@@ -80,8 +83,9 @@ func queryInt(r *http.Request, name string) int {
 	return n
 }
 
-// handleListShops serves GET /shops: a top-level JSON array of the shops
-// visible to the (optional) viewer, filtered by keyword and paginated.
+// handleListShops は GET /shops を処理する：（存在する場合の）viewer から
+// 見える shop のトップレベルの JSON 配列で、keyword で絞り込まれ、
+// ページネーションされる。
 func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		list, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"),
@@ -91,7 +95,7 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
-		resp := make([]shopResponse, 0, len(list)) // non-nil: marshals as []
+		resp := make([]shopResponse, 0, len(list)) // nil ではない：[] として marshal される
 		for _, shop := range list {
 			resp = append(resp, shopResponse{ID: shop.ID, Name: shop.Name, Status: string(shop.Status)})
 		}
@@ -99,8 +103,8 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 	}
 }
 
-// handleGetShop serves GET /shops/{id}: the shop detail with creator and
-// reviews, or the uniform 404 for unknown, hidden, and non-numeric ids.
+// handleGetShop は GET /shops/{id} を処理する：creator と reviews を伴う
+// shop の詳細、または未知、隠された、数値でない id に対する統一された 404。
 func handleGetShop(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)

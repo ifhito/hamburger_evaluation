@@ -16,13 +16,13 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// shopRepoFake is an in-memory usecase.ShopRepository. Visibility is
-// applied through the domain descriptor itself (vis.CanView), so the rule
-// is not re-implemented here; keyword matching is a simple case-fold
-// substring (metacharacter semantics are covered by the repository
-// integration tests). Setting err fails every operation (500 paths).
+// shopRepoFake は in-memory の usecase.ShopRepository である。可視性は
+// domain の記述子そのもの（vis.CanView）を通して適用されるので、そのルールを
+// ここで再実装してはいない。keyword のマッチングは単純な case-fold の
+// 部分文字列一致である（メタ文字のセマンティクスは repository の統合テストが
+// 扱う）。err を設定するとすべての操作が失敗する（500 の経路）。
 type shopRepoFake struct {
-	shops   []domain.ShopDetail // Reviews unset; served via reviews below
+	shops   []domain.ShopDetail // Reviews は未設定。下の reviews 経由で提供される
 	reviews map[int64][]domain.ShopReview
 	err     error
 }
@@ -71,8 +71,8 @@ func (f *shopRepoFake) ListShopReviews(_ context.Context, shopID int64) ([]domai
 	return f.reviews[shopID], nil
 }
 
-// newShopsRouter wires the router with the auth kit and the given shop
-// fake, returning issued Bearer headers for a regular user and an admin.
+// newShopsRouter は、auth kit と与えられた shop の fake で router を配線し、
+// 通常のユーザーと admin 用に発行した Bearer ヘッダーを返す。
 func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, aliceAuth, adminAuth string, aliceID int64) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
@@ -95,8 +95,8 @@ func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, alic
 
 func shopPtr[T any](v T) *T { return &v }
 
-// seedShops returns a fake with one active, one pending (created by
-// creatorID), and one rejected shop.
+// seedShops は、active な shop 1 件、（creatorID が作成した）pending な shop
+// 1 件、rejected な shop 1 件を持つ fake を返す。
 func seedShops(creatorID int64) *shopRepoFake {
 	return &shopRepoFake{
 		shops: []domain.ShopDetail{
@@ -111,9 +111,8 @@ func seedShops(creatorID int64) *shopRepoFake {
 	}
 }
 
-// TestListShops covers AC1–AC3 at the HTTP level: the visible set depends
-// on the OptionalAuth viewer, and the body is a top-level snake_case
-// array ordered by name.
+// TestListShops は HTTP レベルで AC1–AC3 を扱う：見える集合は OptionalAuth の
+// viewer に依存し、body はトップレベルの snake_case の配列で name 順に並ぶ。
 func TestListShops(t *testing.T) {
 	repo := seedShops(1)
 	router, aliceAuth, adminAuth, _ := newShopsRouter(t, repo)
@@ -151,9 +150,9 @@ func TestListShops(t *testing.T) {
 	}
 }
 
-// TestListShopsParams covers keyword filtering and the pagination
-// fallbacks at the HTTP level: non-numeric values fall back to defaults
-// instead of erroring, and out-of-range pages yield an empty array.
+// TestListShopsParams は HTTP レベルで keyword による絞り込みと pagination の
+// fallback を扱う：数値でない値はエラーにならずデフォルト値に fallback し、
+// 範囲外の page は空配列を返す。
 func TestListShopsParams(t *testing.T) {
 	repo := seedShops(1)
 	router, _, adminAuth, _ := newShopsRouter(t, repo)
@@ -204,7 +203,7 @@ func TestListShopsParams(t *testing.T) {
 	}
 }
 
-// TestListShopsRepoFailure: a repository failure surfaces as 500.
+// TestListShopsRepoFailure：repository の失敗は 500 として表面化する。
 func TestListShopsRepoFailure(t *testing.T) {
 	router, _, _, _ := newShopsRouter(t, &shopRepoFake{err: io.ErrUnexpectedEOF})
 	rec := do(router, http.MethodGet, "/shops", "", "")
@@ -216,8 +215,9 @@ func TestListShopsRepoFailure(t *testing.T) {
 	}
 }
 
-// TestGetShopDetail asserts the exact detail body: snake_case fields,
-// creator object, and reviews with user, burger, and stats inline.
+// TestGetShopDetail は detail の body を厳密に検証する：snake_case の
+// フィールド、creator オブジェクト、そして user、burger、統計を inline で
+// 含む review。
 func TestGetShopDetail(t *testing.T) {
 	repo := seedShops(1)
 	repo.reviews[1] = []domain.ShopReview{
@@ -255,9 +255,9 @@ func TestGetShopDetail(t *testing.T) {
 	}
 }
 
-// TestGetShopVisibility covers AC4 and AC6: pending shops 404 for
-// anonymous viewers but open for the creator and admins, unknown and
-// non-numeric ids 404 with the identical body, failures 500.
+// TestGetShopVisibility は AC4 と AC6 を扱う：pending な shop は匿名の
+// viewer には 404 だが creator と admin には開かれており、未知の id と
+// 数値でない id は同一の body で 404 になり、失敗は 500 になる。
 func TestGetShopVisibility(t *testing.T) {
 	repo := seedShops(1)
 	router, aliceAuth, adminAuth, _ := newShopsRouter(t, repo)

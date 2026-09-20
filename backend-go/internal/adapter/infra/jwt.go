@@ -7,26 +7,26 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// jwtAlg is the only accepted signing algorithm, for Rails parity
-// (Rails signs and verifies with HS256).
+// jwtAlg は、受け付ける唯一の署名アルゴリズムである。Rails parity のため
+// （Rails は HS256 で署名と検証を行う）。
 const jwtAlg = "HS256"
 
-// JWTCodec issues and verifies HS256 JWTs whose payload is exactly
-// {"user_id": <number>, "exp": <unix>}, matching the Rails backend and
-// the frontend, which decodes payload.user_id. It implements the
-// usecase TokenIssuer and TokenVerifier interfaces. Secrets and tokens
-// must never be logged.
+// JWTCodec は、payload がちょうど
+// {"user_id": <number>, "exp": <unix>} である HS256 の JWT を発行・検証する。
+// これは Rails バックエンドおよび payload.user_id をデコードする frontend と
+// 一致している。usecase の TokenIssuer と TokenVerifier の interface を
+// 実装する。secret とトークンは決してログに出力してはならない。
 type JWTCodec struct {
 	secret []byte
 	ttl    time.Duration
 }
 
-// NewJWTCodec builds a codec from the configured secret and token TTL.
+// NewJWTCodec は、設定された secret とトークンの TTL から codec を構築する。
 func NewJWTCodec(secret string, ttl time.Duration) *JWTCodec {
 	return &JWTCodec{secret: []byte(secret), ttl: ttl}
 }
 
-// Issue signs a token for userID expiring ttl from now.
+// Issue は、現在から ttl 後に期限切れになる userID 用のトークンに署名する。
 func (c *JWTCodec) Issue(userID int64) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": userID,
@@ -39,8 +39,8 @@ func (c *JWTCodec) Issue(userID int64) (string, error) {
 	return token, nil
 }
 
-// Verify parses raw, pinning the algorithm to HS256 and requiring a
-// valid exp claim, and returns the user_id claim.
+// Verify は raw をパースする。アルゴリズムを HS256 に固定し、有効な exp
+// claim を必須とし、user_id claim を返す。
 func (c *JWTCodec) Verify(raw string) (int64, error) {
 	token, err := jwt.Parse(raw,
 		func(*jwt.Token) (any, error) { return c.secret, nil },
@@ -54,7 +54,7 @@ func (c *JWTCodec) Verify(raw string) (int64, error) {
 	if !ok {
 		return 0, fmt.Errorf("unexpected claims type %T", token.Claims)
 	}
-	// JSON numbers decode as float64.
+	// JSON の数値は float64 としてデコードされる。
 	userID, ok := claims["user_id"].(float64)
 	if !ok {
 		return 0, fmt.Errorf("token has no numeric user_id claim")

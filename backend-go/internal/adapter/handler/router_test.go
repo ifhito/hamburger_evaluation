@@ -13,8 +13,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 )
 
-// pingerFake is a hand-written fake for handler.Pinger; it returns err on
-// every Ping.
+// pingerFake は handler.Pinger の手書きの fake であり、Ping のたびに err を
+// 返す。
 type pingerFake struct{ err error }
 
 func (p pingerFake) Ping(context.Context) error { return p.err }
@@ -24,8 +24,8 @@ var (
 	failPinger = pingerFake{err: errors.New("db down")}
 )
 
-// decodeError asserts body matches the {"error":"..."} shape and returns
-// the message.
+// decodeError は、body が {"error":"..."} の形と一致することを検証し、その
+// メッセージを返す。
 func decodeError(t *testing.T, body []byte) string {
 	t.Helper()
 	var resp struct {
@@ -40,14 +40,14 @@ func decodeError(t *testing.T, body []byte) string {
 	return resp.Error
 }
 
-// TestHealth covers AC1 (healthy pinger -> 200 {"status":"ok"}) and AC2
-// (failing pinger -> 503 with the error shape).
+// TestHealth は AC1（healthy な pinger -> 200 {"status":"ok"}）と AC2（失敗する
+// pinger -> 503 とエラーの形）を扱う。
 func TestHealth(t *testing.T) {
 	tests := []struct {
 		name       string
 		pinger     handler.Pinger
 		wantStatus int
-		wantBody   string // exact body; empty means assert error shape instead
+		wantBody   string // 完全一致させる body。空なら代わりにエラーの形を検証する
 	}{
 		{
 			name:       "AC1 healthy db returns 200 ok",
@@ -84,8 +84,8 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-// TestUnknownRouteAndMethod covers the routing error shapes: unknown paths
-// get 404 and wrong methods 405, both as {"error":"..."} JSON.
+// TestUnknownRouteAndMethod は routing のエラーの形を扱う：未知のパスは 404、
+// 誤ったメソッドは 405 になり、どちらも {"error":"..."} の JSON で返る。
 func TestUnknownRouteAndMethod(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -124,8 +124,8 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 	}
 }
 
-// TestBodyLimit covers AC3: a POST with a 2 MiB body gets 413 with the
-// error JSON shape, and a subsequent request on the same client succeeds.
+// TestBodyLimit は AC3 を扱う：2 MiB の body を持つ POST は、エラーの JSON の
+// 形を伴う 413 になり、同じ client での後続の request は成功する。
 func TestBodyLimit(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(t, okPinger))
 	defer srv.Close()
@@ -146,7 +146,7 @@ func TestBodyLimit(t *testing.T) {
 	}
 	decodeError(t, body)
 
-	// The same client must still be able to talk to the server.
+	// 同じ client が、引き続き server と通信できなければならない。
 	resp2, err := client.Get(srv.URL + "/up")
 	if err != nil {
 		t.Fatalf("follow-up request failed: %v", err)

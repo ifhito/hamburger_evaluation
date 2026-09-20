@@ -8,8 +8,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// CreateUserParams carries the fields persisted for a new user. The
-// password arrives pre-hashed: repositories never see plaintext.
+// CreateUserParams は、新しいユーザーとして永続化するフィールドを保持する。
+// パスワードはハッシュ化済みの状態で渡される。repository が平文を目にする
+// ことはない。
 type CreateUserParams struct {
 	Username       string
 	Email          string
@@ -17,42 +18,43 @@ type CreateUserParams struct {
 	Admin          bool
 }
 
-// UserCredentials pairs a domain user with its password digest for
-// login checks. The digest intentionally never lives on domain.User.
+// UserCredentials は、ログインのチェックのために、domain のユーザーと
+// そのパスワードの digest を組にしたものである。digest は意図的に
+// domain.User 上には決して置かれない。
 type UserCredentials struct {
 	User           domain.User
 	PasswordDigest string
 }
 
-// UserRepository is the consumer-side persistence contract for auth.
-// Implementations map storage errors to domain errors:
-// CreateUser returns (a wrapped) domain.ErrEmailTaken on an email unique
-// violation; the lookups return domain.ErrUserNotFound when no active
-// (non-discarded) user matches.
+// UserRepository は auth 向けの consumer 側の永続化の契約である。
+// 実装は storage のエラーを domain のエラーに対応させる。
+// CreateUser は email の unique violation に対して（wrap された）
+// domain.ErrEmailTaken を返し、lookup は、active な（discard されていない）
+// ユーザーが一致しないとき domain.ErrUserNotFound を返す。
 type UserRepository interface {
 	CreateUser(ctx context.Context, params CreateUserParams) (domain.User, error)
 	GetActiveUserByEmail(ctx context.Context, email string) (UserCredentials, error)
 	GetActiveUserByID(ctx context.Context, id int64) (domain.User, error)
 }
 
-// PasswordHasher hashes and verifies passwords.
+// PasswordHasher はパスワードのハッシュ化と検証を行う。
 type PasswordHasher interface {
 	Hash(password string) (string, error)
 	Compare(digest, password string) error
 }
 
-// TokenIssuer issues an auth token for a user ID.
+// TokenIssuer は、ユーザー ID に対する認証トークンを発行する。
 type TokenIssuer interface {
 	Issue(userID int64) (string, error)
 }
 
-// TokenVerifier verifies a raw token and returns the user ID it carries.
+// TokenVerifier は、生のトークンを検証し、それが持つユーザー ID を返す。
 type TokenVerifier interface {
 	Verify(token string) (int64, error)
 }
 
-// Auth implements the signup/login/token-authentication use cases.
-// Authentication decisions live here, not in HTTP handlers.
+// Auth は signup、login、トークン認証の use case を実装する。
+// 認証に関する判断は HTTP handler ではなく、ここにある。
 type Auth struct {
 	users    UserRepository
 	hasher   PasswordHasher
@@ -64,13 +66,14 @@ func NewAuth(users UserRepository, hasher PasswordHasher, issuer TokenIssuer, ve
 	return &Auth{users: users, hasher: hasher, issuer: issuer, verifier: verifier}
 }
 
-// maxPasswordBytes mirrors bcrypt's 72-byte input limit, which Rails'
-// has_secure_password also enforces.
+// maxPasswordBytes は bcrypt の 72 バイトという入力上限を再現する。この上限は
+// Rails の has_secure_password も強制している。
 const maxPasswordBytes = 72
 
-// SignupInput is the signup use case input. PasswordConfirmation is
-// optional (nil when the field was absent from the request); when
-// present it must equal Password, matching Rails has_secure_password.
+// SignupInput は signup use case の入力である。PasswordConfirmation は
+// 任意であり（リクエストにそのフィールドがなかった場合は nil）、存在する
+// ときは、Rails の has_secure_password に合わせて Password と等しくなければ
+// ならない。
 type SignupInput struct {
 	Username             string
 	Email                string
@@ -78,7 +81,7 @@ type SignupInput struct {
 	PasswordConfirmation *string
 }
 
-// validate returns Rails-parity full messages, empty when valid.
+// validate は Rails parity の full message を返す。valid なら空である。
 func (in SignupInput) validate() []string {
 	var msgs []string
 	if in.Username == "" {
@@ -99,9 +102,9 @@ func (in SignupInput) validate() []string {
 	return msgs
 }
 
-// Signup validates the input, stores the new user (always admin=false)
-// and returns it together with a fresh auth token. Validation failures
-// and duplicate emails surface as *domain.ValidationError.
+// Signup は入力を validate し、新しいユーザーを保存し（常に admin=false）、
+// 新しい認証トークンとともにそのユーザーを返す。validation の失敗と email の
+// 重複は *domain.ValidationError として返される。
 func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, string, error) {
 	if msgs := input.validate(); len(msgs) > 0 {
 		return domain.User{}, "", &domain.ValidationError{Messages: msgs}
@@ -114,7 +117,8 @@ func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, stri
 		Username:       input.Username,
 		Email:          input.Email,
 		PasswordDigest: digest,
-		// New users are never admins; promotion is out of signup scope.
+		// 新しいユーザーは決して admin にならない。
+		// 昇格は signup の範囲外である。
 		Admin: false,
 	})
 	if err != nil {
@@ -130,22 +134,22 @@ func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, stri
 	return user, token, nil
 }
 
-// dummyPasswordDigest is a fixed, valid bcrypt digest (of an arbitrary
-// throwaway string, cost 10 like infra's hasher) used only for the dummy
-// compare in Login. It matches no real password stored by this app.
+// dummyPasswordDigest は、固定の有効な bcrypt の digest（任意の使い捨て文字列の
+// もので、infra の hasher と同様に cost 10）であり、Login でのダミーの
+// compare にだけ使う。このアプリが保存するどの実在のパスワードにも一致しない。
 const dummyPasswordDigest = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
-// Login authenticates an active user by email and password and returns
-// the user with a fresh token. Unknown email and wrong password both
-// yield domain.ErrInvalidCredentials.
+// Login は email とパスワードで active なユーザーを認証し、新しいトークンと
+// ともにそのユーザーを返す。未知の email と誤ったパスワードは、どちらも
+// domain.ErrInvalidCredentials を返す。
 func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, string, error) {
 	creds, err := a.users.GetActiveUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
-			// Burn one hash comparison so the unknown-email path takes
-			// about as long as the wrong-password path; otherwise the
-			// response-time difference would let callers enumerate
-			// which emails have accounts.
+			// hash の比較を 1 回分あえて消費して、未知の email の経路が
+			// 誤ったパスワードの経路とほぼ同じ時間になるようにする。
+			// そうしないと、応答時間の差から、どの email にアカウントが
+			// あるかを呼び出し側が列挙できてしまう。
 			_ = a.hasher.Compare(dummyPasswordDigest, password)
 			return domain.User{}, "", domain.ErrInvalidCredentials
 		}
@@ -161,9 +165,9 @@ func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, 
 	return creds.User, token, nil
 }
 
-// AuthenticateToken verifies rawToken and resolves its active user.
-// Invalid or expired tokens and unknown or discarded users all yield
-// domain.ErrUnauthenticated; infrastructure failures propagate as-is.
+// AuthenticateToken は rawToken を検証し、その active なユーザーを解決する。
+// 不正または期限切れのトークン、未知または discard 済みのユーザーは、いずれも
+// domain.ErrUnauthenticated を返す。インフラの障害はそのまま伝播する。
 func (a *Auth) AuthenticateToken(ctx context.Context, rawToken string) (domain.User, error) {
 	userID, err := a.verifier.Verify(rawToken)
 	if err != nil {
