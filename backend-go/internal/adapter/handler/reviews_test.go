@@ -25,8 +25,8 @@ type fakeStoredReview struct {
 
 // reviewRepoFake は in-memory の usecase.ReviewQuery かつ
 // domain.ReviewRepository である。in-memory の fake は共有 DB の代役なので、
-// 読み書きで状態を共有するよう 1 つの型に保つ（読み書きの分離は usecase の
-// 引数型がコンパイル時に保証する）。active な shop の feed の filter は、seed
+// 読み書きで状態を共有するよう 1 つの型に保つ（読み書きの分離は、usecase の Query の
+// 引数型と domain のサービスの引数型がコンパイル時に保証する）。active な shop の feed の filter は、seed
 // された shops と links から導出される（SQL の EXISTS を再現するもので、SQL
 // 自体は repository の統合テストが扱う）。err を設定するとすべての操作が失敗
 // する（500 の経路）。listFilters は ListReviews が受け取った filter を呼び出し

@@ -18,8 +18,8 @@ import (
 
 // shopRepoFake は in-memory の usecase.ShopQuery かつ domain.ShopRepository
 // である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
-// よう 1 つの型に保つ（読み書きの分離は usecase の引数型がコンパイル時に
-// 保証する）。可視性は domain の記述子そのもの（vis.CanView）を通して適用
+// よう 1 つの型に保つ（読み書きの分離は、usecase の Query の引数型と domain の
+// サービスの引数型がコンパイル時に保証する）。可視性は domain の記述子そのもの（vis.CanView）を通して適用
 // されるので、そのルールをここで再実装してはいない。keyword のマッチングは
 // 単純な case-fold の部分文字列一致である（メタ文字のセマンティクスは
 // repository の統合テストが扱う）。err を設定するとすべての操作が失敗する

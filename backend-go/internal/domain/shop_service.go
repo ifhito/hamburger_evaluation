@@ -22,8 +22,8 @@ type ShopRepository interface {
 
 // ShopService は shop の書き込みの窓口である。ShopRepository を呼ぶのは domain の
 // この型だけで、usecase は repository に依存せず、書き込みをここに任せる。
-// 現時点では repository の書き込みを 1 対 1 で包む薄い層であり、書き込みに付随する
-// domain の手順は、usecase ではなくここに置く。
+// 現時点では repository の書き込みを 1 対 1 で包む窓口にすぎない。domain の手順が増えたときに、
+// usecase ではなくここへ置く。
 type ShopService struct {
 	repo ShopRepository
 }

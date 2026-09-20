@@ -40,8 +40,8 @@ type fakeRecord struct {
 
 // userRepoFake は in-memory の usecase.UserQuery かつ domain.UserRepository
 // である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
-// よう 1 つの型に保つ（読み書きの分離は usecase の引数型がコンパイル時に
-// 保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
+// よう 1 つの型に保つ（読み書きの分離は、usecase の Query の引数型と domain の
+// サービスの引数型がコンパイル時に保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
 // 駆動する）。
 type userRepoFake struct {
 	seq   int64

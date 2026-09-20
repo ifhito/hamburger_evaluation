@@ -47,8 +47,9 @@ type ReviewRepository interface {
 
 // ReviewService は review の書き込みの窓口である。ReviewRepository を呼ぶのは
 // domain のこの型だけで、usecase は repository に依存せず、書き込みをここに任せる。
-// 現時点では repository の書き込みを 1 対 1 で包む薄い層であり、書き込みに付随する
-// domain の手順（burger_stats の再計算など）は、usecase ではなくここに置く。
+// 現時点では repository の書き込みを 1 対 1 で包む窓口にすぎない。burger_stats の再計算は
+// repository の同一 transaction の内部にあり、ここでは行わない。domain の手順が増えたときに、
+// usecase ではなくここへ置く。
 type ReviewService struct {
 	repo ReviewRepository
 }

@@ -55,28 +55,57 @@ func checkNaming(src string) (violations []string, found map[string]int, err err
 	return violations, found, nil
 }
 
-// checkNoRepositoryDependency は、Go のソースが *Repository の interface を宣言せず、
-// domain.*Repository も参照していないことを確かめ、違反の説明を返す。usecase が
-// repository に依存しないための検査である。
+// checkNoRepositoryDependency は、Go のソースが *Repository の型を宣言せず、
+// 別のパッケージの *Repository も参照していないことを確かめ、違反の説明を返す。
+// usecase が repository に依存しないための検査である。import の別名(d "…/domain")で
+// 回避されないよう、パッケージ名は問わず、名前の接尾辞だけで判定する。dot import は、
+// 名前だけで参照できてしまい検査をすり抜けるため、使うこと自体を違反とする。
 func checkNoRepositoryDependency(src string) ([]string, error) {
 	f, err := parser.ParseFile(token.NewFileSet(), "src.go", src, 0)
 	if err != nil {
 		return nil, err
 	}
 	var violations []string
+	for _, imp := range f.Imports {
+		if imp.Name != nil && imp.Name.Name == "." {
+			violations = append(violations, strings.Trim(imp.Path.Value, `"`)+" を dot import している (repository への依存を検査できなくなる)")
+		}
+	}
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.TypeSpec:
-			if _, ok := x.Type.(*ast.InterfaceType); ok && strings.HasSuffix(x.Name.Name, "Repository") {
-				violations = append(violations, x.Name.Name+" を宣言している (repository の interface は domain が宣言する)")
+			if strings.HasSuffix(x.Name.Name, "Repository") {
+				violations = append(violations, x.Name.Name+" を宣言している (repository の型は domain が持つ)")
 			}
 		case *ast.SelectorExpr:
-			if id, ok := x.X.(*ast.Ident); ok && id.Name == "domain" && strings.HasSuffix(x.Sel.Name, "Repository") {
-				violations = append(violations, "domain."+x.Sel.Name+" を参照している (usecase は repository に依存せず、書き込みは domain のサービスを通す)")
+			if strings.HasSuffix(x.Sel.Name, "Repository") {
+				pkg := ""
+				if id, ok := x.X.(*ast.Ident); ok {
+					pkg = id.Name + "."
+				}
+				violations = append(violations, pkg+x.Sel.Name+" を参照している (usecase は repository に依存せず、書き込みは domain のサービスを通す)")
 			}
 		}
 		return true
 	})
+	return violations, nil
+}
+
+// checkStdlibOnly は、Go のソースが標準ライブラリ以外(import パスの先頭の要素に "." を含むもの。
+// プロジェクト内のパッケージも第三者のパッケージも)を import していないことを確かめ、違反の説明を返す。
+// domain が標準ライブラリだけに依存するための検査である。
+func checkStdlibOnly(src string) ([]string, error) {
+	f, err := parser.ParseFile(token.NewFileSet(), "src.go", src, parser.ImportsOnly)
+	if err != nil {
+		return nil, err
+	}
+	var violations []string
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		if first, _, _ := strings.Cut(path, "/"); strings.Contains(first, ".") {
+			violations = append(violations, path+" を import している (domain は標準ライブラリだけに依存する)")
+		}
+	}
 	return violations, nil
 }
 
@@ -124,7 +153,8 @@ func productionSources(t *testing.T, dir string) map[string]string {
 //   - usecase は読み取りを *Query (Get*/List*) で行い、*Repository を宣言も参照もしない
 //   - repository の interface (*Repository。Create*/Update*/Discard*) は domain が宣言し、
 //     呼ぶのは domain のサービスだけである
-//   - usecase と domain は、adapter・HTTP・SQL ドライバを import しない
+//   - usecase と domain は、adapter・HTTP・SQL ドライバを import しない。
+//     domain はさらに、標準ライブラリ以外(第三者・プロジェクト内)を import しない
 func TestPersistenceInterfaceNaming(t *testing.T) {
 	t.Run("実際の usecase パッケージが規約に沿っている", func(t *testing.T) {
 		queries := 0
@@ -201,6 +231,18 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		}
 	})
 
+	t.Run("実際の domain は標準ライブラリだけを import する", func(t *testing.T) {
+		for name, src := range productionSources(t, "../domain") {
+			v, err := checkStdlibOnly(src)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			for _, msg := range v {
+				t.Errorf("%s: %s", name, msg)
+			}
+		}
+	})
+
 	cases := []struct {
 		name, src, want string // want は期待する違反の説明の一部 (空なら違反なし)
 	}{
@@ -228,10 +270,32 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		{"usecase が Repository の interface を宣言していれば検出する", "package p\ntype XRepository interface{ CreateX() }", "XRepository を宣言している"},
 		{"usecase が domain.XRepository を参照していれば検出する", "package p\nimport \"domain\"\ntype S struct{ repo domain.XRepository }", "domain.XRepository を参照している"},
 		{"domain のサービスの参照は許す", "package p\nimport \"domain\"\ntype S struct{ svc *domain.XService }", ""},
+		{"別名の import でも XRepository の参照を検出する", "package p\nimport d \"domain\"\ntype S struct{ repo d.XRepository }", "d.XRepository を参照している"},
+		{"struct で Repository を宣言していても検出する", "package p\ntype XRepository struct{}", "XRepository を宣言している"},
+		{"dot import を検出する", "package p\nimport . \"domain\"", "dot import している"},
 	}
 	for _, tc := range dependencyCases {
 		t.Run(tc.name, func(t *testing.T) {
 			v, err := checkNoRepositoryDependency(tc.src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(v, "\n"); (tc.want == "") != (got == "") || !strings.Contains(got, tc.want) {
+				t.Errorf("違反 = %q, 期待 = %q", got, tc.want)
+			}
+		})
+	}
+
+	stdlibCases := []struct {
+		name, src, want string
+	}{
+		{"第三者のパッケージを検出する", "package p\nimport \"golang.org/x/text\"", "golang.org/x/text"},
+		{"プロジェクト内のパッケージを検出する", "package p\nimport \"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase\"", "internal/usecase"},
+		{"標準ライブラリだけなら違反なし", "package p\nimport (\n\t\"context\"\n\t\"net/url\"\n)", ""},
+	}
+	for _, tc := range stdlibCases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := checkStdlibOnly(tc.src)
 			if err != nil {
 				t.Fatal(err)
 			}
