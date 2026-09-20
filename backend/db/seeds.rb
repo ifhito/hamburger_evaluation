@@ -20,6 +20,9 @@ created_users = users.map do |attrs|
   end
 end
 
+# alice を運営(admin)に(再実行でも冪等に昇格)
+User.where(email: "alice@example.com").update_all(admin: true)
+
 puts "  #{created_users.size} users created"
 
 # ----------------------------------------
@@ -32,7 +35,9 @@ shop_names = [
 ]
 
 created_shops = shop_names.map do |name|
-  Shop.find_or_create_by!(name: name)
+  Shop.find_or_create_by!(name: name) do |s|
+    s.status = :active
+  end
 end
 
 puts "  #{created_shops.size} shops created"
@@ -42,8 +47,9 @@ puts "  #{created_shops.size} shops created"
 # ----------------------------------------
 burger_count = 0
 created_shops.each do |shop|
-  2.times do
-    burger = Burger.create!
+  2.times do |i|
+    name = "#{shop.name} バーガー#{i + 1}"
+    burger = shop.burgers.find_by(name: name) || Burger.create!(name: name)
     ShopsAndBurger.find_or_create_by!(shop: shop, burger: burger)
     burger_count += 1
   end
