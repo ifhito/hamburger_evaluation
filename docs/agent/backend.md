@@ -1,22 +1,22 @@
-# Backend Agent Notes
+# Backend エージェント向けメモ
 
-Rails API lives in `backend/` and runs through Docker Compose.
+Rails API は `backend/` にあり、Docker Compose 経由で実行する。
 
-## Stack
+## 技術スタック
 
 - Ruby 3.3.10 / Rails 8 API mode
 - PostgreSQL 16
-- Custom JWT Bearer auth with `bcrypt` and `jwt`
-- Pundit policies
-- dry-struct / dry-types for domain values
+- `bcrypt` と `jwt` による独自 JWT Bearer 認証
+- Pundit policy
+- ドメインの値に dry-struct / dry-types を使用
 - RSpec, FactoryBot, SimpleCov, RuboCop, Brakeman
 
-## Boundaries
+## 境界
 
-- Controllers authenticate, authorize, validate params, and call services.
-- Services coordinate use cases.
-- Repositories own persistence writes.
-- Queries own read models.
-- Domain objects stay framework-independent.
+- Controller は認証・認可・パラメータ検証を行い、service を呼び出す。
+- Service はユースケースを調整する。
+- Repository は永続化の書き込みを担う。
+- Query は read model を担う。
+- Domain オブジェクトはフレームワークに依存させない。
 
-Do not add ActiveRecord dependencies to `app/domain`.
+`app/domain` に ActiveRecord への依存を追加しないこと。

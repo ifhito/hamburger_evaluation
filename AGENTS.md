@@ -1,10 +1,10 @@
 # AGENTS.md
 
-## Stack
+## 技術スタック
 
 Ruby 3.3 / Rails 8 API と React 19 / TypeScript / Vite の SPA を PostgreSQL 16 で動かす monorepo。
 
-## Build & Test
+## ビルドとテスト
 
 ```bash
 # install
@@ -31,7 +31,7 @@ cd backend && docker compose run --rm api bin/rubocop -A
 cd frontend && pnpm exec eslint . --fix
 ```
 
-## Conventions
+## 規約
 
 - Backend は host Ruby ではなく Docker Compose 経由で検証する。
   なぜ: ローカル Ruby 差異ではなく CI と同じ Rails/PostgreSQL 前提で判断するため。
@@ -48,7 +48,7 @@ cd frontend && pnpm exec eslint . --fix
 - Backend API は snake_case、frontend code は camelCase にする。
   なぜ: Rails の自然な JSON 形と TypeScript 側の自然な状態形を HTTP 境界で変換するため。
 
-## Programmatic checks the agent MUST run before finishing
+## エージェントが終了前に必ず実行しなければならないプログラム的チェック
 
 1. `git status --short --branch --untracked-files=all` と `git diff --check`。
 2. Backend を変更した場合: `cd backend && docker compose run --rm -e RAILS_ENV=test api bundle exec rspec`。
@@ -56,17 +56,17 @@ cd frontend && pnpm exec eslint . --fix
 4. Frontend を変更した場合: `cd frontend && pnpm run type-check && pnpm run lint && pnpm run test`。
 5. Routing/build 設定または API 境界を変更した場合: `cd frontend && pnpm run build`。
 
-## Out of scope
+## 対象外
 
 - `.env`, `.env.*`, `backend/.env*`, `frontend/.env*`, `secrets/**`, `backend/.kamal/secrets`, `backend/config/master.key` の読み書き。
 - ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
-- unrelated files の stage / commit / push。
+- 無関係なファイルの stage / commit / push。
 - `git push --force`, destructive reset, production deploy, secret rotation。
 - Claude/Codex/Hermes の global config や `~/.hermes`, `~/.claude` への変更。
 
-## More context (load on demand)
+## 追加コンテキスト(必要に応じて読み込む)
 
-Use the researcher subagent when you need to locate code patterns; never grep yourself in the parent context.
+コードパターンを探す必要があるときは researcher subagent を使うこと。親コンテキストで自分で grep してはならない。
 
 - `@docs/agent/backend.md`
 - `@docs/agent/frontend.md`

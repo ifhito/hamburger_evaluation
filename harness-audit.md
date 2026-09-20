@@ -1,24 +1,24 @@
-# Harness Audit
+# ハーネス監査
 
-Date: 2026-05-10
-Repository: `hamburger_evaluation`
-Mode: read-only investigation, except this audit file.
+日付: 2026-05-10
+リポジトリ: `hamburger_evaluation`
+モード: 読み取り専用の調査(この監査ファイルを除く)。
 
-## 1. Repository Shape
+## 1. リポジトリの構成
 
-This is a two-part monorepo:
+これは 2 部構成の monorepo です:
 
-- `backend/`: Rails API application.
-- `frontend/`: React SPA application.
+- `backend/`: Rails API アプリケーション。
+- `frontend/`: React SPA アプリケーション。
 
-Other project areas:
+その他のプロジェクト領域:
 
-- `memory/`, `plan/`, `plans/`: project notes and agent-generated planning artifacts.
-- `.claude/`: Claude Code project settings currently exist.
-- No `.agents/` directory exists yet.
-- No root `docs/` directory exists; backend domain docs live under `backend/docs/domain/`.
+- `memory/`, `plan/`, `plans/`: プロジェクトメモとエージェントが生成した計画成果物。
+- `.claude/`: Claude Code のプロジェクト設定が現在存在する。
+- `.agents/` ディレクトリはまだ存在しない。
+- ルートの `docs/` ディレクトリは存在しない。backend のドメインドキュメントは `backend/docs/domain/` 配下にある。
 
-Current local worktree already has unrelated changes:
+現在のローカル worktree には、すでに無関係な変更がある:
 
 ```text
 M AGENT.md
@@ -29,57 +29,57 @@ M CLAUDE.md
 ?? plans/setup-md-misty-charm.md
 ```
 
-## 2. Backend Stack
+## 2. Backend スタック
 
-Location: `backend/`
+場所: `backend/`
 
-- Language: Ruby 3.3.10 (`.ruby-version`, `backend/.ruby-version`).
-- Framework: Rails 8.0.4 API mode.
-- Database: PostgreSQL 16.
-- Package manager: Bundler.
-- Auth: custom JWT Bearer token (`jwt`, `bcrypt`), not `devise_token_auth`.
-- Authorization: Pundit.
-- DDD/data-shaping libs: `dry-struct`, `dry-types`, `dry-monads`.
-- Test runner: RSpec / rspec-rails.
-- Test helpers: FactoryBot, shoulda-matchers, database_cleaner-active_record.
-- Coverage: SimpleCov with `minimum_coverage 80` in `backend/spec/spec_helper.rb`.
-- Linter: RuboCop via `rubocop-rails-omakase`.
-- Security scanner: Brakeman.
+- 言語: Ruby 3.3.10(`.ruby-version`, `backend/.ruby-version`)。
+- フレームワーク: Rails 8.0.4 API mode。
+- データベース: PostgreSQL 16。
+- パッケージマネージャー: Bundler。
+- 認証: 独自 JWT Bearer token(`jwt`, `bcrypt`)。`devise_token_auth` ではない。
+- 認可: Pundit。
+- DDD / データ整形ライブラリ: `dry-struct`, `dry-types`, `dry-monads`。
+- テストランナー: RSpec / rspec-rails。
+- テストヘルパー: FactoryBot, shoulda-matchers, database_cleaner-active_record。
+- カバレッジ: `backend/spec/spec_helper.rb` の `minimum_coverage 80` による SimpleCov。
+- Linter: `rubocop-rails-omakase` 経由の RuboCop。
+- セキュリティスキャナー: Brakeman。
 
-Important command note: backend checks should run through Docker Compose from `backend/`, not host Ruby.
+重要なコマンドに関する注意: backend のチェックは、ホストの Ruby ではなく、`backend/` から Docker Compose 経由で実行すべきである。
 
-## 3. Frontend Stack
+## 3. Frontend スタック
 
-Location: `frontend/`
+場所: `frontend/`
 
-- Language: TypeScript 5.6.
-- Framework/runtime: React 19 + Vite 6.
-- Router: React Router 6.
-- State/data: Jotai, SWR.
-- Forms/validation: react-hook-form + Zod.
-- HTTP: axios with camelcase/snakecase boundary conversion.
-- Package manager: pnpm 10.
-- Test runner: Vitest.
-- Linter: ESLint 10 + typescript-eslint + react-hooks/react-refresh plugins.
-- Type checker: `tsc --noEmit --project tsconfig.app.json`.
-- Build: `tsc -b && vite build`.
-- Storybook exists in package scripts.
+- 言語: TypeScript 5.6。
+- フレームワーク / ランタイム: React 19 + Vite 6。
+- ルーター: React Router 6。
+- 状態 / データ: Jotai, SWR。
+- フォーム / バリデーション: react-hook-form + Zod。
+- HTTP: camelcase / snakecase の境界変換を行う axios。
+- パッケージマネージャー: pnpm 10。
+- テストランナー: Vitest。
+- Linter: ESLint 10 + typescript-eslint + react-hooks / react-refresh プラグイン。
+- 型チェッカー: `tsc --noEmit --project tsconfig.app.json`。
+- ビルド: `tsc -b && vite build`。
+- package scripts に Storybook が存在する。
 
-## 4. Existing Agent Instructions
+## 4. 既存のエージェント向け指示
 
-Tracked files:
+追跡されているファイル:
 
-- `AGENTS.md`: detailed Japanese quick reference for agents and CI.
-- `AGENT.md`: project guide for AI agents; currently modified locally.
-- `CLAUDE.md`: Claude/Codex guidance; currently modified locally.
-- `.claude/settings.json`: tracked Claude project settings.
+- `AGENTS.md`: エージェントと CI 向けの、日本語による詳細なクイックリファレンス。
+- `AGENT.md`: AI エージェント向けのプロジェクトガイド。現在ローカルで変更されている。
+- `CLAUDE.md`: Claude / Codex 向けのガイダンス。現在ローカルで変更されている。
+- `.claude/settings.json`: 追跡されている Claude のプロジェクト設定。
 
-Missing files:
+存在しないファイル:
 
 - `.cursorrules`
 - `.github/copilot-instructions.md`
 
-Existing `.claude/settings.json` is minimal and currently allows:
+既存の `.claude/settings.json` は最小限で、現在は次を許可している:
 
 - `WebSearch`
 - Serena MCP list_dir
@@ -87,30 +87,30 @@ Existing `.claude/settings.json` is minimal and currently allows:
 - `Bash(ls:*)`
 - `Bash(cat:*)`
 
-No project subagents exist under `.claude/agents/`.
+`.claude/agents/` 配下にプロジェクトの subagent は存在しない。
 
 ## 5. CI
 
-CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`.
+CI は `.github/workflows/ci.yml` で定義されており、pull request と `main` への push で実行される。
 
-Backend jobs:
+Backend ジョブ:
 
 - `backend_scan`: `bin/brakeman --no-pager`
 - `backend_lint`: `bin/rubocop -f github`
-- `backend_test`: PostgreSQL 16 service, `bundle exec rails db:test:prepare`, then `bundle exec rspec`
+- `backend_test`: PostgreSQL 16 service、`bundle exec rails db:test:prepare`、続いて `bundle exec rspec`
 
-Frontend jobs:
+Frontend ジョブ:
 
 - `frontend_type_check`: `pnpm run type-check`
 - `frontend_lint`: `pnpm run lint`
 - `frontend_test`: `pnpm run test`
 - `frontend_build`: `pnpm run build`
 
-CI installs Ruby from `.ruby-version`, Node from `.node-version`, and pnpm v10.
+CI は、Ruby を `.ruby-version` から、Node を `.node-version` から、pnpm を v10 でインストールする。
 
-## 6. Boundaries and Architecture
+## 6. 境界とアーキテクチャ
 
-Backend boundary:
+Backend の境界:
 
 ```text
 backend/app/controllers    HTTP boundary; auth/policy/params/service calls
@@ -125,7 +125,7 @@ backend/app/serializers    JSON output
 backend/app/models         thin ActiveRecord models
 ```
 
-Frontend boundary:
+Frontend の境界:
 
 ```text
 frontend/src/app           router/providers/app shell
@@ -135,20 +135,20 @@ frontend/src/states        shared Jotai state
 frontend/src/components    shared UI components
 ```
 
-## 7. Non-Standard or Project-Specific Conventions
+## 7. 非標準またはプロジェクト固有の規約
 
-- Backend validation uses Docker Compose, not host Ruby.
-- Authentication intentionally uses custom JWT Bearer tokens instead of SETUP.md's `devise_token_auth` pattern.
-- Backend API payloads are snake_case; frontend code is camelCase; conversion happens at the HTTP boundary.
-- Rails models should remain thin; controllers/jobs should not directly perform persistence queries/mutations when a query/repository boundary exists.
-- Domain code should not directly depend on ActiveRecord models.
-- SimpleCov can make targeted RSpec runs exit non-zero when examples pass but global coverage is below 80%; full suite is the authoritative coverage check.
-- Existing untracked `SETUP.md` and `plans/*.md` should not be committed unless explicitly requested.
-- PR #3 is currently the consolidated open PR; older #1 and #2 were closed after absorption/supersession.
+- Backend の検証は、ホストの Ruby ではなく Docker Compose を使う。
+- 認証は、SETUP.md の `devise_token_auth` パターンではなく、意図的に独自 JWT Bearer token を使っている。
+- Backend の API payload は snake_case、frontend のコードは camelCase であり、変換は HTTP 境界で行われる。
+- Rails の model は薄く保つべきである。query / repository の境界が存在する場合、controller / job は永続化のクエリや更新を直接行うべきではない。
+- Domain のコードは ActiveRecord model に直接依存すべきではない。
+- SimpleCov により、example は通っていても全体カバレッジが 80% を下回っている場合、対象を絞った RSpec の実行が非ゼロで終了することがある。カバレッジの判断基準となるのはフルスイートである。
+- 既存の未追跡の `SETUP.md` と `plans/*.md` は、明示的に求められない限り commit してはならない。
+- PR #3 が現在、統合された open な PR である。古い #1 と #2 は、取り込みまたは置き換えられた後に close された。
 
-## 8. Programmatic Checks Found
+## 8. 確認されたプログラム的チェック
 
-Backend, from `backend/`:
+Backend(`backend/` から):
 
 ```bash
 docker compose run --rm -e RAILS_ENV=test api bundle exec rspec
@@ -156,7 +156,7 @@ docker compose run --rm api bin/rubocop -f github
 docker compose run --rm api bin/brakeman --no-pager
 ```
 
-Frontend, from `frontend/`:
+Frontend(`frontend/` から):
 
 ```bash
 pnpm run type-check
@@ -165,11 +165,11 @@ pnpm run test
 pnpm run build
 ```
 
-Architecture checks are currently convention/spec based, not a dedicated single command. Relevant backend specs cover repository/query/service boundaries under `backend/spec/{domain,queries,repositories,services,jobs}`.
+アーキテクチャのチェックは、現時点では専用の単一コマンドではなく、規約 / spec に基づくものである。関連する backend の spec は、`backend/spec/{domain,queries,repositories,services,jobs}` 配下の repository / query / service の境界を対象としている。
 
-## 9. Security-Relevant Files
+## 9. セキュリティ関連ファイル
 
-The harness should deny reading at least:
+ハーネスは、少なくとも次のファイルの読み取りを拒否すべきである:
 
 ```text
 .env
@@ -183,4 +183,4 @@ backend/.kamal/secrets
 backend/config/master.key
 ```
 
-These overlap with `.gitignore`, but Claude permissions should also deny them explicitly.
+これらは `.gitignore` と重なっているが、Claude の permissions でも明示的に deny すべきである。

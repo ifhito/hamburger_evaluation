@@ -1,22 +1,22 @@
-# Frontend Agent Notes
+# Frontend エージェント向けメモ
 
-React SPA lives in `frontend/` and uses pnpm.
+React SPA は `frontend/` にあり、pnpm を使う。
 
-## Stack
+## 技術スタック
 
 - React 19 + TypeScript + Vite
-- SWR for server state
-- Jotai for client state
+- サーバー状態に SWR
+- クライアント状態に Jotai
 - react-hook-form + Zod
-- axios with request snake_case and response camelCase conversion
-- ESLint, TypeScript strict, Vitest
+- リクエストは snake_case、レスポンスは camelCase に変換する axios
+- ESLint、TypeScript strict、Vitest
 
-## Boundaries
+## 境界
 
-- `src/app`: router/providers/app shell
-- `src/domains/*`: feature code
-- `src/api`: HTTP client and API boundary
-- `src/states`: shared client state
-- `src/components`: shared UI
+- `src/app`: router / provider / app shell
+- `src/domains/*`: 機能単位のコード
+- `src/api`: HTTP クライアントと API 境界
+- `src/states`: 共有クライアント状態
+- `src/components`: 共有 UI
 
-Keep backend payload names snake_case and frontend code camelCase.
+Backend の payload 名は snake_case、frontend のコードは camelCase に保つこと。

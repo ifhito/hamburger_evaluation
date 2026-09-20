@@ -1,14 +1,14 @@
-# Agent Workflow
+# エージェントのワークフロー
 
-## Before Editing
+## 編集前
 
 ```bash
 git status --short --branch
 ```
 
-Identify changed areas and avoid unrelated local files.
+変更のある領域を特定し、無関係なローカルファイルを避ける。
 
-## Checks
+## チェック
 
 Backend:
 
@@ -29,6 +29,6 @@ pnpm run test
 pnpm run build
 ```
 
-## Secrets
+## シークレット
 
-Never read or include `.env*`, `secrets/**`, `backend/.kamal/secrets`, or `backend/config/master.key`.
+`.env*`、`secrets/**`、`backend/.kamal/secrets`、`backend/config/master.key` を読んだり含めたりしてはならない。
