@@ -3,7 +3,6 @@ package handler_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -308,7 +307,7 @@ func TestLogin(t *testing.T) {
 		},
 		{
 			name:       "AC3 誤ったパスワードは 401 を返す",
-			body:       `{"email":"alice@example.com","password":"wrong"}`,
+			body:       `{"email":"alice@example.com","password":"Wrongpass1!"}`,
 			wantStatus: http.StatusUnauthorized,
 			wantBody:   `{"error":"Invalid email or password"}`,
 		},
@@ -366,23 +365,39 @@ func TestLogin(t *testing.T) {
 	}
 }
 
-// TestLoginLegacyWeakPassword は、旧ルールで作られたアカウントを締め出さない
-// ことを固定する。login は強度を検証しない（Story #38 AC9 / R4）ので、
-// 現行の規則を満たさない弱いパスワードのユーザーでも、digest が一致すれば
-// token 付きで 200 を返す。
-func TestLoginLegacyWeakPassword(t *testing.T) {
-	for _, weak := range []string{"weakpw", "a"} {
-		t.Run(fmt.Sprintf("強度ルールを満たさない password %q のユーザーでも login できる", weak), func(t *testing.T) {
+// TestLoginValidation は、認証情報が signup と同じ規則を満たさないとき、login が
+// 401 ではなく 422 {"errors":[...]}（signup と同じ形・同じメッセージ）を返し、
+// 規則を満たしたうえで誤っている場合だけ 401 になることを固定する（Story #61）。
+func TestLoginValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantBody   string
+	}{
+		{"email と password が空なら 422 で blank を返す", `{"email":"","password":""}`, http.StatusUnprocessableEntity,
+			`{"errors":["Email can't be blank","Password can't be blank"]}`},
+		{"フィールドが無い body も空として 422 を返す", `{}`, http.StatusUnprocessableEntity,
+			`{"errors":["Email can't be blank","Password can't be blank"]}`},
+		{"形式の合わない email は 422 を返す", `{"email":"abc","password":"Password123!"}`, http.StatusUnprocessableEntity,
+			`{"errors":["Email is invalid"]}`},
+		{"強度を満たさない password は 422 を返す", `{"email":"alice@example.com","password":"weakpassword"}`, http.StatusUnprocessableEntity,
+			`{"errors":["Password must include letters, numbers and symbols"]}`},
+		{"規則を満たす誤った password は 401 を返す", `{"email":"alice@example.com","password":"Wrongpass1!"}`, http.StatusUnauthorized,
+			`{"error":"Invalid email or password"}`},
+		{"規則を満たす未知の email は 401 を返す(アカウントの有無で応答が変わらない)", `{"email":"nobody@example.com","password":"Wrongpass1!"}`, http.StatusUnauthorized,
+			`{"error":"Invalid email or password"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			repo, auth, _ := newAuthKit()
-			seeded := repo.seed("legacy", "legacy@example.com", weak)
-			body := fmt.Sprintf(`{"email":"legacy@example.com","password":%q}`, weak)
-			rec := do(newTestRouterWith(t, okPinger, auth), http.MethodPost, "/login", body, "")
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
+			repo.seed("alice", "alice@example.com", "Password123!")
+			rec := do(newTestRouterWith(t, okPinger, auth), http.MethodPost, "/login", tt.body, "")
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tt.wantStatus, rec.Body)
 			}
-			user := decodeAuthUser(t, rec.Body.Bytes())
-			if user.ID != seeded.ID || user.Token == "" {
-				t.Errorf("login body = %+v, want the seeded user with a token", user)
+			if rec.Body.String() != tt.wantBody {
+				t.Errorf("body = %q, want %q", rec.Body.String(), tt.wantBody)
 			}
 		})
 	}
