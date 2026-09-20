@@ -12,7 +12,7 @@ const en = {
     rating: "Rating",
   },
   auth: {
-    passwordHint: "At least {{min}} characters, with letters, numbers and symbols.",
+    passwordHint: "{{min}}\u2013{{max}} bytes (1 byte per ASCII character, 3 per Japanese character), with at least one half-width letter, number and symbol.",
     signin: {
       title: "Sign In",
       email: "Email",

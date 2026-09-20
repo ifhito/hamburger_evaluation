@@ -8,7 +8,7 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-const signupSchema = z.object({
+export const signupSchema = z.object({
   username: z.string().min(1, "Username is required"),
   email: z.string().email("Invalid email address"),
   // 規則の判定は validatePassword に一本化(サーバーと同じメッセージ)。違反は ". " でつないで 1 つのエラーにする
