@@ -13,5 +13,11 @@ frontend/dist/
 frontend/.env
 frontend/.env.*
 
+# 旧 API(backend/)の名残として手元に残りうる秘密ファイル。誤って commit しない
+backend/.kamal/secrets
+backend/config/master.key
+backend/.env
+backend/.env.*
+
 # Dev-mode review photos written into the bind-mounted repo tree (S10 disk storage)
 backend-go/storage/

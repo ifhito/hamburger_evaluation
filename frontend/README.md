@@ -105,7 +105,7 @@ pnpm run build         # プロダクションビルド (型チェック込み)
 
 ## Notes
 
-- Storybook 用の stories は `src/shared/ui/` に置いています。
+- Storybook 用の stories は `src/components/` に置いています（`*.stories.tsx`）。
 - API のベースパスは既定で `/api` です。環境変数 `VITE_API_BASE_URL` で変更できます。
 - 開発時は Vite proxy が `/api` を Go API(既定 `http://host.docker.internal:8080`)へ転送します。転送先は `VITE_API_PROXY_TARGET` で変更できます。
 - React コンポーネント内ではすべてのフィールド名が camelCase になります（変換は HTTP 境界で完結）。
