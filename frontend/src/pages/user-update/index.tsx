@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
 import { ApiRequestError } from '../../shared/lib/api'
+import { PASSWORD_HINT, validatePassword } from '../../shared/lib/password'
 import { useUpdateUser, useDeleteUser } from '../../shared/lib/hooks/useUserMutations'
 import { Button } from '../../shared/ui/Button'
 import { ErrorMessage } from '../../shared/ui/ErrorMessage'
@@ -19,6 +20,7 @@ export default function UserUpdatePage() {
   const [email, setEmail] = useState(authUser?.email ?? '')
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
+  const [passwordError, setPasswordError] = useState<string | undefined>(undefined)
   const [serverError, setServerError] = useState<string | string[] | null>(null)
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -28,6 +30,12 @@ export default function UserUpdatePage() {
     if (username !== authUser?.username) data.username = username
     if (email !== authUser?.email) data.email = email
     if (password) {
+      // 空のときは変更しないので検証しない。空でなければ API を呼ぶ前に規則を確認する
+      const passwordErrors = validatePassword(password)
+      if (passwordErrors.length > 0) {
+        setPasswordError(passwordErrors.join('. '))
+        return
+      }
       data.password = password
       data.password_confirmation = passwordConfirmation
     }
@@ -83,7 +91,12 @@ export default function UserUpdatePage() {
           label="New Password (leave blank to keep current)"
           type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            setPassword(e.target.value)
+            setPasswordError(undefined)
+          }}
+          error={passwordError}
+          hint={PASSWORD_HINT}
           autoComplete="new-password"
         />
         <Input

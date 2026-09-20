@@ -7,6 +7,7 @@ import { Input } from '../../shared/ui/Input'
 import { Layout } from '../../shared/ui/Layout'
 import { useSignupForm } from '../../shared/lib/hooks/useAuthForm'
 import { ApiRequestError } from '../../shared/lib/api'
+import { PASSWORD_HINT } from '../../shared/lib/password'
 
 export default function SignupPage() {
   const { signup } = useAuth()
@@ -62,6 +63,7 @@ export default function SignupPage() {
           value={fields.password}
           onChange={(e) => setField('password', e.target.value)}
           error={errors.password}
+          hint={PASSWORD_HINT}
           autoComplete="new-password"
         />
         <Input

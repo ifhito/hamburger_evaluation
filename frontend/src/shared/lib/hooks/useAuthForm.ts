@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { LoginRequest, SignupRequest } from '../types/auth'
+import { validatePassword } from '../password'
 
 interface SignupFormState {
   username: string
@@ -33,7 +34,8 @@ export function useSignupForm() {
     const newErrors: SignupFormErrors = {}
     if (!fields.username.trim()) newErrors.username = 'Username is required'
     if (!fields.email.trim()) newErrors.email = 'Email is required'
-    if (fields.password.length < 6) newErrors.password = 'Password must be at least 6 characters'
+    const passwordErrors = validatePassword(fields.password)
+    if (passwordErrors.length > 0) newErrors.password = passwordErrors.join('. ')
     if (fields.password !== fields.password_confirmation) {
       newErrors.password_confirmation = "Passwords don't match"
     }
