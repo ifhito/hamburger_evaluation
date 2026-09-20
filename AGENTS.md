@@ -71,7 +71,6 @@ cd backend-go && docker compose run --rm sqlc generate
 ## 対象外
 
 - `.env`, `.env.*`, `backend-go/.env*`, `frontend/.env*`, `secrets/**` の読み書き。
-- 旧 API(`backend/`)の名残として手元に残りうる秘密ファイル(`backend/.env*`, `backend/.kamal/secrets`, `backend/config/master.key`)の読み書き。
 - ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
 - 無関係なファイルの stage / commit / push。
 - `git push --force`, destructive reset, production deploy, secret rotation。

@@ -29,4 +29,4 @@ pnpm run build
 
 ## シークレット
 
-`.env*`(`backend-go/.env*`、`frontend/.env*` を含む)と `secrets/**`、および旧 API(`backend/`)の名残として手元に残りうる秘密ファイルを読んだり含めたりしてはならない。
+`.env*`(`backend-go/.env*`、`frontend/.env*` を含む)と `secrets/**` を読んだり含めたりしてはならない。
