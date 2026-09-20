@@ -683,7 +683,8 @@ func TestListReviewsFilters(t *testing.T) {
 // containsJSONID は、body（review の JSON 配列）の要素のうち、最上位の id が
 // 引数の id と一致するものがあるかどうかを返す。埋め込まれた user や burger の
 // id には一致しない。body が JSON 配列として解釈できない場合は、「含まれない」
-// 系の検査が空振りで通ってしまわないよう、テストを失敗させる。
+// 系の検査が空振りで通ってしまわないよう、テストを失敗させる（null は空配列として
+// 扱われるが、handler は null を返さない）。
 func containsJSONID(t *testing.T, body string, id int64) bool {
 	t.Helper()
 	var reviews []struct {
