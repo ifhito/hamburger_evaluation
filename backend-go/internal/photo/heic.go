@@ -29,15 +29,17 @@ const (
 	maxHEICPixels = 16_000_000
 )
 
-// heicTimeout は、HEIC の待ち行列とデコードを合わせた時間の上限である(1,600 万画素のデコードは約 1 秒)。
-// サーバーの書き込みの時間切れ(10 秒)より前に、こちらから 422 を返せるように 8 秒にしている。
-// テストで短くできるように変数にしてある。
+// heicTimeout は、HEIC の順番待ちと、デコードそのものに、それぞれ与える時間の上限である(1,600 万画素の
+// デコードは約 1 秒)。待ちが 8 秒を超えると混雑(ErrBusy)、デコードが 8 秒を超えると処理しきれない写真
+// として扱う。テストで短くできるように変数にしてある。
 var heicTimeout = 8 * time.Second
 
 // heicSem は、HEIC のデコードを同時に 1 件に制限する。1 件だけで最大約 500 MiB を使うので、
-// 2 件が重なると、コンテナのメモリの上限を超えるおそれがある。JPEG などと共有する decodeSem
-// (2 件)とは別に持ち、HEIC は「heicSem → decodeSem」の順に取る(取る順序を常に同じにして、
-// 待ち合わせが循環しないようにする)。
+// 2 件が重なると、コンテナのメモリの上限を超えるおそれがある。さらに、HEIC は JPEG などと共有する
+// decodeSem(2 件)の「両方の枠」を使う。HEIC のデコード中に JPEG などが並行して走ると、合計が
+// コンテナの上限(1 GiB)に張り付くことが、実測で分かったため(24MP の JPEG 2 件と 1,600 万画素の
+// HEIC の同時投稿で、メモリが上限の 996 MiB に達した)。取る順序は、常に「heicSem → decodeSem の全部」で、
+// 待ち合わせが循環しないようにしている。
 var heicSem = make(chan struct{}, 1)
 
 // heicDecode は HEIC を画像にデコードする関数である。テストで差し替えられるように変数にしてある。
@@ -47,6 +49,10 @@ var heicDecode = func(r io.Reader) (image.Image, error) { return heic.Decode(r) 
 // ErrUnsupportedImage の一種でもある(errors.Is で両方に一致する)ので、寸法だけを別の
 // メッセージにしたい呼び出し側は、先にこちらを調べる。
 var ErrDimensionsTooLarge = fmt.Errorf("%w: dimensions exceed the limit", ErrUnsupportedImage)
+
+// ErrBusy は、HEIC のデコードの順番が、時間内に回ってこなかったことを表す。写真が悪いのではなく、
+// サーバーが混み合っているので、handler は 503(あとで再試行)にする。
+var ErrBusy = errors.New("photo processing is busy")
 
 // WarmUp は HEIC のデコーダ(WASM の読み込みとコンパイル。約 0.3 秒)を先に済ませる。
 // 起動時に別の goroutine で呼んでおくと、サーバーの起動を遅らせず、最初の HEIC の投稿だけが
@@ -244,25 +250,35 @@ func processHEIF(ctx context.Context, data []byte) (Processed, error) {
 	return encodeJPEG(shrink(img))
 }
 
-// decodeHEIC は、同時実行の枠を取ってから HEIC をデコードする。デコードは別の goroutine で行い、
+// decodeHEIC は、同時実行の枠(HEIC 用の 1 件と、JPEG などと共有する枠のすべて)を取ってから HEIC を
+// デコードする。デコードは別の goroutine で行い、
 // 時間切れ・キャンセルのときは、待たずに戻る(WASM のデコードは途中で止められない)。ただし、枠は
 // デコードが実際に終わるまで手放さないので、時間切れのデコードが溜まって、メモリの上限を超えることは
 // ない。デコーダの中の異常終了(panic)は、ここで受け止めて 1 件の失敗として扱い、プロセスは落とさない。
 func decodeHEIC(parent context.Context, data []byte) (image.Image, error) {
-	ctx, cancel := context.WithTimeout(parent, heicTimeout)
-	defer cancel()
+	// 順番待ちと、デコードそのものに、それぞれ時間制限を持たせる。合わせて 1 つの制限にすると、順番が
+	// 回ってきた直後の写真が、待った時間のせいで、デコード中に時間切れになってしまう。
+	queueCtx, cancelQueue := context.WithTimeout(parent, heicTimeout)
+	defer cancelQueue()
 
 	select {
 	case heicSem <- struct{}{}:
-	case <-ctx.Done():
-		return nil, decodeWaitError(parent, ctx)
+	case <-queueCtx.Done():
+		return nil, queueWaitError(parent)
 	}
-	select {
-	case decodeSem <- struct{}{}:
-	case <-ctx.Done():
-		<-heicSem
-		return nil, decodeWaitError(parent, ctx)
+	for got := 0; got < cap(decodeSem); got++ {
+		select {
+		case decodeSem <- struct{}{}:
+		case <-queueCtx.Done():
+			for ; got > 0; got-- {
+				<-decodeSem
+			}
+			<-heicSem
+			return nil, queueWaitError(parent)
+		}
 	}
+	ctx, cancel := context.WithTimeout(parent, heicTimeout)
+	defer cancel()
 
 	type result struct {
 		img image.Image
@@ -271,7 +287,12 @@ func decodeHEIC(parent context.Context, data []byte) (image.Image, error) {
 	done := make(chan result, 1)
 	decode := heicDecode // goroutine を作る前に読んでおく(差し替え中のテストとの競合を避ける)
 	go func() {
-		defer func() { <-decodeSem; <-heicSem }()
+		defer func() {
+			for i := 0; i < cap(decodeSem); i++ {
+				<-decodeSem
+			}
+			<-heicSem
+		}()
 		defer func() {
 			if r := recover(); r != nil {
 				done <- result{err: fmt.Errorf("%w: heic decoder panic: %v", ErrUnsupportedImage, r)}
@@ -291,9 +312,19 @@ func decodeHEIC(parent context.Context, data []byte) (image.Image, error) {
 	}
 }
 
-// decodeWaitError は、待ち・デコードが打ち切られた理由を、呼び出し側の扱いに合わせて返す。
-// 呼び出し側(リクエスト)のキャンセルは、そのまま返す(すでに相手がいない)。こちらの時間切れは、
-// 「処理しきれない写真」として、対応しない写真(ErrUnsupportedImage)と同じ扱いにする。
+// queueWaitError は、デコードの順番を待つ間に打ち切られた理由を返す。呼び出し側(リクエスト)の
+// キャンセルは、そのまま返す(すでに相手がいない)。こちらの時間切れは、写真ではなく混雑が原因なので
+// ErrBusy にする。
+func queueWaitError(parent context.Context) error {
+	if parent.Err() != nil {
+		return parent.Err()
+	}
+	return ErrBusy
+}
+
+// decodeWaitError は、デコードそのものが時間内に終わらなかったときの理由を返す。リクエストの
+// キャンセルはそのまま返す。こちらの時間切れは、「この写真は処理しきれない」ものとして、対応しない
+// 写真(ErrUnsupportedImage)と同じ扱いにする(再試行しても同じ結果になるため)。
 func decodeWaitError(parent, ctx context.Context) error {
 	if parent.Err() != nil {
 		return parent.Err()

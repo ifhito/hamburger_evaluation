@@ -195,6 +195,13 @@ func readPhotoPart(ctx context.Context, w http.ResponseWriter, part *multipart.P
 			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoUnsupportedMessage}})
 			return nil, false
 		}
+		// HEIC のデコードの順番が、時間内に回ってこなかった(混雑)。写真の問題ではないので、
+		// 422 ではなく 503 にして、あとで再試行できることを示す。
+		if errors.Is(err, photo.ErrBusy) {
+			w.Header().Set("Retry-After", "5")
+			writeError(w, http.StatusServiceUnavailable, "photo processing is busy, please try again")
+			return nil, false
+		}
 		// この経路での sentinel でない Process のエラーは、ストリーム途中の
 		// 読み取り失敗、すなわち壊れた multipart body（またはグローバルな
 		// body cap）、もしくは decode semaphore の待ち行列にいる間に request の

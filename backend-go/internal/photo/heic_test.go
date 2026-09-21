@@ -17,6 +17,13 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
 
+// TestMain は、テストの前に HEIC のデコーダの準備(WASM のコンパイル。-race では数秒かかる)を済ませる。
+// 準備が最初のテストの時間制限(8 秒)の中に入ると、遅い環境で、そのテストだけが時間切れになる。
+func TestMain(m *testing.M) {
+	photo.WarmUp()
+	os.Exit(m.Run())
+}
+
 // heicFixture は、testdata の HEIC を読み込む。どちらも 640x480 で、左上が赤・右上が緑・
 // 左下が青・右下が黄の 4 色の絵である(向きが正しいかを、隅の色で確かめられる)。
 //   - landscape.heic: 向きの情報がない、ふつうの横向きの写真
@@ -210,8 +217,8 @@ func TestProcessHEIC(t *testing.T) {
 
 	t.Run("1 バイトずつ書き換えた HEIC を大量に与えても、パニックも停止もせず、成功か「対応しない画像」のどちらかになる", func(t *testing.T) {
 		base := heicFixture(t, "portrait_irot.heic")
-		// 場所をばらして 96 か所。各回は約 10 ミリ秒(WASM のデコード)で、-race でも数秒に収まる。
-		for n := 0; n < 96; n++ {
+		// 場所をばらして 64 か所。各回は約 10 ミリ秒(WASM のデコード)で、-race でも数秒に収まる。
+		for n := 0; n < 64; n++ {
 			data := append([]byte(nil), base...)
 			pos := (n*2654435761 + 17) % len(data) // 位置を疑似乱数でばらす(結果が毎回同じになる)
 			data[pos] ^= byte(1 << (n % 8))

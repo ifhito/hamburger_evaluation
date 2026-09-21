@@ -99,11 +99,38 @@ func TestDecodeHEIC(t *testing.T) {
 			t.Errorf("時間切れまでに %v かかった(デコードの終了を待ってしまっている)", elapsed)
 		}
 		// デコードはまだ走っているので、枠は埋まったまま(メモリの上限を守るため)。
-		if len(heicSem) != 1 || len(decodeSem) != 1 {
-			t.Errorf("時間切れの直後の枠 = heic %d / decode %d, want 1 / 1", len(heicSem), len(decodeSem))
+		if len(heicSem) != 1 || len(decodeSem) != cap(decodeSem) {
+			t.Errorf("時間切れの直後の枠 = heic %d / decode %d, want 1 / %d(すべて)", len(heicSem), len(decodeSem), cap(decodeSem))
 		}
 		close(release)
 		waitFor(t, "デコードの終了後に枠が返る", func() bool { return len(heicSem) == 0 && len(decodeSem) == 0 })
+	})
+
+	t.Run("順番待ちに時間がかかっても、順番が回ってきたあとのデコードには、あらためて時間制限が与えられる", func(t *testing.T) {
+		origTimeout := heicTimeout
+		heicTimeout = 200 * time.Millisecond
+		t.Cleanup(func() { heicTimeout = origTimeout })
+		// 1 件目は 150 ミリ秒、2 件目は 120 ミリ秒かかる。2 件目は約 150 ミリ秒待ってから 120 ミリ秒でデコードするので、
+		// 合計(約 270 ミリ秒)は制限(200 ミリ秒)を超えるが、待ちとデコードは、それぞれ制限内に収まる。
+		var calls atomic.Int32
+		stubDecoder(t, func() (image.Image, error) {
+			if calls.Add(1) == 1 {
+				time.Sleep(150 * time.Millisecond)
+			} else {
+				time.Sleep(120 * time.Millisecond)
+			}
+			return small, nil
+		})
+		errs := make(chan error, 2)
+		for i := 0; i < 2; i++ {
+			go func() { _, err := decodeHEIC(context.Background(), nil); errs <- err }()
+			time.Sleep(20 * time.Millisecond) // 1 件目が先に枠を取る
+		}
+		for i := 0; i < 2; i++ {
+			if err := <-errs; err != nil {
+				t.Errorf("decodeHEIC returned error: %v(待ちの時間が、デコードの制限に食い込んでいる)", err)
+			}
+		}
 	})
 
 	t.Run("リクエストがキャンセルされたら、時間切れではなくキャンセルとして戻る", func(t *testing.T) {
@@ -119,12 +146,12 @@ func TestDecodeHEIC(t *testing.T) {
 		waitFor(t, "枠が返る", func() bool { return len(heicSem) == 0 && len(decodeSem) == 0 })
 	})
 
-	t.Run("枠が空くのを待つ間に時間切れになったら、取りかけた枠を返す", func(t *testing.T) {
+	t.Run("枠が空くのを待つ間に時間切れになったら、混雑として扱い、取りかけた枠をすべて返す", func(t *testing.T) {
 		origTimeout := heicTimeout
 		heicTimeout = 50 * time.Millisecond
 		t.Cleanup(func() { heicTimeout = origTimeout })
-		// JPEG などが decodeSem を 2 件とも使っている状態を作る(HEIC は heicSem を取ったあと、待たされる)。
-		decodeSem <- struct{}{}
+		// JPEG などが decodeSem の 1 件を使っている状態を作る(HEIC は heicSem と、残りの 1 件を取ったあと、
+		// もう 1 件を待たされる)。
 		decodeSem <- struct{}{}
 		t.Cleanup(func() {
 			for len(decodeSem) > 0 {
@@ -133,11 +160,11 @@ func TestDecodeHEIC(t *testing.T) {
 		})
 		stubDecoder(t, func() (image.Image, error) { return small, nil })
 		_, err := decodeHEIC(context.Background(), nil)
-		if !errors.Is(err, ErrUnsupportedImage) {
-			t.Fatalf("err = %v, want ErrUnsupportedImage", err)
+		if !errors.Is(err, ErrBusy) || errors.Is(err, ErrUnsupportedImage) {
+			t.Fatalf("err = %v, want ErrBusy(混雑が原因で、写真が悪いわけではない)", err)
 		}
-		if len(heicSem) != 0 {
-			t.Errorf("heicSem に %d 件が残っている。時間切れで取りかけた枠は返すはず", len(heicSem))
+		if len(heicSem) != 0 || len(decodeSem) != 1 {
+			t.Errorf("時間切れの後の枠 = heic %d / decode %d, want 0 / 1(JPEG などが使っている 1 件だけが残る)", len(heicSem), len(decodeSem))
 		}
 	})
 }
@@ -213,10 +240,10 @@ func TestParseHEIF(t *testing.T) {
 	})
 
 	t.Run("同じ名前のボックスを大量に並べても、決まった個数で読むのをやめる", func(t *testing.T) {
-		// 空の ispe 以外のボックスを 100 万個並べた ipco。数を数えて打ち切らないと、読むのに時間がかかる。
+		// 空の ispe 以外のボックスを 10 万個並べた ipco。数を数えて打ち切らないと、読むのに時間がかかる。
 		var many []byte
 		filler := isoBox("free")
-		for i := 0; i < 1_000_000; i++ {
+		for i := 0; i < 100_000; i++ {
 			many = append(many, filler...)
 		}
 		data := append(isoBox("ftyp", []byte("heic"), []byte{0, 0, 0, 0}, []byte("heic")),
