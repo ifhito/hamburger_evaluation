@@ -41,6 +41,8 @@ func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *u
 		{path: "/signup/confirm", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignupConfirm(signups)}},
 		{path: "/login", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogin(auth)}},
 		{path: "/logout", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogout}, middleware: RequireAuth(auth)},
+		{path: "/me", methods: map[string]http.HandlerFunc{http.MethodGet: handleMe}, middleware: RequireAuth(auth)},
+		{path: "/meta", methods: map[string]http.HandlerFunc{http.MethodGet: handleMeta}},
 		// GET は匿名でも使える（OptionalAuth）ままで、ログインが必要なのは
 		// shop の投稿だけであり、そのため method ごとの上書きを行う。
 		{
