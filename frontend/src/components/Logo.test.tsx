@@ -1,35 +1,35 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Logo, SMALL_MARK_BELOW_PX } from "./Logo";
-import { MARK, MARK_SMALL } from "./logoMarks";
+import { Logo } from "./Logo";
+import markSvg from "../assets/logo/burgerstack-mark.svg?raw";
 
 const render = (props: Parameters<typeof Logo>[0]) => renderToStaticMarkup(<Logo {...props} />);
+const markPath = /<path d="([^"]+)"/.exec(markSvg)![1];
+const markStrokeWidth = /stroke-width="([^"]+)"/.exec(markSvg)![1];
 
-describe("Logo の記号の版", () => {
-  it("高さが 24px 以上のときは、レタスの波つきの通常版を使う", () => {
-    expect(SMALL_MARK_BELOW_PX).toBe(24);
-    const html = render({ name: "BurgerStack", size: 24 });
-    expect(html).toContain('data-mark="normal"');
-    expect(html).toContain(`d="${MARK.path}"`);
+describe("Logo の記号", () => {
+  it("どの大きさでも、レタスの波つきの同じ記号(同じ path・同じ線の太さ)を使う", () => {
+    for (const size of [16, 20, 23, 24, 32, 64]) {
+      const html = render({ name: "BurgerStack", size });
+      expect(html, `${size}px`).toContain(`d="${markPath}"`);
+      expect(html, `${size}px`).toContain(`stroke-width="${markStrokeWidth}"`);
+    }
   });
 
-  it("高さが 24px 未満のときは、波を省いた小さい版に切り替える", () => {
-    const html = render({ name: "BurgerStack", size: 23 });
-    expect(html).toContain('data-mark="small"');
-    expect(html).toContain(`d="${MARK_SMALL.path}"`);
-    expect(html).not.toContain(`d="${MARK.path}"`);
-  });
-
-  it("大きさを指定しないときは、ヘッダーの高さ(32px)の通常版になる", () => {
+  it("大きさを指定しないときは、ヘッダーの高さ(32px)になり、幅は記号の縦横の比から決まる", () => {
     const html = render({ name: "BurgerStack" });
     expect(html).toContain('height="32"');
-    expect(html).toContain('data-mark="normal"');
+    const [, , w, h] = /viewBox="([^"]+)"/.exec(markSvg)![1].split(" ").map(Number);
+    expect(html).toContain(`width="${Math.round((32 * w) / h)}"`);
   });
 
-  it("通常版と小さい版とで、線の太さが違う(小さい版は太い)", () => {
-    expect(MARK_SMALL.strokeWidth).toBeGreaterThan(MARK.strokeWidth);
-    expect(render({ name: "BurgerStack", size: 32 })).toContain(`stroke-width="${MARK.strokeWidth}"`);
-    expect(render({ name: "BurgerStack", size: 16 })).toContain(`stroke-width="${MARK_SMALL.strokeWidth}"`);
+  it("大きさを変えると、高さと幅が、その大きさに比例して変わる", () => {
+    const small = render({ name: "BurgerStack", size: 16 });
+    const large = render({ name: "BurgerStack", size: 64 });
+    const widthOf = (html: string) => Number(/ width="(\d+)"/.exec(html)![1]);
+    expect(small).toContain('height="16"');
+    expect(large).toContain('height="64"');
+    expect(widthOf(large)).toBeGreaterThan(widthOf(small) * 3);
   });
 });
 

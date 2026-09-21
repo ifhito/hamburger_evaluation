@@ -1,8 +1,19 @@
-import { MARK, MARK_SMALL } from './logoMarks'
+import markSvg from '../assets/logo/burgerstack-mark.svg?raw'
 import styles from './logo.module.css'
 
-// design/README.md の「ロゴの使い方」に従い、記号の高さがこの値(px)未満のときは、波を省いた小さい版を使う。
-export const SMALL_MARK_BELOW_PX = 24
+// 記号(1 本の連続した線)。元は design/assets/logo/burgerstack-mark.svg で、src/assets/logo/ のファイルは、その写し
+// (logoAssets.test.ts が、内容の一致を確かめる)。path を .ts に書き写さないために、SVG から読む。
+// 記号は、どの大きさでも、この 1 種類(波つき)を使う。
+function readMark(svg: string) {
+  const path = /<path d="([^"]+)"/.exec(svg)?.[1]
+  const viewBox = /viewBox="([^"]+)"/.exec(svg)?.[1]
+  const strokeWidth = /stroke-width="([^"]+)"/.exec(svg)?.[1]
+  if (!path || !viewBox || !strokeWidth) throw new Error('ロゴの SVG から、path・viewBox・線の太さを読めない')
+  const [, , w, h] = viewBox.split(' ').map(Number)
+  return { path, viewBox, strokeWidth: Number(strokeWidth), aspect: w / h }
+}
+
+const MARK = readMark(markSvg)
 
 interface LogoProps {
   // ブランド名(例: BurgerStack)。大文字の切れ目で、前半を太字、後半を標準の太さにする。
@@ -19,22 +30,19 @@ function splitName(name: string): [string, string] {
 }
 
 export function Logo({ name, size = 32, variant = 'on-light' }: LogoProps) {
-  const mark = size < SMALL_MARK_BELOW_PX ? MARK_SMALL : MARK
-  const [, , w, h] = mark.viewBox.split(' ').map(Number)
   const [first, rest] = splitName(name)
 
   return (
     <span className={variant === 'on-dark' ? `${styles.logo} ${styles.onDark}` : styles.logo}>
       <svg
         className={styles.mark}
-        viewBox={mark.viewBox}
-        width={Math.round((size * w) / h)}
+        viewBox={MARK.viewBox}
+        width={Math.round(size * MARK.aspect)}
         height={size}
         aria-hidden="true"
         focusable="false"
-        data-mark={mark === MARK_SMALL ? 'small' : 'normal'}
       >
-        <path d={mark.path} strokeWidth={mark.strokeWidth} />
+        <path d={MARK.path} strokeWidth={MARK.strokeWidth} />
       </svg>
       <span className={styles.text}>
         <span className={styles.first}>{first}</span>
