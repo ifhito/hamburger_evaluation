@@ -5,8 +5,13 @@
 | ファイル | 内容 |
 |---|---|
 | `raw/*.csv` | `scripts/bench/*.sh` が出力する生データ。編集しない |
-| `phase1-database.md` | DB 4 候補の結果 |
-| `phase2-photo.md` | 写真ストレージ 4 候補の結果 |
+| `phase0-baseline.md` | 準備と基準値(本番用イメージ、写真の OOM) |
+| `phase1-<社名>.md` | DB 各社の詳細 |
+| `phase1-summary.md` | DB 4 候補の総括 |
+| `phase1-candidates.md` | DB 候補の解説と、選ばなかった理由 |
+| `phase2-<社名>.md` | 写真ストレージ各社の詳細 |
+| `phase2-summary.md` | 写真ストレージ 4 候補の総括 |
+| `phase2-candidates.md` | 写真ストレージ候補の解説と、選ばなかった理由 |
 | `phase3-email.md` | メール送信 4 候補の結果 |
 | `phase4-api.md` | API 4 候補の結果 |
 | `phase5-async.md` | 非同期処理 4 候補の結果 |
