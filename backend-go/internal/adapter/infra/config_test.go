@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -335,24 +337,35 @@ func TestLoadConfigStatsWorker(t *testing.T) {
 		}
 	})
 
-	// 間違えた値を黙って既定に戻すと、設定したつもりの値が効いていないことに気づけない。
-	// 起動時に、どの変数が悪いかを伝えて失敗させる。
-	for name, env := range map[string]map[string]string{
-		"STATS_WORKER_INTERVAL":     {"STATS_WORKER_INTERVAL": "soon"},
-		"STATS_WORKER_INTERVAL が 0": {"STATS_WORKER_INTERVAL": "0s"},
-		"STATS_WORKER_INTERVAL が負":  {"STATS_WORKER_INTERVAL": "-1s"},
-		"STATS_WORKER_BATCH":        {"STATS_WORKER_BATCH": "many"},
-		"STATS_WORKER_BATCH が 0":    {"STATS_WORKER_BATCH": "0"},
-		"STATS_WORKER_MAX_ATTEMPTS": {"STATS_WORKER_MAX_ATTEMPTS": "-2"},
+	// 不正な値は、起動を失敗させずに既定の値になる。ただし、黙って戻すと、設定したつもりの値が
+	// 効いていないことに気づけないので、どの変数かを警告のログに出す。
+	for name, tc := range map[string]struct {
+		env  map[string]string
+		want func(Config) bool
+	}{
+		"STATS_WORKER_INTERVAL が数値でない": {map[string]string{"STATS_WORKER_INTERVAL": "soon"}, func(c Config) bool { return c.StatsWorkerInterval == time.Second }},
+		"STATS_WORKER_INTERVAL が 0":    {map[string]string{"STATS_WORKER_INTERVAL": "0s"}, func(c Config) bool { return c.StatsWorkerInterval == time.Second }},
+		"STATS_WORKER_INTERVAL が負":     {map[string]string{"STATS_WORKER_INTERVAL": "-1s"}, func(c Config) bool { return c.StatsWorkerInterval == time.Second }},
+		"STATS_WORKER_BATCH が数値でない":    {map[string]string{"STATS_WORKER_BATCH": "many"}, func(c Config) bool { return c.StatsWorkerBatch == 20 }},
+		"STATS_WORKER_BATCH が 0":       {map[string]string{"STATS_WORKER_BATCH": "0"}, func(c Config) bool { return c.StatsWorkerBatch == 20 }},
+		"STATS_WORKER_MAX_ATTEMPTS が負": {map[string]string{"STATS_WORKER_MAX_ATTEMPTS": "-2"}, func(c Config) bool { return c.StatsWorkerMaxAttempts == 8 }},
 	} {
-		t.Run("不正な値はエラーになる: "+name, func(t *testing.T) {
-			_, err := mailLoader(env)
-			if err == nil {
-				t.Fatal("LoadConfig returned nil error, want error")
+		t.Run("不正な値は、警告のログを出して既定の値になる: "+name, func(t *testing.T) {
+			var logs bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+
+			cfg, err := mailLoader(tc.env)
+			if err != nil {
+				t.Fatalf("LoadConfig returned error: %v", err)
 			}
-			for key := range env {
-				if !strings.Contains(err.Error(), key) {
-					t.Errorf("エラーに変数名 %s がない: %v", key, err)
+			if !tc.want(cfg) {
+				t.Errorf("既定の値になっていない: %+v", cfg)
+			}
+			for key := range tc.env {
+				if !strings.Contains(logs.String(), key) {
+					t.Errorf("警告のログに変数名 %s がない: %s", key, logs.String())
 				}
 			}
 		})

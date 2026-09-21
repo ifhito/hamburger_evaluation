@@ -2,6 +2,7 @@ package infra
 
 import (
 	"fmt"
+	"log/slog"
 	"net/mail"
 	"net/url"
 	"strconv"
@@ -93,13 +94,13 @@ type Config struct {
 	// 末尾の "/" は取り除かれる。
 	AppBaseURL string
 	// StatsWorkerInterval は、統計の再計算のワーカーが、依頼を取りに行く間隔である。
-	// STATS_WORKER_INTERVAL（"1s" のような Go の duration）、既定は 1s。正の値でなければならない。
+	// STATS_WORKER_INTERVAL（"1s" のような Go の duration）、既定は 1s。正の値でなければ既定になる。
 	StatsWorkerInterval time.Duration
 	// StatsWorkerBatch は、ワーカーが 1 回に取り出す依頼の上限の件数である。STATS_WORKER_BATCH、
-	// 既定は 20。正の整数でなければならない。
+	// 既定は 20。正の整数でなければ既定になる。
 	StatsWorkerBatch int
 	// StatsWorkerMaxAttempts は、1 つの依頼を、失敗しながら再試行する上限の回数である。
-	// STATS_WORKER_MAX_ATTEMPTS、既定は 8。正の整数でなければならない。
+	// STATS_WORKER_MAX_ATTEMPTS、既定は 8。正の整数でなければ既定になる。
 	StatsWorkerMaxAttempts int
 }
 
@@ -108,8 +109,8 @@ type Config struct {
 // JWT_TTL が正の duration でない場合、DB_MAX_CONNS が正の整数でない場合、
 // PHOTO_STORAGE が "disk" でも "s3" でもない場合、s3 モードで必須の
 // 変数のいずれかが欠けている場合、または確認メールの設定（SMTP_*、MAIL_FROM、
-// APP_BASE_URL）が欠けている・不正な場合、統計のワーカーの設定（STATS_WORKER_*）が正の値でない場合に
-// 失敗する。
+// APP_BASE_URL）が欠けている・不正な場合に失敗する。統計のワーカーの設定（STATS_WORKER_*）は、
+// 不正でも失敗せず、警告のログを出して既定の値になる。
 func LoadConfig(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		Port:        getenv("PORT"),
@@ -181,43 +182,39 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	if err := loadMailConfig(getenv, &cfg); err != nil {
 		return Config{}, err
 	}
-	if err := loadStatsWorkerConfig(getenv, &cfg); err != nil {
-		return Config{}, err
-	}
+	loadStatsWorkerConfig(getenv, &cfg)
 	return cfg, nil
 }
 
-// loadStatsWorkerConfig は、統計の再計算のワーカーの設定を読み込む。未設定なら既定の値で、
-// 設定されていて不正(数値でない・0 以下)なら、ほかの設定と同じく、起動時に失敗させる。
-func loadStatsWorkerConfig(getenv func(string) string, cfg *Config) error {
+// loadStatsWorkerConfig は、統計の再計算のワーカーの設定を読み込む。統計の更新が少し遅れても、
+// アプリ全体を止めるほどのことではないので、設定されていて不正(数値でない・0 以下)な値は、
+// 起動を失敗させずに、警告のログを出して既定の値にする(値そのものは秘密ではないのでログに含める)。
+func loadStatsWorkerConfig(getenv func(string) string, cfg *Config) {
 	cfg.StatsWorkerInterval = defaultStatsWorkerInterval
 	if raw := getenv("STATS_WORKER_INTERVAL"); raw != "" {
-		d, err := time.ParseDuration(raw)
-		if err != nil || d <= 0 {
-			return fmt.Errorf("STATS_WORKER_INTERVAL must be a positive duration, got %q", raw)
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			cfg.StatsWorkerInterval = d
+		} else {
+			slog.Warn("invalid stats worker setting, using the default", "name", "STATS_WORKER_INTERVAL", "value", raw, "default", defaultStatsWorkerInterval)
 		}
-		cfg.StatsWorkerInterval = d
 	}
-	var err error
-	if cfg.StatsWorkerBatch, err = positiveIntEnv(getenv, "STATS_WORKER_BATCH", defaultStatsWorkerBatch); err != nil {
-		return err
-	}
-	cfg.StatsWorkerMaxAttempts, err = positiveIntEnv(getenv, "STATS_WORKER_MAX_ATTEMPTS", defaultStatsWorkerMaxAttempts)
-	return err
+	cfg.StatsWorkerBatch = positiveIntEnv(getenv, "STATS_WORKER_BATCH", defaultStatsWorkerBatch)
+	cfg.StatsWorkerMaxAttempts = positiveIntEnv(getenv, "STATS_WORKER_MAX_ATTEMPTS", defaultStatsWorkerMaxAttempts)
 }
 
 // positiveIntEnv は、環境変数 name を正の整数として読む。未設定なら fallback を返し、
-// 設定されていて正の整数でなければエラーにする。
-func positiveIntEnv(getenv func(string) string, name string, fallback int) (int, error) {
+// 設定されていて正の整数でなければ、警告のログを出して fallback を返す。
+func positiveIntEnv(getenv func(string) string, name string, fallback int) int {
 	raw := getenv(name)
 	if raw == "" {
-		return fallback, nil
+		return fallback
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
-		return 0, fmt.Errorf("%s must be a positive integer, got %q", name, raw)
+		slog.Warn("invalid stats worker setting, using the default", "name", name, "value", raw, "default", fallback)
+		return fallback
 	}
-	return n, nil
+	return n
 }
 
 // loadMailConfig は、確認メールの設定を読み込んで検証し、cfg に書き込む。エラー

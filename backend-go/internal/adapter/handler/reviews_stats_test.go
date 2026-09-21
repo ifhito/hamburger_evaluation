@@ -111,4 +111,17 @@ func TestReviewWritesDeferStatsIntegration(t *testing.T) {
 	if n := dbtest.CountRecalcRequests(ctx, t, conn, burgerID); n != 0 {
 		t.Errorf("再計算のあとの依頼 = %d 件, want 0 件", n)
 	}
+
+	// 書き込みが拒否されたときは、再計算の依頼も登録されない(統計を計算し直す理由がない)。
+	rejected := fmt.Sprintf(`{"review":{"rating":9,"comment":"too high","shop_id":%q,"burger_id":%q}}`, shopID, burgerID)
+	if rec := do(router, http.MethodPost, "/reviews", rejected, aliceAuth); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("範囲外の評価の POST /reviews = %d (body %s), want 422", rec.Code, rec.Body)
+	}
+	if rec := do(router, http.MethodDelete, "/reviews/"+bobReview, "", aliceAuth); rec.Code != http.StatusForbidden {
+		t.Fatalf("他人のレビューの DELETE = %d (body %s), want 403", rec.Code, rec.Body)
+	}
+	var requests int
+	if err := conn.QueryRow(ctx, `SELECT count(*) FROM burger_stats_dirty`).Scan(&requests); err != nil || requests != 0 {
+		t.Errorf("拒否された書き込みのあとの再計算の依頼 = %d 件 (エラー %v), want 0 件", requests, err)
+	}
 }
