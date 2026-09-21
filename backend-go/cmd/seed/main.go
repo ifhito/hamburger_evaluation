@@ -134,7 +134,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	}
 
 	type reviewSpec struct {
-		userID  int64
+		userID  string
 		burger  int // burgers へのインデックス
 		rating  int16
 		comment string
@@ -169,32 +169,32 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 // seedUser は email でユーザーを探し、なければ、signup とまったく同じように
 // ハッシュ化した共通の開発用パスワードでユーザーを作成する（デフォルトの cost
 // での bcrypt。internal/adapter/infra/password.go を参照）。
-func seedUser(ctx context.Context, tx pgx.Tx, email, username string, admin bool) (int64, error) {
-	var id int64
+func seedUser(ctx context.Context, tx pgx.Tx, email, username string, admin bool) (string, error) {
+	var id string
 	err := tx.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return 0, fmt.Errorf("find user %s: %w", email, err)
+		return "", fmt.Errorf("find user %s: %w", email, err)
 	}
 	digest, err := bcrypt.GenerateFromPassword([]byte(devPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return 0, fmt.Errorf("hash password for %s: %w", email, err)
+		return "", fmt.Errorf("hash password for %s: %w", email, err)
 	}
 	err = tx.QueryRow(ctx,
 		`INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, $3, $4) RETURNING id`,
 		email, username, string(digest), admin,
 	).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("insert user %s: %w", email, err)
+		return "", fmt.Errorf("insert user %s: %w", email, err)
 	}
 	return id, nil
 }
 
 // seedShop は name で shop を探し（seed の natural key である。schema には
 // これに対する unique 制約がない）、なければ与えられた status で作成する。
-func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID int64) (int64, error) {
+func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID string) (int64, error) {
 	var id int64
 	err := tx.QueryRow(ctx, `SELECT id FROM shops WHERE name = $1`, name).Scan(&id)
 	if err == nil {
@@ -246,7 +246,7 @@ func seedBurger(ctx context.Context, tx pgx.Tx, shopID int64, name string) (int6
 // seedReview は、ユーザーがその burger に対する kept な review をすでに持って
 // いない限り review を挿入する（seed の natural key。アプリ自体は複数件を
 // 許可する）。
-func seedReview(ctx context.Context, tx pgx.Tx, userID, burgerID int64, rating int16, comment string) error {
+func seedReview(ctx context.Context, tx pgx.Tx, userID string, burgerID int64, rating int16, comment string) error {
 	var exists bool
 	err := tx.QueryRow(ctx,
 		`SELECT EXISTS (
@@ -256,7 +256,7 @@ func seedReview(ctx context.Context, tx pgx.Tx, userID, burgerID int64, rating i
 		userID, burgerID,
 	).Scan(&exists)
 	if err != nil {
-		return fmt.Errorf("find review (user %d, burger %d): %w", userID, burgerID, err)
+		return fmt.Errorf("find review (user %s, burger %d): %w", userID, burgerID, err)
 	}
 	if exists {
 		return nil
@@ -265,7 +265,7 @@ func seedReview(ctx context.Context, tx pgx.Tx, userID, burgerID int64, rating i
 		`INSERT INTO reviews (rating, comment, user_id, burger_id) VALUES ($1, $2, $3, $4)`,
 		rating, comment, userID, burgerID,
 	); err != nil {
-		return fmt.Errorf("insert review (user %d, burger %d): %w", userID, burgerID, err)
+		return fmt.Errorf("insert review (user %s, burger %d): %w", userID, burgerID, err)
 	}
 	return nil
 }
@@ -292,7 +292,7 @@ func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) erro
 	type factRow struct {
 		rating    int16
 		createdAt time.Time
-		userID    int64
+		userID    string
 	}
 	var factRows []factRow
 	for rows.Next() {
@@ -310,8 +310,8 @@ func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) erro
 
 	// Reviewer-trust の履歴：各 fact の author がすべての burger にわたって
 	// つけた kept な rating を、ユーザーごとにまとめたもの。
-	historyByUser := make(map[int64][]float64, len(factRows))
-	userIDs := make([]int64, 0, len(factRows))
+	historyByUser := make(map[string][]float64, len(factRows))
+	userIDs := make([]string, 0, len(factRows))
 	for _, row := range factRows {
 		if _, seen := historyByUser[row.userID]; !seen {
 			historyByUser[row.userID] = nil
@@ -321,7 +321,7 @@ func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) erro
 	if len(userIDs) > 0 {
 		ratingRows, err := tx.Query(ctx,
 			`SELECT r.user_id, r.rating FROM reviews r
-			 WHERE r.user_id = ANY($1::bigint[]) AND r.discarded_at IS NULL
+			 WHERE r.user_id = ANY($1::text[]::uuid[]) AND r.discarded_at IS NULL
 			 ORDER BY r.id`,
 			userIDs,
 		)
@@ -329,7 +329,7 @@ func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) erro
 			return fmt.Errorf("list reviewer ratings: %w", err)
 		}
 		for ratingRows.Next() {
-			var userID int64
+			var userID string
 			var rating int16
 			if err := ratingRows.Scan(&userID, &rating); err != nil {
 				ratingRows.Close()

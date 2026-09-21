@@ -1,41 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { isValidUserId, userKey } from "./useUser";
+import { userKey } from "./useUser";
 
-describe("isValidUserId", () => {
-  it("正の整数は有効", () => {
-    expect(isValidUserId(1)).toBe(true);
-    expect(isValidUserId(42)).toBe(true);
-    expect(isValidUserId(Number.MAX_SAFE_INTEGER)).toBe(true);
-  });
-
-  it("NaN・0・負数・小数・安全でない整数は無効", () => {
-    expect(isValidUserId(NaN)).toBe(false);
-    expect(isValidUserId(0)).toBe(false);
-    expect(isValidUserId(-1)).toBe(false);
-    expect(isValidUserId(1.5)).toBe(false);
-    expect(isValidUserId(Number.MAX_SAFE_INTEGER + 1)).toBe(false);
-  });
-});
+const aliceId = "0b0e3a5c-8d54-4c1a-9f33-2a9d6f1c7e10";
+const bobId = "5d2c8a91-3f47-4e6b-8c15-7a0e9b4d2f63";
 
 describe("userKey", () => {
-  it("有効な id と enabled なら、id と viewerId を含む配列キーを返す", () => {
-    expect(userKey(2, 3)).toEqual(["/users", 2, 3]);
-    expect(userKey(2, null, true)).toEqual(["/users", 2, null]);
+  it("id があり enabled なら、id と viewerId を含む配列キーを返す", () => {
+    expect(userKey(aliceId, bobId)).toEqual(["/users", aliceId, bobId]);
+    expect(userKey(aliceId, null, true)).toEqual(["/users", aliceId, null]);
   });
 
   it("enabled が false なら null を返す", () => {
-    expect(userKey(2, 3, false)).toBeNull();
+    expect(userKey(aliceId, bobId, false)).toBeNull();
   });
 
-  it("不正な id なら null を返す", () => {
-    expect(userKey(NaN, 3)).toBeNull();
-    expect(userKey(0, 3)).toBeNull();
-    expect(userKey(-1, 3)).toBeNull();
-    expect(userKey(1.5, 3)).toBeNull();
+  it("id がなければ null を返す(形式の判定はせず、正規形でない id は API の 404 に任せる)", () => {
+    expect(userKey(undefined, bobId)).toBeNull();
+    expect(userKey("", bobId)).toBeNull();
+    expect(userKey("abc", bobId)).toEqual(["/users", "abc", bobId]);
   });
 
   it("閲覧者が違えば(未ログイン含む)別のキーになる", () => {
-    expect(userKey(2, 3)).not.toEqual(userKey(2, null));
-    expect(userKey(2, 3)).not.toEqual(userKey(2, 4));
+    expect(userKey(aliceId, bobId)).not.toEqual(userKey(aliceId, null));
+    expect(userKey(aliceId, bobId)).not.toEqual(userKey(aliceId, aliceId));
   });
 });

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // shopStoreFake（shops_test.go で宣言）の moderation 用メソッド群。この fake は
@@ -111,12 +112,12 @@ func TestCreateShop(t *testing.T) {
 			body:       `{"shop":{"name":"New Shack"}}`,
 			auth:       true,
 			wantStatus: http.StatusCreated,
-			wantBody:   `{"id":4,"name":"New Shack","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}}`,
+			wantBody:   `{"id":4,"name":"New Shack","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"}}`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router, aliceAuth, _, _ := newShopsRouter(t, seedShops(1))
+			router, aliceAuth, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
 			authHeader := ""
 			if tt.auth {
 				authHeader = aliceAuth
@@ -132,7 +133,7 @@ func TestCreateShop(t *testing.T) {
 	}
 
 	t.Run("作成した pending な shop は creator の一覧には出るが匿名の一覧には出ない", func(t *testing.T) {
-		router, aliceAuth, _, _ := newShopsRouter(t, seedShops(1))
+		router, aliceAuth, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
 		if rec := do(router, http.MethodPost, "/shops", `{"shop":{"name":"New Shack"}}`, aliceAuth); rec.Code != http.StatusCreated {
 			t.Fatalf("create status = %d (body %s)", rec.Code, rec.Body)
 		}
@@ -161,7 +162,7 @@ func TestAdminShopsForbidden(t *testing.T) {
 		{method: http.MethodPost, path: "/admin/shops/1/approve"},
 		{method: http.MethodPost, path: "/admin/shops/1/reject"},
 	}
-	router, aliceAuth, _, _ := newShopsRouter(t, seedShops(1))
+	router, aliceAuth, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
 	for _, ep := range endpoints {
 		t.Run(ep.method+" "+ep.path+" は非 admin だと 403 になる", func(t *testing.T) {
 			rec := do(router, ep.method, ep.path, ep.body, aliceAuth)
@@ -192,7 +193,7 @@ func TestAdminShopsForbidden(t *testing.T) {
 // 形で新しい順に返すこと、pending/active/rejected の filter、そして未知の
 // filter の値が空配列に縮退すること。
 func TestAdminListShops(t *testing.T) {
-	repo := seedShops(1)
+	repo := seedShops(uid.N(1))
 	repo.shops[2].Shop.ModerationNote = shopPtr("needs fixes")
 	router, _, adminAuth, _ := newShopsRouter(t, repo)
 
@@ -205,13 +206,13 @@ func TestAdminListShops(t *testing.T) {
 			name:  "すべての shop を新しい順に返す",
 			query: "",
 			wantBody: `[{"id":3,"name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","creator":null},` +
-				`{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}},` +
+				`{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"}},` +
 				`{"id":1,"name":"Active Diner","status":"active","moderation_note":null,"creator":null}]`,
 		},
 		{
 			name:     "status=pending で絞り込む",
 			query:    "?status=pending",
-			wantBody: `[{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}}]`,
+			wantBody: `[{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"}}]`,
 		},
 		{
 			name:     "未知の status は空配列になる",
@@ -222,7 +223,7 @@ func TestAdminListShops(t *testing.T) {
 			name:  "status が空ならすべての shop を返す",
 			query: "?status=",
 			wantBody: `[{"id":3,"name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","creator":null},` +
-				`{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}},` +
+				`{"id":2,"name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"}},` +
 				`{"id":1,"name":"Active Diner","status":"active","moderation_note":null,"creator":null}]`,
 		},
 	}
@@ -255,7 +256,7 @@ func TestAdminUpdateShop(t *testing.T) {
 			path:       "/admin/shops/2",
 			body:       `{"shop":{"name":"Renamed Shack"}}`,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"id":2,"name":"Renamed Shack","status":"pending","moderation_note":null,"creator":{"id":1,"username":"alice"}}`,
+			wantBody:   `{"id":2,"name":"Renamed Shack","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"}}`,
 		},
 		{
 			name:       "空の name は 422 を返す",
@@ -281,7 +282,7 @@ func TestAdminUpdateShop(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router, _, adminAuth, _ := newShopsRouter(t, seedShops(1))
+			router, _, adminAuth, _ := newShopsRouter(t, seedShops(uid.N(1)))
 			rec := do(router, http.MethodPut, tt.path, tt.body, adminAuth)
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tt.wantStatus, rec.Body)
@@ -298,7 +299,7 @@ func TestAdminUpdateShop(t *testing.T) {
 // どのような request body も無視されること、未知の id には 404、そして
 // 承認された shop が匿名でも見えるようになること。
 func TestAdminApproveShop(t *testing.T) {
-	repo := seedShops(1)
+	repo := seedShops(uid.N(1))
 	repo.shops[2].Shop.ModerationNote = shopPtr("needs fixes")
 	router, _, adminAuth, _ := newShopsRouter(t, repo)
 
@@ -343,7 +344,7 @@ func TestAdminApproveShop(t *testing.T) {
 // null で reject されること、そして reject された shop が匿名の一覧から
 // 消えること。
 func TestAdminRejectShop(t *testing.T) {
-	router, _, adminAuth, _ := newShopsRouter(t, seedShops(1))
+	router, _, adminAuth, _ := newShopsRouter(t, seedShops(uid.N(1)))
 
 	t.Run("note 付きで reject する", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/1/reject", `{"moderation_note":"spam"}`, adminAuth)
@@ -368,7 +369,7 @@ func TestAdminRejectShop(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":2,"name":"Alice Pending","status":"rejected","moderation_note":null,"creator":{"id":1,"username":"alice"}}`
+		want := `{"id":2,"name":"Alice Pending","status":"rejected","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}

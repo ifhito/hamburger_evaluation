@@ -11,6 +11,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -42,8 +43,8 @@ func TestUserRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser returned error: %v", err)
 	}
-	if created.ID == 0 {
-		t.Fatal("CreateUser returned zero ID")
+	if !domain.IsUUID(created.ID) {
+		t.Fatalf("CreateUser returned ID %q, want a UUID in the canonical form", created.ID)
 	}
 	wantUser := domain.User{ID: created.ID, Username: "alice", Email: "alice@example.com", Admin: false}
 	if created != wantUser {
@@ -77,7 +78,7 @@ func TestUserRepository(t *testing.T) {
 		if _, err := userQuery.GetActiveUserByEmail(ctx, "nobody@example.com"); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Fatalf("GetActiveUserByEmail error = %v, want %v", err, domain.ErrUserNotFound)
 		}
-		if _, err := userQuery.GetActiveUserByID(ctx, created.ID+1000); !errors.Is(err, domain.ErrUserNotFound) {
+		if _, err := userQuery.GetActiveUserByID(ctx, uid.N(1000)); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Fatalf("GetActiveUserByID error = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})
@@ -125,10 +126,10 @@ func TestUserRepositoryManagement(t *testing.T) {
 	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, $3, $4) RETURNING id`
-	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", "digest-alice", false)
-	bob := insertRow(ctx, t, conn, insertUser, "bob@example.com", "bob", "digest-bob", false)
-	victim := insertRow(ctx, t, conn, insertUser, "victim@example.com", "victim", "digest-victim", false)
-	ghost := insertRow(ctx, t, conn, insertUser, "ghost@example.com", "ghost", "digest-ghost", false)
+	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", "digest-alice", false)
+	bob := insertUserRow(ctx, t, conn, insertUser, "bob@example.com", "bob", "digest-bob", false)
+	victim := insertUserRow(ctx, t, conn, insertUser, "victim@example.com", "victim", "digest-victim", false)
+	ghost := insertUserRow(ctx, t, conn, insertUser, "ghost@example.com", "ghost", "digest-ghost", false)
 	if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = now() WHERE id = $1`, ghost); err != nil {
 		t.Fatalf("discard ghost: %v", err)
 	}
@@ -219,7 +220,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 
 	t.Run("UpdateUserProfile で存在しない id と discard 済みの id は ErrUserNotFound になる", func(t *testing.T) {
-		for name, id := range map[string]int64{"unknown": 99999, "discarded": ghost} {
+		for name, id := range map[string]string{"unknown": uid.N(99999), "discarded": ghost} {
 			if _, err := repo.UpdateUserProfile(ctx, id, domain.ProfileChanges{Username: strPtr("x")}); !errors.Is(err, domain.ErrUserNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrUserNotFound)
 			}
@@ -274,7 +275,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if err := repo.DiscardUser(ctx, victim); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("second discard = %v, want %v", err, domain.ErrUserNotFound)
 		}
-		if err := repo.DiscardUser(ctx, 99999); !errors.Is(err, domain.ErrUserNotFound) {
+		if err := repo.DiscardUser(ctx, uid.N(99999)); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})

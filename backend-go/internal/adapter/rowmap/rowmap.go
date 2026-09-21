@@ -34,7 +34,7 @@ func ShopStatusCode(status domain.ShopStatus) (int16, error) {
 
 // Shop は sqlc の shop のカラムを domain のエンティティに変換し、
 // smallint の status をデコードする（0=pending、1=active、2=rejected）。
-func Shop(id int64, name string, status int16, note pgtype.Text, creatorID pgtype.Int8) (domain.Shop, error) {
+func Shop(id int64, name string, status int16, note pgtype.Text, creatorID *string) (domain.Shop, error) {
 	shop := domain.Shop{ID: id, Name: name}
 	switch status {
 	case 0:
@@ -52,10 +52,7 @@ func Shop(id int64, name string, status int16, note pgtype.Text, creatorID pgtyp
 		n := note.String
 		shop.ModerationNote = &n
 	}
-	if creatorID.Valid {
-		c := creatorID.Int64
-		shop.CreatorID = &c
-	}
+	shop.CreatorID = creatorID
 	return shop, nil
 }
 

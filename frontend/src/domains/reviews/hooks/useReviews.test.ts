@@ -18,6 +18,8 @@ function page(from: number, count: number): Review[] {
   return Array.from({ length: count }, (_, i) => review(from + i));
 }
 
+const userId = "0b0e3a5c-8d54-4c1a-9f33-2a9d6f1c7e10";
+
 describe("mergePages", () => {
   it("ページをつないで 1 つの一覧にする", () => {
     const merged = mergePages([page(1, 3), page(4, 2)]);
@@ -61,7 +63,7 @@ describe("getKey", () => {
   });
 
   it("userId は snake_case の user_id としてキーに入る", () => {
-    expect(getKey({ userId: 2 })(0, null)).toBe("/reviews?user_id=2&page=1&per_page=20");
+    expect(getKey({ userId })(0, null)).toBe(`/reviews?user_id=${userId}&page=1&per_page=20`);
   });
 
   it("空の keyword はキーに含まれない", () => {
@@ -76,14 +78,14 @@ describe("getKey", () => {
   });
 
   it("enabled が false のときは、先頭ページも次ページも null を返して取得を止める", () => {
-    const disabled = getKey({ userId: 2 }, false);
+    const disabled = getKey({ userId }, false);
 
     expect(disabled(0, null)).toBeNull();
     expect(disabled(1, page(1, PER_PAGE))).toBeNull();
   });
 
   it("enabled を省略した場合と true の場合は、これまでどおりキーを返す", () => {
-    expect(getKey({ userId: 2 })(0, null)).toBe("/reviews?user_id=2&page=1&per_page=20");
-    expect(getKey({ userId: 2 }, true)(0, null)).toBe("/reviews?user_id=2&page=1&per_page=20");
+    expect(getKey({ userId })(0, null)).toBe(`/reviews?user_id=${userId}&page=1&per_page=20`);
+    expect(getKey({ userId }, true)(0, null)).toBe(`/reviews?user_id=${userId}&page=1&per_page=20`);
   });
 });

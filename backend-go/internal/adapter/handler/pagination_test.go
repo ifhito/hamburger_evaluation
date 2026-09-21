@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 const (
@@ -28,7 +30,7 @@ var paginationEndpoints = []paginationEndpoint{
 		name: "GET /shops",
 		path: "/shops",
 		setup: func(t *testing.T) (http.Handler, func() (int, int32, int32)) {
-			repo := seedShops(1)
+			repo := seedShops(uid.N(1))
 			router, _, _, _ := newShopsRouter(t, repo)
 			return router, func() (int, int32, int32) { return repo.listCalls, repo.lastLimit, repo.lastOffset }
 		},
@@ -37,7 +39,7 @@ var paginationEndpoints = []paginationEndpoint{
 		name: "GET /reviews",
 		path: "/reviews",
 		setup: func(t *testing.T) (http.Handler, func() (int, int32, int32)) {
-			repo := seedReviewWorld(1)
+			repo := seedReviewWorld(uid.N(1))
 			router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 			seedFeed(t, router, aliceAuth)
 			return router, func() (int, int32, int32) { return len(repo.listFilters), repo.lastLimit, repo.lastOffset }
@@ -185,13 +187,13 @@ func TestListReviewsPaginationWithFilters(t *testing.T) {
 		wantBody string
 	}{
 		{name: "他の filter と併用しても page の 422 が返る", query: "?page=abc&rating=4", wantBody: pageErrBody},
-		{name: "有効な filter を全部付けても per_page の 422 が返る", query: "?rating=4&shop_id=1&user_id=1&keyword=x&per_page=1.5", wantBody: perPageErrBody},
+		{name: "有効な filter を全部付けても per_page の 422 が返る", query: "?rating=4&shop_id=1&user_id=" + uid.N(1) + "&keyword=x&per_page=1.5", wantBody: perPageErrBody},
 		{name: "rating が不正なら page も不正でも rating の 422 が先に返る", query: "?page=abc&rating=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
 		{name: "shop_id が不正なら page も不正でも shop_id の 422 が先に返る", query: "?per_page=abc&shop_id=abc", wantBody: `{"errors":["Shop id must be an integer"]}`},
-		{name: "user_id が不正なら page も per_page も不正でも user_id の 422 が先に返る", query: "?page=abc&per_page=abc&user_id=abc", wantBody: `{"errors":["User id must be an integer"]}`},
+		{name: "user_id が不正なら page も per_page も不正でも user_id の 422 が先に返る", query: "?page=abc&per_page=abc&user_id=abc", wantBody: `{"errors":["User id must be a valid UUID"]}`},
 	}
 
-	repo := seedReviewWorld(1)
+	repo := seedReviewWorld(uid.N(1))
 	router, _, _, _ := newReviewsRouter(t, repo)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

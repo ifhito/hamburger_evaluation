@@ -12,6 +12,7 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -141,7 +142,7 @@ func TestReviewsListPagination(t *testing.T) {
 func TestReviewsListFilterPassThrough(t *testing.T) {
 	rating := 4
 	shopID := int64(7)
-	userID := int64(42)
+	userID := uid.N(42)
 	want := usecase.ReviewListFilter{Rating: &rating, Keyword: "tasty", ShopID: &shopID, UserID: &userID}
 	var got usecase.ReviewListFilter
 	query := &fakeReviewQuery{
@@ -175,8 +176,8 @@ func TestReviewsListFailure(t *testing.T) {
 // 返す（usecase レベルでの issue #14 AC6）。
 func TestReviewsGet(t *testing.T) {
 	detail := domain.ReviewDetail{
-		Review: domain.Review{ID: 9, Rating: 4, AuthorID: 1, BurgerID: 5, CreatedAt: time.Now()},
-		User:   &domain.UserRef{ID: 1, Username: "alice"},
+		Review: domain.Review{ID: 9, Rating: 4, AuthorID: uid.N(1), BurgerID: 5, CreatedAt: time.Now()},
+		User:   &domain.UserRef{ID: uid.N(1), Username: "alice"},
 		Burger: &domain.ShopReviewBurger{ID: 5, Name: "Cheese"},
 	}
 	query := &fakeReviewQuery{
@@ -206,14 +207,14 @@ func TestReviewsGet(t *testing.T) {
 // shop 404 → reviewable 403 → burger 404 → validation 422 → insert である。
 // fake の未設定の振る舞いにより、順序どおりでない呼び出しは panic になる。
 func TestReviewsCreate(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"}
-	bob := domain.User{ID: 2, Username: "bob"}
-	admin := domain.User{ID: 3, Username: "root", Admin: true}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	bob := domain.User{ID: uid.N(2), Username: "bob"}
+	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
 	ctx := context.Background()
 
 	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
-	pendingShop := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: int64Ptr(alice.ID)}
-	rejectedShop := domain.Shop{ID: 12, Status: domain.ShopStatusRejected, CreatorID: int64Ptr(alice.ID)}
+	pendingShop := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID)}
+	rejectedShop := domain.Shop{ID: 12, Status: domain.ShopStatusRejected, CreatorID: strPtr(alice.ID)}
 	cheese := domain.ShopReviewBurger{ID: 5, Name: "Cheese", AverageRating: 4.5, ReviewCount: 2, WeightedScore: 4.1, Confidence: 0.8}
 
 	getShop := func(_ context.Context, id int64) (domain.Shop, error) {
@@ -247,7 +248,7 @@ func TestReviewsCreate(t *testing.T) {
 			t.Fatalf("Create returned error: %v", err)
 		}
 		if inserted.AuthorID != bob.ID || inserted.BurgerID != cheese.ID || inserted.Rating != 4 {
-			t.Errorf("inserted = %+v, want author %d, burger %d, rating 4", inserted, bob.ID, cheese.ID)
+			t.Errorf("inserted = %+v, want author %s, burger %d, rating 4", inserted, bob.ID, cheese.ID)
 		}
 		if got.ID != 42 || got.Rating != 4 || got.Comment == nil || *got.Comment != "Tasty" {
 			t.Errorf("detail review = %+v, want id 42, rating 4, comment Tasty", got.Review)
@@ -343,7 +344,7 @@ func TestReviewsCreate(t *testing.T) {
 			t.Errorf("repo got shop %d name %q, want %d %q", gotShopID, gotName, activeShop.ID, " Smash ")
 		}
 		if gotReview.AuthorID != bob.ID || gotReview.Rating != 4 {
-			t.Errorf("repo got review %+v, want author %d rating 4", gotReview, bob.ID)
+			t.Errorf("repo got review %+v, want author %s rating 4", gotReview, bob.ID)
 		}
 		if got.ID != 44 || got.BurgerID != smash.ID {
 			t.Errorf("detail review = %+v, want id 44 for burger %d", got.Review, smash.ID)
@@ -405,7 +406,7 @@ func TestReviewsCreate(t *testing.T) {
 
 // reviewDetailFor は、edit/delete のテストが load する、保存済みの detail を
 // 組み立てる。
-func reviewDetailFor(authorID int64) domain.ReviewDetail {
+func reviewDetailFor(authorID string) domain.ReviewDetail {
 	comment := "Old"
 	return domain.ReviewDetail{
 		Review: domain.Review{ID: 9, Rating: 2, Comment: &comment, AuthorID: authorID, BurgerID: 5,
@@ -420,9 +421,9 @@ func reviewDetailFor(authorID int64) domain.ReviewDetail {
 // （discardReview は未設定のままなので、どの discard も panic する）、
 // そして 404 である。
 func TestReviewsUpdate(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"}
-	bob := domain.User{ID: 2, Username: "bob"}
-	admin := domain.User{ID: 3, Username: "root", Admin: true}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	bob := domain.User{ID: uid.N(2), Username: "bob"}
+	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
 	ctx := context.Background()
 	stored := reviewDetailFor(alice.ID)
 	getReview := func(_ context.Context, id int64) (domain.ReviewDetail, error) {
@@ -497,9 +498,9 @@ func TestReviewsUpdate(t *testing.T) {
 // （updateReviewContent は未設定のままなので、どの content の書き込みも
 // panic する）、そして 404 である。
 func TestReviewsDelete(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"}
-	bob := domain.User{ID: 2, Username: "bob"}
-	admin := domain.User{ID: 3, Username: "root", Admin: true}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	bob := domain.User{ID: uid.N(2), Username: "bob"}
+	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
 	ctx := context.Background()
 	stored := reviewDetailFor(alice.ID)
 	getReview := func(_ context.Context, id int64) (domain.ReviewDetail, error) {
@@ -597,7 +598,7 @@ func (f *fakePhotoStorage) URL(key string) string { return "/photos/" + key }
 // best-effort で削除するので、孤立ファイルは残らない。
 func TestReviewsCreatePhoto(t *testing.T) {
 	ctx := context.Background()
-	bob := domain.User{ID: 2, Username: "bob"}
+	bob := domain.User{ID: uid.N(2), Username: "bob"}
 	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
 	cheese := domain.ShopReviewBurger{ID: 5, Name: "Cheese"}
 	upload := &photo.Processed{Data: []byte("img"), ContentType: "image/jpeg", Ext: ".jpg"}
@@ -668,7 +669,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 // だけの書き込みが走り、写真の書き込みは決して起こらない。
 func TestReviewsUpdatePhoto(t *testing.T) {
 	ctx := context.Background()
-	alice := domain.User{ID: 1, Username: "alice"}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
 	oldKey := "reviews/old.jpg"
 	stored := domain.ReviewDetail{
 		Review: domain.Review{ID: 9, Rating: 4, AuthorID: alice.ID, BurgerID: 5, PhotoKey: &oldKey},
@@ -763,7 +764,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 // した後に、blob は best-effort で削除される。
 func TestReviewsDeletePhoto(t *testing.T) {
 	ctx := context.Background()
-	alice := domain.User{ID: 1, Username: "alice"}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
 	key := "reviews/gone.jpg"
 	photos := &fakePhotoStorage{}
 	query := &fakeReviewQuery{

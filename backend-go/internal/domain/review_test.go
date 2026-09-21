@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // TestValidateReviewContent は Rails parity の validation メッセージを固定する
@@ -56,11 +57,11 @@ func TestValidateReviewContent(t *testing.T) {
 // 無効な入力は review を返さずに ValidationError を表に出す。
 func TestNewReview(t *testing.T) {
 	t.Run("有効な入力から review を作る", func(t *testing.T) {
-		review, err := domain.NewReview(4, " Tasty ", 7, 9)
+		review, err := domain.NewReview(4, " Tasty ", uid.N(7), 9)
 		if err != nil {
 			t.Fatalf("NewReview returned error: %v", err)
 		}
-		if review.Rating != 4 || review.AuthorID != 7 || review.BurgerID != 9 {
+		if review.Rating != 4 || review.AuthorID != uid.N(7) || review.BurgerID != 9 {
 			t.Errorf("review = %+v, want rating 4, author 7, burger 9", review)
 		}
 		if review.Comment == nil || *review.Comment != " Tasty " {
@@ -69,7 +70,7 @@ func TestNewReview(t *testing.T) {
 	})
 
 	t.Run("無効な入力は検証エラーになる", func(t *testing.T) {
-		_, err := domain.NewReview(0, "", 7, 9)
+		_, err := domain.NewReview(0, "", uid.N(7), 9)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -80,17 +81,17 @@ func TestNewReview(t *testing.T) {
 // TestReviewCanBeModifiedBy は所有権ルールを固定する（issue #14 AC3）。
 // author だけが編集または削除でき、admin にも例外はない。
 func TestReviewCanBeModifiedBy(t *testing.T) {
-	review := domain.Review{ID: 1, AuthorID: 7}
+	review := domain.Review{ID: 1, AuthorID: uid.N(7)}
 
 	tests := []struct {
 		name   string
 		viewer domain.User
 		want   bool
 	}{
-		{name: "author は変更できる", viewer: domain.User{ID: 7}, want: true},
-		{name: "他のユーザーは変更できない", viewer: domain.User{ID: 8}, want: false},
-		{name: "admin でも特別扱いされず変更できない", viewer: domain.User{ID: 9, Admin: true}, want: false},
-		{name: "author である admin は変更できる", viewer: domain.User{ID: 7, Admin: true}, want: true},
+		{name: "author は変更できる", viewer: domain.User{ID: uid.N(7)}, want: true},
+		{name: "他のユーザーは変更できない", viewer: domain.User{ID: uid.N(8)}, want: false},
+		{name: "admin でも特別扱いされず変更できない", viewer: domain.User{ID: uid.N(9), Admin: true}, want: false},
+		{name: "author である admin は変更できる", viewer: domain.User{ID: uid.N(7), Admin: true}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // このファイルは adapter の DB 統合テストである。読み取りの adapter/query と
@@ -25,6 +26,16 @@ import (
 func insertRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, args ...any) int64 {
 	t.Helper()
 	var id int64
+	if err := conn.QueryRow(ctx, sql, args...).Scan(&id); err != nil {
+		t.Fatalf("insert %q: %v", sql, err)
+	}
+	return id
+}
+
+// insertUserRow は insertRow と同様だが、users の id(UUID の正規形の文字列)を返す。
+func insertUserRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, args ...any) string {
+	t.Helper()
+	var id string
 	if err := conn.QueryRow(ctx, sql, args...).Scan(&id); err != nil {
 		t.Fatalf("insert %q: %v", sql, err)
 	}
@@ -69,8 +80,8 @@ func TestShopRepository(t *testing.T) {
 	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
-	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
-	carol := insertRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
+	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+	carol := insertUserRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
 	// status のコード：0=pending、1=active、2=rejected。
@@ -90,7 +101,7 @@ func TestShopRepository(t *testing.T) {
 
 	anon := domain.ShopVisibilityFor(nil)
 	aliceVis := domain.ShopVisibilityFor(&domain.User{ID: alice})
-	adminVis := domain.ShopVisibilityFor(&domain.User{ID: 999, Admin: true})
+	adminVis := domain.ShopVisibilityFor(&domain.User{ID: uid.N(999), Admin: true})
 
 	list := func(t *testing.T, vis domain.ShopVisibility, keyword string, limit, offset int32) []domain.Shop {
 		t.Helper()
@@ -311,7 +322,7 @@ func TestShopModerationRepository(t *testing.T) {
 	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
-	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id, created_at)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`

@@ -38,9 +38,7 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 		PageLimit:  limit,
 		PageOffset: offset,
 	}
-	if vis.ViewerID != nil {
-		params.ViewerID = pgtype.Int8{Int64: *vis.ViewerID, Valid: true}
-	}
+	params.ViewerID = vis.ViewerID
 	if keyword != "" {
 		params.NamePattern = pgtype.Text{String: "%" + likeEscaper.Replace(keyword) + "%", Valid: true}
 	}
@@ -74,9 +72,9 @@ func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id int64) (domain.Sh
 		return domain.ShopDetail{}, fmt.Errorf("get shop with creator: %w", err)
 	}
 	detail := domain.ShopDetail{Shop: shop}
-	if row.CreatorID.Valid {
+	if row.CreatorID != nil {
 		// users.id は外部キーなので、LEFT JOIN で creator が見つかっている。
-		detail.Creator = &domain.UserRef{ID: row.CreatorID.Int64, Username: row.CreatorUsername.String}
+		detail.Creator = &domain.UserRef{ID: *row.CreatorID, Username: row.CreatorUsername.String}
 	}
 	return detail, nil
 }
@@ -131,9 +129,9 @@ func (r *ShopQuery) ListShopsForModeration(ctx context.Context, status *domain.S
 			return nil, fmt.Errorf("list shops for moderation: %w", err)
 		}
 		detail := domain.ShopDetail{Shop: shop}
-		if row.CreatorID.Valid {
+		if row.CreatorID != nil {
 			// users.id は外部キーなので、LEFT JOIN で creator が見つかっている。
-			detail.Creator = &domain.UserRef{ID: row.CreatorID.Int64, Username: row.CreatorUsername.String}
+			detail.Creator = &domain.UserRef{ID: *row.CreatorID, Username: row.CreatorUsername.String}
 		}
 		details = append(details, detail)
 	}

@@ -39,7 +39,7 @@ func (r *ShopRepository) CreateShop(ctx context.Context, shop domain.Shop) (doma
 		Name:           shop.Name,
 		Status:         code,
 		ModerationNote: textOrNull(shop.ModerationNote),
-		CreatorID:      int8OrNull(shop.CreatorID),
+		CreatorID:      shop.CreatorID,
 	})
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("create shop: %w", err)
@@ -103,12 +103,4 @@ func textOrNull(s *string) pgtype.Text {
 		return pgtype.Text{}
 	}
 	return pgtype.Text{String: *s, Valid: true}
-}
-
-// int8OrNull は、省略可能な int64 を null 許容な pgx の形式に変換する。
-func int8OrNull(n *int64) pgtype.Int8 {
-	if n == nil {
-		return pgtype.Int8{}
-	}
-	return pgtype.Int8{Int64: *n, Valid: true}
 }

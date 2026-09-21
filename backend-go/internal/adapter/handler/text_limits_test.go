@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // textUnits は、上限が文字数（コードポイント数）で数えられることを確かめる文字の種類である。
@@ -44,7 +45,7 @@ func TestReviewTextLimits(t *testing.T) {
 		tooBig := strings.Repeat(u.unit, domain.MaxCommentChars+1)
 
 		t.Run("JSON の投稿: 上限ちょうどの"+u.name+"は 201、超えると 422 で何も作られない", func(t *testing.T) {
-			repo := seedReviewWorld(1)
+			repo := seedReviewWorld(uid.N(1))
 			router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 			body := func(comment string) string {
 				return fmt.Sprintf(`{"review":{"rating":4,"comment":%s,"shop_id":%d,"burger_id":%d}}`, jsonString(t, comment), activeShopID, cheeseBurgerID)
@@ -63,7 +64,7 @@ func TestReviewTextLimits(t *testing.T) {
 		})
 
 		t.Run("multipart の投稿: 上限ちょうどの"+u.name+"は 201、超えると 422 で何も作られない", func(t *testing.T) {
-			repo := seedReviewWorld(1)
+			repo := seedReviewWorld(uid.N(1))
 			router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 			post := func(comment string) (code int, body string) {
 				form, ct := multipartBody(t, map[string]string{
@@ -86,7 +87,7 @@ func TestReviewTextLimits(t *testing.T) {
 		})
 
 		t.Run("PUT: 上限ちょうどの"+u.name+"は 200、超えると 422 で内容が変わらない", func(t *testing.T) {
-			router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+			router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 			created := do(router, http.MethodPost, "/reviews",
 				fmt.Sprintf(`{"review":{"rating":4,"comment":"first","shop_id":%d,"burger_id":%d}}`, activeShopID, cheeseBurgerID), aliceAuth)
 			id, _ := decodePhotoURL(t, created.Body.Bytes())
@@ -116,7 +117,7 @@ func TestReviewTextLimits(t *testing.T) {
 	}
 
 	t.Run("burger_name の経路: 上限ちょうどは 201、超えると 422 で burger も review も作られない", func(t *testing.T) {
-		repo := seedReviewWorld(1)
+		repo := seedReviewWorld(uid.N(1))
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := func(name string) string {
 			return fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d,"burger_name":%s}}`, activeShopID, jsonString(t, name))
@@ -135,7 +136,7 @@ func TestReviewTextLimits(t *testing.T) {
 	})
 
 	t.Run("複数の違反は 1 つの応答に列挙され、rating の違反が先に並ぶ", func(t *testing.T) {
-		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		body := fmt.Sprintf(`{"review":{"rating":9,"comment":%s,"shop_id":%d,"burger_id":%d}}`,
 			jsonString(t, strings.Repeat("a", domain.MaxCommentChars+1)), activeShopID, cheeseBurgerID)
 		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
@@ -153,7 +154,7 @@ func TestShopTextLimits(t *testing.T) {
 	noteOver := tooLong("Moderation note", domain.MaxModerationNoteChars)
 
 	t.Run("POST /shops: 名前は上限ちょうどなら 201、超えると 422 で shop が増えない", func(t *testing.T) {
-		repo := seedShops(1)
+		repo := seedShops(uid.N(1))
 		router, aliceAuth, _, _ := newShopsRouter(t, repo)
 		body := func(name string) string { return `{"shop":{"name":` + jsonString(t, name) + `}}` }
 		if rec := do(router, http.MethodPost, "/shops", body(strings.Repeat("あ", domain.MaxShopNameChars)), aliceAuth); rec.Code != http.StatusCreated {
@@ -170,7 +171,7 @@ func TestShopTextLimits(t *testing.T) {
 	})
 
 	t.Run("管理者の名称変更: 上限ちょうどは 200、超えると 422 で名前が変わらない", func(t *testing.T) {
-		repo := seedShops(1)
+		repo := seedShops(uid.N(1))
 		router, _, adminAuth, _ := newShopsRouter(t, repo)
 		put := func(name string) (int, string) {
 			rec := do(router, http.MethodPut, "/admin/shops/2", `{"shop":{"name":`+jsonString(t, name)+`}}`, adminAuth)
@@ -189,7 +190,7 @@ func TestShopTextLimits(t *testing.T) {
 	})
 
 	t.Run("却下: note は上限ちょうどなら 200、超えると 422 で status も note も変わらない", func(t *testing.T) {
-		repo := seedShops(1)
+		repo := seedShops(uid.N(1))
 		router, _, adminAuth, _ := newShopsRouter(t, repo)
 		reject := func(note string) (int, string) {
 			rec := do(router, http.MethodPost, "/admin/shops/2/reject", `{"moderation_note":`+jsonString(t, note)+`}`, adminAuth)
@@ -211,7 +212,7 @@ func TestShopTextLimits(t *testing.T) {
 	})
 
 	t.Run("却下: 一般ユーザーは、note が長くても先に 403 になる", func(t *testing.T) {
-		router, aliceAuth, _, _ := newShopsRouter(t, seedShops(1))
+		router, aliceAuth, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
 		rec := do(router, http.MethodPost, "/admin/shops/2/reject",
 			`{"moderation_note":`+jsonString(t, strings.Repeat("a", domain.MaxModerationNoteChars+1))+`}`, aliceAuth)
 		if rec.Code != http.StatusForbidden {
@@ -256,21 +257,21 @@ func TestUserTextLimits(t *testing.T) {
 	t.Run("PUT /users: 上限ちょうどは 200、超えると 422 で変更されない。送らない項目は検証されない", func(t *testing.T) {
 		repo, router, token := newSeededUsersRouter(t)
 		put := func(body string) (int, string) {
-			rec := do(router, http.MethodPut, "/users/1", body, token(1))
+			rec := do(router, http.MethodPut, "/users/"+uid.N(1), body, token(uid.N(1)))
 			return rec.Code, rec.Body.String()
 		}
 		if code, body := put(`{"user":{"username":` + jsonString(t, strings.Repeat("🍔", domain.MaxUsernameChars)) + `,"email":` + jsonString(t, longEmail(domain.MaxEmailChars)) + `}}`); code != http.StatusOK {
 			t.Fatalf("上限ちょうど: status = %d, want 200 (body %.200s)", code, body)
 		}
-		before := repo.users[1].user
+		before := repo.users[uid.N(1)].user
 		if code, body := put(`{"user":{"username":` + jsonString(t, strings.Repeat("a", domain.MaxUsernameChars+1)) + `}}`); code != http.StatusUnprocessableEntity || body != usernameOver {
 			t.Errorf("ユーザー名の超過: status/body = %d %s, want 422 %s", code, body, usernameOver)
 		}
 		if code, body := put(`{"user":{"email":` + jsonString(t, longEmail(domain.MaxEmailChars+1)) + `}}`); code != http.StatusUnprocessableEntity || body != emailOver {
 			t.Errorf("メールの超過: status/body = %d %s, want 422 %s", code, body, emailOver)
 		}
-		if repo.users[1].user != before {
-			t.Errorf("422 なのにユーザーが変わった: %+v → %+v", before, repo.users[1].user)
+		if repo.users[uid.N(1)].user != before {
+			t.Errorf("422 なのにユーザーが変わった: %+v → %+v", before, repo.users[uid.N(1)].user)
 		}
 		if code, body := put(`{"user":{"username":"short"}}`); code != http.StatusOK {
 			t.Errorf("送らない email は検証されず、更新できるはず: status = %d (body %s)", code, body)
