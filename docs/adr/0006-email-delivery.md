@@ -120,6 +120,36 @@ B は実装作業が発生するため、**SMTP が通るホストを選べる�
 - **SES / Postmark / Mailgun / Scaleway / Elastic Email**: 手数・無料枠・立地の
   いずれかで個人開発に合わない
 
+## 実測(2026-09-21、Phase 3)
+
+本番イメージを各社の SMTP に向けて起動し、実際にサインアップを実行した。
+
+| 候補 | 登録 | 送信 | 失敗の理由 |
+|---|---|---|---|
+| **Mailjet** | ○ | **成功** | — |
+| Brevo | △ 企業名 | 失敗 | `525 Unauthorized IP address`(送信元 IP の登録が要る) |
+| Resend | ○ | 失敗 | `550 You can only send testing emails to your own email address` |
+| MailerSend | ○ | 失敗 | `450 The from.email domain must be verified` |
+
+**ドメインを持たない状態で実際に送れたのは Mailjet だけだった。**
+
+### 判明した点
+
+- **通数は選定の基準にならない。** 送るのは 1 日数通で、どの無料枠でも余る。
+  実際に効いたのは「登録できるか」と「ドメインなしで送れるか」だけだった
+- **Brevo には送信元 IP の登録という別の関門があった。** ドメイン不要という点だけ見て
+  Mailjet と同列に置いていたが、**インスタンスの IP が変わる基盤(Render、Cloud Run)とは
+  相性が悪い**。これは料金表からは読み取れない
+- **Resend の「自分宛のみ」は + エイリアスも拒否するほど厳密**である
+- **失敗の分類は事業者の応答コードに依存する。** MailerSend は恒久的な設定不備に 450
+  (一時的なエラー)を返すため、アプリは `temporary` と判定して無駄な再試行を続ける。
+  アプリ側は仕様どおりで、問題は事業者の応答にある
+- 閉じたポートに向けた送信は 4 社とも `failed` / `temporary` で `i/o timeout` になった。
+  **Cloud Run が SMTP を塞いでいる場合も同じ形で現れる**([ADR-0002](0002-backend-deploy-target.md) の検証で使う)
+
+詳細は `docs/benchmarks/phase3-summary.md`、候補の解説と除外理由は
+`docs/benchmarks/phase3-candidates.md` にある。
+
 ## 決定(案)
 
 **Mailjet** を第一候補、**Resend** を代替とする。

@@ -68,7 +68,7 @@ signup() {
   echo "- 計測日: $(date '+%Y-%m-%d %H:%M')"
   echo "- SMTP: \`$host:$sport\`(\`${sec:-starttls}\`)"
   echo "- 差出人: \`$from\`"
-  echo "- 宛先: (記録時に伏せる)"
+  echo "- 宛先: 実行ごとに + エイリアスで一意にしている(記録時は伏せる)"
   echo ""
 } >> "$out"
 
@@ -80,16 +80,30 @@ if ! start_api "$host" "$sport"; then
   docker rm -f "$name" >/dev/null 2>&1; exit 1
 fi
 
+# 宛先を実行ごとに一意にする。アプリの冪等キーは確認待ちの受付 id から作られるため、
+# 同じアドレスで繰り返すと 2 回目以降は送信されず、記録も増えない(アプリは正しい)。
+# Gmail などの + エイリアスは同じ受信箱に届くので、受け取りには影響しない。
+case "$to" in
+  *+*) to_run="$to" ;;
+  *@*) to_run="${to%@*}+mb$(date +%s)@${to#*@}" ;;
+  *)   to_run="$to" ;;
+esac
+echo "  宛先(この実行用): $to_run"
+
 before=$(q "select count(*) from mail_deliveries")
+# この実行より前の行を拾わないよう、基準の時刻を取っておく。
+# 取らないと、直前に測った社の結果を読んでしまう。
+mark=$(q "select coalesce(max(created_at), now() - interval '1 second')::text from mail_deliveries")
 uniq="bench-$(date +%s)"
-code=$(signup "$to" "$uniq")
+code=$(signup "$to_run" "$uniq")
 echo "  POST /signup -> $code"
 
 t0=$(date +%s)
 status=""; fail=""; err=""
 for _ in $(seq 1 30); do
-  row=$(q "select status || '|' || coalesce(failure_kind,'') || '|' || coalesce(last_error,'') from mail_deliveries order by created_at desc limit 1")
+  row=$(q "select status || '|' || coalesce(failure_kind,'') || '|' || coalesce(last_error,'') from mail_deliveries where created_at > '${mark}'::timestamptz order by created_at desc limit 1")
   status=${row%%|*}; rest=${row#*|}; fail=${rest%%|*}; err=${rest#*|}
+  [ -z "$status" ] && { sleep 1; continue; }
   [ "$status" = "sent" ] && break
   [ "$status" = "failed" ] && break
   sleep 1
@@ -114,7 +128,7 @@ echo "  mail_deliveries: status=$status failure_kind=$fail ($((t1-t0)) 秒)"
 
 # ---------- 2. 冪等性 ----------
 say "[2/3] 冪等性(同じアドレスでもう 1 回)"
-code2=$(signup "$to" "${uniq}b")
+code2=$(signup "$to_run" "${uniq}b")
 sleep 5
 after=$(q "select count(*) from mail_deliveries")
 added=$((after - before))
@@ -136,16 +150,18 @@ echo "  2 回目の POST /signup -> ${code2}、mail_deliveries の増加 = $adde
 # ---------- 3. ポートが塞がれている場合の挙動 ----------
 say "[3/3] 到達できないポートに向けたときの分類"
 docker rm -f "$name" >/dev/null 2>&1
-if start_api "$host" "2525"; then
+mark2=$(q "select coalesce(max(created_at), now() - interval '1 second')::text from mail_deliveries")
+if start_api "$host" "47777"; then
   signup "blocked-$(date +%s)@example.com" "blocked$(date +%s)" >/dev/null
   sleep 25
-  row=$(q "select status || '|' || coalesce(failure_kind,'') || '|' || coalesce(left(last_error,120),'') from mail_deliveries order by created_at desc limit 1")
+  row=$(q "select status || '|' || coalesce(failure_kind,'') || '|' || coalesce(left(last_error,120),'') from mail_deliveries where created_at > '${mark2}'::timestamptz order by created_at desc limit 1")
   bstatus=${row%%|*}; brest=${row#*|}; bfail=${brest%%|*}; berr=${brest#*|}
   echo "  status=$bstatus failure_kind=$bfail"
   {
     echo "## 到達できないときの挙動"
     echo ""
-    echo "ポート 2525(閉じている想定)に向けて送らせた。"
+    echo "ポート 47777(確実に閉じている)に向けて送らせた。2525 は Mailjet などが"
+    echo "正規に受け付けるため、遮断の模擬には使えない。"
     echo ""
     echo "| 項目 | 結果 |"
     echo "|---|---|"

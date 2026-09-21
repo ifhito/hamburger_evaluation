@@ -12,7 +12,9 @@
 | `phase2-<社名>.md` | 写真ストレージ各社の詳細 |
 | `phase2-summary.md` | 写真ストレージ 4 候補の総括 |
 | `phase2-candidates.md` | 写真ストレージ候補の解説と、選ばなかった理由 |
-| `phase3-email.md` | メール送信 4 候補の結果 |
+| `phase3-<社名>.md` | メール送信各社の詳細 |
+| `phase3-summary.md` | メール送信 4 候補の総括 |
+| `phase3-candidates.md` | メール送信候補の解説と、選ばなかった理由 |
 | `phase4-api.md` | API 4 候補の結果 |
 | `phase5-async.md` | 非同期処理 4 候補の結果 |
 | `phase6-frontend.md` | フロントエンド 4 候補の結果 |
