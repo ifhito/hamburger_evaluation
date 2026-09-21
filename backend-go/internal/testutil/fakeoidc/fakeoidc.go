@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,6 +48,11 @@ type Tweaks struct {
 	TokenStatus int
 	// DenyAuthorize が true なら、認可の画面は、利用者が拒否した(error=access_denied)として戻す。
 	DenyAuthorize bool
+	// DiscoveryDelay が正なら、探索の情報(/.well-known/openid-configuration)を、その時間だけ待ってから返す
+	// (提供元の窓口が遅いときの代役)。
+	DiscoveryDelay time.Duration
+	// DiscoveryStatus が 0 でなければ、探索の情報が、そのステータスのエラーで失敗する。
+	DiscoveryStatus int
 }
 
 type issued struct {
@@ -72,6 +78,8 @@ type Server struct {
 	user   User
 	tweaks Tweaks
 	codes  map[string]*issued
+
+	discoveryRequests atomic.Int32
 }
 
 const keyID = "fakeoidc-key"
@@ -110,6 +118,9 @@ func (s *Server) mux() *http.ServeMux {
 	return mux
 }
 
+// DiscoveryRequests は、探索の情報が要求された回数である。
+func (s *Server) DiscoveryRequests() int { return int(s.discoveryRequests.Load()) }
+
 // Close はサーバーを止める。
 func (s *Server) Close() { s.srv.Close() }
 
@@ -135,7 +146,22 @@ func mustKey() *rsa.PrivateKey {
 	return k
 }
 
-func (s *Server) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleDiscovery(w http.ResponseWriter, r *http.Request) {
+	s.discoveryRequests.Add(1)
+	s.mu.Lock()
+	tw := s.tweaks
+	s.mu.Unlock()
+	if tw.DiscoveryDelay > 0 {
+		select {
+		case <-time.After(tw.DiscoveryDelay):
+		case <-r.Context().Done():
+			return
+		}
+	}
+	if tw.DiscoveryStatus != 0 {
+		http.Error(w, "discovery failed", tw.DiscoveryStatus)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                s.URL,
 		"authorization_endpoint":                s.URL + "/authorize",

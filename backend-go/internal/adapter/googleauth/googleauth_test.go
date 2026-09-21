@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -194,4 +195,125 @@ func TestBeginFailsWhenProviderIsUnreachable(t *testing.T) {
 	if _, _, err := p.Begin(context.Background()); err == nil {
 		t.Fatal("提供元につながらないのに、手続きを始められてしまった")
 	}
+}
+
+// TestDiscoveryDoesNotSerializeRequests は、提供元の探索の情報を取得する通信が、要求を 1 件ずつ待たせないことを
+// 確かめる。探索の通信は、最初に必要になったときに行うので、提供元の窓口が遅い・落ちているとき、同時に来た
+// 開始・戻りの要求が、その通信を、順番に待たされて(それぞれが、最大 10 秒)、全体が止まってはならない。
+func TestDiscoveryDoesNotSerializeRequests(t *testing.T) {
+	t.Run("探索の通信が遅くて、待っている要求が取り消されたら、通信の完了を待たずに、その要求は終わる", func(t *testing.T) {
+		p, idp := newProvider(t)
+		idp.SetTweaks(fakeoidc.Tweaks{DiscoveryDelay: 600 * time.Millisecond})
+		go func() { _, _, _ = p.Begin(context.Background()) }() // 探索の通信を始める(遅い)
+		time.Sleep(100 * time.Millisecond)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+		defer cancel()
+		start := time.Now()
+		_, _, err := p.Begin(ctx)
+
+		if err == nil {
+			t.Fatal("取り消された要求が、通信の完了まで待って、成功した")
+		}
+		if elapsed := time.Since(start); elapsed > 400*time.Millisecond {
+			t.Fatalf("取り消された要求が、%v も待たされた(通信の完了を待っている)", elapsed)
+		}
+	})
+
+	t.Run("提供元の窓口が落ちているとき、同時に来た要求は、探索の通信を 1 回だけ行い、まとめて失敗する(順番に何度も行わない)", func(t *testing.T) {
+		p, idp := newProvider(t)
+		idp.SetTweaks(fakeoidc.Tweaks{DiscoveryDelay: 200 * time.Millisecond, DiscoveryStatus: http.StatusInternalServerError})
+		const n = 5
+		errs := make([]error, n)
+		var wg sync.WaitGroup
+		start := time.Now()
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, _, errs[i] = p.Begin(context.Background())
+			}()
+		}
+		wg.Wait()
+
+		for i, err := range errs {
+			if err == nil {
+				t.Fatalf("%d 件目が成功した", i)
+			}
+		}
+		if hits := idp.DiscoveryRequests(); hits != 1 {
+			t.Fatalf("探索の通信 = %d 回, want 1 回(同時の要求は、1 回の通信を共有する)", hits)
+		}
+		if elapsed := time.Since(start); elapsed > 600*time.Millisecond {
+			t.Fatalf("全体で %v かかった(順番に待たされている)", elapsed)
+		}
+	})
+
+	t.Run("最初の要求が取り消されても、探索の通信を待っているほかの要求は、道連れで失敗せず、結果を受け取る", func(t *testing.T) {
+		p, idp := newProvider(t)
+		idp.SetTweaks(fakeoidc.Tweaks{DiscoveryDelay: 300 * time.Millisecond})
+		firstCtx, cancelFirst := context.WithCancel(context.Background())
+		go func() { _, _, _ = p.Begin(firstCtx) }() // 探索の通信を始める(最初の要求)
+		time.Sleep(60 * time.Millisecond)
+
+		done := make(chan error, 1)
+		go func() {
+			_, _, err := p.Begin(context.Background()) // 待つ要求
+			done <- err
+		}()
+		time.Sleep(60 * time.Millisecond)
+		cancelFirst() // 最初の要求が取り消される(利用者が画面を閉じた、など)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("待っていた要求が、最初の要求の取り消しで失敗した: %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("待っていた要求が終わらない")
+		}
+		if hits := idp.DiscoveryRequests(); hits != 1 {
+			t.Fatalf("探索の通信 = %d 回, want 1 回", hits)
+		}
+	})
+
+	t.Run("成功した探索の情報は覚えて、以後の要求は、通信しない", func(t *testing.T) {
+		p, idp := newProvider(t)
+		for i := 0; i < 4; i++ {
+			if _, _, err := p.Begin(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if hits := idp.DiscoveryRequests(); hits != 1 {
+			t.Fatalf("探索の通信 = %d 回, want 1 回", hits)
+		}
+	})
+
+	t.Run("失敗したあと、RetryInterval の間は、通信せずに失敗し(窓口が回復していても)、過ぎたら、再び通信して、回復していれば成功する", func(t *testing.T) {
+		idp := fakeoidc.New(t, testClientID, testClientSecret)
+		p := googleauth.New(googleauth.Config{
+			ClientID: testClientID, ClientSecret: testClientSecret, RedirectURL: testRedirectURL, Issuer: idp.URL,
+			DiscoveryRetryInterval: 400 * time.Millisecond,
+		})
+		idp.SetTweaks(fakeoidc.Tweaks{DiscoveryStatus: http.StatusInternalServerError})
+		if _, _, err := p.Begin(context.Background()); err == nil {
+			t.Fatal("窓口が落ちているのに成功した")
+		}
+		idp.SetTweaks(fakeoidc.Tweaks{}) // 窓口が回復した
+
+		if _, _, err := p.Begin(context.Background()); err == nil {
+			t.Fatal("失敗を覚えている間に、成功した(通信している)")
+		}
+		if hits := idp.DiscoveryRequests(); hits != 1 {
+			t.Fatalf("失敗を覚えている間の通信 = %d 回, want 1 回(通信しない)", hits)
+		}
+
+		time.Sleep(450 * time.Millisecond)
+		if _, _, err := p.Begin(context.Background()); err != nil {
+			t.Fatalf("時間が過ぎたあと、回復した窓口に対して失敗した: %v", err)
+		}
+		if hits := idp.DiscoveryRequests(); hits != 2 {
+			t.Fatalf("探索の通信 = %d 回, want 2 回(失敗 1 回・回復後 1 回)", hits)
+		}
+	})
 }
