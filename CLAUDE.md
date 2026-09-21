@@ -42,7 +42,7 @@ hamburger_evaluation/
 
 ### 技術スタック
 
-- Go 1.22+ (標準 `net/http` のルーティング。Web フレームワークも ORM も使わない)
+- Go 1.27 (標準 `net/http` のルーティングを使う。Web フレームワークも ORM も使わない)
 - PostgreSQL 16 (pgx)
 - sqlc (SQL からの型安全なコード生成)
 - JWT 認証
