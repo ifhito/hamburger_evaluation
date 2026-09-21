@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
@@ -61,4 +63,147 @@ func (a *OAuthAccessTokens) Authenticate(ctx context.Context, rawToken string, r
 		return domain.User{}, domain.OAuthAccessToken{}, fmt.Errorf("authenticate oauth access token: load user: %w", err)
 	}
 	return user, token, nil
+}
+
+// OAuthGrantQuery は、利用者が許可したアプリの記録の、読み取り専用の窓口である。
+// 書き込みのメソッドは置かない(書き込みは domain.OAuthGrants を通す)。
+type OAuthGrantQuery interface {
+	// GetOAuthGrantByUserAndClient は、利用者とアプリの組の許可を返す。なければ、(wrap された)
+	// domain.ErrOAuthGrantNotFound を返す。
+	GetOAuthGrantByUserAndClient(ctx context.Context, userID, clientID string) (domain.OAuthGrant, error)
+	// ListOAuthGrantsByUser は、利用者が許可したアプリを、最近使ったものから順に返す。
+	ListOAuthGrantsByUser(ctx context.Context, userID string) ([]domain.OAuthGrant, error)
+}
+
+// AuthorizeRequestView は、利用者に許可を尋ねる画面に出す、認可の要求の内容である。
+type AuthorizeRequestView struct {
+	ClientID   string
+	ClientName string
+	// Scopes は、アプリが求めた範囲の名前である。
+	Scopes []string
+}
+
+// OAuthAuthorizer は、認可の要求の解釈と、結果のアプリへの戻し方を、認可ライブラリに任せる口である
+// (adapter/oauthserver が実装する)。params は、認可の URL の値(client_id・redirect_uri・scope・state・
+// code_challenge など)で、要求は、呼ぶたびに検証し直す。アプリへ結果を戻せない不正は、(wrap された)
+// domain.ErrOAuthAuthorizeRequestInvalid を返し、戻せる不正は、エラーを付けた戻り先を返す。
+type OAuthAuthorizer interface {
+	// DescribeAuthorizeRequest は、要求を検証して、画面に出す内容を返す。
+	DescribeAuthorizeRequest(ctx context.Context, params url.Values) (AuthorizeRequestView, error)
+	// IssueAuthorizationCode は、利用者(userID)が許可した(許可の記録が grantID の)要求に、認可コードを発行し、
+	// アプリへ戻す URL を返す。
+	IssueAuthorizationCode(ctx context.Context, params url.Values, userID, grantID string) (redirectTo string, err error)
+	// DenyAuthorization は、利用者が許可しなかった要求に対して、アプリへ戻す URL(access_denied)を返す。
+	DenyAuthorization(ctx context.Context, params url.Values) (redirectTo string, err error)
+}
+
+// ConsentView は、許可の画面に出す内容である。範囲の説明は、frontend に写さず、ここ(domain の規則)から返す。
+type ConsentView struct {
+	ClientID   string
+	ClientName string
+	Scopes     []domain.OAuthScope
+	// ConsentRequired が false なら、求められた範囲は、すでに許可済みの範囲に収まる。画面は、尋ねずに、
+	// そのまま許可を送ってよい。
+	ConsentRequired bool
+}
+
+// OAuthConsents は、許可の画面(利用者が、アプリに何を許すかを決める)の use case である。
+type OAuthConsents struct {
+	authorizer OAuthAuthorizer
+	grants     OAuthGrantQuery
+	writes     *domain.OAuthGrants
+}
+
+// NewOAuthConsents は、許可の画面の use case を返す。
+func NewOAuthConsents(authorizer OAuthAuthorizer, grants OAuthGrantQuery, writes *domain.OAuthGrants) *OAuthConsents {
+	return &OAuthConsents{authorizer: authorizer, grants: grants, writes: writes}
+}
+
+// ParseAuthorizeQuery は、frontend が渡す、認可の URL の値(URL の `?` のあとの文字列)を、値の組にする。
+// 先頭の "?" は取り除く。解釈できない文字列は、(wrap された)domain.ErrOAuthAuthorizeRequestInvalid を返す。
+func ParseAuthorizeQuery(raw string) (url.Values, error) {
+	params, err := url.ParseQuery(strings.TrimPrefix(raw, "?"))
+	if err != nil {
+		return nil, fmt.Errorf("%w: the query string is malformed", domain.ErrOAuthAuthorizeRequestInvalid)
+	}
+	return params, nil
+}
+
+// Describe は、認可の要求を検証し、許可の画面に出す内容を返す。この利用者が、すでにこのアプリに、
+// 求められた範囲を全部許可していれば、ConsentRequired は false になる(範囲が広がったときだけ尋ね直す)。
+func (c *OAuthConsents) Describe(ctx context.Context, userID string, params url.Values) (ConsentView, error) {
+	view, err := c.authorizer.DescribeAuthorizeRequest(ctx, params)
+	if err != nil {
+		return ConsentView{}, err
+	}
+	var granted []string
+	existing, err := c.grants.GetOAuthGrantByUserAndClient(ctx, userID, view.ClientID)
+	switch {
+	case err == nil:
+		granted = existing.Scopes
+	case errors.Is(err, domain.ErrOAuthGrantNotFound):
+	default:
+		return ConsentView{}, fmt.Errorf("describe oauth consent: %w", err)
+	}
+	scopes := make([]domain.OAuthScope, 0, len(view.Scopes))
+	for _, name := range view.Scopes {
+		if s, ok := domain.OAuthScopeByName(name); ok {
+			scopes = append(scopes, s)
+		}
+	}
+	return ConsentView{
+		ClientID:        view.ClientID,
+		ClientName:      view.ClientName,
+		Scopes:          scopes,
+		ConsentRequired: domain.OAuthConsentRequired(granted, view.Scopes),
+	}, nil
+}
+
+// Decide は、利用者の許可・拒否を受けて、アプリへ戻す URL を返す。許可なら、許可の記録を残してから、
+// 認可コードを発行する(記録を残せなかったときは、コードを発行しない)。拒否なら、何も記録せず、
+// access_denied を付けて戻す。要求は、ここでも検証し直すので、画面が見た内容と違う値を送っても、
+// 検証を通らなければ、許可は残らない。
+func (c *OAuthConsents) Decide(ctx context.Context, userID string, params url.Values, approve bool) (string, error) {
+	if !approve {
+		return c.authorizer.DenyAuthorization(ctx, params)
+	}
+	view, err := c.authorizer.DescribeAuthorizeRequest(ctx, params)
+	if err != nil {
+		return "", err
+	}
+	grantID, err := c.writes.Approve(ctx, userID, domain.OAuthClient{ID: view.ClientID, Name: view.ClientName}, view.Scopes)
+	if err != nil {
+		return "", fmt.Errorf("decide oauth consent: %w", err)
+	}
+	return c.authorizer.IssueAuthorizationCode(ctx, params, userID, grantID)
+}
+
+// ConnectedApps は、利用者が許可したアプリの一覧と、取り消しの use case である。
+type ConnectedApps struct {
+	grants OAuthGrantQuery
+	writes *domain.OAuthGrants
+}
+
+// NewConnectedApps は、許可したアプリの一覧と取り消しの use case を返す。
+func NewConnectedApps(grants OAuthGrantQuery, writes *domain.OAuthGrants) *ConnectedApps {
+	return &ConnectedApps{grants: grants, writes: writes}
+}
+
+// List は、利用者が許可したアプリを、最近使ったものから順に返す。
+func (a *ConnectedApps) List(ctx context.Context, userID string) ([]domain.OAuthGrant, error) {
+	grants, err := a.grants.ListOAuthGrantsByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list connected apps: %w", err)
+	}
+	return grants, nil
+}
+
+// Revoke は、利用者本人の許可を取り消す。そのアプリのトークンは、すぐに使えなくなる。
+// 形式が正規でない id・存在しない許可・別の利用者の許可は、区別せず、(wrap された)
+// domain.ErrOAuthGrantNotFound を返す。
+func (a *ConnectedApps) Revoke(ctx context.Context, userID, grantID string) error {
+	if !domain.IsUUID(grantID) {
+		return fmt.Errorf("revoke connected app: %w", domain.ErrOAuthGrantNotFound)
+	}
+	return a.writes.Revoke(ctx, userID, grantID)
 }

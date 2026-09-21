@@ -15,3 +15,15 @@ RETURNING id;
 -- 利用者本人の許可だけを削除する(別の利用者の id を渡しても、0 行になる)。発行済みのトークンは、
 -- 外部キーの連鎖削除で同時に消える。
 DELETE FROM oauth_grants WHERE id = @id AND user_id = @user_id;
+
+-- name: GetOAuthGrantByUserAndClient :one
+SELECT id, user_id, client_id, client_name, scopes, created_at, updated_at
+FROM oauth_grants
+WHERE user_id = @user_id AND client_id = @client_id;
+
+-- name: ListOAuthGrantsByUser :many
+-- 利用者が許可したアプリを、最近使ったものから順に返す(同時刻は id で決める)。
+SELECT id, user_id, client_id, client_name, scopes, created_at, updated_at
+FROM oauth_grants
+WHERE user_id = @user_id
+ORDER BY updated_at DESC, id;

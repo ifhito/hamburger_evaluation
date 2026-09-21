@@ -196,12 +196,12 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 ### OAuth の認可サーバー
 
-AI アプリ(MCP のクライアントなど)が、利用者のログインと許可だけでこのアプリにつなぐための、OAuth 2.1 の認可サーバー(`internal/adapter/oauthserver`。認可ライブラリは `github.com/ory/fosite`)。`OAUTH_ISSUER` を設定したときだけ有効で、設定しなければ、下の窓口は登録されない(404)。リモートの MCP(`/mcp`)は別の story で、ここは、そこが使う「許可の証(トークン)を発行し、確かめる」土台である。
+AI アプリ(MCP のクライアントなど)が、利用者のログインと許可だけでこのアプリにつなぐための、OAuth 2.1 の認可サーバー(`internal/adapter/oauthserver`。認可ライブラリは `github.com/ory/fosite`)。`OAUTH_ISSUER` を設定したときだけ有効で、設定しなければ、下の窓口は登録されない(404)。リモートの MCP(`/mcp`)は別の story で、ここは、そこが使う「許可の証(トークン)を発行し、確かめる」土台である。許可を尋ねる画面と、許可したアプリの一覧・取り消しは、frontend にある。
 
 **流れ**(認可コード + PKCE)
 
 1. アプリが、利用者のブラウザで `GET /oauth/authorize?...`(`client_id`・`redirect_uri`・`scope`・`state`・`code_challenge`(S256)・`resource`)を開く。API は要求を検証し、問題がなければ、許可を尋ねる画面(frontend。`OAUTH_CONSENT_URL`)へ、同じ値のまま 303 で渡す。アプリへ結果を戻せない不正(未登録のアプリ・登録と違う戻り先)は、リダイレクトせずにエラーで返し、戻せる不正(PKCE がない・知らない範囲・宛先の誤り)は、`error` を付けてアプリへ戻す。
-2. 利用者がログイン済みの画面で許可すると、API が認可コードを発行し、アプリへ戻す(戻り先に `code`・`state`・`iss`(発行者。RFC 9207)を付ける)。
+2. 許可を尋ねる画面(frontend の `/oauth/authorize`)は、利用者のログイン(JWT)を確かめ(未ログインならログイン画面へ送り、ログイン後に戻す)、`GET /oauth/authorize/request?<同じ値>` で、アプリの名前・求められた範囲と説明・尋ねる必要があるか(`consent_required`)を受け取る。すでに許可済みの範囲に収まれば、尋ねずにそのまま許可を送る。利用者が選ぶと、`POST /oauth/authorize/decision`(`{"query":"<認可の URL の ? のあと>","approve":true|false}`)を送る。API は要求を検証し直し、許可なら許可の記録を残して認可コードを発行し、`redirect_to`(アプリへの戻り先。`code`・`state`・`iss`(発行者。RFC 9207)付き。拒否なら `error=access_denied` 付き)を返す。画面はそこへブラウザを移す。cookie のセッションは使わず、画面の API は、いつものログインの JWT(Bearer)で守る(OAuth のアクセストークンは受け付けない)。
 3. アプリが `POST /oauth/token` で、認可コードと PKCE の `code_verifier` を、アクセストークン(と更新トークン)に交換する。切れたら、更新トークンで取り直す。
 4. 保護する側(`/mcp` など)は、`usecase.OAuthAccessTokens.Authenticate` で、`Authorization: Bearer` のトークンを確かめる(宛先・範囲・持ち主のユーザーの有効性)。
 
@@ -211,6 +211,8 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - `GET /oauth/authorize` — 認可の入口(上記 1)。
 - `POST /oauth/token` — トークンの発行(認可コードの交換・更新)。
 - `POST /oauth/revoke` — 取り消し(RFC 7009)。更新トークンを取り消すと、その認可から発行されたトークンがすべて使えなくなる。
+- `GET /oauth/authorize/request`・`POST /oauth/authorize/decision` — 許可の画面が使う API(要ログイン。上記 2)。要求がアプリへ結果を戻せない形で不正なときは 422 `{"error":"…"}`。
+- `GET /oauth/grants`・`DELETE /oauth/grants/{id}` — 利用者本人が許可したアプリの一覧(`id`・`client_id`・`client_name`・範囲と説明・`created_at`・`updated_at`。最近使ったものから順)と、取り消し(204)。取り消すと、そのアプリのトークンはすぐ使えなくなる。別の利用者の許可・存在しない許可・正規の形でない id は、区別できない同一の 404。プロフィール画面の「接続済みのアプリ」が使う。
 
 **ルール**(判断は `internal/domain/oauth*.go` だけが持つ)
 
@@ -252,6 +254,8 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - `GET /oauth/authorize` — 認可の入口。検証して、許可を尋ねる画面へ 303 で渡す
 - `POST /oauth/token` — 認可コード(PKCE つき)・更新トークンを、トークンに交換する
 - `POST /oauth/revoke` — トークンの取り消し(RFC 7009)
+- `GET /oauth/authorize/request` / `POST /oauth/authorize/decision` — 許可の画面が使う API(要認証)
+- `GET /oauth/grants` / `DELETE /oauth/grants/:id` — 許可したアプリの一覧と取り消し(要認証)
 
 **認証**
 - `POST /signup` — アカウントの作成を申し込み、確認メールを送る。**登録済みの email でも未登録の email でも、同じ 202 `{"message":"Confirmation email sent"}` を返す**(アカウント列挙の防止)。アカウントは、確認メールのリンクを開いて `POST /signup/confirm` を呼んで初めて作られる。検証は登録の有無に依存しないものだけで、違反は 422(username、email、password。email は形式(`net/mail` で解析でき、表示名などを含まないアドレスだけであること)を検証し、不正なら 422 `Email is invalid`。password は 8〜72 バイトで、半角英字・数字・記号をそれぞれ 1 文字以上含む。`PUT /users/:id` のパスワード変更にも同じ規則を適用する。password_confirmation は任意で、送った場合は password と不一致なら 422。規則の判定は backend の domain だけが持ち、frontend は説明文の表示と、サーバーの 422 メッセージの表示だけを行う)。「登録済み」を示すエラーは返さない

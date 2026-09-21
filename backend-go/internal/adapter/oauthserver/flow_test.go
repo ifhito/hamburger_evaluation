@@ -12,6 +12,7 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/oauthserver"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 func TestAuthorizationCodeFlow(t *testing.T) {
@@ -280,7 +281,7 @@ func TestAuthorizeRequestErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := oauthserver.AuthorizeRequestView{ClientID: staticClientID, ClientName: "Dev App", Scopes: []string{domain.OAuthScopeRead, domain.OAuthScopeWrite}}
+		want := usecase.AuthorizeRequestView{ClientID: staticClientID, ClientName: "Dev App", Scopes: []string{domain.OAuthScopeRead, domain.OAuthScopeWrite}}
 		if view.ClientID != want.ClientID || view.ClientName != want.ClientName || strings.Join(view.Scopes, " ") != strings.Join(want.Scopes, " ") {
 			t.Errorf("view = %+v, want %+v", view, want)
 		}

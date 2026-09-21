@@ -28,6 +28,68 @@ func (q *Queries) DeleteOAuthGrant(ctx context.Context, arg DeleteOAuthGrantPara
 	return result.RowsAffected(), nil
 }
 
+const getOAuthGrantByUserAndClient = `-- name: GetOAuthGrantByUserAndClient :one
+SELECT id, user_id, client_id, client_name, scopes, created_at, updated_at
+FROM oauth_grants
+WHERE user_id = $1 AND client_id = $2
+`
+
+type GetOAuthGrantByUserAndClientParams struct {
+	UserID   string
+	ClientID string
+}
+
+func (q *Queries) GetOAuthGrantByUserAndClient(ctx context.Context, arg GetOAuthGrantByUserAndClientParams) (OauthGrant, error) {
+	row := q.db.QueryRow(ctx, getOAuthGrantByUserAndClient, arg.UserID, arg.ClientID)
+	var i OauthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ClientID,
+		&i.ClientName,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listOAuthGrantsByUser = `-- name: ListOAuthGrantsByUser :many
+SELECT id, user_id, client_id, client_name, scopes, created_at, updated_at
+FROM oauth_grants
+WHERE user_id = $1
+ORDER BY updated_at DESC, id
+`
+
+// 利用者が許可したアプリを、最近使ったものから順に返す(同時刻は id で決める)。
+func (q *Queries) ListOAuthGrantsByUser(ctx context.Context, userID string) ([]OauthGrant, error) {
+	rows, err := q.db.Query(ctx, listOAuthGrantsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OauthGrant
+	for rows.Next() {
+		var i OauthGrant
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ClientID,
+			&i.ClientName,
+			&i.Scopes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertOAuthGrant = `-- name: UpsertOAuthGrant :one
 INSERT INTO oauth_grants (user_id, client_id, client_name, scopes)
 VALUES ($1, $2, $3, $4::text[])
