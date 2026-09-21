@@ -35,7 +35,7 @@ func (r *LoginHandoffQuery) GetLoginHandoffByCodeHash(ctx context.Context, codeH
 		}
 		return domain.LoginHandoff{}, fmt.Errorf("get login handoff: %w", err)
 	}
-	h := domain.LoginHandoff{ID: row.ID, Outcome: domain.LoginHandoffOutcome(row.Outcome), ReturnTo: row.ReturnTo}
+	h := domain.LoginHandoff{ID: row.ID, Outcome: domain.LoginHandoffOutcome(row.Outcome), ReturnTo: row.ReturnTo, BinderHash: row.BinderHash}
 	if row.UserID != nil {
 		h.UserID = *row.UserID
 	}

@@ -33,6 +33,7 @@ func (r *LoginHandoffRepository) CreateLoginHandoff(ctx context.Context, params 
 	}
 	err := r.q.CreateLoginHandoff(ctx, sqlcgen.CreateLoginHandoffParams{
 		CodeHash:   params.CodeHash,
+		BinderHash: params.BinderHash,
 		Outcome:    string(params.Outcome),
 		UserID:     userID,
 		ReturnTo:   params.ReturnTo,

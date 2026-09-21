@@ -446,6 +446,10 @@ func loadMailConfig(getenv func(string) string, cfg *Config) error {
 	return nil
 }
 
+// googleRedirectPathSuffix は、GOOGLE_REDIRECT_URL の path の末尾である(この API の /auth/google/callback。公開の
+// path には、前に接頭辞が付いてもよい)。handler が、cookie の Path を、ここから決める。
+const googleRedirectPathSuffix = "/auth/google/callback"
+
 // loadGoogleConfig は、Google のアカウントでのサインインの設定を読み込んで検証する。GOOGLE_CLIENT_ID がなければ
 // 無効で、ほかの GOOGLE_* は読まない。有効なのに設定が足りない・不正なときは fail-loud する。エラーメッセージには
 // 変数名だけを含め、その値(特に GOOGLE_CLIENT_SECRET)は決して含めない。
@@ -471,6 +475,11 @@ func loadGoogleConfig(getenv func(string) string, cfg *Config) error {
 	// アプリの URL は、https か、開発用のループバックの http だけを許す(外部への平文の通信を防ぐ)。
 	if err := requireHTTPSOrLoopback("GOOGLE_REDIRECT_URL", gc.RedirectURL); err != nil {
 		return err
+	}
+	// 手続きの cookie の Path と、結果との交換の cookie の Path は、戻り先の path から決まる。末尾が違うと、cookie が
+	// 届かず、手続きが失敗するのに、気づけないので、起動のときに断る(値はエラーに含めない)。
+	if u, _ := url.Parse(gc.RedirectURL); !strings.HasSuffix(u.Path, googleRedirectPathSuffix) {
+		return fmt.Errorf("GOOGLE_REDIRECT_URL path must end with %s (a public prefix such as /api may come before it)", googleRedirectPathSuffix)
 	}
 	if err := requireHTTPSOrLoopback("APP_BASE_URL", cfg.AppBaseURL); err != nil {
 		return fmt.Errorf("%w (required when GOOGLE_CLIENT_ID is set)", err)

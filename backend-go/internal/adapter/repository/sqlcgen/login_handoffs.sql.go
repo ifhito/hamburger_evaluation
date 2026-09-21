@@ -10,12 +10,13 @@ import (
 )
 
 const createLoginHandoff = `-- name: CreateLoginHandoff :exec
-INSERT INTO login_handoffs (code_hash, outcome, user_id, return_to, expires_at)
-VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5::float8))
+INSERT INTO login_handoffs (code_hash, binder_hash, outcome, user_id, return_to, expires_at)
+VALUES ($1, $2, $3, $4, $5, now() + make_interval(secs => $6::float8))
 `
 
 type CreateLoginHandoffParams struct {
 	CodeHash   string
+	BinderHash string
 	Outcome    string
 	UserID     *string
 	ReturnTo   string
@@ -26,6 +27,7 @@ type CreateLoginHandoffParams struct {
 func (q *Queries) CreateLoginHandoff(ctx context.Context, arg CreateLoginHandoffParams) error {
 	_, err := q.db.Exec(ctx, createLoginHandoff,
 		arg.CodeHash,
+		arg.BinderHash,
 		arg.Outcome,
 		arg.UserID,
 		arg.ReturnTo,
@@ -64,15 +66,16 @@ func (q *Queries) DeleteLoginHandoff(ctx context.Context, id string) error {
 }
 
 const getLoginHandoffByCodeHash = `-- name: GetLoginHandoffByCodeHash :one
-SELECT id, outcome, user_id, return_to FROM login_handoffs
+SELECT id, binder_hash, outcome, user_id, return_to FROM login_handoffs
 WHERE code_hash = $1 AND expires_at > now()
 `
 
 type GetLoginHandoffByCodeHashRow struct {
-	ID       string
-	Outcome  string
-	UserID   *string
-	ReturnTo string
+	ID         string
+	BinderHash string
+	Outcome    string
+	UserID     *string
+	ReturnTo   string
 }
 
 // 期限内のコードの中身を読む(ロックはしない。同じトランザクションで先にロックしているので、
@@ -82,6 +85,7 @@ func (q *Queries) GetLoginHandoffByCodeHash(ctx context.Context, codeHash string
 	var i GetLoginHandoffByCodeHashRow
 	err := row.Scan(
 		&i.ID,
+		&i.BinderHash,
 		&i.Outcome,
 		&i.UserID,
 		&i.ReturnTo,

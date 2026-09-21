@@ -73,9 +73,12 @@ func (fakeIdentityRepo) DiscardUserIdentitiesByUser(context.Context, string) err
 	panic("unexpected DiscardUserIdentitiesByUser call")
 }
 
-// fakeHandoffRepo は、画面へ渡すコードの書き込み(domain.LoginHandoffRepository)の代役で、保存された中身を記録する。
+// fakeHandoffRepo は、画面へ渡すコードの書き込み(domain.LoginHandoffRepository)の代役で、保存された中身と、
+// 削除された ID を記録する。
 type fakeHandoffRepo struct {
-	created []domain.CreateLoginHandoffParams
+	created   []domain.CreateLoginHandoffParams
+	locked    []string
+	discarded []string
 }
 
 func (f *fakeHandoffRepo) CreateLoginHandoff(_ context.Context, p domain.CreateLoginHandoffParams) error {
@@ -83,12 +86,14 @@ func (f *fakeHandoffRepo) CreateLoginHandoff(_ context.Context, p domain.CreateL
 	return nil
 }
 
-func (*fakeHandoffRepo) LockLoginHandoff(context.Context, string) error {
-	panic("unexpected LockLoginHandoff call")
+func (f *fakeHandoffRepo) LockLoginHandoff(_ context.Context, codeHash string) error {
+	f.locked = append(f.locked, codeHash)
+	return nil
 }
 
-func (*fakeHandoffRepo) DiscardLoginHandoff(context.Context, string) error {
-	panic("unexpected DiscardLoginHandoff call")
+func (f *fakeHandoffRepo) DiscardLoginHandoff(_ context.Context, id string) error {
+	f.discarded = append(f.discarded, id)
+	return nil
 }
 
 func (*fakeHandoffRepo) DiscardExpiredLoginHandoffs(context.Context, int) (int64, error) {
@@ -178,6 +183,68 @@ func TestGoogleLoginsSignInRace(t *testing.T) {
 		got := run(t, []func() (domain.UserIdentity, error){notLinked, broken}, domain.ErrEmailTaken, nil, active)
 		if got.Outcome != domain.OutcomeFailed {
 			t.Fatalf("結果 = %+v, want failed", got)
+		}
+	})
+}
+
+// TestGoogleLoginsCompleteWithoutFlow は、進行中の手続き(手続きを始めたブラウザの cookie に封じた値)がない要求では、
+// 何も保存せずに、エラーを返すことを固定する(手続きを始めていない要求で、DB に書き込ませない)。
+func TestGoogleLoginsCompleteWithoutFlow(t *testing.T) {
+	handoffs := &fakeHandoffRepo{}
+	logins := usecase.NewGoogleLogins(fakeGoogleProvider{}, &fakeIdentityQuery{lookups: []func() (domain.UserIdentity, error){notLinked}}, &fakeUserQuery{},
+		&uowtest.UoW{}, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(fakeIdentityRepo{}), fakeIssuer{})
+
+	_, err := logins.Complete(context.Background(), usecase.GoogleFlow{}, usecase.GoogleCallback{Code: "c", State: "s"})
+
+	if !errors.Is(err, usecase.ErrGoogleFlowMissing) {
+		t.Fatalf("err = %v, want ErrGoogleFlowMissing", err)
+	}
+	if len(handoffs.created) != 0 {
+		t.Fatalf("保存された結果 = %d 件, want 0", len(handoffs.created))
+	}
+}
+
+// fakePendingHandoff は、画面へ渡すコードの中身の読み取り(usecase.LoginHandoffQuery)の代役である。
+type fakePendingHandoff struct{ handoff domain.LoginHandoff }
+
+func (f fakePendingHandoff) GetLoginHandoffByCodeHash(context.Context, string) (domain.LoginHandoff, error) {
+	return f.handoff, nil
+}
+
+// TestGoogleLoginsRedeemRequiresBinder は、コードの交換が、手続きを終えたブラウザだけが持つ「結び付けの値」と一緒でなければ
+// できず、合わない交換では、コードが消費されない(コードごと取り消される)ことを固定する。
+func TestGoogleLoginsRedeemRequiresBinder(t *testing.T) {
+	const binder = "binder-of-the-browser"
+	redeem := func(t *testing.T, presented string) (domain.LoginHandoff, error, *fakeHandoffRepo, *uowtest.UoW) {
+		t.Helper()
+		handoffs := &fakeHandoffRepo{}
+		stored := domain.LoginHandoff{ID: uid.N(1), Outcome: domain.OutcomeFailed, ReturnTo: "/oauth/authorize?x=1", BinderHash: domain.HashLoginHandoffBinder(binder)}
+		unit := &uowtest.UoW{LoginHandoffs: handoffs, PendingHandoff: fakePendingHandoff{handoff: stored}}
+		logins := usecase.NewGoogleLogins(fakeGoogleProvider{}, &fakeIdentityQuery{lookups: []func() (domain.UserIdentity, error){notLinked}}, &fakeUserQuery{},
+			unit, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(fakeIdentityRepo{}), fakeIssuer{})
+		res, err := logins.Redeem(context.Background(), "the-code", presented)
+		return domain.LoginHandoff{Outcome: res.Outcome, ReturnTo: res.ReturnTo}, err, handoffs, unit
+	}
+
+	t.Run("合う結び付けの値なら、結果(と、失敗のときの戻り先)を返し、コードを削除して確定する", func(t *testing.T) {
+		got, err, handoffs, unit := redeem(t, binder)
+		if err != nil || got.Outcome != domain.OutcomeFailed || got.ReturnTo != "/oauth/authorize?x=1" {
+			t.Fatalf("結果 = %+v, err = %v", got, err)
+		}
+		if len(handoffs.discarded) != 1 || unit.Commits != 1 || unit.Rollbacks != 0 {
+			t.Fatalf("削除 %v・commit %d・rollback %d, want 削除 1 件・commit 1", handoffs.discarded, unit.Commits, unit.Rollbacks)
+		}
+	})
+
+	t.Run("空・合わない結び付けの値なら、無効として断り、コードを削除せず、全体を取り消す(コードは消費されない)", func(t *testing.T) {
+		for name, presented := range map[string]string{"空": "", "別の値": "another-binder", "コードそのもの": "the-code"} {
+			_, err, handoffs, unit := redeem(t, presented)
+			if !errors.Is(err, domain.ErrLoginHandoffInvalid) {
+				t.Errorf("%s: err = %v, want ErrLoginHandoffInvalid", name, err)
+			}
+			if len(handoffs.discarded) != 0 || unit.Commits != 0 || unit.Rollbacks != 1 {
+				t.Errorf("%s: 削除 %v・commit %d・rollback %d, want 削除なし・rollback 1", name, handoffs.discarded, unit.Commits, unit.Rollbacks)
+			}
 		}
 	})
 }

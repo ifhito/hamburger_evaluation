@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -16,7 +17,7 @@ import (
 // 環境ごとに変える設定ではない)。
 const LoginHandoffTTL = 60 * time.Second
 
-// loginHandoffCodeBytes は、コードの乱数のバイト数である(256 ビット)。
+// loginHandoffCodeBytes は、コードと結び付けの値の乱数のバイト数である(256 ビット)。
 const loginHandoffCodeBytes = 32
 
 // ErrLoginHandoffInvalid は、画面へ渡すコードが、期限切れ・存在しない・使用済み・用途が違う、の
@@ -53,18 +54,34 @@ type LoginHandoff struct {
 	// UserID は、結果が利用者を伴うとき(NeedsUser)の、その利用者の ID である。ほかは空である。
 	UserID string
 	// ReturnTo は、手続きのあとに戻る先(アプリの中のパス。SanitizeReturnTo を通ったもの)である。空は既定の画面。
+	// 失敗の結果にも入る(失敗のあと、元の画面へ戻れるように)。
 	ReturnTo string
+	// BinderHash は、このコードを使える相手(手続きを終えたブラウザ)を確かめる値の、保存の形(SHA-256)である。
+	// コードだけでは使えない(BoundTo)。
+	BinderHash string
+}
+
+// BoundTo は、binder(平文)が、このコードを発行したときに渡した、結び付けの値かを返す(定数時間で比べる)。
+// 空の binder は、常に false である。コードは、手続きを終えたブラウザだけが持つ結び付けの値と一緒に使うときだけ
+// 有効で、コードだけを別のブラウザへ持ち込んでも(たとえば、攻撃者が自分の Google で進めた手続きの URL を、
+// 被害者に踏ませても)、使えない(被害者が、攻撃者のアカウントでログインした状態になる、ログイン CSRF を防ぐ)。
+func (h LoginHandoff) BoundTo(binder string) bool {
+	if binder == "" || h.BinderHash == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(HashLoginHandoffBinder(binder)), []byte(h.BinderHash)) == 1
 }
 
 // ---- repository の契約(実装は adapter/repository) ----
 
-// CreateLoginHandoffParams は、コードの中身として保存するフィールドを保持する。コードは CodeHash
-// (SHA-256。平文は渡さない)である。有効期間は LoginHandoffTTL で、repository が使う。
+// CreateLoginHandoffParams は、コードの中身として保存するフィールドを保持する。コードは CodeHash・結び付けの値は
+// BinderHash(どちらも SHA-256。平文は渡さない)である。有効期間は LoginHandoffTTL で、repository が使う。
 type CreateLoginHandoffParams struct {
-	CodeHash string
-	Outcome  LoginHandoffOutcome
-	UserID   string
-	ReturnTo string
+	CodeHash   string
+	BinderHash string
+	Outcome    LoginHandoffOutcome
+	UserID     string
+	ReturnTo   string
 }
 
 // LoginHandoffRepository は、画面へ渡すコードの書き込みの契約である。domain が宣言し、呼び出すのは
@@ -101,26 +118,45 @@ func NewLoginHandoffs(repo LoginHandoffRepository) *LoginHandoffs {
 	return &LoginHandoffs{repo: repo}
 }
 
-// Issue は、結果を画面へ渡すコードを作って保存し、平文のコードを返す。平文は、画面の URL にだけ
-// 入れる値で、保存しない。userID は、結果が利用者を伴うとき(NeedsUser)だけ、伴わないときは空にする。
-func (s *LoginHandoffs) Issue(ctx context.Context, outcome LoginHandoffOutcome, userID, returnTo string) (string, error) {
+// IssuedLoginHandoff は、発行したコードと、その結び付けの値(どちらも平文)である。コードは画面の URL に載せて渡し、
+// 結び付けの値は、手続きを終えたブラウザの cookie にだけ持たせる。どちらも保存しない(保存するのは、SHA-256 だけ)。
+type IssuedLoginHandoff struct {
+	Code   string
+	Binder string
+}
+
+// Issue は、結果を画面へ渡すコードと、そのコードを使える相手を確かめる結び付けの値を作って保存し、平文で返す。
+// userID は、結果が利用者を伴うとき(NeedsUser)だけ、伴わないときは空にする。
+func (s *LoginHandoffs) Issue(ctx context.Context, outcome LoginHandoffOutcome, userID, returnTo string) (IssuedLoginHandoff, error) {
 	if outcome.NeedsUser() != (userID != "") {
-		return "", fmt.Errorf("issue login handoff: outcome %q and user id do not match", outcome)
+		return IssuedLoginHandoff{}, fmt.Errorf("issue login handoff: outcome %q and user id do not match", outcome)
 	}
+	code, err := randomLoginHandoffSecret()
+	if err != nil {
+		return IssuedLoginHandoff{}, fmt.Errorf("generate login handoff code: %w", err)
+	}
+	binder, err := randomLoginHandoffSecret()
+	if err != nil {
+		return IssuedLoginHandoff{}, fmt.Errorf("generate login handoff binder: %w", err)
+	}
+	if err := s.repo.CreateLoginHandoff(ctx, CreateLoginHandoffParams{
+		CodeHash:   HashLoginHandoffCode(code),
+		BinderHash: HashLoginHandoffBinder(binder),
+		Outcome:    outcome,
+		UserID:     userID,
+		ReturnTo:   returnTo,
+	}); err != nil {
+		return IssuedLoginHandoff{}, fmt.Errorf("create login handoff: %w", err)
+	}
+	return IssuedLoginHandoff{Code: code, Binder: binder}, nil
+}
+
+func randomLoginHandoffSecret() (string, error) {
 	buf := make([]byte, loginHandoffCodeBytes)
 	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("generate login handoff code: %w", err)
+		return "", err
 	}
-	raw := base64.RawURLEncoding.EncodeToString(buf)
-	if err := s.repo.CreateLoginHandoff(ctx, CreateLoginHandoffParams{
-		CodeHash: HashLoginHandoffCode(raw),
-		Outcome:  outcome,
-		UserID:   userID,
-		ReturnTo: returnTo,
-	}); err != nil {
-		return "", fmt.Errorf("create login handoff: %w", err)
-	}
-	return raw, nil
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
 // Lock は、平文のコードに対応する、期限内のコードの中身を排他ロックする。コードの保存の形への変換
@@ -143,6 +179,13 @@ func (s *LoginHandoffs) DiscardExpired(ctx context.Context, limit int) (int64, e
 // HashLoginHandoffCode は、平文のコードを、保存する形(SHA-256 の 16 進)に変換する。コードは
 // 256 ビットの乱数なので、パスワードと違い、遅いハッシュは要らない。
 func HashLoginHandoffCode(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+// HashLoginHandoffBinder は、平文の結び付けの値を、保存する形(SHA-256 の 16 進)に変換する(コードと同じ理由で、
+// 遅いハッシュは要らない。コードのハッシュと取り違えないよう、別の名前にしてある)。
+func HashLoginHandoffBinder(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }
