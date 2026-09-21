@@ -31,16 +31,15 @@ func TestCatalogStructure(t *testing.T) {
 // TestErrorBodiesAreBuiltByTheHelpers は、利用者に見えるエラーの本文を、respond.go の関数(writeError・
 // writeErrorList・writeValidation)だけが作ることを確かめる。文字列を直接書いて本文を作ると、利用者の言語に
 // 合わせる仕組みをすり抜けて、英語のままになる。次の書き方を見つける: errorResponse・errorsResponse の直接の
-// 生成 / 成功(200・201・202)以外の状態コードでの writeJSON の直接の呼び出し / http.Error。
+// 生成 / 成功(200・201・202)以外の状態コードでの writeJSON の直接の呼び出し / http.Error / MCP のツールの失敗(failure)への
+// 文字列の直接の受け渡し。
 func TestErrorBodiesAreBuiltByTheHelpers(t *testing.T) {
-	// 例外(ファイル → 理由)。ここにあるファイルは、対象の書き方を、丸ごと許す。
-	exempt := map[string]string{
-		"respond.go": "本文を作る関数そのもの",
-		// 文言をカタログに移す作業の途中のファイル。移したら、ここから消す。
-		"google_login.go":  "Google の案内の文言",
-		"mcp.go":           "Insufficient scope",
-		"oauth_consent.go": "許可の画面の文言",
+	toolFailureLiterals := map[string]bool{
+		`"internal server error"`: true,
+		`"結果が大きすぎます。per_page を小さくして、もう一度呼んでください。"`: true,
 	}
+	// 例外(ファイル → 理由)。ここにあるファイルは、対象の書き方を、丸ごと許す。
+	exempt := map[string]string{"respond.go": "本文を作る関数そのもの"}
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
 	if err != nil {
@@ -83,6 +82,13 @@ func TestErrorBodiesAreBuiltByTheHelpers(t *testing.T) {
 					}
 					if isHTTP(n.Fun, "Error") {
 						t.Errorf("%s: http.Error は使わない(本文が、言語の切り替えをすり抜ける)", fset.Position(n.Pos()))
+					}
+					// MCP のツールの失敗も同じ。文字列のリテラルは、次の 2 つだけ: 5xx 相当の固定の英語と、AI に渡す
+					// 説明と同じく日本語で書く、結果が大きすぎるときの案内。
+					if id, ok := n.Fun.(*ast.Ident); ok && id.Name == "failure" && len(n.Args) == 1 {
+						if lit, ok := n.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING && !toolFailureLiterals[lit.Value] {
+							t.Errorf("%s: failure に文字列を直接渡している(t.failMessage とカタログの文言を使う)", fset.Position(n.Pos()))
+						}
 					}
 				}
 				return true

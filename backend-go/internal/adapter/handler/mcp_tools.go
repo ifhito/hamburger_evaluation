@@ -49,7 +49,9 @@ const (
 type mcpTools struct {
 	viewer domain.User
 	// scopes は、この要求のトークンが許可された範囲である(ツールを実行する直前の確認に使う)。
-	scopes  []string
+	scopes []string
+	// lang は、ツールの失敗の文言の言語である(要求の Accept-Language。ヘッダーがなければ英語)。
+	lang    domain.Lang
 	shops   *usecase.Shops
 	reviews *usecase.Reviews
 	users   *usecase.Users
@@ -60,9 +62,9 @@ func boolPtr(b bool) *bool { return &b }
 // newToolServer は、viewer のための MCP サーバー(全ツール入り)を組み立てる。書き込みのツールも一覧に
 // 出す。許可されていない範囲のツールを呼ぶと、要求の入口が 403 で、足りない範囲を伝える(クライアントは、
 // それを見て、範囲を広げる許可を求め直せる)。
-func (m *MCPServer) newToolServer(viewer domain.User, scopes []string) *mcp.Server {
+func (m *MCPServer) newToolServer(viewer domain.User, scopes []string, lang domain.Lang) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "burgerstack", Version: "1.0.0"}, &mcp.ServerOptions{Instructions: mcpInstructions})
-	t := &mcpTools{viewer: viewer, scopes: scopes, shops: m.shops, reviews: m.reviews, users: m.users}
+	t := &mcpTools{viewer: viewer, scopes: scopes, lang: lang, shops: m.shops, reviews: m.reviews, users: m.users}
 
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: boolPtr(false)}
 	additive := &mcp.ToolAnnotations{DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)}
@@ -96,7 +98,7 @@ func guarded[In any](t *mcpTools, name string, h mcp.ToolHandlerFor[In, any]) mc
 	required := mcpToolScopes[name]
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 		if !slices.Contains(t.scopes, required) {
-			return failure("Insufficient scope: " + required)
+			return t.failMessage(apiMsg(keyInsufficientScope, required))
 		}
 		return h(ctx, req, in)
 	}
@@ -115,9 +117,9 @@ func failure(message string) (*mcp.CallToolResult, any, error) {
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: message}}}, nil, nil
 }
 
-// failureMessage は、カタログの文言(handler と同じ)を、英語で、ツールの失敗にする。
-func failureMessage(m apiMessage) (*mcp.CallToolResult, any, error) {
-	return failure(text(domain.LangEN, m))
+// failMessage は、カタログの文言(HTTP の API と同じ)を、要求の言語で、ツールの失敗にする。
+func (t *mcpTools) failMessage(m apiMessage) (*mcp.CallToolResult, any, error) {
+	return failure(text(t.lang, m))
 }
 
 // success は、v を JSON の文字列にして返す。結果が大きすぎるときは、切らずに、件数を減らすよう伝える。
@@ -137,21 +139,21 @@ func success(v any) (*mcp.CallToolResult, any, error) {
 
 // toolError は、usecase のエラーを、ツールの失敗(利用者に伝える文言)に写す。文言は HTTP の API と同じで、
 // 知らないエラーは、詳細をログにだけ残して、決まった文言で返す。
-func toolError(op string, err error) (*mcp.CallToolResult, any, error) {
+func (t *mcpTools) toolError(op string, err error) (*mcp.CallToolResult, any, error) {
 	var vErr *domain.ValidationError
 	switch {
 	case errors.Is(err, domain.ErrForbidden):
-		return failureMessage(msgForbidden)
+		return t.failMessage(msgForbidden)
 	case errors.Is(err, domain.ErrReviewNotFound):
-		return failureMessage(msgReviewNotFound)
+		return t.failMessage(msgReviewNotFound)
 	case errors.Is(err, domain.ErrShopNotFound):
-		return failureMessage(msgShopNotFound)
+		return t.failMessage(msgShopNotFound)
 	case errors.Is(err, domain.ErrBurgerNotFound):
-		return failureMessage(msgBurgerNotFound)
+		return t.failMessage(msgBurgerNotFound)
 	case errors.Is(err, domain.ErrUserNotFound):
-		return failureMessage(msgUserNotFound)
+		return t.failMessage(msgUserNotFound)
 	case errors.As(err, &vErr):
-		return failure(strings.Join(vErr.Texts(domain.LangEN), "; "))
+		return failure(strings.Join(vErr.Texts(t.lang), "; "))
 	default:
 		log.Printf("mcp: %s: %v", op, err)
 		return failure("internal server error")
@@ -175,7 +177,7 @@ type listShopsInput struct {
 func (t *mcpTools) listShops(ctx context.Context, _ *mcp.CallToolRequest, in listShopsInput) (*mcp.CallToolResult, any, error) {
 	list, hasMore, err := t.shops.List(ctx, &t.viewer, in.Keyword, in.Page, in.PerPage)
 	if err != nil {
-		return toolError("list_shops", err)
+		return t.toolError("list_shops", err)
 	}
 	items := make([]shopResponse, 0, len(list))
 	for _, shop := range list {
@@ -190,11 +192,11 @@ type getShopInput struct {
 
 func (t *mcpTools) getShop(ctx context.Context, _ *mcp.CallToolRequest, in getShopInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ShopID) {
-		return failureMessage(msgShopNotFound)
+		return t.failMessage(msgShopNotFound)
 	}
 	detail, err := t.shops.Get(ctx, &t.viewer, in.ShopID)
 	if err != nil {
-		return toolError("get_shop", err)
+		return t.toolError("get_shop", err)
 	}
 	return success(newShopDetailResponse(detail))
 }
@@ -212,19 +214,19 @@ func (t *mcpTools) listReviews(ctx context.Context, _ *mcp.CallToolRequest, in l
 	filter := usecase.ReviewListFilter{Keyword: in.Keyword, Rating: in.Rating}
 	if in.ShopID != "" {
 		if !domain.IsUUID(in.ShopID) {
-			return failureMessage(msgShopIDInvalid)
+			return t.failMessage(msgShopIDInvalid)
 		}
 		filter.ShopID = &in.ShopID
 	}
 	if in.UserID != "" {
 		if !domain.IsUUID(in.UserID) {
-			return failureMessage(msgUserIDInvalid)
+			return t.failMessage(msgUserIDInvalid)
 		}
 		filter.UserID = &in.UserID
 	}
 	list, hasMore, err := t.reviews.List(ctx, &t.viewer, filter, in.Page, in.PerPage)
 	if err != nil {
-		return toolError("list_reviews", err)
+		return t.toolError("list_reviews", err)
 	}
 	items := make([]reviewResponse, 0, len(list))
 	for _, detail := range list {
@@ -239,11 +241,11 @@ type getReviewInput struct {
 
 func (t *mcpTools) getReview(ctx context.Context, _ *mcp.CallToolRequest, in getReviewInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ReviewID) {
-		return failureMessage(msgReviewNotFound)
+		return t.failMessage(msgReviewNotFound)
 	}
 	detail, err := t.reviews.Get(ctx, &t.viewer, in.ReviewID)
 	if err != nil {
-		return toolError("get_review", err)
+		return t.toolError("get_review", err)
 	}
 	return success(newReviewResponse(detail))
 }
@@ -254,11 +256,11 @@ type getUserInput struct {
 
 func (t *mcpTools) getUser(ctx context.Context, _ *mcp.CallToolRequest, in getUserInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.UserID) {
-		return failureMessage(msgUserNotFound)
+		return t.failMessage(msgUserNotFound)
 	}
 	profile, err := t.users.Get(ctx, &t.viewer, in.UserID)
 	if err != nil {
-		return toolError("get_user", err)
+		return t.toolError("get_user", err)
 	}
 	return success(newUserProfileResponse(profile))
 }
@@ -275,11 +277,11 @@ type createReviewInput struct {
 
 func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in createReviewInput) (*mcp.CallToolResult, any, error) {
 	if _, msg, ok := checkReviewTargetIDs(in.ShopID, in.BurgerID); !ok {
-		return failureMessage(msg)
+		return t.failMessage(msg)
 	}
 	detail, err := t.reviews.Create(ctx, t.viewer, in.ShopID, in.BurgerID, in.BurgerName, in.Rating, in.Comment, nil)
 	if err != nil {
-		return toolError("create_review", err)
+		return t.toolError("create_review", err)
 	}
 	return success(newReviewResponse(detail))
 }
@@ -292,11 +294,11 @@ type updateReviewInput struct {
 
 func (t *mcpTools) updateReview(ctx context.Context, _ *mcp.CallToolRequest, in updateReviewInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ReviewID) {
-		return failureMessage(msgReviewNotFound)
+		return t.failMessage(msgReviewNotFound)
 	}
 	detail, err := t.reviews.Update(ctx, t.viewer, in.ReviewID, in.Rating, in.Comment, nil)
 	if err != nil {
-		return toolError("update_review", err)
+		return t.toolError("update_review", err)
 	}
 	return success(newReviewResponse(detail))
 }
@@ -307,10 +309,10 @@ type deleteReviewInput struct {
 
 func (t *mcpTools) deleteReview(ctx context.Context, _ *mcp.CallToolRequest, in deleteReviewInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ReviewID) {
-		return failureMessage(msgReviewNotFound)
+		return t.failMessage(msgReviewNotFound)
 	}
 	if err := t.reviews.Delete(ctx, t.viewer, in.ReviewID); err != nil {
-		return toolError("delete_review", err)
+		return t.toolError("delete_review", err)
 	}
 	return success(map[string]any{"deleted": true, "review_id": in.ReviewID})
 }
@@ -322,7 +324,7 @@ type submitShopInput struct {
 func (t *mcpTools) submitShop(ctx context.Context, _ *mcp.CallToolRequest, in submitShopInput) (*mcp.CallToolResult, any, error) {
 	detail, err := t.shops.Create(ctx, t.viewer, in.Name)
 	if err != nil {
-		return toolError("submit_shop", err)
+		return t.toolError("submit_shop", err)
 	}
 	return success(newAdminShopResponse(detail))
 }

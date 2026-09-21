@@ -82,6 +82,18 @@ func writeErrorList(w http.ResponseWriter, r *http.Request, status int, ms ...ap
 	writeJSON(w, status, errorsResponse{Errors: texts})
 }
 
+// writeErrorListWith は、writeErrorList と同じく、文言を利用者の言語にして {"errors":[...]} を書くが、本文に
+// 別の項目を足せる(build が、文字列にした文言のリストから、本文を作る)。
+func writeErrorListWith(w http.ResponseWriter, r *http.Request, status int, build func(texts []string) any, ms ...apiMessage) {
+	varyByLanguage(w)
+	l := langOf(r)
+	texts := make([]string, len(ms))
+	for i, m := range ms {
+		texts[i] = text(l, m)
+	}
+	writeJSON(w, status, build(texts))
+}
+
 // writeInternalError は 500 {"error":"internal server error"} を書き込む。5xx の文言は、利用者に見せる
 // ものではなく(詳細は、ログにだけ残す)、言語によらず、英語の固定の文字列である。
 func writeInternalError(w http.ResponseWriter) {

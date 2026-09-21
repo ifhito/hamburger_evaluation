@@ -33,7 +33,7 @@ func TestServerErrorsStayEnglish(t *testing.T) {
 }
 
 // TestMCPErrorsFollowAcceptLanguage は、/mcp の入り口の 4xx(Origin の拒否・トークンなし・無効なトークン)が、
-// Accept-Language の言語で返ることを確かめる。ツールの中のエラーは、英語のまま(範囲を別に扱う)。
+// Accept-Language の言語で返ることを確かめる。ツールの中のエラーも同じ。
 func TestMCPErrorsFollowAcceptLanguage(t *testing.T) {
 	k := newMCPKit(t)
 	languages := []struct {
@@ -73,11 +73,29 @@ func TestMCPErrorsFollowAcceptLanguage(t *testing.T) {
 		})
 	}
 
-	t.Run("ツールの中のエラーは、Accept-Language が ja でも英語のまま", func(t *testing.T) {
-		resp, body := k.rpcWith(t, k.token(k.alice, readScope), rpcToolCall("get_review", `{"review_id":"`+uid.N(999)+`"}`),
-			map[string]string{"Accept-Language": "ja"}, "")
-		if resp.StatusCode != http.StatusOK || !strings.Contains(body, "Review not found") {
-			t.Errorf("status/body = %d %s, want 200 で、英語の Review not found を含む", resp.StatusCode, body)
+	t.Run("ツールの中のエラーも、言語に従う(ヘッダーなしは英語)", func(t *testing.T) {
+		for header, want := range map[string]string{"": "Review not found", "ja": "レビューが見つかりません"} {
+			headers := map[string]string{}
+			if header != "" {
+				headers["Accept-Language"] = header
+			}
+			resp, body := k.rpcWith(t, k.token(k.alice, readScope), rpcToolCall("get_review", `{"review_id":"`+uid.N(999)+`"}`), headers, "")
+			if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"isError":true`) || !strings.Contains(body, `"text":"`+want+`"`) {
+				t.Errorf("Accept-Language %q: status/body = %d %s, want 200 の失敗で、文言 %q", header, resp.StatusCode, body, want)
+			}
+		}
+	})
+
+	t.Run("範囲が足りないときの 403 の本文も、言語に従う(WWW-Authenticate は、プロトコルなので英語のまま)", func(t *testing.T) {
+		for header, want := range map[string]string{"": `{"error":"Insufficient scope: hamburger:write"}`, "ja": `{"error":"許可の範囲が足りません: hamburger:write"}`} {
+			headers := map[string]string{}
+			if header != "" {
+				headers["Accept-Language"] = header
+			}
+			resp, body := k.rpcWith(t, k.token(k.alice, readScope), rpcToolCall("delete_review", `{}`), headers, "")
+			if resp.StatusCode != http.StatusForbidden || body != want || !strings.Contains(resp.Header.Get("WWW-Authenticate"), `error="insufficient_scope"`) {
+				t.Errorf("Accept-Language %q: status/body/challenge = %d %s %q, want 403 %s と英語の challenge", header, resp.StatusCode, body, resp.Header.Get("WWW-Authenticate"), want)
+			}
 		}
 	})
 }

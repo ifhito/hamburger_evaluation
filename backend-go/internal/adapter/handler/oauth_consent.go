@@ -107,7 +107,7 @@ func handleOAuthDecision(consents *usecase.OAuthConsents) http.HandlerFunc {
 			return
 		}
 		if body.Approve == nil {
-			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{"Approve is required"}})
+			writeErrorList(w, r, http.StatusUnprocessableEntity, msgOAuthApproveRequired)
 			return
 		}
 		params, err := usecase.ParseAuthorizeQuery(body.Query)
@@ -184,8 +184,10 @@ func handleRevokeOAuthGrant(apps *usecase.ConnectedApps) http.HandlerFunc {
 // writeOAuthError は、OAuth の許可に関する use case のエラーを、HTTP の応答にする。
 func writeOAuthError(w http.ResponseWriter, r *http.Request, op string, err error) {
 	switch {
-	case errors.Is(err, domain.ErrOAuthAuthorizeRequestInvalid), errors.Is(err, domain.ErrOAuthInvalidScope):
-		writeJSON(w, http.StatusUnprocessableEntity, errorResponse{Error: err.Error()})
+	case errors.Is(err, domain.ErrOAuthAuthorizeRequestInvalid):
+		writeError(w, r, http.StatusUnprocessableEntity, apiMsg(keyOAuthRequestInvalid, err.Error()))
+	case errors.Is(err, domain.ErrOAuthInvalidScope):
+		writeError(w, r, http.StatusUnprocessableEntity, apiMsg(keyOAuthScopeInvalid, err.Error()))
 	case errors.Is(err, domain.ErrOAuthGrantNotFound):
 		writeError(w, r, http.StatusNotFound, msgRouteNotFound)
 	default:
