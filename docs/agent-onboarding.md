@@ -54,7 +54,7 @@ flowchart TD
 
 ## 触ってはいけないファイル・操作
 
-- `.env*`, `backend-go/.env*`, `frontend/.env*`, `secrets/**`。
+- `.env*`, `backend-go/.env*`, `frontend/.env*`, `design/.env*`, `secrets/**`。
 - `~/.claude`, `~/.hermes`, `~/.codex` などのグローバル設定。必要なら別PRや明示確認を取る。
 - `.claude/settings.local.json` の共有前提化。個人ローカル設定として扱う。
 - ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
