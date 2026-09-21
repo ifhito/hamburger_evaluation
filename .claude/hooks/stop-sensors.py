@@ -28,7 +28,7 @@ GO_BOUNDARY_RULES = (
     ("backend-go/internal/domain/", ('"net/http"', "database/sql", "pgx", "/adapter/", "/usecase/", "/internal/photo")),
     ("backend-go/internal/usecase/", ('"net/http"', "database/sql", "pgx", "/adapter/")),
 )
-# repository は domain からだけ使う(S15 / #46 の規約):
+# repository は domain からだけ使う規約:
 # - *Repository の interface(書き込み専用)は domain が宣言し、呼べるのは domain のコードだけ
 #   (単一集約の書き込みは集約ごとの書き込みオブジェクト。*Service は、間に読み取りを挟まない、集約を跨ぐ更新だけ。
 #   読み取りを挟む手順は、usecase が UnitOfWork.Do の中で組み立てる)
