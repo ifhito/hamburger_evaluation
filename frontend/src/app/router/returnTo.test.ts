@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { returnPathFrom } from "./returnTo";
+import { appPathOrNull, returnPathFrom } from "./returnTo";
 
 describe("returnPathFrom", () => {
   it("このアプリの中のパス(クエリつき)は、戻り先として取り出す", () => {
@@ -21,5 +21,14 @@ describe("returnPathFrom", () => {
     expect(returnPathFrom({})).toBeNull();
     expect(returnPathFrom({ from: 1 })).toBeNull();
     expect(returnPathFrom({ from: "" })).toBeNull();
+  });
+});
+
+describe("appPathOrNull", () => {
+  it("このアプリの中のパスはそのまま返し、外部の URL・//・/\\・スキームつき・空は null にする", () => {
+    expect(appPathOrNull("/oauth/authorize?client_id=app&state=x")).toBe("/oauth/authorize?client_id=app&state=x");
+    for (const bad of ["", "https://evil.example.com/", "//evil.example.com/", "/\\evil.example.com/", "javascript:alert(1)", "reviews"]) {
+      expect(appPathOrNull(bad), bad).toBeNull();
+    }
   });
 });

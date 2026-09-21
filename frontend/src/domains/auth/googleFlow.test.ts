@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl, isGoogleSignIn, isNavigableUrl, landingPath, signinStateFor } from "./googleFlow";
+import type { Meta } from "../../api/meta";
+import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl, isGoogleSignIn, landingPath, signinStateFor } from "./googleFlow";
 import type { GoogleExchangeResponse } from "./types";
 
 describe("googleStartUrl(Google でのサインインを始める URL)", () => {
@@ -57,19 +58,14 @@ describe("googleEnabled(GET /meta が Google を使えると返しているか)"
     expect(googleEnabled({ loginProviders: ["other"] })).toBe(false);
   });
 
+  it("meta があっても loginProviders がない(この項目を足す前の応答が、HTTP キャッシュに残っているとき)は、落ちずに false", () => {
+    expect(googleEnabled({} as unknown as Pick<Meta, "loginProviders">)).toBe(false);
+    expect(googleEnabled({ loginProviders: null } as unknown as Pick<Meta, "loginProviders">)).toBe(false);
+  });
+
   it("google が含まれているときだけ true", () => {
     expect(googleEnabled({ loginProviders: [GOOGLE_PROVIDER] })).toBe(true);
     expect(googleEnabled({ loginProviders: ["other", GOOGLE_PROVIDER] })).toBe(true);
-  });
-});
-
-describe("isNavigableUrl(Google の URL へ移動してよいか)", () => {
-  it("http・https の URL だけ移動してよい(javascript: などのスキーム・URL でない文字列は、移動しない)", () => {
-    expect(isNavigableUrl("https://accounts.google.com/o/oauth2/v2/auth?client_id=x")).toBe(true);
-    expect(isNavigableUrl("http://127.0.0.1:9000/authorize?x=1")).toBe(true);
-    for (const bad of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "file:///etc/passwd", "not a url", ""]) {
-      expect(isNavigableUrl(bad)).toBe(false);
-    }
   });
 });
 

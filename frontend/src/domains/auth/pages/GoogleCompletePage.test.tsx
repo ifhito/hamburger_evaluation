@@ -230,3 +230,25 @@ describe("Google の手続きが失敗したあとの、元の画面への戻り
     expect(byText(page, "a", "Back to sign in")).toBeUndefined();
   });
 });
+
+describe("サインイン画面の「Sign in with Google」(ログインが必要な画面から来たとき、戻り先を開始の URL に載せる)", () => {
+  const CONSENT = "/oauth/authorize?client_id=app-1&state=xyz";
+  const linkHref = async (entry: string | { pathname: string; state: unknown }) => {
+    const page = await mount(
+      <MemoryRouter initialEntries={[entry]}>
+        <Shell>{routes}</Shell>
+      </MemoryRouter>,
+    );
+    return byText(page, "a", "Sign in with Google")?.getAttribute("href");
+  };
+
+  it("許可の画面などから送られてきたとき(state の from)は、その画面を return_to として載せる", async () => {
+    expect(await linkHref({ pathname: "/signin", state: { from: CONSENT } })).toBe(`/api/auth/google/start?return_to=${encodeURIComponent(CONSENT)}`);
+  });
+
+  it("戻り先がないとき・アプリの外を指すときは、return_to を載せない", async () => {
+    expect(await linkHref("/signin")).toBe("/api/auth/google/start");
+    await cleanup();
+    expect(await linkHref({ pathname: "/signin", state: { from: "https://evil.example/x" } })).toBe("/api/auth/google/start");
+  });
+});

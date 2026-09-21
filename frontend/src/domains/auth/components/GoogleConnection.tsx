@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { useMeta } from "../../../api/meta";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { authApi } from "../api/authApiClient";
-import { GOOGLE_PROVIDER, googleEnabled, isNavigableUrl } from "../googleFlow";
+import { isNavigable } from "../../oauth/navigation";
+import { GOOGLE_PROVIDER, googleEnabled } from "../googleFlow";
 import { useIdentities } from "../hooks/useIdentities";
 import type { Identity } from "../types";
 import styles from "./googleConnection.module.css";
@@ -76,13 +77,30 @@ export function GoogleConnectionView({ state, actionError, disconnected, busy, o
 // 本人のプロフィールに出す、Google アカウントの結び付けと解除。GET /meta が、Google を使えると返したときだけ出す
 // (使えない・取得できていない間は何も出さない)。結び付けは、認証つきの POST で、このブラウザに手続きの cookie を
 // 設定して始め、返された Google の URL へ、ブラウザが移動する(戻ってきたら、このプロフィールへ戻る)。
-export function GoogleConnection({ viewerId }: { viewerId: string }) {
+// navigateTo は、返された Google の URL へブラウザを移動する処理(テストで差し替えるため、引数にしている)。
+export function GoogleConnection({
+  viewerId,
+  navigateTo = (url) => window.location.assign(url),
+}: {
+  viewerId: string;
+  navigateTo?: (url: string) => void;
+}) {
   const { t } = useTranslation();
   const enabled = googleEnabled(useMeta().data);
   const { identities, error, isLoading, refresh, removeProvider } = useIdentities(viewerId, enabled);
   const [busy, setBusy] = useState<"connect" | "disconnect" | null>(null);
   const [actionError, setActionError] = useState<string[] | null>(null);
   const [disconnected, setDisconnected] = useState(false);
+
+  // Google の画面から「戻る」で戻ると、ブラウザが、画面の状態ごとページを復元する(bfcache)ことがある。移動する直前の
+  // 「処理中」のままだと、再読み込みするまで結び付けをやり直せないので、復元されたときは、処理中を戻す。
+  useEffect(() => {
+    const onPageShow = (e: Event) => {
+      if ((e as PageTransitionEvent).persisted) setBusy(null);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   if (!enabled) return null;
   // 一覧を取得できたときだけ、連携の有無を決める(取得できていないのに、「未連携」にしない)。
@@ -95,11 +113,12 @@ export function GoogleConnection({ viewerId }: { viewerId: string }) {
   const onConnect = async () => {
     setBusy("connect");
     setActionError(null);
+    setDisconnected(false);
     try {
       // 手続きの cookie は、この POST の応答で、このブラウザに設定される。返された Google の URL へ、同じブラウザで移動する。
       const { redirectUrl } = await authApi.startGoogleLink(`/users/${viewerId}`);
-      if (!isNavigableUrl(redirectUrl)) throw new Error("unexpected redirect URL");
-      window.location.assign(redirectUrl);
+      if (!isNavigable(redirectUrl)) throw new Error("unexpected redirect URL");
+      navigateTo(redirectUrl);
     } catch (e) {
       setActionError(e instanceof ApiError ? e.messages : [t("auth.google.profile.connectError")]);
       setBusy(null);

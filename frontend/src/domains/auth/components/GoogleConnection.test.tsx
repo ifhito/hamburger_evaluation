@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
 import { SWRConfig } from "swr";
 import "../../../lib/i18n";
 import { ApiError } from "../../../api/client/buildApiClient";
@@ -15,6 +16,7 @@ vi.mock("../../../api/meta", () => ({ useMeta: () => ({ data: { loginProviders: 
 
 const listIdentities = vi.mocked(authApi.listIdentities);
 const unlinkGoogle = vi.mocked(authApi.unlinkGoogle);
+const startGoogleLink = vi.mocked(authApi.startGoogleLink);
 
 const connected: IdentitiesResponse = {
   identities: [{ provider: "google", email: "carol@gmail.example", connectedAt: "2026-09-21T00:00:00Z", canUnlink: true } satisfies Identity],
@@ -22,10 +24,11 @@ const connected: IdentitiesResponse = {
 const notConnected: IdentitiesResponse = { identities: [] };
 
 // 呼び出しごとに新しいキャッシュにして、テスト同士で結果を持ち越さない(再試行もしない)。
+const navigateTo = vi.fn<(url: string) => void>();
 const show = () =>
   mount(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}>
-      <GoogleConnection viewerId="7" />
+      <GoogleConnection viewerId="7" navigateTo={navigateTo} />
     </SWRConfig>,
   );
 
@@ -117,6 +120,87 @@ describe("GoogleConnection(プロフィールの Google の連携。一覧の取
 
     await eventually(() => expect(page.textContent).toContain("Google is your only way to sign in."));
     expect(page.textContent).toContain("Connected as carol@gmail.example");
+    expect(page.textContent).not.toContain("Google disconnected.");
+  });
+
+  it("「結び付ける」を押すと、認証つきの開始を、このプロフィールの戻り先で呼び、返された Google の URL へ移動する", async () => {
+    listIdentities.mockResolvedValue(notConnected);
+    startGoogleLink.mockResolvedValue({ redirectUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=s" });
+    const page = await show();
+    await eventually(() => expect(byText(page, "button", "Connect Google")).toBeDefined());
+
+    await click(need(byText(page, "button", "Connect Google"), "Connect Google"));
+
+    expect(startGoogleLink).toHaveBeenCalledWith("/users/7");
+    expect(navigateTo).toHaveBeenCalledWith("https://accounts.google.com/o/oauth2/v2/auth?state=s");
+  });
+
+  it("開始が返した URL が http(s) でないとき(javascript: など)は、移動せず、エラーを出し、ボタンを押せる状態に戻す", async () => {
+    listIdentities.mockResolvedValue(notConnected);
+    startGoogleLink.mockResolvedValue({ redirectUrl: "javascript:alert(1)" });
+    const page = await show();
+    await eventually(() => expect(byText(page, "button", "Connect Google")).toBeDefined());
+
+    await click(need(byText(page, "button", "Connect Google"), "Connect Google"));
+
+    expect(navigateTo).not.toHaveBeenCalled();
+    await eventually(() => expect(page.textContent).toContain("Failed to start connecting Google."));
+    expect(need(byText(page, "button", "Connect Google"), "Connect Google").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("開始がサーバーの文言のエラーで失敗したときは、その文言を出し、移動しない", async () => {
+    listIdentities.mockResolvedValue(notConnected);
+    startGoogleLink.mockRejectedValue(new ApiError(["Please sign in again."], 401));
+    const page = await show();
+    await eventually(() => expect(byText(page, "button", "Connect Google")).toBeDefined());
+
+    await click(need(byText(page, "button", "Connect Google"), "Connect Google"));
+
+    await eventually(() => expect(page.textContent).toContain("Please sign in again."));
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  it("Google の画面から戻る(bfcache で、画面の状態ごと復元される)と、処理中のままにならず、もう一度「結び付ける」を押せる", async () => {
+    listIdentities.mockResolvedValue(notConnected);
+    startGoogleLink.mockResolvedValue({ redirectUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=s" });
+    const page = await show();
+    await eventually(() => expect(byText(page, "button", "Connect Google")).toBeDefined());
+    await click(need(byText(page, "button", "Connect Google"), "Connect Google"));
+    expect(page.textContent).toContain("Loading"); // 移動している間は、処理中
+
+    await act(async () => {
+      window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    });
+
+    expect(need(byText(page, "button", "Connect Google"), "Connect Google").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("ふつうの読み込み(bfcache でない pageshow)では、処理中の表示を変えない", async () => {
+    listIdentities.mockResolvedValue(notConnected);
+    startGoogleLink.mockReturnValue(new Promise(() => undefined));
+    const page = await show();
+    await eventually(() => expect(byText(page, "button", "Connect Google")).toBeDefined());
+    await click(need(byText(page, "button", "Connect Google"), "Connect Google"));
+
+    await act(async () => {
+      window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: false }));
+    });
+
+    expect(page.textContent).toContain("Loading");
+  });
+
+  it("「Google disconnected.」の知らせは、次の操作(結び付ける)を始めたら消える(失敗の文言と同時に出ない)", async () => {
+    listIdentities.mockResolvedValueOnce(connected).mockResolvedValue(notConnected);
+    unlinkGoogle.mockResolvedValue(undefined);
+    startGoogleLink.mockRejectedValue(new ApiError(["Cannot start now."], 500));
+    const page = await show();
+    await eventually(() => expect(page.textContent).toContain("Connected as carol@gmail.example"));
+    await click(need(byText(page, "button", "Disconnect"), "Disconnect"));
+    await eventually(() => expect(page.textContent).toContain("Google disconnected."));
+
+    await click(need(byText(page, "button", "Connect Google"), "Connect Google"));
+
+    await eventually(() => expect(page.textContent).toContain("Cannot start now."));
     expect(page.textContent).not.toContain("Google disconnected.");
   });
 });
