@@ -51,6 +51,17 @@ type ShopsBurger struct {
 	BurgerID int64
 }
 
+type SignupVerification struct {
+	ID             pgtype.UUID
+	Email          string
+	Username       string
+	PasswordDigest string
+	TokenHash      string
+	ExpiresAt      pgtype.Timestamptz
+	LastSentAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+}
+
 type User struct {
 	ID             int64
 	Email          string

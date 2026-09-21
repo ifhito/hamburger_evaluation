@@ -65,6 +65,22 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23505", "users_email_key")
 	})
 
+	// S16（AC14）：確認待ちの signup の制約。トークンのハッシュは一意、email は大文字小文字を
+	// 区別せず一意で、必須の列は NOT NULL である。users のスキーマは変わらない。
+	t.Run("S16 signup_verifications の制約", func(t *testing.T) {
+		const insert = "INSERT INTO signup_verifications (email, username, password_digest, token_hash, expires_at) VALUES ($1, 'u', 'digest', $2, now() + interval '1 day')"
+		if _, err := conn.Exec(ctx, insert, "Pending@example.com", "hash-1"); err != nil {
+			t.Fatalf("insert first verification: %v", err)
+		}
+		_, err := conn.Exec(ctx, insert, "other@example.com", "hash-1")
+		assertPgError(t, err, "23505", "signup_verifications_token_hash_key")
+		_, err = conn.Exec(ctx, insert, "PENDING@example.com", "hash-2")
+		assertPgError(t, err, "23505", "idx_signup_verifications_email_lower")
+		_, err = conn.Exec(ctx,
+			"INSERT INTO signup_verifications (email, username, password_digest, token_hash) VALUES ('n@example.com', 'u', 'digest', 'hash-3')")
+		assertPgError(t, err, "23502", "")
+	})
+
 	// AC2：すべての migration を down すると空の database に戻る。
 	dbtest.Apply(ctx, t, conn, downs)
 	t.Run("AC2 down すると空の schema に戻る", func(t *testing.T) {
@@ -88,7 +104,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	t.Helper()
 
-	wantTables := []string{"burger_stats", "burgers", "reviews", "shops", "shops_burgers", "users"}
+	wantTables := []string{"burger_stats", "burgers", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
 	gotTables := queryStrings(ctx, t, conn,
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
@@ -128,6 +144,15 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/updated_at/timestamp with time zone/NO",
 		"shops_burgers/shop_id/bigint/NO",
 		"shops_burgers/burger_id/bigint/NO",
+		// signup_verifications は 000010（S16）で追加された。
+		"signup_verifications/id/uuid/NO",
+		"signup_verifications/email/text/NO",
+		"signup_verifications/username/text/NO",
+		"signup_verifications/password_digest/text/NO",
+		"signup_verifications/token_hash/text/NO",
+		"signup_verifications/expires_at/timestamp with time zone/NO",
+		"signup_verifications/last_sent_at/timestamp with time zone/NO",
+		"signup_verifications/created_at/timestamp with time zone/NO",
 		"users/id/bigint/NO",
 		"users/email/text/NO",
 		"users/username/text/NO",
@@ -178,6 +203,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"reviews/reviews_burger_id_fkey/f",
 		"burger_stats/burger_stats_burger_id_key/u",
 		"burger_stats/burger_stats_burger_id_fkey/f",
+		"signup_verifications/signup_verifications_pkey/p",
+		"signup_verifications/signup_verifications_token_hash_key/u",
 	}
 	for _, want := range wantConstraints {
 		if !constraints[want] {
@@ -196,6 +223,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"idx_shops_burgers_burger_id",
 		"idx_reviews_user_id",
 		"idx_reviews_burger_id",
+		"idx_signup_verifications_email_lower",
+		"idx_signup_verifications_expires_at",
 	}
 	for _, want := range wantIndexes {
 		if !indexes[want] {
