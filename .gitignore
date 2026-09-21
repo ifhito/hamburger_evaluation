@@ -23,3 +23,7 @@ backend/.env.*
 
 # Dev-mode review photos written into the bind-mounted repo tree (S10 disk storage)
 backend-go/storage/
+
+# Python のキャッシュ(フックのテストで作られる)
+__pycache__/
+*.pyc

@@ -3,11 +3,15 @@
 
 意図的に保守的にしてある。git の衛生と秘密パスは常に確認し、Go の API(backend-go/)
 または frontend のソースが変更されたときだけ、その領域の検査を走らせる。
+
+Go の検査は、ホストの Go が go.mod の版より古いときは、`golang:<版>` の使い捨て Docker で動かす
+(DB は使わないので、DB のテストは skip される。完全な検査は CI の Backend Go が行う)。
 """
 from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +27,30 @@ SECRET_MARKERS = (
 )
 FRONTEND_PREFIXES = ("frontend/src/", "frontend/package.json", "frontend/pnpm-lock.yaml", "frontend/vite.config", "frontend/tsconfig", "frontend/eslint")
 GO_PREFIXES = ("backend-go/",)
+# Go の検査(gofmt / vet / build / test)の意味があるファイル。`.env.example`・文書・compose の例などでは起動しない
+GO_CHECK_SUFFIXES = (".go", ".sql")
+GO_CHECK_NAMES = {"go.mod", "go.sum", "sqlc.yaml", "sqlc.yml"}
+GOFMT_CHECK = 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'
+GO_NATIVE_COMMANDS = (
+    ["bash", "-c", GOFMT_CHECK],
+    ["go", "vet", "./..."],
+    ["go", "build", "./..."],
+    ["go", "test", "./..."],
+)
+# Docker の中では 4 つの検査を 1 回の起動にまとめ、どれが失敗したかを出力に残す
+GO_DOCKER_SCRIPT = "\n".join(
+    [
+        "rc=0",
+        'unformatted="$(gofmt -l .)"',
+        '[ -z "$unformatted" ] || { echo "$unformatted"; echo "FAILED: gofmt"; rc=1; }',
+        'go vet ./... || { echo "FAILED: go vet"; rc=1; }',
+        'go build ./... || { echo "FAILED: go build"; rc=1; }',
+        'go test ./... || { echo "FAILED: go test"; rc=1; }',
+        "exit $rc",
+    ]
+)
+GO_CACHE_VOLUME = "he-sensor-gocache"
+STATUS_LINES_MAX = 30
 # クリーンアーキテクチャの内向き依存ルール: domain/usecase から外側への import を禁止
 GO_BOUNDARY_RULES = (
     ("backend-go/internal/domain/", ('"net/http"', "database/sql", "pgx", "/adapter/", "/usecase/", "/internal/photo")),
@@ -60,14 +88,94 @@ FRONTEND_BUILD_ESCALATION_PREFIXES = (
 )
 
 
-def run(cmd: list[str], cwd: Path = ROOT) -> int:
-    print(f"$ {' '.join(cmd)}  # cwd={cwd.relative_to(ROOT) if cwd != ROOT else '.'}")
+def run(cmd: list[str], cwd: Path = ROOT, label: str | None = None) -> int:
+    print(f"$ {label or ' '.join(cmd)}  # cwd={cwd.relative_to(ROOT) if cwd != ROOT else '.'}")
     result = subprocess.run(cmd, cwd=cwd, text=True)
     return result.returncode
 
 
 def capture(cmd: list[str], cwd: Path = ROOT) -> str:
     return subprocess.check_output(cmd, cwd=cwd, text=True, stderr=subprocess.STDOUT)
+
+
+def go_relevant(path: str) -> bool:
+    if not path.startswith(GO_PREFIXES):
+        return False
+    return Path(path).name in GO_CHECK_NAMES or path.endswith(GO_CHECK_SUFFIXES)
+
+
+def parse_go_version(text: str) -> tuple[int, int] | None:
+    """`go 1.27`(go.mod)や `go version go1.19 darwin/arm64` から (1, 27) のような版を取り出す。"""
+    match = re.search(r"(?:^|\s)go\s*(\d+)\.(\d+)", text)
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def host_go_satisfies(host: tuple[int, int] | None, required: tuple[int, int] | None) -> bool:
+    if required is None:
+        return True
+    return host is not None and host >= required
+
+
+def limit_lines(text: str, limit: int) -> str:
+    lines = text.splitlines()
+    if len(lines) <= limit:
+        return "\n".join(lines)
+    return "\n".join(lines[:limit] + [f"... ほか {len(lines) - limit} 行"])
+
+
+def print_git_status() -> bool:
+    # 未追跡のディレクトリは 1 行にまとめ、行数も切り詰める(本当の失敗が埋もれないように)
+    cmd = ["git", "status", "--short", "--branch", "--untracked-files=normal"]
+    print(f"$ {' '.join(cmd)}  # cwd=.")
+    try:
+        print(limit_lines(capture(cmd), STATUS_LINES_MAX))
+    except subprocess.CalledProcessError as exc:
+        print(exc.output)
+        return False
+    return True
+
+
+def docker_available() -> bool:
+    if not shutil.which("docker"):
+        return False
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=15).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def run_go_sensors(go_dir: Path) -> list[str]:
+    try:
+        required = parse_go_version((go_dir / "go.mod").read_text())
+    except OSError:
+        required = None
+    try:
+        host = parse_go_version(capture(["go", "version"]))
+    except (OSError, subprocess.CalledProcessError):
+        host = None
+
+    if host_go_satisfies(host, required):
+        return ["go sensor failed: " + " ".join(cmd) for cmd in GO_NATIVE_COMMANDS if run(cmd, go_dir) != 0]
+
+    need = f"{required[0]}.{required[1]}"
+    have = f"{host[0]}.{host[1]}" if host else "なし"
+    if not docker_available():
+        print(f"go sensors skipped: ホストの Go({have})が go.mod の版({need})より古く、Docker も使えない。完全な検査は CI の Backend Go が行う")
+        return []
+
+    image = f"golang:{need}"
+    print(f"go sensors: ホストの Go({have})が go.mod の版({need})より古いので、{image} の Docker で動かす。DB を使うテストは skip される(完全な検査は CI の Backend Go)")
+    # 名前つき volume は root の所有で作られるので、非 root で書けるようにしてから、キャッシュとして共有する
+    run(["docker", "run", "--rm", "-v", f"{GO_CACHE_VOLUME}:/cache", image, "chmod", "a+rwx", "/cache"])
+    cmd = [
+        "docker", "run", "--rm", "-u", f"{os.getuid()}:{os.getgid()}",
+        "-v", f"{go_dir}:/src", "-w", "/src", "-v", f"{GO_CACHE_VOLUME}:/cache",
+        "-e", "HOME=/tmp", "-e", "GOCACHE=/cache/build", "-e", "GOMODCACHE=/cache/mod", "-e", "GOFLAGS=-buildvcs=false",
+        image, "sh", "-c", GO_DOCKER_SCRIPT,
+    ]
+    if run(cmd, ROOT, label=f"docker run {image}: gofmt / go vet / go build / go test") != 0:
+        return [f"go sensor failed in Docker {image}(出力の FAILED: の行を参照)"]
+    return []
 
 
 def changed_paths() -> list[str]:
@@ -227,10 +335,12 @@ def go_query_repository_violations(paths: list[str]) -> list[str]:
 
 
 def main() -> int:
+    # 子プロセス(docker など)の出力と順番が入れ替わらないよう、1 行ずつ出す
+    sys.stdout.reconfigure(line_buffering=True)
     os.chdir(ROOT)
     failures: list[str] = []
 
-    if run(["git", "status", "--short", "--branch", "--untracked-files=all"]) != 0:
+    if not print_git_status():
         failures.append("git status failed")
 
     try:
@@ -301,28 +411,25 @@ def main() -> int:
         build_escalated = any(p.startswith(FRONTEND_BUILD_ESCALATION_PREFIXES) for p in paths)
         if build_escalated:
             print("frontend build escalation active: API client/Vite/TypeScript boundary changed")
-        for cmd in (
-            ["pnpm", "run", "type-check"],
-            ["pnpm", "run", "lint"],
-            ["pnpm", "run", "test"],
-            ["pnpm", "run", "build"],
-        ):
-            if run(cmd, frontend) != 0:
-                failures.append("frontend sensor failed: " + " ".join(cmd))
+        # 環境がそろっていないだけのときは、コードの誤りと区別して skip にする(完全な検査は CI の Frontend が行う)
+        if not shutil.which("pnpm") or not (frontend / "node_modules").is_dir():
+            print("frontend sensors skipped: pnpm または frontend/node_modules がない(`cd frontend && pnpm install` が必要)。完全な検査は CI の Frontend が行う")
+        else:
+            for cmd in (
+                ["pnpm", "run", "type-check"],
+                ["pnpm", "run", "lint"],
+                ["pnpm", "run", "test"],
+                ["pnpm", "run", "build"],
+            ):
+                if run(cmd, frontend) != 0:
+                    failures.append("frontend sensor failed: " + " ".join(cmd))
     else:
         print("frontend sensors skipped: no frontend source changes detected")
 
     go_dir = ROOT / "backend-go"
-    go_changed = any(p.startswith(GO_PREFIXES) for p in paths)
+    go_changed = any(go_relevant(p) for p in paths)
     if go_changed and go_dir.is_dir():
-        for cmd in (
-            ["bash", "-c", 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'],
-            ["go", "vet", "./..."],
-            ["go", "build", "./..."],
-            ["go", "test", "./..."],
-        ):
-            if run(cmd, go_dir) != 0:
-                failures.append("go sensor failed: " + " ".join(cmd))
+        failures.extend(run_go_sensors(go_dir))
     else:
         print("go sensors skipped: no backend-go source changes detected")
 

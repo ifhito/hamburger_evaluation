@@ -22,6 +22,13 @@ metadata:
 ビルドできないので、`golang:1.27` の Docker イメージで同じコマンドを動かす。
 Docker Compose のデータベースが必要なのはリポジトリの統合テストだけ。
 
+終了前のセンサー(`.claude/hooks/stop-sensors.py`)は、これを自動で行う: ホストの Go が
+`go.mod` の版より古いときは、`golang:<その版>` の使い捨て Docker で、gofmt・`go vet`・`go build`・
+`go test` を 1 回の起動で動かす(モジュールのキャッシュは名前つき volume `he-sensor-gocache`)。
+DB は使わないので、DB のテストは skip される。完全な検査は CI の Backend Go が行う。Go の検査は、
+`.go`・`.sql`・`go.mod`・`go.sum`・`sqlc.yaml` が変わったときだけ起動する(`.env.example` や文書では起動しない)。
+センサー自体のテストは `python3 -m unittest discover -s .claude/hooks`。
+
 ## チェック
 
 すべて `backend-go/` から実行するか、同梱スクリプトを使う:
