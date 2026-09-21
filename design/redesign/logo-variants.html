@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BurgerStack のロゴ案(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { width: 1440px; padding: 40px; }
+  .lead { margin-top: 8px; font-size: 14px; line-height: 1.7; color: var(--text-muted); max-width: 1100px; }
+  .v { margin-top: 48px; padding-top: 16px; border-top: 2px solid var(--text); }
+  .v h2 { display: flex; align-items: baseline; gap: 12px; }
+  .v h2 small { font-size: 14px; font-weight: 400; color: var(--text-muted); }
+  .hdr { display: flex; align-items: center; gap: 24px; height: 64px; margin: 16px 0; padding: 0 24px; border: 1px solid var(--border); border-radius: 8px; }
+  .hdr .logo { margin-right: auto; }
+  .hdr .t { font-size: 14px; color: var(--text-muted); }
+  .hdr .u { font-size: 14px; color: var(--text-muted); }
+  .hdr .lang-btn { min-width: 44px; height: 44px; border: 0; border-radius: 8px; font-size: 14px; font-weight: 500; }
+  .cap { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .cells { display: grid; grid-template-columns: 300px 250px 250px 240px 1fr; gap: 12px; }
+  .cell { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; }
+  .cell .box { display: flex; align-items: center; justify-content: center; gap: 24px; min-height: 96px; }
+  .fav { display: flex; align-items: flex-end; gap: 14px; }
+  .fav div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); }
+  .cr { font-size: 12px; line-height: 1.6; }
+  .cr b { font-weight: 700; }
+  .pc { font-size: 13px; line-height: 1.7; }
+  .pc b { font-weight: 700; }
+  .jp { display: flex; flex-direction: column; gap: 6px; }
+  .jp .h1 { font-size: 22px; font-weight: 700; line-height: 1.3; }
+  .jp p { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+  .jbar { display: flex; align-items: center; gap: 12px; height: 48px; border-bottom: 1px solid var(--border); }
+  .jbar .logo { margin-right: auto; }
+  .jbar span { font-size: 12px; color: var(--text-muted); }
+  .rec { margin-top: 48px; padding: 20px 24px; border: 2px solid var(--text); border-radius: 8px; font-size: 14px; line-height: 1.8; }
+  .rec b { font-weight: 700; }
+  /* 案 1: 文字だけ。いまの「Hamburger [Evaluation]」の札の作りを引き継ぐ(黄色は面だけ。文字は黒) */
+  .l1 { display: inline-flex; align-items: center; gap: .3em; font-weight: 700; letter-spacing: .02em; line-height: 1.5; white-space: nowrap; }
+  .l1 .pill { padding: 0 .5em; border-radius: .3em; background: var(--accent); color: var(--on-accent); font-weight: 500; }
+  /* 案 2: 記号(積み上がった 4 段)+ 文字 */
+  .l2 { display: inline-flex; align-items: center; gap: .4em; letter-spacing: .01em; line-height: 1.5; white-space: nowrap; }
+  .l2 b { font-weight: 700; }
+  .l2 i { font-style: normal; font-weight: 400; }
+  /* 案 3: 文字そのものが段になる。上のバンズ = Burger、チーズ、パティ = Stack、下のバンズ */
+  .l3 { display: inline-flex; flex-direction: column; font-weight: 700; line-height: 1; text-align: center; }
+  .l3 > div { border: .16em solid #111; }
+  .l3 .bun { padding: .3em .9em .25em; border-radius: 1.4em 1.4em .2em .2em; background: var(--c-bun); color: #111; }
+  .l3 .cheese { height: .42em; margin: -.16em .3em; border-radius: .2em; background: var(--c-cheese); position: relative; z-index: 1; }
+  .l3 .patty { padding: .32em .9em .28em; margin-top: -.16em; border-radius: .5em; background: var(--c-patty); color: #fff; }
+  .l3 .bunb { height: .55em; margin: -.16em .1em 0; border-radius: .1em .1em .8em .8em; background: var(--c-bun); }
+</style>
+</head>
+<body>
+  <h1>BurgerStack のロゴ案</h1>
+  <p class="lead">アプリの名前を「BurgerStack」(ハンバーガーが積み上がっていく感じ)にするための、ロゴの 3 案です。色は、これまでの白・黒・グレー・マスタード黄だけです(バーガーの部品の色は、記号にだけ使います)。書体は、いまの画面と同じ Noto Sans JP です。黄色は白い地では文字にも線にも使えないので、面だけに使い、その上の文字は黒にします。下の各案は、(a) ヘッダーに置いたところ、(b) 大きく、(c) 小さく、(d) 白黒にしたところ、(e) ファビコン、(f) 文字と面のコントラスト比(実測)、(g) 日本語の画面に置いたところ、の順に並べています。</p>
+  <div id="app"></div>
+  <div class="rec" id="rec"></div>
+
+<script src="rating-icons.js"></script>
+<script>
+  const C = Burger.COLOR, INK = '#111111';
+  const root = document.documentElement;
+  root.style.setProperty('--c-bun', C.bun); root.style.setProperty('--c-patty', C.patty); root.style.setProperty('--c-cheese', C.cheese);
+
+  // ---- ロゴの部品(高さ h[px] を渡すと、その大きさで描く) ----
+  const BUN_TOP = 'M 6 36 C 6 15 30 2 60 2 C 90 2 114 15 114 36 C 114 38 113 39 111 39 L 9 39 C 7 39 6 38 6 36 Z';
+  const BUN_BOTTOM = 'M 8 82 L 112 82 C 112 91 108 98 98 98 L 22 98 C 12 98 8 91 8 82 Z';
+  // 積み上がった 4 段の記号(上のバンズ・チーズ・パティ・下のバンズ)。細部は描かない(小さくても 4 段が見えるように)
+  const mark = (h, stroke, gray) => {
+    const sw = +(stroke / (h / 100)).toFixed(2), g = (c) => (gray ? Burger.grayOf(c) : c);
+    const p = (d, f) => `<path d="${d}" fill="${g(f)}" stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+    const r = (x, y, w, hh, rx, f) => `<rect x="${x}" y="${y}" width="${w}" height="${hh}" rx="${rx}" fill="${g(f)}" stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+    return `<svg viewBox="0 0 120 100" width="${h * 1.2}" height="${h}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${p(BUN_BOTTOM, C.bun)}${r(2, 55, 116, 25, 11, C.patty)}${r(5, 42, 110, 13, 5, C.cheese)}${p(BUN_TOP, C.bun)}</svg>`;
+  };
+  const L1 = (h) => `<span class="l1" style="font-size:${h * 0.625}px">Burger<span class="pill">Stack</span></span>`;
+  const L2 = (h) => `<span class="l2" style="font-size:${h * 0.625}px">${mark(h, h >= 28 ? 1.6 : 1.2)}<span><b>Burger</b><i>Stack</i></span></span>`;
+  const L3 = (h) => `<span class="l3" style="font-size:${h / 4.2}px"><div class="bun">Burger</div><div class="cheese"></div><div class="patty">Stack</div><div class="bunb"></div></span>`;
+
+  // ---- ファビコン(正方形。文字が入らない案は記号だけ) ----
+  const fav1 = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="30" height="30" rx="7" fill="${C.cheese}" stroke="${INK}" stroke-width="2"/><text x="16" y="23.5" text-anchor="middle" font-family="Noto Sans JP, sans-serif" font-weight="700" font-size="21" fill="${INK}">S</text></svg>`;
+  const fav2 = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0 10)">${mark(100, 0).replace(/<svg[^>]*>|<\/svg>/g, '').replace(/stroke-width="[^"]*"/g, 'stroke-width="7"')}</g></svg>`;
+  const fav3 = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><clipPath id="c${s}"><rect x="1" y="1" width="30" height="30" rx="8"/></clipPath><g clip-path="url(#c${s})"><rect width="32" height="32" fill="${C.bun}"/><rect y="11" width="32" height="4" fill="${C.cheese}"/><rect y="15" width="32" height="9" fill="${C.patty}"/><rect y="24" width="32" height="8" fill="${C.bun}"/></g><rect x="1" y="1" width="30" height="30" rx="8" fill="none" stroke="${INK}" stroke-width="2"/></svg>`;
+
+  // ---- コントラスト比(実測。WCAG の相対輝度) ----
+  const lum = (hex) => { const v = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return ((x + 0.05) / (y + 0.05)).toFixed(2) + ':1'; };
+  const crRow = (label, a, b, need) => `<div><b>${ratio(a, b)}</b> ${label}${need ? ` <span class="muted">(${need})</span>` : ''}</div>`;
+
+  const V = [
+    { no: 1, name: '文字だけ', note: 'Burger は黒、Stack は黄色の札(いまの「Hamburger [Evaluation]」の作りを引き継ぐ)', logo: L1, hHdr: 32, hBig: 50, fav: fav1, favNote: '黄色の四角に S(バーガーを思わせる形はない)',
+      cr: [crRow('「Stack」の黒い文字 / 黄色の札', '#111111', '#e9b824', 'AA は 4.5 以上'), crRow('「Burger」の黒い文字 / 白', '#111111', '#ffffff', '')],
+      pc: '<b>長所</b> いまの画面と同じ作りで、いちばん軽い(文字と面だけ。画像がいらない)。20px でも読める。実装も、Penpot への反映も、いちばん簡単。<br><b>弱点</b> 名前の「積み上がる」も、バーガーも、絵では伝わらない。ファビコンは「S」だけで、記号としては弱い。' },
+    { no: 2, name: '記号 + 文字', note: '積み上がった 4 段(バンズ・チーズ・パティ・バンズ)の記号を、文字の左に置く。Burger は太字、Stack は標準の太さ', logo: L2, hHdr: 32, hBig: 44, fav: fav2, favNote: '記号だけ(文字なし)',
+      cr: [crRow('黒い文字 / 白', '#111111', '#ffffff', 'AA は 4.5 以上'), crRow('黒い輪郭 / 白(記号の境界)', '#111111', '#ffffff', '3 以上'), crRow('バンズの色 / 白(輪郭で補う)', C.bun, '#ffffff', '3 未満'), crRow('チーズの色 / 白(輪郭で補う)', C.cheese, '#ffffff', '3 未満')],
+      pc: '<b>長所</b> 記号がバーガーの積み上がりを表し、評価の水位のバーガーと同じ絵の系統になる。記号だけでファビコンにできる(32px なら 4 段が見える)。文字は軽いまま。<br><b>弱点</b> 記号を SVG の画像として持つ必要がある。16px では 4 段がつぶれ気味。評価のバーガーと似ていて、満点の評価と見間違えるおそれが、少しある(4 段で、細部がないので、区別はできる)。' },
+    { no: 3, name: '文字が積み上がる', note: '「Burger」が上のバンズ、間にチーズ、「Stack」がパティ、下にバンズ。文字そのものが、バーガーの段になる', logo: L3, hHdr: 48, hBig: 110, fav: fav3, favNote: '4 段の色の帯(文字なし)',
+      cr: [crRow('「Burger」の黒い文字 / バンズの色', '#111111', C.bun, 'AA は 4.5 以上'), crRow('「Stack」の白い文字 / パティの色', '#ffffff', C.patty, 'AA は 4.5 以上'), crRow('黒い輪郭 / 白', '#111111', '#ffffff', '3 以上')],
+      pc: '<b>長所</b> 名前の意味(積み上がるバーガー)が、いちばんはっきり伝わる。1 つで完結する。<br><b>弱点</b> 2 段組なので、高さが要る。32px の高さだと文字が 8px 前後で読めず、ヘッダーには 48px が要る。小さい所(20px)では、まったく読めない。横並びの別版が、結局、要る(ロゴが 2 種類になる)。CSS の段の重ね方が凝っていて、いちばん重い。' },
+  ];
+
+  const hdr = (v, gray) => `<div class="hdr" ${gray ? 'style="filter:grayscale(1)"' : ''}><span class="logo">${v.logo(v.hHdr)}</span><span class="t">ショップ</span><span class="t">レビュー</span><span class="u">alice</span><span class="u">サインアウト</span><span class="lang-btn" style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center">JA</span></div>`;
+  document.getElementById('app').innerHTML = V.map((v) => `
+    <section class="v">
+      <h2>案 ${v.no} ${v.name} <small>${v.note}</small></h2>
+      <div class="cap">(a) ヘッダーに置いたところ(高さ ${v.hHdr}px${v.no === 3 ? '。他の案は 32px。この案は、32px だと読めないので、48px' : ''})</div>
+      ${hdr(v)}
+      <div class="cells">
+        <div class="cell"><div class="cap">(b) 大きく(案 1・2 は幅 約 240px。案 3 は、縦長なので、高さ 110px)</div><div class="box">${v.logo(v.hBig)}</div></div>
+        <div class="cell"><div class="cap">(c) 小さく(高さ 20px。読めるか)</div><div class="box">${v.logo(20)}</div><div class="cap">(d) 白黒にしたところ(高さ 32px)</div><div class="box" style="min-height:48px;filter:grayscale(1)">${v.logo(32)}</div></div>
+        <div class="cell"><div class="cap">(e) ファビコン(実寸 32px・16px と、4 倍の図)</div><div class="fav"><div>${v.fav(32)}32px</div><div>${v.fav(16)}16px</div><div>${v.fav(64)}4 倍</div></div><div class="cap">${v.favNote}</div></div>
+        <div class="cell"><div class="cap">(f) コントラスト比(実測)</div><div class="cr">${v.cr.join('')}</div></div>
+        <div class="cell"><div class="cap">(g) 日本語の画面に置いたところ</div><div class="jp"><div class="jbar"><span class="logo">${v.logo(v.no === 3 ? 40 : 28)}</span><span>ショップ</span><span>レビュー</span></div><div class="h1">ショップ</div><p>BurgerStack で、食べたバーガーを積み上げよう(見本の文)。</p></div></div>
+      </div>
+      <p class="pc" style="margin-top:12px">${v.pc}</p>
+    </section>`).join('');
+  document.getElementById('rec').innerHTML = '<b>私の推奨: 案 2(記号 + 文字)</b><br>記号が「積み上がるバーガー」を表し、評価の水位のバーガーと同じ絵の系統になるので、アプリ全体の見た目が揃います。記号だけでファビコンにでき、文字の部分は案 1 と同じく軽いままです。案 1 は最も安全で軽い代わりに、名前の意味が絵で伝わりません。案 3 は意味がいちばん伝わりますが、小さい所で読めず、横並びの別版も要るので、ロゴの管理が重くなります。<br>案 2 を選ぶ場合の弱点(16px の記号がつぶれ気味・評価のバーガーと似ている)は、記号の段を 4 段のまま太くする、評価のバーガーの近くではロゴを出さない、で下げられます。';
+</script>
+</body>
+</html>
