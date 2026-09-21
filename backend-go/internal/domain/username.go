@@ -1,9 +1,9 @@
 package domain
 
 // MaxUsernameChars はユーザー名の文字数の上限（Unicode のコードポイント数）である。
-// DB の CHECK 制約 users_username_max_length（マイグレーション 000009）と同じ値でなければならない。
-// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、新しい
-// マイグレーションの CHECK の両方を直す。
+// DB の CHECK 制約 users_username_max_length（000001_create_users）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxUsernameChars = 50
 
 // ValidateUsername は username の規則を検証し、違反の Rails 形式 full message を返す。

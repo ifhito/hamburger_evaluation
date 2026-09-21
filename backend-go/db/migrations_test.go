@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -345,62 +343,4 @@ func checkLimits(ctx context.Context, t *testing.T, conn *pgx.Conn) map[string]i
 		t.Fatalf("iterate constraints: %v", err)
 	}
 	return limits
-}
-
-// TestTextLimitMigrationRejectsOversizedRows は、上限を超える既存の行があるとき、
-// マイグレーション 000009 が、自動で切り詰めず、該当の行を報告して止まることを確かめる
-// （S21 AC7）。止まったときは、何も変わらない（制約が付かず、行もそのまま）。
-func TestTextLimitMigrationRejectsOversizedRows(t *testing.T) {
-	ctx := context.Background()
-	conn, _ := dbtest.NewEmpty(t)
-	ups, _ := dbtest.LoadMigrations(t)
-	var before, limit []string
-	for _, f := range ups {
-		if filepath.Base(f) < "000009" {
-			before = append(before, f)
-		} else if strings.HasPrefix(filepath.Base(f), "000009") {
-			limit = append(limit, f)
-		}
-	}
-	if len(limit) != 1 {
-		t.Fatalf("000009 の up ファイルが 1 つでない: %v", limit)
-	}
-	dbtest.Apply(ctx, t, conn, before)
-
-	var userID, burgerID, reviewID int64
-	if err := conn.QueryRow(ctx,
-		"INSERT INTO users (email, username, password_digest) VALUES ('old@example.com', 'old', 'digest') RETURNING id").Scan(&userID); err != nil {
-		t.Fatalf("insert user: %v", err)
-	}
-	if err := conn.QueryRow(ctx, "INSERT INTO burgers (name) VALUES ('old burger') RETURNING id").Scan(&burgerID); err != nil {
-		t.Fatalf("insert burger: %v", err)
-	}
-	if err := conn.QueryRow(ctx,
-		"INSERT INTO reviews (rating, comment, user_id, burger_id) VALUES (3, $1, $2, $3) RETURNING id",
-		strings.Repeat("x", domain.MaxCommentChars+1), userID, burgerID).Scan(&reviewID); err != nil {
-		t.Fatalf("insert oversized review: %v", err)
-	}
-
-	sql, err := os.ReadFile(limit[0])
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	_, err = conn.Exec(ctx, string(sql))
-	if err == nil {
-		t.Fatal("上限を超える既存の行があるのに、マイグレーションが成功した")
-	}
-	wantID := fmt.Sprintf("id=%d (%d chars)", reviewID, domain.MaxCommentChars+1)
-	if !strings.Contains(err.Error(), "reviews.comment") || !strings.Contains(err.Error(), wantID) {
-		t.Errorf("エラーが該当の列と行を報告していない（want reviews.comment と %q）: %v", wantID, err)
-	}
-	var stored int
-	if err := conn.QueryRow(ctx, "SELECT char_length(comment) FROM reviews WHERE id = $1", reviewID).Scan(&stored); err != nil {
-		t.Fatalf("read review: %v", err)
-	}
-	if stored != domain.MaxCommentChars+1 {
-		t.Errorf("行が切り詰められた: %d 文字", stored)
-	}
-	if got := checkLimits(ctx, t, conn); len(got) != 0 {
-		t.Errorf("止まったのに制約が付いている: %v", got)
-	}
 }

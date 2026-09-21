@@ -22,9 +22,9 @@ type Review struct {
 }
 
 // MaxCommentChars はレビューのコメントの文字数の上限（Unicode のコードポイント数）である。
-// DB の CHECK 制約 reviews_comment_max_length（マイグレーション 000009）と同じ値でなければならない。
-// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、新しい
-// マイグレーションの CHECK の両方を直す。
+// DB の CHECK 制約 reviews_comment_max_length（000005_create_reviews）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxCommentChars = 2000
 
 // ValidateReviewContent は、書き込み可能な review の属性に対して Rails の
@@ -48,9 +48,9 @@ func ValidateReviewContent(rating int, comment string) error {
 }
 
 // MaxBurgerNameChars はバーガー名の文字数の上限（Unicode のコードポイント数）である。
-// DB の CHECK 制約 burgers_name_max_length（マイグレーション 000009）と同じ値でなければならない。
-// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、新しい
-// マイグレーションの CHECK の両方を直す。
+// DB の CHECK 制約 burgers_name_max_length（000003_create_burgers）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxBurgerNameChars = 100
 
 // ValidateBurgerName は、burger_name による review 投稿の経路に対して Rails の

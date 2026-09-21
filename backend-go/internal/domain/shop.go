@@ -26,9 +26,9 @@ type Shop struct {
 }
 
 // MaxShopNameChars はショップ名の文字数の上限（Unicode のコードポイント数）である。
-// DB の CHECK 制約 shops_name_max_length（マイグレーション 000009）と同じ値でなければならない。
-// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、新しい
-// マイグレーションの CHECK の両方を直す。
+// DB の CHECK 制約 shops_name_max_length（000002_create_shops）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxShopNameChars = 100
 
 // ValidateShopName は、shop 名に対して Rails の presence validation を強制
@@ -45,9 +45,9 @@ func ValidateShopName(name string) error {
 }
 
 // MaxModerationNoteChars は管理者の却下メモの文字数の上限（Unicode のコードポイント数）である。
-// DB の CHECK 制約 shops_moderation_note_max_length（マイグレーション 000009）と同じ値でなければならない。
-// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、新しい
-// マイグレーションの CHECK の両方を直す。
+// DB の CHECK 制約 shops_moderation_note_max_length（000002_create_shops）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxModerationNoteChars = 500
 
 // ValidateModerationNote は、reject 時の任意の moderation note の上限を検証する。
