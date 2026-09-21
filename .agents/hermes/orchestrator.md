@@ -42,6 +42,15 @@ Procedure:
     - large + no P1/P2: `gh pr ready`, do NOT merge; report as
       ready-for-human-review with size numbers. Keep the worktree.
     - P1/P2 pending (any size): leave draft and stop.
+    - stacked PR (base = another PR's branch): never merge a child into its
+      parent's branch (commits end up off `main`; `Closes #<n>` does not
+      fire). Wait until the parent is on `main`, retarget the child
+      (`gh pr edit <n> --base main`), merge `main` into it if it conflicts,
+      re-verify, then apply the size gate.
+    - cleanup: before `git worktree remove`, check no running container
+      bind-mounts it (`docker inspect` → `Mounts`); if one does, keep it and
+      report. Tell the user to enable "Automatically delete head branches"
+      (user-owned setting; never change it yourself).
     If the ff push is refused, escalate instead of resolving.
 
 Escalate instead of deciding:
