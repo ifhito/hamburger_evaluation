@@ -6,11 +6,27 @@ import type { GoogleExchangeResponse, GoogleSignedInResponse } from "./types";
 // サインイン方法の名前(GET /meta の loginProviders に含まれる値)。表示の出し分けにだけ使う。
 export const GOOGLE_PROVIDER = "google";
 
-// GET /meta が、Google でのサインインを使えると返しているか(取得できていない間は false。値を推測しない)。
-// GET /meta は 1 時間キャッシュされうるので、loginProviders を足す前の応答が残っていて、この項目がないときも、
-// 落ちずに false にする。
-export function googleEnabled(meta: Pick<Meta, "loginProviders"> | undefined): boolean {
-  return meta?.loginProviders?.includes(GOOGLE_PROVIDER) ?? false;
+// 画面と同じオリジンの API か(API の根が、相対の path、または、画面と同じオリジンの絶対 URL)。交換と結び付けの cookie は、
+// 同じオリジンの /api の道筋でだけ往復するので、別のオリジンの API では、Google の手続きは、必ず失敗する。
+// 画面のオリジンが分からない環境(サーバー側の描画など)では、判断しない(true)。
+function isSameOriginApi(apiBaseUrl: string, pageOrigin: string | undefined): boolean {
+  if (pageOrigin === undefined) return true;
+  try {
+    return new URL(apiBaseUrl, pageOrigin).origin === pageOrigin;
+  } catch {
+    return false;
+  }
+}
+
+// GET /meta が、Google でのサインインを使えると返していて、API が画面と同じオリジンにあるか(取得できていない間は false。
+// 値を推測しない)。GET /meta は 1 時間キャッシュされうるので、loginProviders を足す前の応答が残っていて、この項目が
+// ないときも、落ちずに false にする。API が別のオリジンにあるときは、必ず失敗するので、ボタンを出さない。
+export function googleEnabled(
+  meta: Pick<Meta, "loginProviders"> | undefined,
+  apiBaseUrl: string = API_BASE_URL,
+  pageOrigin: string | undefined = globalThis.location?.origin,
+): boolean {
+  return (meta?.loginProviders?.includes(GOOGLE_PROVIDER) ?? false) && isSameOriginApi(apiBaseUrl, pageOrigin);
 }
 
 // Google でのサインインの手続きを始める URL。ブラウザが、この URL へそのまま移動する(API が、Google の

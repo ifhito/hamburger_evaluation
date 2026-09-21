@@ -61,3 +61,24 @@ describe("googleEnabled(GET /meta が Google を使えると返しているか)"
     expect(googleEnabled({ loginProviders: ["other", GOOGLE_PROVIDER] })).toBe(true);
   });
 });
+
+describe("googleEnabled(API が、画面と別のオリジンにあるとき)", () => {
+  const google = { loginProviders: ["google"] };
+
+  it("API の根が、相対の path(既定の /api)か、画面と同じオリジンの絶対 URL なら、true", () => {
+    expect(googleEnabled(google, "/api", "http://localhost:5173")).toBe(true);
+    expect(googleEnabled(google, "http://localhost:5173/api", "http://localhost:5173")).toBe(true);
+    expect(googleEnabled(google, "/", "https://app.example.com")).toBe(true);
+  });
+
+  it("API の根が、画面と別のオリジンの絶対 URL なら、false(交換と結び付けの cookie が届かず、必ず失敗するので、ボタンを出さない)", () => {
+    expect(googleEnabled(google, "https://api.example.com/api", "https://app.example.com")).toBe(false);
+    expect(googleEnabled(google, "//api.example.com/api", "https://app.example.com")).toBe(false);
+    expect(googleEnabled(google, "http://localhost:8080", "http://localhost:5173")).toBe(false);
+  });
+
+  it("画面のオリジンが分からない環境(サーバー側の描画など)では、判断せず、meta の内容だけで決める", () => {
+    expect(googleEnabled(google, "https://api.example.com/api", undefined)).toBe(true);
+    expect(googleEnabled({ loginProviders: [] }, "https://api.example.com/api", undefined)).toBe(false);
+  });
+});
