@@ -34,9 +34,9 @@ func (r *recordingOAuth) HandleRevoke(w http.ResponseWriter, req *http.Request) 
 func TestOAuthRoutes(t *testing.T) {
 	newRouter := func(oauth handler.OAuthEndpoints) http.Handler {
 		if oauth == nil {
-			return handler.NewRouter(okPinger, nil, unusedSignups(), nil, nil, nil, nil, nil)
+			return handler.NewRouter(okPinger, nil, unusedSignups(), nil, nil, nil, nil, nil, nil)
 		}
-		return handler.NewRouter(okPinger, nil, unusedSignups(), nil, nil, nil, nil, &handler.OAuth{Endpoints: oauth})
+		return handler.NewRouter(okPinger, nil, unusedSignups(), nil, nil, nil, nil, &handler.OAuth{Endpoints: oauth}, nil)
 	}
 	do := func(h http.Handler, method, path string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()

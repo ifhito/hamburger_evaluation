@@ -21,11 +21,12 @@ func TestRenderSignupConfirmation(t *testing.T) {
 		ValidFor:       domain.SignupTokenTTL,
 		IdempotencyKey: "k",
 	})
-	if msg.To != "a@example.com" || msg.Subject != "Confirm your email address" {
+	if msg.To != "a@example.com" || msg.Subject != "Confirm your email address for BurgerStack" {
 		t.Errorf("宛先・件名 = %q / %q", msg.To, msg.Subject)
 	}
 	for _, want := range []string{
 		"https://app.example.com/signup/confirm?token=abc123",
+		"finish creating your BurgerStack account",
 		"This link expires in 24 hours.",
 		"If you didn't sign up, you can safely ignore this email.",
 	} {
@@ -40,11 +41,14 @@ func TestRenderSignupConfirmation(t *testing.T) {
 
 func TestRenderAlreadyRegistered(t *testing.T) {
 	msg := renderAlreadyRegistered(usecase.AlreadyRegisteredNotice{To: "a@example.com", SignInURL: "https://app.example.com/signin", IdempotencyKey: "k"})
-	if msg.To != "a@example.com" || msg.Subject != "You already have an account" {
+	if msg.To != "a@example.com" || msg.Subject != "You already have a BurgerStack account" {
 		t.Errorf("宛先・件名 = %q / %q", msg.To, msg.Subject)
 	}
 	if !strings.Contains(msg.Body, "https://app.example.com/signin") || !strings.Contains(msg.Body, "an account already exists") {
 		t.Errorf("本文にログイン画面へのリンクと登録済みの説明がない:\n%s", msg.Body)
+	}
+	if !strings.Contains(msg.Body, "BurgerStack") {
+		t.Errorf("本文にサービスの名前(BurgerStack)がない:\n%s", msg.Body)
 	}
 	if lower := strings.ToLower(msg.Body); strings.Contains(lower, "token") || strings.Contains(lower, "confirm") {
 		t.Errorf("通知メールに確認トークン・確認リンクの言葉が含まれている:\n%s", msg.Body)

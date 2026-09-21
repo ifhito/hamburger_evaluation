@@ -2,7 +2,7 @@
 name: pr-hygiene
 description: hamburger_evaluation でコミットの準備、PR の更新、差分レビュー、Claude/Codex/Hermes の作業調整をするときに使う。
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

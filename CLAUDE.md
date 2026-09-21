@@ -4,7 +4,7 @@
 
 ## プロジェクト概要
 
-Hamburger Evaluation は、ハンバーガーのレビューと評価を行う Web アプリケーションです。
+BurgerStack は、ハンバーガーのレビューと評価を行う Web アプリケーションです。
 
 ユーザーは次のことができます:
 
@@ -46,6 +46,7 @@ hamburger_evaluation/
 - PostgreSQL 16 (pgx)
 - sqlc (SQL からの型安全なコード生成)
 - JWT 認証
+- MCP(リモートのサーバー。公式の `github.com/modelcontextprotocol/go-sdk`。Go 1.25 以上が必要)
 
 ### アーキテクチャ
 
@@ -196,7 +197,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 ### OAuth の認可サーバー
 
-AI アプリ(MCP のクライアントなど)が、利用者のログインと許可だけでこのアプリにつなぐための、OAuth 2.1 の認可サーバー(`internal/adapter/oauthserver`。認可ライブラリは `github.com/ory/fosite`)。`OAUTH_ISSUER` を設定したときだけ有効で、設定しなければ、下の窓口は登録されない(404)。リモートの MCP(`/mcp`)は別の story で、ここは、そこが使う「許可の証(トークン)を発行し、確かめる」土台である。許可を尋ねる画面と、許可したアプリの一覧・取り消しは、frontend にある。
+AI アプリ(MCP のクライアントなど)が、利用者のログインと許可だけでこのアプリにつなぐための、OAuth 2.1 の認可サーバー(`internal/adapter/oauthserver`。認可ライブラリは `github.com/ory/fosite`)。`OAUTH_ISSUER` を設定したときだけ有効で、設定しなければ、下の窓口は登録されない(404)。リモートの MCP(`/mcp`。下の「リモートの MCP サーバー」)は、ここが発行したトークンで認証する。許可を尋ねる画面と、許可したアプリの一覧・取り消しは、frontend にある。
 
 **流れ**(認可コード + PKCE)
 
@@ -236,8 +237,9 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 | `OAUTH_RESOURCE_URL` | 任意 | トークンの宛先。既定は `<OAUTH_ISSUER>/mcp` |
 | `OAUTH_CONSENT_URL` | 任意 | 許可を尋ねる画面の URL。既定は `<APP_BASE_URL>/oauth/authorize` |
 | `OAUTH_STATIC_CLIENTS` | 任意 | 固定で登録するアプリ。JSON の配列 `[{"id":"…","name":"…","redirect_uris":["…"]}]` |
+| `MCP_ALLOWED_ORIGINS` | 任意 | リモートの MCP(`/mcp`)が受け付ける Origin(ブラウザが付ける要求元)。カンマ区切りの `scheme://host[:port]`。既定は `OAUTH_ISSUER` の Origin だけ(設定すると置き換える)。ワイルドカードと `null` は起動時に拒否する。Origin のない要求(ブラウザ以外)は、この設定に関係なく通る |
 
-**主なクライアントとの相性**(公式ドキュメントで確認した内容。実機での確認は、`/mcp` ができてから行う)
+**主なクライアントとの相性**(公式ドキュメントで確認した内容。Claude Code は、`/mcp` に、トークンつきでつなぐところまで実機で確認した(下の「リモートの MCP サーバー」)。ブラウザで許可する流れ(未ログイン → ログイン → 許可の画面 → トークン交換 → `/mcp`)は、自作のクライアントと実際のブラウザで確認した。Claude Code 自身の OAuth の実行は、非対話(`-p`)ではできず、対話画面での確認は、まだ)
 
 - Cursor: 固定のクライアント ID を設定する方式(動的登録・CIMD は使わない)。戻り先は `http://localhost:8787/callback` と `https://www.cursor.com/agents/mcp/oauth/callback` → `OAUTH_STATIC_CLIENTS` で足りる。
 - Claude Code: 既定は動的登録(DCR)で、認可サーバーが CIMD に対応していれば CIMD も使う。戻り先は `http://localhost:<ランダムなポート>/callback`。`--client-id` と `--callback-port` で固定すれば、固定で登録したアプリ(戻り先は `http://localhost:<そのポート>/callback`)でつなげる。
@@ -245,6 +247,26 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - **動的登録(DCR。`POST /oauth/register`)は未対応**。どのクライアントにも、固定の登録か CIMD の道があること、誰でも登録できる窓口は表を増やし続ける悪用の余地があること、が理由。実機で必要と分かったら、別の PR で足す。
 
 **制限**: アプリの説明を取りに行く回数の制限(レート制限)は、まだない(SSRF の対策と、取得結果のキャッシュだけ)。
+
+### リモートの MCP サーバー(`/mcp`)
+
+AI アプリ(Claude Code など)が、このアプリのショップ・レビューを調べ、許可されたときだけ、利用者の名前でレビューの投稿・編集・削除とショップの申請をするための、MCP(Model Context Protocol。AI が外部のツールを使う標準の決まり)のサーバーである。backend-go の API と**同じプロセス**に入っていて(`internal/adapter/handler/mcp*.go`)、OAuth の認可サーバー(上の節)を有効にしたとき(`OAUTH_ISSUER`)だけ登録される。SDK は公式の `github.com/modelcontextprotocol/go-sdk`(Go 1.25 以上が必要)。
+
+- **認証**: `POST /mcp` の `Authorization: Bearer <アクセストークン>`。トークンの確認は `usecase.OAuthAccessTokens.Authenticate`(宛先 → 持ち主が有効か → 範囲の順。判断は usecase と domain にあり、handler は結果を HTTP に写すだけ)。トークンは、宛先が `OAUTH_RESOURCE_URL`(既定 `<OAUTH_ISSUER>/mcp`)のものだけを受け付け、**受け取ったトークンを、別のサーバーや API に渡さない**(ツールは usecase を直接呼ぶ)。トークンを URL の query に入れない。
+  - トークンがない・無効(存在しない・期限切れ・取り消し済み・宛先違い・持ち主が退会済み) → `401` と `WWW-Authenticate: Bearer resource_metadata="…"`(トークンがあって無効なときは `error="invalid_token"` も付く)。
+  - 範囲が足りない → `403` と `WWW-Authenticate: Bearer error="insufficient_scope", scope="hamburger:write", …`(クライアントは、範囲を広げる許可を求め直せる)。
+  - 保護されたリソースの情報(RFC 9728)は、トークンなしで `GET /.well-known/oauth-protected-resource`(と、リソースの path を足した `/.well-known/oauth-protected-resource/mcp`)。宛先・認可サーバーの場所・使える範囲を返す。
+- **Origin の検証**(DNS の付け替え攻撃への対策): MCP の仕様は、Streamable HTTP のサーバーに、すべての接続で `Origin` を検証すること、不正なら `403` を返すことを求めている(2025-06-18 は MUST。最新の 2026-07-28 は「Origin が存在して不正なら 403」まで明記)。`POST /mcp` は、**認証より前**に検証する(トークンの確認にも、本文の読み取りにも進ませない)。`Origin` がなければ通す(Claude Code などブラウザ以外のクライアント)。あれば、`MCP_ALLOWED_ORIGINS` の一覧と、scheme・host・port の**完全一致**で比べる(`domain.NormalizeOrigin`。scheme と host の大文字小文字は区別せず、既定のポートは省いて比べる。部分一致はしない)。一覧にない・`null`・空・複数・path や末尾のスラッシュを持つ不正な形は、理由を返さず、固定の本文(`{"error":"Forbidden"}`)で `403`。CORS のヘッダーは返さない(別の Origin のブラウザから直接使うクライアントには、対応しない。事前確認(preflight)は承認されないので、ブラウザは本要求を送らない)。
+- **範囲はツールごと**: 読み取りのツール(`get_meta`・`list_shops`・`get_shop`・`list_reviews`・`get_review`・`get_user`)は `hamburger:read`、書き込みのツール(`create_review`・`update_review`・`delete_review`・`submit_shop`)は `hamburger:write`。対応表は `mcpToolScopes` の 1 か所で、入口(本文から読み取った範囲の確認。範囲を広げる許可を求め直せる 403 を返すため)と、ツールを実行する直前の確認(`guarded`。SDK が本文を別の読み方で解釈しても、書き込みが通らないようにする二重の防御)の両方が使う。ツールを足すときは、この表に足す(足し忘れると、テストが落ちる)。初期化・ツールの一覧は、範囲を要求しない。
+- **ツールの実体**: 既存の usecase を呼ぶだけ。権限(投稿者本人だけが編集・削除、審査待ちのショップの見え方)は usecase と domain にあり、ここに複製しない。返す JSON は、REST の API と同じ形(`newReviewResponse` などを共有)。エラーの文言も REST と同じで、知らないエラーは、詳細をログにだけ残し、利用者には `internal server error` だけを返す。
+- **プロンプトインジェクションへの注意**: レビューの本文・店名・自己紹介は、他の利用者が書いた文字列である。ツールの説明と、接続時の説明(`instructions`)で、内容として扱い、その中の命令には従わないよう伝えている。書き込みのツールの説明には、実際にデータを変えること、実行前に利用者へ確認することを書いている。防げる保証はない(AI の判断による)ので、書き込みは、必要なときだけ許可する。
+- **結果の大きさ**: 1 回のツールの結果は 64 KiB まで。超える一覧は、途中で切らずに、`per_page` を小さくするよう伝えるエラーにする。
+- **動かし方**: 状態を持たない(セッションを作らない)・応答は JSON。要求ごとに、認証した利用者のためのサーバーを組み立てる。SDK は、`localhost` で受けた要求の `Host` が `localhost` でないと `403` にする(DNS の付け替えの攻撃への対策)。同じ機械の逆プロキシの後ろに置くときは、この既定が邪魔になりうる(その場合は `DisableLocalhostProtection` を検討する。本番の構成は未決)。
+- **つなぎ方**(ローカル。Claude Code の例):
+  1. API を、OAuth を有効にして起動する(`export OAUTH_ISSUER=http://localhost:8080 OAUTH_TOKEN_SECRET=$(openssl rand -hex 32)`)。Claude Code を固定のアプリとして登録する(`OAUTH_STATIC_CLIENTS='[{"id":"claude-code","name":"Claude Code","redirect_uris":["http://localhost:8788/callback"]}]'`)。
+  2. `claude mcp add --transport http hamburger http://localhost:8080/mcp --client-id claude-code --callback-port 8788`
+  3. Claude Code の `/mcp` から認可する。ブラウザで、ログインして、許可を選ぶ(許可の画面は frontend の `/oauth/authorize`)。
+- **本番の公開**: 公開の HTTPS の URL・ドメインは未決(この story の外)。`OAUTH_ISSUER` / `OAUTH_RESOURCE_URL` を、その公開の URL に合わせる。
 
 ### エンドポイント
 
@@ -258,6 +280,10 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - `POST /oauth/revoke` — トークンの取り消し(RFC 7009)
 - `GET /oauth/authorize/request` / `POST /oauth/authorize/decision` — 許可の画面が使う API(要認証)
 - `GET /oauth/grants` / `DELETE /oauth/grants/:id` — 許可したアプリの一覧と取り消し(要認証)
+
+**リモートの MCP サーバー**(`OAUTH_ISSUER` を設定したときだけ。詳細は「リモートの MCP サーバー」)
+- `POST /mcp` — MCP(Streamable HTTP。`Authorization: Bearer <アクセストークン>` が必須。範囲はツールごと)
+- `GET /.well-known/oauth-protected-resource`(と `…/mcp`) — 保護されたリソースの情報(RFC 9728)
 
 **認証**
 - `POST /signup` — アカウントの作成を申し込み、確認メールを送る。**登録済みの email でも未登録の email でも、同じ 202 `{"message":"Confirmation email sent"}` を返す**(アカウント列挙の防止)。アカウントは、確認メールのリンクを開いて `POST /signup/confirm` を呼んで初めて作られる。検証は登録の有無に依存しないものだけで、違反は 422(username、email、password。email は形式(`net/mail` で解析でき、表示名などを含まないアドレスだけであること)を検証し、不正なら 422 `Email is invalid`。password は 8〜72 バイトで、半角英字・数字・記号をそれぞれ 1 文字以上含む。`PUT /users/:id` のパスワード変更にも同じ規則を適用する。password_confirmation は任意で、送った場合は password と不一致なら 422。規則の判定は backend の domain だけが持ち、frontend は説明文の表示と、サーバーの 422 メッセージの表示だけを行う)。「登録済み」を示すエラーは返さない

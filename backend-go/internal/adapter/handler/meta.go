@@ -52,7 +52,12 @@ type metaResponse struct {
 // ルールを持つのは domain だけで、frontend は定数を複製しない。
 func handleMeta(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", metaCacheControl)
-	writeJSON(w, http.StatusOK, metaResponse{
+	writeJSON(w, http.StatusOK, newMetaResponse())
+}
+
+// newMetaResponse は、GET /meta と MCP の get_meta が共有する、規則の値の JSON 形式である。
+func newMetaResponse() metaResponse {
+	return metaResponse{
 		Rating: ratingRangeResponse{Min: domain.MinRating, Max: domain.MaxRating},
 		Photo:  photoLimitsResponse{MaxEdge: domain.MaxPhotoEdge, MaxBytes: domain.MaxPhotoBytes},
 		Text: textLimitsResponse{
@@ -64,5 +69,5 @@ func handleMeta(w http.ResponseWriter, r *http.Request) {
 			ModerationNoteMaxChars: domain.MaxModerationNoteChars,
 		},
 		Password: passwordLimitsResponse{MinBytes: domain.MinPasswordBytes, MaxBytes: domain.MaxPasswordBytes},
-	})
+	}
 }
