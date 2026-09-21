@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAdminShops, useShopModeration } from "../../hooks/useShopMutations";
 import type { ShopStatus } from "../../api/types";
+import { ApiError } from "../../../../api/client/buildApiClient";
 import { Button } from "../../../../components/Button";
+import { ErrorMessage } from "../../../../components/ErrorMessage";
 import { Input } from "../../../../components/Input";
 import { Layout } from "../../../../components/Layout";
 import styles from "./adminShops.module.css";
@@ -25,6 +27,8 @@ export default function AdminShopListPage() {
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  // 却下の失敗(例: note が長すぎる 422)は、サーバーのメッセージをそのまま表示する
+  const [rejectError, setRejectError] = useState<string | string[] | null>(null);
 
   const handleApprove = async (id: number) => {
     setBusyId(id);
@@ -37,10 +41,13 @@ export default function AdminShopListPage() {
 
   const handleReject = async (id: number) => {
     setBusyId(id);
+    setRejectError(null);
     try {
       await reject(id, note);
       setRejectingId(null);
       setNote("");
+    } catch (e) {
+      setRejectError(e instanceof ApiError ? e.messages : t("shops.admin.rejectError"));
     } finally {
       setBusyId(null);
     }
@@ -101,6 +108,7 @@ export default function AdminShopListPage() {
                     onClick={() => {
                       setRejectingId(shop.id);
                       setNote("");
+                      setRejectError(null);
                     }}
                   >
                     {t("shops.admin.reject")}
@@ -114,6 +122,7 @@ export default function AdminShopListPage() {
               </div>
               {rejectingId === shop.id && (
                 <div className={styles.rejectBox}>
+                  {rejectError && <ErrorMessage message={rejectError} />}
                   <Input
                     id={`note-${shop.id}`}
                     label={t("shops.admin.noteLabel")}
@@ -133,7 +142,10 @@ export default function AdminShopListPage() {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => setRejectingId(null)}
+                    onClick={() => {
+                      setRejectingId(null);
+                      setRejectError(null);
+                    }}
                   >
                     {t("shops.admin.cancel")}
                   </Button>

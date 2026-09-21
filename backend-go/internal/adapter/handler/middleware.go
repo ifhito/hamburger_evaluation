@@ -15,17 +15,21 @@ import (
 // （resource guardrail）。
 const maxRequestBodyBytes int64 = 1 << 20
 
-// maxReviewRequestBodyBytes は review の投稿 body を 6 MiB に制限する：
-// 5 MiB の写真（S10）に加え、フィールドと multipart のフレーミングの分の
+// maxReviewRequestBodyBytes は review の投稿 body（multipart のみ）を 6 MiB に
+// 制限する：5 MiB の写真（S10）に加え、フィールドと multipart のフレーミングの分の
 // 余裕がある。写真自体は引き続き独自の 5 MiB の上限で検査され、422 を返す
 // のはそちらである。この cap は暴走した body を 413 で止めるだけである。
 const maxReviewRequestBodyBytes int64 = 6 << 20
 
 // bodyLimit は request の body の上限を返す：より大きな上限を得るのは、
-// review の書き込み endpoint（multipart の写真を含みうる、S10）だけである。
+// review の書き込み endpoint（POST /reviews、PUT /reviews/{id}）に対する
+// multipart/form-data の request（写真を含みうる、S10）だけである。JSON を含む
+// それ以外の Content-Type は、review の書き込みでも 1 MiB のままである
+// （S21。コメントの上限が 2,000 文字なので、JSON に 6 MiB は要らない）。
 func bodyLimit(r *http.Request) int64 {
-	if (r.Method == http.MethodPost && r.URL.Path == "/reviews") ||
-		(r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/reviews/")) {
+	isReviewWrite := (r.Method == http.MethodPost && r.URL.Path == "/reviews") ||
+		(r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/reviews/"))
+	if isReviewWrite && isMultipart(r) {
 		return maxReviewRequestBodyBytes
 	}
 	return maxRequestBodyBytes
