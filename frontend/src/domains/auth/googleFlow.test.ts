@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Meta } from "../../api/meta";
-import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl, isGoogleSignIn, landingPath, signinStateFor } from "./googleFlow";
+import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl, isGoogleSignIn } from "./googleFlow";
 import type { GoogleExchangeResponse } from "./types";
 
 describe("googleStartUrl(Google でのサインインを始める URL)", () => {
@@ -42,13 +42,6 @@ describe("交換の結果の扱い", () => {
     expect(isGoogleSignIn(signedIn)).toBe(true);
     expect(isGoogleSignIn(linked)).toBe(false);
   });
-
-  it("戻り先は、アプリの中のパスならそこへ、空や外部を指すときは既定の画面へ", () => {
-    expect(landingPath("/shops", "/reviews")).toBe("/shops");
-    expect(landingPath("", "/reviews")).toBe("/reviews");
-    expect(landingPath("https://evil.example", "/reviews")).toBe("/reviews");
-    expect(landingPath("//evil.example", "/reviews")).toBe("/reviews");
-  });
 });
 
 describe("googleEnabled(GET /meta が Google を使えると返しているか)", () => {
@@ -66,17 +59,5 @@ describe("googleEnabled(GET /meta が Google を使えると返しているか)"
   it("google が含まれているときだけ true", () => {
     expect(googleEnabled({ loginProviders: [GOOGLE_PROVIDER] })).toBe(true);
     expect(googleEnabled({ loginProviders: ["other", GOOGLE_PROVIDER] })).toBe(true);
-  });
-});
-
-describe("signinStateFor(失敗の応答が返した戻り先を、サインイン画面へ渡す state にする)", () => {
-  it("アプリの中のパスは、from として渡す", () => {
-    expect(signinStateFor("/oauth/authorize?client_id=app-1&state=xyz")).toEqual({ from: "/oauth/authorize?client_id=app-1&state=xyz" });
-  });
-
-  it("空・アプリの外・不正な形は、渡さない(state なし)", () => {
-    for (const bad of ["", "https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)"]) {
-      expect(signinStateFor(bad), bad).toBeUndefined();
-    }
   });
 });

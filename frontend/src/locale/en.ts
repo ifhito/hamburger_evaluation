@@ -68,6 +68,7 @@ const en = {
         loading: "Signing you in\u2026",
         backToSignin: "Back to sign in",
         backToProfile: "Back to your profile",
+        retry: "Try again",
       },
       profile: {
         heading: "Google",

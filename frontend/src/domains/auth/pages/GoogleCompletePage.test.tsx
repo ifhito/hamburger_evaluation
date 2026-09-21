@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { StrictMode } from "react";
+import { StrictMode, act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserRouter, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Provider, createStore } from "jotai";
@@ -250,5 +250,134 @@ describe("サインイン画面の「Sign in with Google」(ログインが必�
     expect(await linkHref("/signin")).toBe("/api/auth/google/start");
     await cleanup();
     expect(await linkHref({ pathname: "/signin", state: { from: "https://evil.example/x" } })).toBe("/api/auth/google/start");
+  });
+});
+
+// 交換の結果を、テストの好きな時点で決める(遅れて返す通信の代役)。
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("交換が一時的に失敗したとき(コードは、backend が消費していないので、同じコードで再試行できる)", () => {
+  const showFromMemory = (entry = "/auth/google/complete?code=one-time-code") =>
+    mount(
+      <MemoryRouter initialEntries={[entry]}>
+        <Shell>{routes}</Shell>
+      </MemoryRouter>,
+    );
+
+  it("サーバーの障害(500)・通信の失敗は、「Try again」を出し、押すと、同じコードでもう一度交換して、成功すればサインインする", async () => {
+    for (const failure of [new ApiError(["internal server error"], 500), new Error("network down")]) {
+      exchangeGoogleCode.mockReset();
+      exchangeGoogleCode.mockRejectedValueOnce(failure).mockResolvedValueOnce(signedIn("/shops"));
+      const page = await showFromMemory();
+      await eventually(() => expect(byText(page, "button", "Try again")).toBeDefined());
+
+      await click(need(byText(page, "button", "Try again"), "Try again"));
+
+      await eventually(() => expect(probeOf(page)).toBe("/shops|carol"));
+      expect(exchangeGoogleCode).toHaveBeenCalledTimes(2);
+      expect(exchangeGoogleCode.mock.calls.map((c) => c[0])).toEqual(["one-time-code", "one-time-code"]);
+      await cleanup();
+      localStorage.clear();
+    }
+  });
+
+  it("再試行も失敗したときは、また「Try again」が出る(何度でもやり直せる)", async () => {
+    exchangeGoogleCode.mockRejectedValue(new ApiError(["internal server error"], 500));
+    const page = await showFromMemory();
+    await eventually(() => expect(byText(page, "button", "Try again")).toBeDefined());
+
+    await click(need(byText(page, "button", "Try again"), "Try again"));
+
+    await eventually(() => expect(exchangeGoogleCode).toHaveBeenCalledTimes(2));
+    await eventually(() => expect(byText(page, "button", "Try again")).toBeDefined());
+  });
+
+  it("決まった失敗(409・400。コードは使い切られた)には、「Try again」を出さない", async () => {
+    for (const status of [409, 400]) {
+      exchangeGoogleCode.mockReset();
+      exchangeGoogleCode.mockRejectedValue(new ApiError([CONFLICT], status));
+      const page = await showFromMemory();
+      await eventually(() => expect(page.textContent).toContain(CONFLICT));
+      expect(byText(page, "button", "Try again"), String(status)).toBeUndefined();
+      await cleanup();
+    }
+  });
+});
+
+describe("コードのない画面(URL から消したあとの、戻る操作など)", () => {
+  it("コードがないときは、交換の要求を送らず、失敗の案内とサインインへの導線を出す", async () => {
+    const page = await mount(
+      <MemoryRouter initialEntries={["/auth/google/complete"]}>
+        <Shell>{routes}</Shell>
+      </MemoryRouter>,
+    );
+
+    await eventually(() => expect(page.textContent).toContain("Google sign-in failed. Please try again."));
+    expect(exchangeGoogleCode).not.toHaveBeenCalled();
+    expect(byText(page, "a", "Back to sign in")).toBeDefined();
+    expect(byText(page, "button", "Try again")).toBeUndefined();
+  });
+
+  it("コードを URL から消すのは、router を通して行う(履歴の書き換えは、router の位置と食い違わない)", async () => {
+    exchangeGoogleCode.mockReturnValue(new Promise(() => undefined));
+    const page = await mount(
+      <MemoryRouter initialEntries={["/auth/google/complete?code=one-time-code"]}>
+        <Shell>
+          <Routes>
+            <Route path="/auth/google/complete" element={<><GoogleCompletePage /><Probe /></>} />
+          </Routes>
+        </Shell>
+      </MemoryRouter>,
+    );
+
+    await eventually(() => expect(exchangeGoogleCode).toHaveBeenCalledWith("one-time-code"));
+    expect(probeOf(page)).toBe("/auth/google/complete|-"); // router の位置から、query が消えている
+  });
+});
+
+describe("画面を離れたあと・ログインの状態の復元中の、交換の結果", () => {
+  it("「Signing you in…」の間に別の画面へ移ったら、あとで成功しても、勝手に移動させない(サインインは反映する)", async () => {
+    const pending = deferred<GoogleExchangeResponse>();
+    exchangeGoogleCode.mockReturnValue(pending.promise);
+    const page = await mount(
+      <MemoryRouter initialEntries={["/auth/google/complete?code=one-time-code"]}>
+        <Shell>{routes}</Shell>
+      </MemoryRouter>,
+    );
+    await eventually(() => expect(exchangeGoogleCode).toHaveBeenCalledTimes(1));
+    await click(need(byText(page, "a", "Shops"), "Shops")); // ヘッダーのリンクで、別の画面へ
+
+    await act(async () => pending.resolve(signedIn("/reviews")));
+
+    await eventually(() => expect(localStorage.getItem("token")).toBe("jwt-from-google"));
+    expect(probeOf(page)).toBe("/shops|carol"); // /reviews へ移動させられていない。サインインは反映されている
+  });
+
+  it("ログイン中の利用者の手続きの失敗は、ログインの状態を復元し終えるまで、リンクを出さず、復元できたら、プロフィールへ戻るリンクを出す(サインインへの誤った導線を出さない)", async () => {
+    localStorage.setItem("token", "jwt-existing");
+    const restoring = deferred<Awaited<ReturnType<typeof authApi.me>>>();
+    me.mockReturnValue(restoring.promise);
+    exchangeGoogleCode.mockRejectedValue(new ApiError(["This Google account is already connected to another user."], 409));
+    const page = await mount(
+      <MemoryRouter initialEntries={["/auth/google/complete?code=one-time-code"]}>
+        <Shell>{routes}</Shell>
+      </MemoryRouter>,
+    );
+    await eventually(() => expect(page.textContent).toContain("already connected to another user"));
+
+    expect(byText(page, "a", "Back to sign in")).toBeUndefined(); // 復元の前は、どちらも出さない
+    expect(byText(page, "a", "Back to your profile")).toBeUndefined();
+    await act(async () => restoring.resolve({ id: "7", username: "carol", email: "carol@gmail.example", canModerate: false }));
+
+    await eventually(() => expect(byText(page, "a", "Back to your profile")?.getAttribute("href")).toBe("/users/7"));
+    expect(byText(page, "a", "Back to sign in")).toBeUndefined();
   });
 });

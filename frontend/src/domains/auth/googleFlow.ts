@@ -33,15 +33,3 @@ export function googleStartUrl(
 export function isGoogleSignIn(res: GoogleExchangeResponse): res is GoogleSignedInResponse {
   return "token" in res;
 }
-
-// 結果の画面から戻る先。backend が確かめた戻り先(空は既定)を、もう一度アプリの中のパスかだけ確かめて使う。
-export function landingPath(returnTo: string, fallback: string): string {
-  return appPathOrNull(returnTo) ?? fallback;
-}
-
-// 失敗の応答が返した戻り先(手続きを始めた画面。backend が確かめたもの)を、サインインの画面へ渡す遷移の state にする。
-// アプリの中のパスだけを渡す(それ以外・なければ、state なし)。パスワードでサインインしたあと、その画面へ戻れる。
-export function signinStateFor(returnTo: string): { from: string } | undefined {
-  const from = appPathOrNull(returnTo);
-  return from ? { from } : undefined;
-}
