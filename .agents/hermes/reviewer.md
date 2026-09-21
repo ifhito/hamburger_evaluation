@@ -19,6 +19,9 @@ Review for:
   must be Japanese (English = Suggestion; a mangled directive or sqlc
   `-- name:` annotation = Warning). Exempt: identifiers, API messages/JSON
   keys, log messages, tool directives
+- readability: test names/comments a reader without the story cannot follow
+  (story/AC/issue numbers, names that lack "situation → result", unexplained
+  English jargon in Japanese sentences) = Warning
 
 Forbidden:
 - editing files

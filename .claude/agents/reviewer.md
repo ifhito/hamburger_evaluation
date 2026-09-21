@@ -38,6 +38,10 @@ Review the diff for, in priority order:
    Exempt: identifiers, API error messages / JSON keys, log messages,
    compiler/tool directives, and sqlc `-- name:` annotations. Report a mangled
    directive or `-- name:` annotation as Warning (it breaks tooling).
+   Also report as Warning test names / comments a reader who does not know the
+   story cannot understand: story / acceptance-criteria / issue numbers
+   (`AC1`, `S24`, `#123`), names that do not say "situation → result", or
+   unexplained English jargon inside Japanese sentences.
 
 For a focused pass (error handling, consistency, concurrency, performance,
 resources, security, test quality), load the `focused-review` skill, read the
