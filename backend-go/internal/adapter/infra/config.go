@@ -493,6 +493,32 @@ func loadGoogleConfig(getenv func(string) string, cfg *Config) error {
 	return nil
 }
 
+// GoogleWarnings は、設定は有効(LoadConfig を通る)でも、実際には Google でのサインインと結び付けが失敗しやすい組み合わせを、
+// 起動時のログに出す文言で返す(起動は止めない)。画面は、交換と結び付けの開始を、画面と同じオリジンの /api/… へ
+// 送る。GOOGLE_REDIRECT_URL が、APP_BASE_URL(画面)と別のオリジン(たとえば API に直接 http://localhost:8080/…)だと、
+// 戻りで設定する「交換の cookie」が、画面からの要求に届かず、毎回、失敗する(気づけない失敗になる)。
+// Google でのサインインが無効なとき・URL を読めないときは、何も返さない。値(URL)だけを出し、秘密は含めない。
+func (c Config) GoogleWarnings() []string {
+	if !c.Google.Enabled {
+		return nil
+	}
+	redirect, err1 := url.Parse(c.Google.RedirectURL)
+	app, err2 := url.Parse(c.AppBaseURL)
+	if err1 != nil || err2 != nil || urlOrigin(redirect) == urlOrigin(app) {
+		return nil
+	}
+	return []string{fmt.Sprintf(
+		"GOOGLE_REDIRECT_URL (%s) は、APP_BASE_URL (%s) と別のオリジンです。画面から /api/… で呼ぶ交換の要求に cookie が届かず、"+
+			"Google でのサインインと結び付けが、毎回失敗します。戻り先は、画面のオリジンを通る形(例: %s/api/auth/google/callback)にし、"+
+			"Google Cloud の「承認済みのリダイレクト URI」も同じ値にしてください",
+		c.Google.RedirectURL, c.AppBaseURL, strings.TrimRight(c.AppBaseURL, "/"))}
+}
+
+// urlOrigin は、URL のオリジン(スキーム + ホスト + ポート。大文字小文字は区別しない)を返す。
+func urlOrigin(u *url.URL) string {
+	return strings.ToLower(u.Scheme + "://" + u.Host)
+}
+
 // requireHTTPSOrLoopback は、name の値 raw が、https の URL か、ループバック(localhost・127.0.0.1・[::1])の
 // http の URL であることを確かめる。平文の http で、外部の提供元に、認可コードやトークンを送らないため。
 func requireHTTPSOrLoopback(name, raw string) error {

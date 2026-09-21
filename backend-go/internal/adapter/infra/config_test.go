@@ -631,3 +631,57 @@ func TestLoadConfigGoogle(t *testing.T) {
 		})
 	}
 }
+
+// TestGoogleWarnings は、設定は有効でも、実際には手続きが失敗する組み合わせ(戻り先が、画面のオリジンを通らない)を、
+// 起動時に気づけるように、警告の文言を返すことを固定する。画面は、交換と結び付けの開始を、画面と同じオリジンの
+// /api/… へ送る。戻り先が別のオリジン(たとえば API に直接)だと、そこで設定した cookie が、画面からの要求に届かず、
+// サインインと結び付けが、毎回失敗する。
+func TestGoogleWarnings(t *testing.T) {
+	cfg := func(redirect, appBase string) Config {
+		return Config{AppBaseURL: appBase, Google: GoogleConfig{Enabled: true, RedirectURL: redirect}}
+	}
+
+	t.Run("戻り先が、画面と同じオリジン(前に /api などの接頭辞が付いてもよい)なら、警告なし", func(t *testing.T) {
+		for _, c := range []Config{
+			cfg("http://localhost:5173/api/auth/google/callback", "http://localhost:5173"),
+			cfg("https://app.example.com/api/auth/google/callback", "https://app.example.com"),
+			cfg("https://app.example.com/auth/google/callback", "https://app.example.com/"),
+			cfg("HTTPS://APP.EXAMPLE.COM/api/auth/google/callback", "https://app.example.com"),
+		} {
+			if w := c.GoogleWarnings(); len(w) != 0 {
+				t.Errorf("%s / %s: warnings = %v, want なし", c.Google.RedirectURL, c.AppBaseURL, w)
+			}
+		}
+	})
+
+	t.Run("戻り先が、画面と別のオリジン(API に直接・別のホスト・別のスキーム)なら、警告する(URL の値だけを出す)", func(t *testing.T) {
+		for _, c := range []Config{
+			cfg("http://localhost:8080/auth/google/callback", "http://localhost:5173"),
+			cfg("https://api.example.com/auth/google/callback", "https://app.example.com"),
+			cfg("http://localhost:5173/api/auth/google/callback", "https://localhost:5173"),
+		} {
+			w := c.GoogleWarnings()
+			if len(w) != 1 || !strings.Contains(w[0], "GOOGLE_REDIRECT_URL") || !strings.Contains(w[0], "APP_BASE_URL") {
+				t.Errorf("%s / %s: warnings = %v, want 1 件で、両方の変数の名前を含む", c.Google.RedirectURL, c.AppBaseURL, w)
+			}
+		}
+	})
+
+	t.Run("Google でのサインインが無効なときは、警告しない", func(t *testing.T) {
+		c := cfg("http://localhost:8080/auth/google/callback", "http://localhost:5173")
+		c.Google.Enabled = false
+		if w := c.GoogleWarnings(); len(w) != 0 {
+			t.Errorf("warnings = %v, want なし", w)
+		}
+	})
+
+	t.Run("警告に、クライアントの秘密は含まれない", func(t *testing.T) {
+		c := cfg("http://localhost:8080/auth/google/callback", "http://localhost:5173")
+		c.Google.ClientSecret = "test-only-google-client-secret"
+		for _, w := range c.GoogleWarnings() {
+			if strings.Contains(w, c.Google.ClientSecret) {
+				t.Fatalf("警告に、クライアントの秘密が含まれている: %s", w)
+			}
+		}
+	})
+}

@@ -44,6 +44,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+	for _, w := range cfg.GoogleWarnings() {
+		log.Printf("config: warning: %s", w)
+	}
 	if err := run(ctx, cfg, nil); err != nil {
 		log.Fatalf("server: %v", err)
 	}
