@@ -448,3 +448,78 @@ func TestLoadConfigOAuth(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigMCPAllowedOrigins(t *testing.T) {
+	const secret = "0123456789abcdef0123456789abcdef"
+	load := func(extra map[string]string) (Config, error) {
+		env := map[string]string{
+			"DATABASE_URL": "postgres://localhost/app", "JWT_SECRET": "test-only-secret",
+			"OAUTH_ISSUER": "https://api.example.com/", "OAUTH_TOKEN_SECRET": secret,
+		}
+		for k, v := range extra {
+			env[k] = v
+		}
+		return LoadConfig(withMailEnv(env))
+	}
+
+	t.Run("MCP_ALLOWED_ORIGINS を設定しなければ、許可する Origin は、発行者(OAUTH_ISSUER)の Origin だけになる", func(t *testing.T) {
+		cfg, err := load(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(cfg.OAuth.MCPAllowedOrigins, ","); got != "https://api.example.com" {
+			t.Errorf("MCPAllowedOrigins = %q, want only the issuer's origin", got)
+		}
+	})
+
+	t.Run("発行者に path があっても、既定は、その path を除いた Origin になる", func(t *testing.T) {
+		cfg, err := load(map[string]string{"OAUTH_ISSUER": "http://localhost:8080/api"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(cfg.OAuth.MCPAllowedOrigins, ","); got != "http://localhost:8080" {
+			t.Errorf("MCPAllowedOrigins = %q, want http://localhost:8080", got)
+		}
+	})
+
+	t.Run("設定すると、既定(発行者の Origin)を置き換え、正規化・重複の除去・空白と末尾のスラッシュの許容をする", func(t *testing.T) {
+		cfg, err := load(map[string]string{"MCP_ALLOWED_ORIGINS": " HTTP://Localhost:5173/ , https://app.example.com:443,https://app.example.com,,"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(cfg.OAuth.MCPAllowedOrigins, ","); got != "http://localhost:5173,https://app.example.com" {
+			t.Errorf("MCPAllowedOrigins = %q, want the two normalized origins only (the issuer's origin is replaced)", got)
+		}
+	})
+
+	t.Run("認可サーバーが無効(OAUTH_ISSUER なし)なら、MCP_ALLOWED_ORIGINS は読まない", func(t *testing.T) {
+		cfg, err := load(map[string]string{"OAUTH_ISSUER": "", "MCP_ALLOWED_ORIGINS": "*"})
+		if err != nil || cfg.OAuth.Enabled || len(cfg.OAuth.MCPAllowedOrigins) != 0 {
+			t.Errorf("cfg.OAuth = %+v, err = %v, want disabled without error", cfg.OAuth, err)
+		}
+	})
+
+	failures := map[string]string{
+		"ワイルドカード":      "*",
+		"ワイルドカードを含む一覧": "https://app.example.com,*",
+		"null":         "null",
+		"scheme がない":   "app.example.com",
+		"http(s) 以外":   "ftp://app.example.com",
+		"path を含む":     "https://app.example.com/app",
+		"query を含む":    "https://app.example.com?x=1",
+		"利用者情報を含む":     "https://user@app.example.com",
+		"ポートが範囲外":      "https://app.example.com:99999",
+		"区切りだけで、中身がない": " , ,",
+	}
+	for name, value := range failures {
+		t.Run("不正な値("+name+")があると、起動に失敗し、エラーには変数名だけを含める", func(t *testing.T) {
+			_, err := load(map[string]string{"MCP_ALLOWED_ORIGINS": value})
+			if err == nil || !strings.Contains(err.Error(), "MCP_ALLOWED_ORIGINS") {
+				t.Fatalf("err = %v, want an error naming MCP_ALLOWED_ORIGINS", err)
+			}
+			if strings.Contains(strings.ToLower(err.Error()), "app.example.com") {
+				t.Errorf("エラーに値が含まれている: %v", err)
+			}
+		})
+	}
+}

@@ -131,6 +131,12 @@ type OAuthConfig struct {
 	// [{"id":"…","name":"…","redirect_uris":["…"]}])、省略できる。自分で説明を公開できないアプリや、
 	// ローカルでの確認用に使う。
 	StaticClients []domain.OAuthClient
+	// MCPAllowedOrigins は、リモートの MCP サーバー(/mcp)が受け付ける Origin(ブラウザが要求に付ける
+	// 要求元。DNS の付け替え攻撃への対策として、Origin がある要求は、この一覧にあるものだけを通す)である。
+	// MCP_ALLOWED_ORIGINS(カンマ区切りの "scheme://host[:port]")、既定は OAUTH_ISSUER の Origin だけ。
+	// 設定すると、既定を置き換える。値は domain.NormalizeOrigin で正規化される。ワイルドカードと null は
+	// 使えない。Origin のない要求(ブラウザ以外のクライアント)は、この一覧に関係なく通る。
+	MCPAllowedOrigins []string
 }
 
 // oauthSecretMinLength は、OAUTH_TOKEN_SECRET の最小の文字数である(署名の鍵として 32 バイト以上が必要)。
@@ -269,8 +275,50 @@ func loadOAuthConfig(getenv func(string) string, cfg *Config) error {
 			oc.StaticClients = append(oc.StaticClients, c)
 		}
 	}
+	origins, err := loadMCPAllowedOrigins(getenv("MCP_ALLOWED_ORIGINS"), issuer)
+	if err != nil {
+		return err
+	}
+	oc.MCPAllowedOrigins = origins
 	cfg.OAuth = oc
 	return nil
+}
+
+// loadMCPAllowedOrigins は、MCP_ALLOWED_ORIGINS(raw)を、正規化した Origin の一覧にする。空なら、issuer の
+// Origin だけの一覧(既定)である。不正な値(ワイルドカード・null・path を含むもの・空の一覧など)は、起動を
+// 失敗させる(変数名だけを含め、値は含めない)。区切りの前後の空白と、値の末尾の "/" 1 つは、許す。
+func loadMCPAllowedOrigins(raw, issuer string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		u, err := url.Parse(issuer)
+		if err != nil {
+			return nil, fmt.Errorf("OAUTH_ISSUER must be an http(s) URL")
+		}
+		origin, err := domain.NormalizeOrigin(u.Scheme + "://" + u.Host)
+		if err != nil {
+			return nil, fmt.Errorf("OAUTH_ISSUER must be an http(s) URL with a host")
+		}
+		return []string{origin}, nil
+	}
+	var origins []string
+	seen := map[string]bool{}
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSuffix(strings.TrimSpace(entry), "/")
+		if entry == "" {
+			continue
+		}
+		origin, err := domain.NormalizeOrigin(entry)
+		if err != nil {
+			return nil, fmt.Errorf("MCP_ALLOWED_ORIGINS must be a comma-separated list of origins (scheme://host[:port]); wildcards, null, paths and other schemes are not allowed")
+		}
+		if !seen[origin] {
+			seen[origin] = true
+			origins = append(origins, origin)
+		}
+	}
+	if len(origins) == 0 {
+		return nil, fmt.Errorf("MCP_ALLOWED_ORIGINS must list at least one origin (or be left unset to allow only the OAUTH_ISSUER origin)")
+	}
+	return origins, nil
 }
 
 // requireHTTPURL は、name の値 raw が、クエリと断片のない http(s) の URL であることを確かめる。

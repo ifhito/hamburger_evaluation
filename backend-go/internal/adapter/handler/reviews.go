@@ -378,25 +378,36 @@ func handleGetReview(reviews *usecase.Reviews) http.HandlerFunc {
 	}
 }
 
-// validReviewTargetIDs は POST /reviews の shop_id・burger_id の形式を判定する。
-// 空は「指定なし」である: shop_id がなければ存在しない shop（404）、burger_id が
-// なければ burger_name の経路になる。空でなく UUID の正規形でない値は 422 で、
-// false は、そのレスポンスが既に書き込まれたことを意味する。形式の判定は
-// domain.IsUUID が持つ。
+// checkReviewTargetIDs は、review の投稿の shop_id と burger_id の形を確かめる（HTTP の POST /reviews と
+// MCP の create_review が共有する）。問題がなければ (0, "") を返し、あれば HTTP の status とメッセージを
+// 返す：shop_id が空なら 404、UUID の正規形でない shop_id と burger_id は 422 である。空の burger_id は
+// 「指定なし」（burger_name の経路）である。形式の判定は domain.IsUUID が持つ。
+func checkReviewTargetIDs(shopID, burgerID string) (status int, msg string) {
+	if shopID == "" {
+		return http.StatusNotFound, shopNotFoundMessage
+	}
+	if !domain.IsUUID(shopID) {
+		return http.StatusUnprocessableEntity, "Shop id must be a valid UUID"
+	}
+	if burgerID != "" && !domain.IsUUID(burgerID) {
+		return http.StatusUnprocessableEntity, "Burger id must be a valid UUID"
+	}
+	return 0, ""
+}
+
+// validReviewTargetIDs は checkReviewTargetIDs の結果を HTTP の応答に写す。false は、そのレスポンスが
+// 既に書き込まれたことを意味する。
 func validReviewTargetIDs(w http.ResponseWriter, form multipartReviewForm) bool {
-	if form.shopID == "" {
-		writeError(w, http.StatusNotFound, shopNotFoundMessage)
-		return false
+	status, msg := checkReviewTargetIDs(form.shopID, form.burgerID)
+	switch status {
+	case 0:
+		return true
+	case http.StatusNotFound:
+		writeError(w, status, msg)
+	default:
+		writeJSON(w, status, errorsResponse{Errors: []string{msg}})
 	}
-	if !domain.IsUUID(form.shopID) {
-		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{"Shop id must be a valid UUID"}})
-		return false
-	}
-	if form.burgerID != "" && !domain.IsUUID(form.burgerID) {
-		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{"Burger id must be a valid UUID"}})
-		return false
-	}
-	return true
+	return false
 }
 
 // handleCreateReview は RequireAuth の背後で POST /reviews を処理する：作成

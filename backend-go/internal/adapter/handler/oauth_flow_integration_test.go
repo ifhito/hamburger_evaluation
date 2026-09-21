@@ -92,7 +92,7 @@ func newOAuthKit(t *testing.T) *oauthKit {
 			Endpoints: server,
 			Consents:  usecase.NewOAuthConsents(server, grantQuery, grantWrites),
 			Apps:      usecase.NewConnectedApps(grantQuery, grantWrites),
-		})
+		}, nil)
 
 	bearer := map[string]string{}
 	for _, id := range []string{alice, bob} {
