@@ -9,6 +9,7 @@ import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
+import { GoogleSignIn } from "../components/GoogleSignIn";
 import styles from "./auth.module.css";
 
 export default function SigninPage() {
@@ -60,6 +61,8 @@ export default function SigninPage() {
           <a href="/signup">{t("auth.signin.signUpLink")}</a>
         </p>
       </form>
+      {/* ログインが必要な画面から送られてきたときは、Google でのサインインのあとも、その画面へ戻す */}
+      <GoogleSignIn mode="signin" returnTo={returnPathFrom(location.state)} />
     </Layout>
   );
 }

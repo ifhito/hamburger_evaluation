@@ -64,6 +64,37 @@ const en = {
       title: "Signing out\u2026",
       message: "You are being signed out\u2026",
     },
+    // Google でのサインイン。手続きの結果の文言(重複・失敗など)は API が返すので、ここには、API から文言を
+    // 受け取れなかったときの予備の文言だけを置く。
+    google: {
+      or: "or",
+      signIn: "Sign in with Google",
+      signUp: "Sign up with Google",
+      error: "Google sign-in failed. Please try again.",
+      complete: {
+        title: "Signing in with Google",
+        loading: "Signing you in\u2026",
+        backToSignin: "Back to sign in",
+        backToProfile: "Back to your profile",
+        retry: "Try again",
+        temporary: "Something went wrong on our side. Please try again.",
+        expired: "This sign-in link is no longer available. Please start again.",
+      },
+      profile: {
+        heading: "Google",
+        connectedAs: "Connected as {{email}}",
+        notConnected: "Not connected.",
+        connect: "Connect Google",
+        disconnect: "Disconnect",
+        disconnectConfirm: "Disconnect Google? You won't be able to sign in with it anymore.",
+        cannotUnlink: "Google is your only way to sign in. Add a password to be able to disconnect it.",
+        loadError: "Failed to load your Google connection.",
+        retry: "Retry",
+        disconnected: "Google disconnected.",
+        connectError: "Failed to start connecting Google.",
+        disconnectError: "Failed to disconnect Google.",
+      },
+    },
   },
   reviews: {
     list: {

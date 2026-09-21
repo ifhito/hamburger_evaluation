@@ -14,6 +14,7 @@ import ReviewNewPage from '../../domains/reviews/pages/ReviewNewPage'
 import ReviewEditPage from '../../domains/reviews/pages/ReviewEditPage'
 import SignupPage from '../../domains/auth/pages/SignupPage'
 import SignupConfirmPage from '../../domains/auth/pages/SignupConfirmPage'
+import GoogleCompletePage from '../../domains/auth/pages/GoogleCompletePage'
 import SigninPage from '../../domains/auth/pages/SigninPage'
 import SignoutPage from '../../domains/auth/pages/SignoutPage'
 import UserDetailPage from '../../domains/users/pages/UserDetailPage'
@@ -31,6 +32,8 @@ export const router = createBrowserRouter([
   { path: '/users/:id', element: <UserDetailPage /> },
   // 確認メールのリンクの受け皿(ログイン中でも開ける。成功すると確認したアカウントのログイン状態になる)
   { path: '/signup/confirm', element: <SignupConfirmPage /> },
+  // Google でのサインインの結果の受け皿(ログイン中でも開ける。成功するとサインインした状態になる)
+  { path: '/auth/google/complete', element: <GoogleCompletePage /> },
 
   // ゲスト専用ルート
   {

@@ -493,6 +493,45 @@ func loadGoogleConfig(getenv func(string) string, cfg *Config) error {
 	return nil
 }
 
+// GoogleWarnings は、設定は有効(LoadConfig を通る)でも、実際には Google でのサインインと結び付けが失敗しやすい組み合わせを、
+// 起動時のログに出す警告の文言で返す(起動は止めない。ログの文言なので、英語)。画面は、交換と結び付けの開始を、画面と
+// 同じオリジンの /api/… へ送る。GOOGLE_REDIRECT_URL が、(1)APP_BASE_URL(画面)と別のオリジン(たとえば API に直接
+// http://localhost:8080/…)、または、(2)同じオリジンでも、画面が API を呼ぶ接頭辞(既定は /api)を持たない(path が
+// /auth/google/callback だけ)と、戻りで設定する「交換の cookie」が、画面からの要求に届かず、毎回、失敗する。
+// Google でのサインインが無効なとき・URL を読めないときは、何も返さない。オリジン(scheme・host・port)だけを出し、
+// URL の利用者情報・path・query・秘密は含めない。オリジンは、domain.NormalizeOrigin で、既定のポートなどをそろえて比べる。
+func (c Config) GoogleWarnings() []string {
+	if !c.Google.Enabled {
+		return nil
+	}
+	redirect, err1 := url.Parse(c.Google.RedirectURL)
+	app, err2 := url.Parse(c.AppBaseURL)
+	if err1 != nil || err2 != nil {
+		return nil
+	}
+	redirectOrigin, err1 := domain.NormalizeOrigin(redirect.Scheme + "://" + redirect.Host)
+	appOrigin, err2 := domain.NormalizeOrigin(app.Scheme + "://" + app.Host)
+	if err1 != nil || err2 != nil {
+		return nil
+	}
+	example := appOrigin + "/api" + googleRedirectPathSuffix
+	switch {
+	case redirectOrigin != appOrigin:
+		return []string{fmt.Sprintf(
+			"GOOGLE_REDIRECT_URL is on a different origin (%s) than APP_BASE_URL (%s): the exchange cookie set at the callback will not reach "+
+				"the screen's /api requests, so Google sign-in and linking will always fail. Use the screen's origin, for example %s, "+
+				"and register the same value as the authorized redirect URI in Google Cloud",
+			redirectOrigin, appOrigin, example)}
+	case redirect.Path == googleRedirectPathSuffix:
+		return []string{fmt.Sprintf(
+			"GOOGLE_REDIRECT_URL (origin %s) has no path prefix before %s: the screen calls the API under /api, so the exchange cookie "+
+				"(Path=/auth/google/exchange) will not reach POST /api/auth/google/exchange, and Google sign-in and linking will always fail "+
+				"(unless the screen calls the API without a prefix). Use, for example, %s, and register the same value in Google Cloud",
+			redirectOrigin, googleRedirectPathSuffix, example)}
+	}
+	return nil
+}
+
 // requireHTTPSOrLoopback は、name の値 raw が、https の URL か、ループバック(localhost・127.0.0.1・[::1])の
 // http の URL であることを確かめる。平文の http で、外部の提供元に、認可コードやトークンを送らないため。
 func requireHTTPSOrLoopback(name, raw string) error {

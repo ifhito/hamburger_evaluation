@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,5 +194,33 @@ func TestServeListenError(t *testing.T) {
 	}
 	if errors.Is(err, context.Canceled) {
 		t.Fatalf("unexpected context error: %v", err)
+	}
+}
+
+// TestLogConfigWarnings は、Google の設定の警告が、起動時のログに、手順書が案内する形(メッセージ
+// "suspicious google login setting" と、detail の項目)で出ることを固定する。手順書が、この文言で、原因を探させるため。
+func TestLogConfigWarnings(t *testing.T) {
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	logConfigWarnings(infra.Config{
+		AppBaseURL: "http://localhost:5173",
+		Google:     infra.GoogleConfig{Enabled: true, RedirectURL: "http://localhost:8080/auth/google/callback", ClientSecret: "test-only-google-client-secret"},
+	})
+
+	out := buf.String()
+	if !strings.Contains(out, "level=WARN") || !strings.Contains(out, `msg="suspicious google login setting"`) || !strings.Contains(out, "detail=") {
+		t.Fatalf("警告が、期待した形で出ていない: %s", out)
+	}
+	if strings.Contains(out, "test-only-google-client-secret") {
+		t.Fatalf("ログに、クライアントの秘密が含まれている: %s", out)
+	}
+
+	buf.Reset()
+	logConfigWarnings(infra.Config{AppBaseURL: "http://localhost:5173", Google: infra.GoogleConfig{Enabled: true, RedirectURL: "http://localhost:5173/api/auth/google/callback"}})
+	if buf.Len() != 0 {
+		t.Fatalf("問題のない設定で、警告が出た: %s", buf.String())
 	}
 }

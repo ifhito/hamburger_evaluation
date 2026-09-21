@@ -5,6 +5,7 @@ import { formatDate } from "../../../lib/date";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { useConnectedApps } from "../hooks/useConnectedApps";
+import section from "../../../components/profileSection.module.css";
 import styles from "./connectedApps.module.css";
 
 // 利用者が許可した AI アプリの一覧と、取り消し。本人のプロフィールにだけ出す(呼び出し側が canEdit で出し分ける)。
@@ -31,8 +32,8 @@ export function ConnectedApps({ viewerId }: { viewerId: string }) {
   };
 
   return (
-    <section className={styles.section}>
-      <h2 className={styles.heading}>{t("oauth.apps.heading")}</h2>
+    <section className={section.section}>
+      <h2 className={section.heading}>{t("oauth.apps.heading")}</h2>
       {isLoading && <p className={styles.muted}>{t("oauth.apps.loading")}</p>}
       {error && <ErrorMessage message={t("oauth.apps.loadError")} />}
       {revokeError && <ErrorMessage message={revokeError} />}
