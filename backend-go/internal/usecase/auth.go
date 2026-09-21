@@ -27,7 +27,7 @@ type UserQuery interface {
 	GetActiveUserByEmail(ctx context.Context, email string) (UserCredentials, error)
 	// GetActiveUserByID は、指定された id の、discard されていないユーザーを
 	// 返す。
-	GetActiveUserByID(ctx context.Context, id int64) (domain.User, error)
+	GetActiveUserByID(ctx context.Context, id string) (domain.User, error)
 }
 
 // PasswordHasher はパスワードのハッシュ化と検証を行う。
@@ -38,12 +38,12 @@ type PasswordHasher interface {
 
 // TokenIssuer は、ユーザー ID に対する認証トークンを発行する。
 type TokenIssuer interface {
-	Issue(userID int64) (string, error)
+	Issue(userID string) (string, error)
 }
 
 // TokenVerifier は、生のトークンを検証し、それが持つユーザー ID を返す。
 type TokenVerifier interface {
-	Verify(token string) (int64, error)
+	Verify(token string) (string, error)
 }
 
 // Auth は signup、login、トークン認証の use case を実装する。

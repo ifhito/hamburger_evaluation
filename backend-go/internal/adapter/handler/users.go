@@ -4,14 +4,13 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 // userNotFoundMessage は、存在しない user、discard 済みの user、および
-// 数値でない user の id に共通の 404 body（GET/PUT/DELETE /users/{id}）であり、
+// UUID の正規形でない user の id に共通の 404 body（GET/PUT/DELETE /users/{id}）であり、
 // soft delete 済みの account が一度も存在しなかったものと区別できないように
 // する。
 const userNotFoundMessage = "User not found"
@@ -23,7 +22,7 @@ const userNotFoundMessage = "User not found"
 // ので、email と admin を常に含めてよい。他人にも返りうる GET の user は
 // userProfileResponse を使う。
 type userResponse struct {
-	ID       int64  `json:"id"`
+	ID       string `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Admin    bool   `json:"admin"`
@@ -39,7 +38,7 @@ func newUserResponse(user domain.User) userResponse {
 // 省かれる（null にはならない）。admin=false は非 nil の pointer なので、本人
 // ビューでは "admin":false として出力される。
 type userProfileResponse struct {
-	ID       int64   `json:"id"`
+	ID       string  `json:"id"`
 	Username string  `json:"username"`
 	Email    *string `json:"email,omitempty"`
 	Admin    *bool   `json:"admin,omitempty"`
@@ -65,14 +64,15 @@ type updateUserRequest struct {
 	} `json:"user"`
 }
 
-// userIDPathValue は {id} の path value をパースする。false は統一された
-// user の 404 が既に書き込まれたことを意味する（数値でない id は存在しない
-// user とまったく同じに見える。shop/review の id と同じ規約）。
-func userIDPathValue(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+// userIDPathValue は {id} の path value を取り出す。false は統一された
+// user の 404 が既に書き込まれたことを意味する（UUID の正規形でない id は
+// 存在しない user とまったく同じに見える。shop/review の id と同じ規約）。
+// 形式の判定は domain.IsUUID が持つ。
+func userIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := r.PathValue("id")
+	if !domain.IsUUID(id) {
 		writeError(w, http.StatusNotFound, userNotFoundMessage)
-		return 0, false
+		return "", false
 	}
 	return id, true
 }
@@ -99,7 +99,7 @@ func writeUserError(w http.ResponseWriter, op string, err error) {
 }
 
 // handleGetUser は GET /users/{id} を処理する：（存在する場合の）viewer から
-// 見える user 1 人のビュー、または存在しない・discard 済み・数値でない id に
+// 見える user 1 人のビュー、または存在しない・discard 済み・UUID の正規形でない id に
 // 対する統一された 404。認証は任意（OptionalAuth）で、email と admin が入る
 // のは viewer 本人が閲覧したときだけである。
 func handleGetUser(users *usecase.Users) http.HandlerFunc {

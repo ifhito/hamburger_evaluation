@@ -53,7 +53,7 @@ ORDER BY r.id
 type ListBurgerReviewFactsRow struct {
 	Rating    int16
 	CreatedAt pgtype.Timestamptz
-	UserID    int64
+	UserID    string
 }
 
 // 1 つの burger の統計の元になる kept な review。discard 済みの review と、
@@ -84,19 +84,19 @@ func (q *Queries) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]
 const listReviewerRatings = `-- name: ListReviewerRatings :many
 SELECT r.user_id, r.rating
 FROM reviews r
-WHERE r.user_id = ANY($1::bigint[])
+WHERE r.user_id = ANY($1::uuid[])
   AND r.discarded_at IS NULL
 ORDER BY r.id
 `
 
 type ListReviewerRatingsRow struct {
-	UserID int64
+	UserID string
 	Rating int16
 }
 
 // reviewer trust の履歴：各 reviewer が「すべての」burger にわたってつけた
 // kept な rating（Rails の user.reviews.kept に対応する）。
-func (q *Queries) ListReviewerRatings(ctx context.Context, userIds []int64) ([]ListReviewerRatingsRow, error) {
+func (q *Queries) ListReviewerRatings(ctx context.Context, userIds []string) ([]ListReviewerRatingsRow, error) {
 	rows, err := q.db.Query(ctx, listReviewerRatings, userIds)
 	if err != nil {
 		return nil, err

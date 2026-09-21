@@ -4,7 +4,7 @@ CREATE TABLE shops (
     name text NOT NULL,
     status smallint NOT NULL CHECK (status IN (0, 1, 2)),
     moderation_note text,
-    creator_id bigint REFERENCES users (id),
+    creator_id uuid REFERENCES users (id),
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );

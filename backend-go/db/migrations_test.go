@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -35,7 +36,8 @@ func TestMigrationsAcceptance(t *testing.T) {
 
 	// AC3：1..5 の範囲外の rating は CHECK 制約によって拒否される。
 	t.Run("AC3 範囲外の rating は CHECK 制約違反になる", func(t *testing.T) {
-		var userID, burgerID int64
+		var userID string
+		var burgerID int64
 		if err := conn.QueryRow(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3) RETURNING id",
 			"ac3@example.com", "ac3", "digest").Scan(&userID); err != nil {
@@ -48,6 +50,36 @@ func TestMigrationsAcceptance(t *testing.T) {
 		_, err := conn.Exec(ctx,
 			"INSERT INTO reviews (rating, user_id, burger_id) VALUES (6, $1, $2)", userID, burgerID)
 		assertPgError(t, err, "23514", "reviews_rating_check")
+	})
+
+	// S27：users.id は DB が uuid（v4）を生成し、それを参照する reviews.user_id・
+	// shops.creator_id の外部キーが uuid で効く。
+	t.Run("S27 users の id は uuid で生成され、外部キーが uuid で効く", func(t *testing.T) {
+		var userID string
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3) RETURNING id::text",
+			"s27@example.com", "s27", "digest").Scan(&userID); err != nil {
+			t.Fatalf("insert user: %v", err)
+		}
+		if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(userID) {
+			t.Fatalf("users.id = %q, want a lowercase v4 uuid", userID)
+		}
+		if _, err := conn.Exec(ctx,
+			"INSERT INTO shops (name, status, creator_id) VALUES ('S27 Shop', 0, $1)", userID); err != nil {
+			t.Fatalf("insert shop with an existing creator: %v", err)
+		}
+		const missing = "00000000-0000-4000-8000-000000000000"
+		_, err := conn.Exec(ctx,
+			"INSERT INTO shops (name, status, creator_id) VALUES ('S27 Orphan', 0, $1)", missing)
+		assertPgError(t, err, "23503", "shops_creator_id_fkey")
+		var burgerID int64
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO burgers (name) VALUES ('S27 Burger') RETURNING id").Scan(&burgerID); err != nil {
+			t.Fatalf("insert burger: %v", err)
+		}
+		_, err = conn.Exec(ctx,
+			"INSERT INTO reviews (rating, user_id, burger_id) VALUES (3, $1, $2)", missing, burgerID)
+		assertPgError(t, err, "23503", "reviews_user_id_fkey")
 	})
 
 	// AC4：同じ email を持つ 2 人目のユーザーは UNIQUE 制約によって
@@ -111,7 +143,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"reviews/id/bigint/NO",
 		"reviews/rating/smallint/NO",
 		"reviews/comment/text/YES",
-		"reviews/user_id/bigint/NO",
+		"reviews/user_id/uuid/NO",
 		"reviews/burger_id/bigint/NO",
 		"reviews/discarded_at/timestamp with time zone/YES",
 		"reviews/created_at/timestamp with time zone/NO",
@@ -123,12 +155,12 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/name/text/NO",
 		"shops/status/smallint/NO",
 		"shops/moderation_note/text/YES",
-		"shops/creator_id/bigint/YES",
+		"shops/creator_id/uuid/YES",
 		"shops/created_at/timestamp with time zone/NO",
 		"shops/updated_at/timestamp with time zone/NO",
 		"shops_burgers/shop_id/bigint/NO",
 		"shops_burgers/burger_id/bigint/NO",
-		"users/id/bigint/NO",
+		"users/id/uuid/NO",
 		"users/email/text/NO",
 		"users/username/text/NO",
 		"users/password_digest/text/NO",

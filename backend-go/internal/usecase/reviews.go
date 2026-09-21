@@ -62,7 +62,7 @@ type ReviewListFilter struct {
 	// user、active な shop に紐づかない burger の review は、UserID を指定しても
 	// 現れない。存在しない（または discard 済みの）user の id を指定すると結果は
 	// 空になる。
-	UserID *int64
+	UserID *string
 }
 
 // Reviews は review の use case を実装する。公開フィードと詳細、および
