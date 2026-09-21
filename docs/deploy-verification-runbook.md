@@ -172,7 +172,7 @@ nohup ./scripts/bench/coldstart.sh https://example.com/healthz 30 5 cold-render 
 | # | 候補 | 取得するもの | 事前に必要なもの |
 |---|---|---|---|
 | 1 | Neon | プーラー経由の接続文字列 | メールアドレスのみ |
-| 2 | Supabase | 接続文字列(Supavisor 経由) | メールアドレスのみ |
+| 2 | Supabase | 接続文字列(**Session pooler**。ポート 5432) | メールアドレスのみ |
 | 3 | Render Postgres | 内部・外部それぞれの接続文字列 | メールアドレスのみ(無料枠は 30 日で失効) |
 | 4 | Xata | 接続文字列 | メールアドレスのみ |
 
