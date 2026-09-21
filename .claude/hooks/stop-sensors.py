@@ -194,7 +194,7 @@ def changed_paths() -> list[str]:
 def is_secret_path(path: str) -> bool:
     normalized = path.strip("/")
     name = Path(normalized).name
-    if name == ".env.example":  # 値の雛形(秘密の値を書かない)。design/.env.example など
+    if name.startswith(".env.") and name.endswith(".example"):  # 値の雛形(秘密の値を書かない)。.env.example・.env.bench.example など
         return False
     return (
         name == ".env"
