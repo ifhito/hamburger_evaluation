@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロフィールの Google 連携の状態(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="google-login.css">
+</head>
+<body data-active="me">
+<main class="wrap page">
+  <h1>プロフィールの Google 連携の状態</h1>
+  <p class="lead">プロフィールの「Google」の欄の、操作の途中と結果の見え方です(欄そのものは <a href="google-profile.html">google-profile.html</a>)。</p>
+  <div class="sample-grid">
+    <div class="sample"><p class="note">1. 「Google を連携する」を押して、Google の画面へ移動するまで(送信中)</p><article class="appitem"><div><b class="name-sm">Google アカウント</b><p class="appmeta">連携していません。連携すると、Google でサインインできます。</p></div><button class="btn off" aria-busy="true" disabled>Google に移動しています…</button></article></div>
+    <div class="sample"><p class="note">2. 連携を解除するかどうかの確認(ダイアログ)</p><div class="appitem" style="display:block;padding:28px;border-radius:16px;border:1px solid var(--border)"><h2 style="margin-bottom:8px">Google の連携を解除しますか?</h2><p class="muted" style="margin-bottom:24px">解除すると、Google でサインインできなくなります。</p><div class="actions-row" style="justify-content:flex-end;padding-top:0"><button type="button" class="btn ghost">キャンセル</button><button type="button" class="btn danger-solid">解除する</button></div></div></div>
+    <div class="sample"><p class="note">3. 解除しているとき(送信中)</p><article class="appitem"><div><b class="name-sm">Google アカウント</b><p class="appmeta">連携済み: alice@gmail.com</p></div><button class="btn off" aria-busy="true" disabled>解除しています…</button></article></div>
+    <div class="sample"><p class="note">4. 解除できたとき(欄は「連携していません」に戻り、結果を 1 行で伝える。<b>いまの実装(#126)にもある</b>)</p><p class="hint" role="status" style="color:var(--text)">Google の連携を解除しました。</p><article class="appitem"><div><b class="name-sm">Google アカウント</b><p class="appmeta">連携していません。連携すると、Google でサインインできます。</p></div><button class="btn ghost">Google を連携する</button></article></div>
+    <div class="sample"><p class="note">5. 解除できなかったとき(API が文言を返したときは、それをそのまま出す)</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">Google の連携を解除できませんでした</b><p class="msg">Google is your only way to sign in. Add a password before disconnecting it.</p></div></section><article class="appitem"><div><b class="name-sm">Google アカウント</b><p class="appmeta">連携済み: alice@gmail.com</p></div><button class="btn danger">連携を解除</button></article></div>
+    <div class="sample"><p class="note">6. 連携を始められなかったとき(Google の画面へ移動する前の失敗)</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">Google の連携を始められませんでした</b><p class="msg">Failed to start connecting Google.</p></div></section><article class="appitem"><div><b class="name-sm">Google アカウント</b><p class="appmeta">連携していません。連携すると、Google でサインインできます。</p></div><button class="btn ghost">Google を連携する</button></article></div>
+    <div class="sample"><p class="note">7. 連携できたとき(Google の画面から戻ってきたプロフィール。<b>新しい案</b>)</p><p class="hint" role="status" style="color:var(--text)">Google を連携しました。</p><article class="appitem"><div><b class="name-sm">Google アカウント</b><p class="appmeta">連携済み: alice@gmail.com</p></div><button class="btn danger">連携を解除</button></article></div>
+    <div class="sample"><p class="note">8. 連携の状態を読み込めなかったとき(未連携と誤表示しない。再試行は、いまの実装にもある)</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">Google の連携を読み込めませんでした</b><p class="msg">Failed to load your Google connection.</p></div></section><p class="hint">連携しているかどうかが分からないので、「連携する」も「解除」も出さない。<button class="btn ghost" style="margin-left:12px">もう一度読み込む</button></p></div>
+  </div>
+  <aside class="memo"><b>実装メモ</b><ul>
+    <li>・2 の確認は、いまのアプリでは、ブラウザ標準の確認(<code>window.confirm</code>)。「接続済みのアプリ」の解除の確認(<a href="profile-states.html">profile-states.html</a> の 5)と同じ形のダイアログにそろえる案。確認の文(「解除すると、Google でサインインできなくなります」)は frontend の文言。</li>
+    <li>・4 の 1 行(「解除しました」)は、<strong>いまの実装(#126)にすでにある</strong>(<code>role="status"</code>)。見た目だけを、この案の形(黒い文字の 1 行)にそろえる。7 の 1 行(「連携しました」)だけが<strong>新しい案</strong>で、連携の結果を、Google の画面から戻ったあとのプロフィールに知らせる必要があり(戻り先の URL の印か、画面の遷移の値で受け渡す)、実装に手が入る。要るかどうかは、利用者が決める。色は、赤ではなく、黒の文字(赤は、削除とエラーだけ)。</li>
+    <li>・5 の文言のうち、赤い枠の 1 行目の <code>Google is your only way to sign in…</code> は API が返したもの。太字の見出し「Google の連携を解除できませんでした」は画面側の言葉。<code>can_unlink</code> が <code>false</code> のときは、そもそも「解除」を出さない(<a href="google-profile.html?state=cannot">google-profile.html</a>)ので、5 は、状態が変わった直後などの、まれな場合。</li>
+    <li>・6 と 8 の <code>Failed to ...</code> は、API が文言を返さなかったときの、画面側の文言(いまは英語)。</li>
+    <li>・1 と 3 は、その行のボタンを、本物の <code>disabled</code> にして押せなくし、二重に送らない(いまの実装のボタンも、送信中は <code>disabled</code>)。文字は、灰色の面の上の <code>--text-muted</code>(6:1 前後)で、薄めすぎない。</li>
+  </ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>
