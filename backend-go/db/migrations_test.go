@@ -145,10 +145,12 @@ func TestMigrationsAcceptance(t *testing.T) {
 		if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(reviewID) {
 			t.Errorf("reviews.id = %q, want a lowercase v4 uuid", reviewID)
 		}
+		// OAuth の client_id は、このアプリが採番する ID ではなく、アプリ(クライアント)が自分を名乗る
+		// 識別子(自分の説明を公開している URL など)なので、uuid にしない。
 		rows, err := conn.Query(ctx, `SELECT table_name || '.' || column_name || ':' || data_type
 			FROM information_schema.columns
 			WHERE table_schema = 'public' AND table_name <> 'schema_migrations'
-			  AND (column_name = 'id' OR column_name LIKE '%\_id') AND data_type <> 'uuid'
+			  AND (column_name = 'id' OR column_name LIKE '%\_id') AND column_name <> 'client_id' AND data_type <> 'uuid'
 			ORDER BY 1`)
 		if err != nil {
 			t.Fatalf("query id columns: %v", err)
@@ -217,9 +219,67 @@ func TestMigrationsAcceptance(t *testing.T) {
 			"users_email_max_length":           domain.MaxEmailChars,
 
 			"burger_stats_recalc_requests_last_error_max_length": domain.MaxRecalcFailureReasonChars,
+
+			"oauth_grants_client_id_max_length":   domain.MaxOAuthURILength,
+			"oauth_grants_client_name_max_length": domain.MaxOAuthClientNameLength,
 		}
 		if fmt.Sprint(got) != fmt.Sprint(want) {
 			t.Fatalf("CHECK の上限が domain の定数と違う:\n got %v\nwant %v", got, want)
+		}
+	})
+
+	// OAuth の許可の記録とトークンの記録の制約。許可は利用者とアプリの組ごとに 1 つで、範囲が空・
+	// 長すぎる表示名は入らない。利用者を消すと許可が、許可を消すとトークンの記録が、連鎖して消える。
+	t.Run("OAuth の許可とトークンの記録は、制約を守り、利用者・許可の削除に連鎖して消える", func(t *testing.T) {
+		var userID, grantID string
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ('oauth@example.com', 'oauth', 'digest') RETURNING id::text").Scan(&userID); err != nil {
+			t.Fatalf("insert user: %v", err)
+		}
+		const insertGrant = "INSERT INTO oauth_grants (user_id, client_id, client_name, scopes) VALUES ($1, $2, $3, $4) RETURNING id::text"
+		if err := conn.QueryRow(ctx, insertGrant, userID, "app", "アプリ", []string{"hamburger:read"}).Scan(&grantID); err != nil {
+			t.Fatalf("insert grant: %v", err)
+		}
+		_, err := conn.Exec(ctx, insertGrant, userID, "app", "別名", []string{"hamburger:read"})
+		assertPgError(t, err, "23505", "oauth_grants_user_client_key")
+		_, err = conn.Exec(ctx, insertGrant, userID, "app2", "アプリ", []string{})
+		assertPgError(t, err, "23514", "oauth_grants_scopes_not_empty")
+		_, err = conn.Exec(ctx, insertGrant, userID, "app2", strings.Repeat("あ", domain.MaxOAuthClientNameLength+1), []string{"hamburger:read"})
+		assertPgError(t, err, "23514", "oauth_grants_client_name_max_length")
+		_, err = conn.Exec(ctx, insertGrant, userID, "app2", "", []string{"hamburger:read"})
+		assertPgError(t, err, "23514", "oauth_grants_client_name_not_empty")
+		_, err = conn.Exec(ctx, insertGrant, userID, strings.Repeat("a", domain.MaxOAuthURILength+1), "アプリ", []string{"hamburger:read"})
+		assertPgError(t, err, "23514", "oauth_grants_client_id_max_length")
+
+		const insertSession = "INSERT INTO oauth_token_sessions (kind, signature, request_id, grant_id, user_id, client_id, request, expires_at) VALUES ($1, $2, gen_random_uuid(), $3, $4, 'app', '{}', now())"
+		_, err = conn.Exec(ctx, insertSession, "password", "s0", grantID, userID)
+		assertPgError(t, err, "23514", "oauth_token_sessions_kind_check")
+		if _, err := conn.Exec(ctx, insertSession, "access_token", "s1", grantID, userID); err != nil {
+			t.Fatalf("insert token session: %v", err)
+		}
+		_, err = conn.Exec(ctx, insertSession, "access_token", "s1", grantID, userID)
+		assertPgError(t, err, "23505", "oauth_token_sessions_kind_signature_key")
+		if _, err := conn.Exec(ctx, insertSession, "refresh_token", "s1", grantID, userID); err != nil {
+			t.Errorf("同じ署名でも、種類が違えば入るはず: %v", err)
+		}
+		_, err = conn.Exec(ctx, insertSession, "access_token", "s2", "00000000-0000-4000-8000-000000000000", userID)
+		assertPgError(t, err, "23503", "oauth_token_sessions_grant_id_fkey")
+
+		if _, err := conn.Exec(ctx, "DELETE FROM oauth_grants WHERE id = $1", grantID); err != nil {
+			t.Fatalf("delete grant: %v", err)
+		}
+		var n int
+		if err := conn.QueryRow(ctx, "SELECT count(*) FROM oauth_token_sessions").Scan(&n); err != nil || n != 0 {
+			t.Errorf("許可を消したあとのトークンの記録 = %d (%v), want 0", n, err)
+		}
+		if err := conn.QueryRow(ctx, insertGrant, userID, "app", "アプリ", []string{"hamburger:read"}).Scan(&grantID); err != nil {
+			t.Fatalf("re-insert grant: %v", err)
+		}
+		if _, err := conn.Exec(ctx, "DELETE FROM users WHERE id = $1", userID); err != nil {
+			t.Fatalf("delete user: %v", err)
+		}
+		if err := conn.QueryRow(ctx, "SELECT count(*) FROM oauth_grants").Scan(&n); err != nil || n != 0 {
+			t.Errorf("利用者を消したあとの許可の記録 = %d (%v), want 0", n, err)
 		}
 	})
 
@@ -279,7 +339,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	t.Helper()
 
-	wantTables := []string{"burger_stats", "burger_stats_recalc_requests", "burgers", "mail_deliveries", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
+	wantTables := []string{"burger_stats", "burger_stats_recalc_requests", "burgers", "mail_deliveries", "oauth_grants", "oauth_token_sessions", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
 	gotTables := queryStrings(ctx, t, conn,
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
@@ -318,6 +378,25 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"mail_deliveries/last_error/text/YES",
 		"mail_deliveries/created_at/timestamp with time zone/NO",
 		"mail_deliveries/sent_at/timestamp with time zone/YES",
+		// oauth_grants と oauth_token_sessions は 000011・000012 で追加された(OAuth の認可サーバー)。
+		"oauth_grants/id/uuid/NO",
+		"oauth_grants/user_id/uuid/NO",
+		"oauth_grants/client_id/text/NO",
+		"oauth_grants/client_name/text/NO",
+		"oauth_grants/scopes/ARRAY/NO",
+		"oauth_grants/created_at/timestamp with time zone/NO",
+		"oauth_grants/updated_at/timestamp with time zone/NO",
+		"oauth_token_sessions/id/uuid/NO",
+		"oauth_token_sessions/kind/text/NO",
+		"oauth_token_sessions/signature/text/NO",
+		"oauth_token_sessions/request_id/uuid/NO",
+		"oauth_token_sessions/grant_id/uuid/NO",
+		"oauth_token_sessions/user_id/uuid/NO",
+		"oauth_token_sessions/client_id/text/NO",
+		"oauth_token_sessions/active/boolean/NO",
+		"oauth_token_sessions/request/jsonb/NO",
+		"oauth_token_sessions/expires_at/timestamp with time zone/NO",
+		"oauth_token_sessions/created_at/timestamp with time zone/NO",
 		"reviews/id/uuid/NO",
 		"reviews/rating/smallint/NO",
 		"reviews/comment/text/YES",
@@ -418,6 +497,20 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burger_stats_recalc_requests/burger_stats_recalc_requests_burger_id_fkey/f",
 		"burger_stats_recalc_requests/burger_stats_recalc_requests_attempts_check/c",
 		"burger_stats_recalc_requests/burger_stats_recalc_requests_last_error_max_length/c",
+		"oauth_grants/oauth_grants_pkey/p",
+		"oauth_grants/oauth_grants_user_id_fkey/f",
+		"oauth_grants/oauth_grants_user_client_key/u",
+		"oauth_grants/oauth_grants_client_id_max_length/c",
+		"oauth_grants/oauth_grants_client_id_not_empty/c",
+		"oauth_grants/oauth_grants_client_name_max_length/c",
+		"oauth_grants/oauth_grants_client_name_not_empty/c",
+		"oauth_grants/oauth_grants_scopes_not_empty/c",
+		"oauth_token_sessions/oauth_token_sessions_pkey/p",
+		"oauth_token_sessions/oauth_token_sessions_grant_id_fkey/f",
+		"oauth_token_sessions/oauth_token_sessions_user_id_fkey/f",
+		"oauth_token_sessions/oauth_token_sessions_kind_signature_key/u",
+		"oauth_token_sessions/oauth_token_sessions_kind_check/c",
+		"oauth_token_sessions/oauth_token_sessions_signature_length/c",
 	}
 	for _, want := range wantConstraints {
 		if !constraints[want] {
@@ -438,6 +531,9 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"idx_reviews_burger_id",
 		"idx_signup_verifications_email_lower",
 		"idx_signup_verifications_expires_at",
+		"idx_oauth_token_sessions_request_id",
+		"idx_oauth_token_sessions_grant_id",
+		"idx_oauth_token_sessions_expires_at",
 	}
 	for _, want := range wantIndexes {
 		if !indexes[want] {

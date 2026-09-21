@@ -47,6 +47,30 @@ type MailDelivery struct {
 	SentAt         pgtype.Timestamptz
 }
 
+type OauthGrant struct {
+	ID         string
+	UserID     string
+	ClientID   string
+	ClientName string
+	Scopes     []string
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type OauthTokenSession struct {
+	ID        string
+	Kind      string
+	Signature string
+	RequestID string
+	GrantID   string
+	UserID    string
+	ClientID  string
+	Active    bool
+	Request   []byte
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
 type Review struct {
 	ID          string
 	Rating      int16
