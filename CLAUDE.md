@@ -252,9 +252,11 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 
 メール + パスワードのほかに、Google のアカウントで、サインイン・新規登録・結び付けができる(`internal/adapter/googleauth`。認可コード + PKCE(S256)。ライブラリは `github.com/coreos/go-oidc/v3` と `golang.org/x/oauth2`)。`GOOGLE_CLIENT_ID` を設定したときだけ有効で、設定しなければ、`/auth/google/*` と `/me/identities*` は登録されず(404)、`GET /meta` の `login_providers` は空になる。Google Cloud での準備と手元での確かめ方は `docs/google-login-setup.md`。
 
-- 流れ: ① 画面の「Google でサインイン」が `GET /auth/google/start`(query の `return_to`)へ移動 → ② API が、手続きの秘密(state・nonce・PKCE の検証値・戻り先)を、暗号化した短命の cookie(`google_login_flow`。HttpOnly・SameSite=Lax・path は戻り先の path だけ。使い終わったら消す)に封じて、Google の認可の画面へ 302 → ③ Google が `GET /auth/google/callback` へ戻す。API が state を確かめ、認可コードを交換し、ID トークン(署名・発行者・宛先・有効期限・nonce・`email_verified`)を検証する → ④ **結果(成功も失敗も)は、短命(60 秒)・1 回限りの「画面へ渡すコード」に入れて**、frontend の `/auth/google/complete?code=…` へ 303 → ⑤ 画面が `POST /auth/google/exchange`(`{"code": "…"}`)で交換して、結果を受け取る。**ログインの証(JWT)は URL に載せず、交換の応答でだけ返す。**
-- 識別は、メールでなく、Google の `sub`(`user_identities.provider_user_id`)。結び付いていればサインイン。結び付いておらず、同じメール(大文字小文字を区別しない)の利用者がいなければ、パスワードなしで新規登録(ユーザー名は `domain.UsernameFromProfile`。あとで変更できる)。**同じメールの利用者がいるときは、自動では結び付けない**(409 と案内。パスワードでサインインして、プロフィールから結び付ける)。
-- 結び付け(ログイン済み): `POST /me/identities/google/link`(1 回限りの開始のコードを返す)→ 画面が `/auth/google/start?link_code=…` へ移動 → 同じ流れで、その利用者に `sub` を結び付ける。`GET /me/identities`(一覧。`can_unlink`)。`DELETE /me/identities/google`(204。**パスワードなしのアカウントは、サインインする方法がなくなるので 422**。判断は domain の `CanUnlinkIdentity`)。
+- 流れ: ① 画面の「Google でサインイン」が `GET /auth/google/start`(query の `return_to`)へ移動 → ② API が、手続きの秘密(state・nonce・PKCE の検証値・戻り先)を、暗号化した短命の cookie(`google_login_flow`。HttpOnly・SameSite=Lax・path は戻り先の path だけ)に封じて、Google の認可の画面へ 302 → ③ Google が `GET /auth/google/callback` へ戻す。API が、cookie から、**state に対応する手続きを取り出し**(取り出した手続きだけを cookie から取り除く)、認可コードを交換し、ID トークン(署名・発行者・宛先・有効期限・nonce・`email_verified`)を検証する → ④ **結果(成功も失敗も)は、短命(60 秒)・1 回限りの「画面へ渡すコード」に入れて**、frontend の `/auth/google/complete?code=…` へ 303 → ⑤ 画面が `POST /auth/google/exchange`(`{"code": "…"}`)で交換して、結果を受け取る。**ログインの証(JWT)は URL に載せず、交換の応答でだけ返す。**
+- **手続きの cookie は、複数の手続きを持てる**(同じブラウザの複数のタブで、続けて始めても、後発が先発を上書きしない)。最大 5 件・封じた値は 3,800 バイトまで(超えたら古い手続きから捨てる)・期限(10 分)切れは掃除・使った手続きは取り除き、空になったら cookie を消す。
+- **交換(`Redeem`)は、後続の処理が成功してから、コードを消す**: 1 つのトランザクションの中で「コードをロック(`FOR UPDATE`)→ 内容を読む → 利用者の取得・トークンの発行 → コードを削除」。途中で失敗したら取り消すので、DB の一時的なエラーやトークンの発行の失敗で 500 になっても、コードは期限まで有効で、画面が同じコードで再試行できる。同じコードの並行する交換は、ロックで直列になり、成功するのは 1 回だけ。**トランザクションの中の読み取りは、プールからもう 1 つ接続を取らず、トランザクションの接続(`Tx.UserReads`)を使う**(取ると、同じコードを待つ処理が接続を使い切り、全体が止まる)。
+- 識別は、メールでなく、Google の `sub`(`user_identities.provider_user_id`)。結び付いていればサインイン。結び付いておらず、同じメール(大文字小文字を区別しない)の利用者がいなければ、パスワードなしで新規登録(ユーザー名は `domain.UsernameFromProfile`。あとで変更できる)。**同じメールの利用者がいるときは、自動では結び付けない**(409 と案内。パスワードでサインインして、プロフィールから結び付ける)。**メールの一意性は、DB が、大文字小文字を区別せずに保証する**(`users` の `lower(email)` の一意の索引 `users_email_lower_key`。退会済みも対象。並行する登録の競合で、破られない。一意違反は `domain.ErrEmailTaken` になり、Google の新規登録は案内のエラー、メール確認での登録は「確認できない」になる)。
+- 結び付け(ログイン済み): **`POST /me/identities/google/link`(認証つき。body の `return_to` は省略できる)が、その要求を出したブラウザで手続きを始め、Google の認可の画面の URL(`redirect_url`)を返す**。結び付ける利用者は、要求の認証から決まり、手続きの cookie(応答の Set-Cookie で、そのブラウザにだけ設定される)の中にだけある。**開始の URL やコードで、別のブラウザに利用者を伝える経路はない**(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに結び付ける攻撃を防ぐため。cookie を持たないブラウザでは、戻ってきても state が合わず失敗する)。画面は、`redirect_url` へ移動する。`GET /me/identities`(一覧。`can_unlink`)。`DELETE /me/identities/google`(204。**パスワードなしのアカウントは、サインインする方法がなくなるので 422**。判断は domain の `CanUnlinkIdentity`)。
 - 戻り先(`return_to`)は、アプリの中のパスだけ(`domain.SanitizeReturnTo`。外部の URL・`//host`・`\`・制御文字は、既定の画面になる)。S39 の許可の画面へ戻る流れ(`/oauth/authorize?...`)も、この経路で戻る。
 - パスワードなしのアカウント: `users.password_digest` は NULL。パスワードでのサインインは、知らないメールと同じ失敗(文言・ステータス・hash の比較 1 回分)になる。
 - テーブル: `user_identities`(`UNIQUE(provider, provider_user_id)`・`UNIQUE(user_id, provider)`。Google のトークンは保存しない)、`login_handoffs`(画面へ渡すコードの中身。`code_hash` は SHA-256。使うと消える)。`users.password_digest` を NULL 可にしたので、**適用済みの開発用 DB は作り直す**(`migrate drop -f` → `migrate up` → `seed`)。
@@ -266,7 +268,7 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 |---|---|---|
 | `GOOGLE_CLIENT_ID` | 任意(設定すると有効) | Google Cloud Console で作った OAuth クライアントの ID |
 | `GOOGLE_CLIENT_SECRET` | 有効なとき必須 | そのクライアントの秘密の鍵。**秘密。ログ・コード・PR・チャットに書かない。`.env` は Git に入れない** |
-| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:8080/auth/google/callback`) |
+| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:8080/auth/google/callback`)。**https、または開発用のループバックの http だけ**(起動時に断る。`APP_BASE_URL` も、有効なときは同じ制約)。画面と同じサイト(同じホスト)にして、手続きの cookie が届くようにする |
 | `GOOGLE_OIDC_ISSUER` | 任意 | OpenID Connect の提供元。既定は `https://accounts.google.com`。テスト・隔離した確認で、代役に向けるためだけにある。https か、ループバック(`localhost`・`127.0.0.1`・`[::1]`)の http だけ許す。**本番では設定しない** |
 
 ### リモートの MCP サーバー(`/mcp`)
@@ -295,10 +297,10 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `GET /up` — ヘルスチェック (DB への ping)
 
 **Google でのサインイン**(`GOOGLE_CLIENT_ID` を設定したときだけ。詳細は「Google のアカウントでのサインイン」)
-- `GET /auth/google/start` — Google の認可の画面へ 302(query: `return_to`、結び付けのときは `link_code`)
+- `GET /auth/google/start` — Google の認可の画面へ 302(query: `return_to`。サインイン・新規登録の手続き専用)
 - `GET /auth/google/callback` — Google からの戻り。結果を入れた 1 回限りのコードを付けて、frontend の `/auth/google/complete` へ 303
 - `POST /auth/google/exchange` — コードを交換して結果を返す(サインインの成功 200 + `token`・`return_to`、結び付けの成功 200 + `linked`、重複 409、失敗・無効なコード 400)
-- `POST /me/identities/google/link` — 結び付けの開始のコードを返す (要認証)
+- `POST /me/identities/google/link` — 結び付けの手続きを、要求を出したブラウザで始め(cookie を設定)、Google の認可の画面の URL(`redirect_url`)を返す (要認証)
 - `GET /me/identities` — 結び付き(Google など)の一覧。`can_unlink` (要認証)
 - `DELETE /me/identities/google` — 結び付きの解除 204 (要認証。解除するとサインインする方法がなくなるなら 422)
 

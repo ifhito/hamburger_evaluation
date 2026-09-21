@@ -171,7 +171,7 @@ func googleRoutes(g *GoogleLogin, auth *usecase.Auth) []route {
 		{path: "/auth/google/callback", methods: map[string]http.HandlerFunc{http.MethodGet: g.HandleCallback}},
 		{path: "/auth/google/exchange", methods: map[string]http.HandlerFunc{http.MethodPost: g.HandleExchange}},
 		{path: "/me/identities", methods: map[string]http.HandlerFunc{http.MethodGet: g.HandleListIdentities}, middleware: RequireAuth(auth)},
-		{path: "/me/identities/google/link", methods: map[string]http.HandlerFunc{http.MethodPost: g.HandleLinkIntent}, middleware: RequireAuth(auth)},
+		{path: "/me/identities/google/link", methods: map[string]http.HandlerFunc{http.MethodPost: g.HandleLinkStart}, middleware: RequireAuth(auth)},
 		{path: "/me/identities/google", methods: map[string]http.HandlerFunc{http.MethodDelete: g.HandleUnlinkGoogle}, middleware: RequireAuth(auth)},
 	}
 }

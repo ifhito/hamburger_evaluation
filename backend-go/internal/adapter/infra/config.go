@@ -467,8 +467,13 @@ func loadGoogleConfig(getenv func(string) string, cfg *Config) error {
 	if gc.RedirectURL == "" {
 		return fmt.Errorf("GOOGLE_REDIRECT_URL is required when GOOGLE_CLIENT_ID is set")
 	}
-	if err := requireHTTPURL("GOOGLE_REDIRECT_URL", gc.RedirectURL); err != nil {
+	// 認可コード・state・手続きの cookie が流れる戻り先と、1 回限りのコード(JWT に交換できる)が流れる
+	// アプリの URL は、https か、開発用のループバックの http だけを許す(外部への平文の通信を防ぐ)。
+	if err := requireHTTPSOrLoopback("GOOGLE_REDIRECT_URL", gc.RedirectURL); err != nil {
 		return err
+	}
+	if err := requireHTTPSOrLoopback("APP_BASE_URL", cfg.AppBaseURL); err != nil {
+		return fmt.Errorf("%w (required when GOOGLE_CLIENT_ID is set)", err)
 	}
 	if gc.Issuer == "" {
 		gc.Issuer = defaultGoogleIssuer

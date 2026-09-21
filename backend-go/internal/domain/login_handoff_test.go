@@ -9,7 +9,8 @@ import (
 
 // fakeHandoffRepo は、保存されたコードの中身を覚えておく、テスト用の repository である。
 type fakeHandoffRepo struct {
-	saved map[string]CreateLoginHandoffParams
+	saved  map[string]CreateLoginHandoffParams
+	locked []string
 }
 
 func (f *fakeHandoffRepo) CreateLoginHandoff(_ context.Context, p CreateLoginHandoffParams) error {
@@ -20,40 +21,43 @@ func (f *fakeHandoffRepo) CreateLoginHandoff(_ context.Context, p CreateLoginHan
 	return nil
 }
 
-func (f *fakeHandoffRepo) DiscardLoginHandoff(_ context.Context, hash string) (LoginHandoff, error) {
-	p, ok := f.saved[hash]
-	if !ok {
-		return LoginHandoff{}, ErrLoginHandoffInvalid
+func (f *fakeHandoffRepo) LockLoginHandoff(_ context.Context, hash string) error {
+	if _, ok := f.saved[hash]; !ok {
+		return ErrLoginHandoffInvalid
 	}
-	delete(f.saved, hash)
-	return LoginHandoff{Outcome: p.Outcome, UserID: p.UserID, ReturnTo: p.ReturnTo}, nil
+	f.locked = append(f.locked, hash)
+	return nil
 }
+
+func (f *fakeHandoffRepo) DiscardLoginHandoff(context.Context, string) error { return nil }
 
 func (f *fakeHandoffRepo) DiscardExpiredLoginHandoffs(context.Context, int) (int64, error) {
 	return 0, nil
 }
 
-func TestLoginHandoffsIssueAndRedeem(t *testing.T) {
+func TestLoginHandoffsIssueAndLock(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("コードを発行すると、平文は保存されず、ハッシュだけが保存され、その平文で 1 回だけ中身を取り出せる", func(t *testing.T) {
+	t.Run("コードを発行すると、平文は保存されず、ハッシュだけが保存され、その平文でロックできる", func(t *testing.T) {
 		repo := &fakeHandoffRepo{}
 		h := NewLoginHandoffs(repo)
 		raw, err := h.Issue(ctx, OutcomeSignedIn, "user-1", "/shops")
 		if err != nil {
 			t.Fatal(err)
 		}
-		for hash := range repo.saved {
-			if hash == raw || strings.Contains(hash, raw) {
+		for hash, p := range repo.saved {
+			if hash == raw || strings.Contains(hash, raw) || p.CodeHash != hash {
 				t.Fatal("平文のコードが保存されている")
 			}
+			if p.CodeHash != HashLoginHandoffCode(raw) || p.Outcome != OutcomeSignedIn || p.UserID != "user-1" || p.ReturnTo != "/shops" {
+				t.Fatalf("保存された内容 = %+v", p)
+			}
 		}
-		got, err := h.Redeem(ctx, raw)
-		if err != nil || got.Outcome != OutcomeSignedIn || got.UserID != "user-1" || got.ReturnTo != "/shops" {
-			t.Fatalf("got %+v, err %v", got, err)
+		if err := h.Lock(ctx, raw); err != nil {
+			t.Fatalf("Lock: %v", err)
 		}
-		if _, err := h.Redeem(ctx, raw); !errors.Is(err, ErrLoginHandoffInvalid) {
-			t.Fatalf("2 回目は使えないはずが、err = %v", err)
+		if len(repo.locked) != 1 || repo.locked[0] != HashLoginHandoffCode(raw) {
+			t.Fatalf("ロックされたもの = %v, want 平文のハッシュ", repo.locked)
 		}
 	})
 
@@ -72,6 +76,9 @@ func TestLoginHandoffsIssueAndRedeem(t *testing.T) {
 		if _, err := h.Issue(ctx, OutcomeSignedIn, "", ""); err == nil {
 			t.Fatal("利用者なしのサインインの成功を、発行できてしまった")
 		}
+		if _, err := h.Issue(ctx, OutcomeLinked, "", ""); err == nil {
+			t.Fatal("利用者なしの結び付けの成功を、発行できてしまった")
+		}
 		if _, err := h.Issue(ctx, OutcomeFailed, "user-1", ""); err == nil {
 			t.Fatal("利用者つきの失敗を、発行できてしまった")
 		}
@@ -80,9 +87,9 @@ func TestLoginHandoffsIssueAndRedeem(t *testing.T) {
 		}
 	})
 
-	t.Run("知らないコードは、無効として断る", func(t *testing.T) {
+	t.Run("知らないコードは、ロックできず、無効として断る", func(t *testing.T) {
 		h := NewLoginHandoffs(&fakeHandoffRepo{})
-		if _, err := h.Redeem(ctx, "unknown"); !errors.Is(err, ErrLoginHandoffInvalid) {
+		if err := h.Lock(ctx, "unknown"); !errors.Is(err, ErrLoginHandoffInvalid) {
 			t.Fatalf("err = %v", err)
 		}
 	})

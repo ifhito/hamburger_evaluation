@@ -12,7 +12,8 @@ import (
 )
 
 // LoginHandoffRepository は、sqlc 生成のクエリ上で domain.LoginHandoffRepository(書き込み)を実装する。
-// 1 つの操作は 1 つの文で行う。
+// 1 つの操作は 1 つの文で行い、複数の操作をまとめて 1 つのトランザクションにするのは、呼び出し側(usecase の
+// UnitOfWork)の役目である(その中では、db にトランザクション(pgx.Tx)が渡される)。
 type LoginHandoffRepository struct {
 	q *sqlcgen.Queries
 }
@@ -43,21 +44,26 @@ func (r *LoginHandoffRepository) CreateLoginHandoff(ctx context.Context, params 
 	return nil
 }
 
-// DiscardLoginHandoff は、codeHash の、期限内のコードの中身を、削除しながら返す。1 つの文なので、
-// 並行して同じコードを使っても、成功するのは 1 回だけである。なければ domain.ErrLoginHandoffInvalid を返す。
-func (r *LoginHandoffRepository) DiscardLoginHandoff(ctx context.Context, codeHash string) (domain.LoginHandoff, error) {
-	row, err := r.q.DeleteLoginHandoffByCodeHash(ctx, codeHash)
-	if err != nil {
+// LockLoginHandoff は、codeHash の、期限内のコードの行を FOR UPDATE で排他ロックする。行の中身は返さない。
+// 行がない(期限切れ・存在しない・使用済み)ときは、domain.ErrLoginHandoffInvalid を返す。トランザクションの
+// 中で呼べば、そのトランザクションが終わるまで、同じコードを使うほかの処理は待たされる。待っている間に先の処理が
+// コードを削除して確定すると、待っていた側は行が消えているのを見て、同じエラーになる。
+func (r *LoginHandoffRepository) LockLoginHandoff(ctx context.Context, codeHash string) error {
+	if _, err := r.q.LockLoginHandoffByCodeHash(ctx, codeHash); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.LoginHandoff{}, fmt.Errorf("discard login handoff: %w", domain.ErrLoginHandoffInvalid)
+			return fmt.Errorf("lock login handoff: %w", domain.ErrLoginHandoffInvalid)
 		}
-		return domain.LoginHandoff{}, fmt.Errorf("discard login handoff: %w", err)
+		return fmt.Errorf("lock login handoff: %w", err)
 	}
-	h := domain.LoginHandoff{ID: row.ID, Outcome: domain.LoginHandoffOutcome(row.Outcome), ReturnTo: row.ReturnTo}
-	if row.UserID != nil {
-		h.UserID = *row.UserID
+	return nil
+}
+
+// DiscardLoginHandoff は、id のコードの行を削除する。
+func (r *LoginHandoffRepository) DiscardLoginHandoff(ctx context.Context, id string) error {
+	if err := r.q.DeleteLoginHandoff(ctx, id); err != nil {
+		return fmt.Errorf("discard login handoff: %w", err)
 	}
-	return h, nil
+	return nil
 }
 
 // DiscardExpiredLoginHandoffs は、期限切れのコードの中身を、最大 limit 件まで削除し、削除した件数を返す。

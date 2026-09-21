@@ -182,7 +182,22 @@ func TestMigrationsAcceptance(t *testing.T) {
 		_, err := conn.Exec(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3)",
 			email, "ac4-second", "digest")
-		assertPgError(t, err, "23505", "users_email_key")
+		// まったく同じ文字列は、UNIQUE(email)と lower(email)の一意の索引の、どちらにも違反する(先に検出された名前で報告される)。
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "23505" || (pgErr.ConstraintName != "users_email_key" && pgErr.ConstraintName != "users_email_lower_key") {
+			t.Fatalf("expected a unique violation on the email, got %v", err)
+		}
+	})
+
+	// メールの一意性は、大文字小文字を区別せずに、DB が保証する(事前の確認だけに頼らない)。退会済みも対象。
+	t.Run("大文字小文字だけが違うメールアドレスの 2 人目のユーザーを入れると、UNIQUE 制約違反になる", func(t *testing.T) {
+		if _, err := conn.Exec(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ('Case.Mixed@Example.com', 'case-first', 'digest')"); err != nil {
+			t.Fatalf("insert first user: %v", err)
+		}
+		_, err := conn.Exec(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ('case.mixed@example.com', 'case-second', 'digest')")
+		assertPgError(t, err, "23505", "users_email_lower_key")
 	})
 
 	// メール確認待ちの登録(signup_verifications)の制約。トークンのハッシュは一意、email は大文字小文字を
@@ -568,6 +583,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"idx_oauth_token_sessions_expires_at",
 		"idx_login_handoffs_expires_at",
 		"idx_login_handoffs_user_id",
+		"users_email_lower_key",
 	}
 	for _, want := range wantIndexes {
 		if !indexes[want] {

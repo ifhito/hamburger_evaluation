@@ -53,6 +53,15 @@ type IdentityQuery interface {
 	GetActiveUserHasPassword(ctx context.Context, userID string) (bool, error)
 }
 
+// LoginHandoffQuery は、画面へ渡すコードの中身を読む、読み取り専用の窓口である。UnitOfWork の中では、
+// トランザクションに結び付いた実装が渡されるので、同じトランザクションでロックした行を、そのまま読める。
+// 書き込みのメソッドは置かない(書き込みは domain.LoginHandoffs を通す)。
+type LoginHandoffQuery interface {
+	// GetLoginHandoffByCodeHash は、codeHash の、期限内のコードの中身を返す。期限切れ・存在しない・
+	// すでに使われた(削除された)ものは、(wrap された)domain.ErrLoginHandoffInvalid を返す。
+	GetLoginHandoffByCodeHash(ctx context.Context, codeHash string) (domain.LoginHandoff, error)
+}
+
 // GoogleFlow は、手続きを始めたときに決まり、終わるまで持ち回る値である。利用者の画面には渡さず、ブラウザの
 // cookie に封じる。
 type GoogleFlow struct {
@@ -124,24 +133,12 @@ func (g *GoogleLogins) Begin(ctx context.Context, returnTo string) (GoogleBegin,
 	return g.begin(ctx, domain.SanitizeReturnTo(returnTo), "")
 }
 
-// BeginLink は、ログイン済みの利用者の、結び付けの手続きを始める。linkCode は、IssueLinkIntent で発行した、1 回だけ
-// 使えるコードである。期限切れ・使用済み・用途が違うコード、退会済みの利用者は、(wrap された)
-// domain.ErrLoginHandoffInvalid を返す。
-func (g *GoogleLogins) BeginLink(ctx context.Context, linkCode, returnTo string) (GoogleBegin, error) {
-	h, err := g.handoffs.Redeem(ctx, linkCode)
-	if err != nil {
-		return GoogleBegin{}, err
-	}
-	if h.Outcome != domain.OutcomeLinkIntent {
-		return GoogleBegin{}, fmt.Errorf("begin link: %w", domain.ErrLoginHandoffInvalid)
-	}
-	if _, err := g.users.GetActiveUserByID(ctx, h.UserID); err != nil {
-		if errors.Is(err, domain.ErrUserNotFound) {
-			return GoogleBegin{}, fmt.Errorf("begin link: %w", domain.ErrLoginHandoffInvalid)
-		}
-		return GoogleBegin{}, fmt.Errorf("begin link: get user: %w", err)
-	}
-	return g.begin(ctx, domain.SanitizeReturnTo(returnTo), h.UserID)
+// BeginLink は、**ログイン済みの利用者**の、結び付けの手続きを始める。結び付ける利用者は、呼び出した本人(viewer。
+// 認証済みの要求から決まる)で、手続きの秘密と一緒に、そのブラウザの cookie に封じられる。開始の URL やコードで、
+// 別のブラウザに利用者を伝える経路は作らない(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに
+// 結び付ける攻撃を防ぐため。手続きは、始めたブラウザの cookie がなければ、戻ってきても失敗する)。
+func (g *GoogleLogins) BeginLink(ctx context.Context, viewer domain.User, returnTo string) (GoogleBegin, error) {
+	return g.begin(ctx, domain.SanitizeReturnTo(returnTo), viewer.ID)
 }
 
 func (g *GoogleLogins) begin(ctx context.Context, returnTo, linkUserID string) (GoogleBegin, error) {
@@ -150,16 +147,6 @@ func (g *GoogleLogins) begin(ctx context.Context, returnTo, linkUserID string) (
 		return GoogleBegin{}, fmt.Errorf("begin google login: %w", err)
 	}
 	return GoogleBegin{AuthURL: authURL, Flow: GoogleFlow{Secrets: secrets, ReturnTo: returnTo, LinkUserID: linkUserID}}, nil
-}
-
-// IssueLinkIntent は、ログイン済みの利用者が、結び付けの手続きを始めるための、1 回だけ使える短命のコードを発行する。
-// 結び付けの手続きは、ブラウザの移動で始まり、Authorization ヘッダーを付けられないので、このコードで利用者を伝える。
-func (g *GoogleLogins) IssueLinkIntent(ctx context.Context, viewer domain.User) (string, error) {
-	code, err := g.handoffs.Issue(ctx, domain.OutcomeLinkIntent, viewer.ID, "")
-	if err != nil {
-		return "", fmt.Errorf("issue link intent: %w", err)
-	}
-	return code, nil
 }
 
 // Complete は、Google から戻ってきた要求を処理し、結果を入れた「画面へ渡すコード」(平文)を返す。手続きの結果は、
@@ -291,34 +278,48 @@ func (g *GoogleLogins) link(ctx context.Context, userID string, ident domain.Ext
 	}
 }
 
-// Redeem は、「画面へ渡すコード」(平文)を 1 回だけ使って、手続きの結果を返す。期限切れ・存在しない・使用済み・
-// 用途が違う(結び付けの開始のコード)ものは、(wrap された)domain.ErrLoginHandoffInvalid を返す。サインインの成功のときは、
-// この時点で、ログインの証(JWT)を発行する。
+// Redeem は、「画面へ渡すコード」(平文)を 1 回だけ使って、手続きの結果を返す。期限切れ・存在しない・使用済みは、
+// (wrap された)domain.ErrLoginHandoffInvalid を返す。サインインの成功のときは、この時点で、ログインの証(JWT)を発行する。
+//
+// 手順は、1 つのトランザクションの中で「コードをロックする → 内容を読む → 利用者の取得・トークンの発行 → コードを
+// 削除する」の順に行う。**後続の処理が失敗したら全体を取り消す**ので、DB の一時的なエラーやトークンの発行の失敗で
+// 500 になっても、コードは期限まで有効なままで、画面が同じコードで再試行できる(先に消してしまうと、利用者は、
+// 最初からやり直すことになる)。先頭でロックするので、同じコードの並行する交換は 1 件ずつに直列になり、
+// 2 件目は、行が消えているのを見て、無効になる(成功するのは 1 回だけ)。
 func (g *GoogleLogins) Redeem(ctx context.Context, rawCode string) (GoogleRedeemed, error) {
-	h, err := g.handoffs.Redeem(ctx, rawCode)
-	if err != nil {
-		return GoogleRedeemed{}, err
-	}
-	switch h.Outcome {
-	case domain.OutcomeLinkIntent:
-		// 結び付けの開始のコードは、サインインの結果としては使えない(使った時点で消えている)。
-		return GoogleRedeemed{}, fmt.Errorf("redeem google login: %w", domain.ErrLoginHandoffInvalid)
-	case domain.OutcomeSignedIn:
-		user, err := g.users.GetActiveUserByID(ctx, h.UserID)
+	var res GoogleRedeemed
+	err := g.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
+		if err := tx.LoginHandoffs.Lock(ctx, rawCode); err != nil {
+			return err
+		}
+		h, err := tx.PendingHandoff.GetLoginHandoffByCodeHash(ctx, domain.HashLoginHandoffCode(rawCode))
 		if err != nil {
-			if errors.Is(err, domain.ErrUserNotFound) {
-				return GoogleRedeemed{Outcome: domain.OutcomeFailed, ReturnTo: h.ReturnTo}, nil
+			return err
+		}
+		res = GoogleRedeemed{Outcome: h.Outcome, ReturnTo: h.ReturnTo}
+		if h.Outcome == domain.OutcomeSignedIn {
+			// トランザクションの接続で読む(プールから、もう 1 つ接続を取ると、並行する交換で、接続を取り合って止まる)。
+			user, err := tx.UserReads.GetActiveUserByID(ctx, h.UserID)
+			switch {
+			case err == nil:
+				token, err := g.issuer.Issue(user.ID)
+				if err != nil {
+					return fmt.Errorf("issue token: %w", err)
+				}
+				res.User, res.Token = user, token
+			case errors.Is(err, domain.ErrUserNotFound):
+				// コードを作ってから、交換までの間に退会した。サインインさせず、失敗として返す(コードは使い切る)。
+				res.Outcome = domain.OutcomeFailed
+			default:
+				return fmt.Errorf("get user: %w", err)
 			}
-			return GoogleRedeemed{}, fmt.Errorf("redeem google login: get user: %w", err)
 		}
-		token, err := g.issuer.Issue(user.ID)
-		if err != nil {
-			return GoogleRedeemed{}, fmt.Errorf("redeem google login: issue token: %w", err)
-		}
-		return GoogleRedeemed{Outcome: h.Outcome, User: user, Token: token, ReturnTo: h.ReturnTo}, nil
-	default:
-		return GoogleRedeemed{Outcome: h.Outcome, ReturnTo: h.ReturnTo}, nil
+		return tx.LoginHandoffs.Discard(ctx, h.ID)
+	})
+	if err != nil {
+		return GoogleRedeemed{}, fmt.Errorf("redeem google login: %w", err)
 	}
+	return res, nil
 }
 
 // ListIdentities は、ログイン済みの利用者の、外部のサービスとの結び付きを返す。
