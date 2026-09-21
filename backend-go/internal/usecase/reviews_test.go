@@ -319,7 +319,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("burger_name 経由では repository 越しに find-or-create し payload を組み立てる", func(t *testing.T) {
+	t.Run("バーガー名を指定して投稿すると、名前のバーガーを探して(なければ作って)からレビューを登録し、応答の内容を組み立てる", func(t *testing.T) {
 		smash := domain.ShopReviewBurger{ID: uid.N(7), Name: " Smash "}
 		var gotShopID string
 		var gotName string
@@ -336,8 +336,7 @@ func TestReviewsCreate(t *testing.T) {
 				return review, nil
 			},
 		}
-		// name は trim されないまま repository に届く（Rails は決して
-		// trim しない）。
+		// バーガー名は、前後の空白を取り除かれないまま、そのまま書き込み側に渡る。
 		got, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", " Smash ", 4, "Juicy", nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
@@ -346,7 +345,7 @@ func TestReviewsCreate(t *testing.T) {
 			t.Errorf("repo got shop %s name %q, want %s %q", gotShopID, gotName, activeShop.ID, " Smash ")
 		}
 		if gotReview.AuthorID != bob.ID || gotReview.Rating != 4 || gotReview.BurgerID != smash.ID {
-			t.Errorf("repo got review %+v, want author %s rating 4 for the resolved burger %s", gotReview, bob.ID, smash.ID)
+			t.Errorf("登録されたレビュー = %+v, want 投稿者 %s・評価 4・解決したバーガー %s", gotReview, bob.ID, smash.ID)
 		}
 		if got.ID != 44 || got.BurgerID != smash.ID {
 			t.Errorf("detail review = %+v, want id 44 for burger %s", got.Review, smash.ID)
@@ -358,7 +357,8 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("バーガーの id(burger_id)が指定されていれば、バーガー名(burger_name)より優先される", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
-		// createShopBurger は未設定：呼び出しは panic する
+		// バーガー名の解決(createShopBurger)は代役に設定していない。ID の指定が優先されるので、
+		// 呼ばれると panic してテストが失敗する。
 		repo := &fakeReviewRepo{
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 				review.ID = 45
@@ -393,7 +393,7 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("burger_name 経由では書き込みの前に内容を validate する", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop}
-		repo := &fakeReviewRepo{} // createShopBurger は未設定：呼び出しは panic する
+		repo := &fakeReviewRepo{} // バーガー名の解決(createShopBurger)は代役に設定していない。書き込みの前に検証で失敗するので、呼ばれない
 		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", "Smash", 0, " ", nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {

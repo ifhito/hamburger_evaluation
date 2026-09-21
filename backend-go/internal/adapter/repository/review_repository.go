@@ -13,29 +13,31 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// ReviewRepository は、sqlc 生成のクエリ上で domain.ReviewRepository を
-// 実装する。書き込み（create、edit、discard）だけを担い、読み取りは
-// adapter/query の ReviewQuery が担う。soft delete の述語（discarded_at IS NULL）は
-// SQL 側にあり、認可ルール自体は domain パッケージにある。burger_stats の再計算は
-// ここでは行わない（トランザクションを持つ usecase が、UnitOfWork の中で
-// BurgerStatRepository と組み合わせて行う）。db が UnitOfWork のトランザクション
-// （pgx.Tx）のときは、複数の文を 1 つにまとめる withTx は savepoint になり、
-// 全体のトランザクションの中で原子的に働く。
+// ReviewRepository は、sqlc が生成したクエリを使って domain.ReviewRepository を実装する。
+// レビューの書き込み(登録・編集・論理削除)だけを担い、読み取りは adapter/query の ReviewQuery が
+// 担う。論理削除済みの行を除く条件(discarded_at IS NULL)は SQL に書かれていて、編集・削除できる
+// のは誰かという認可のルールは domain にある。
+//
+// バーガーの統計の再計算は、ここでは行わない。レビューの書き込みと同じトランザクションで、
+// usecase が UnitOfWork(ここからここまでをまとめて 1 つのトランザクションにする範囲を、usecase が
+// 指定する仕組み)の中で、BurgerStatRepository と組み合わせて行う。db が UnitOfWork のトランザクション
+// のときは、この中で複数の文をまとめるための withTx が、新しいトランザクションではなくセーブポイント
+// (トランザクションの途中に打つ、部分的な巻き戻し用の目印)になり、外側のトランザクションの中で
+// 矛盾なく巻き戻る。
 type ReviewRepository struct {
 	db beginnerDBTX
 	q  *sqlcgen.Queries
 }
 
-// NewReviewRepository は db（共有の pgx pool か、UnitOfWork のトランザクション）を
-// ラップする。
+// NewReviewRepository は db をラップする。本番では、共有の接続プールか、UnitOfWork の
+// トランザクション(まとめて 1 つのトランザクションにする範囲の中で使うもの)が渡される。
 func NewReviewRepository(db beginnerDBTX) *ReviewRepository {
 	return &ReviewRepository{db: db, q: sqlcgen.New(db)}
 }
 
 var _ domain.ReviewRepository = (*ReviewRepository)(nil)
 
-// CreateReview は（検証済みの）review を insert し、生成された id と
-// created_at を持つ review を返す。
+// CreateReview は、検証済みのレビューを登録し、採番された ID と作成日時を持つレビューを返す。
 func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
 	row, err := r.q.CreateReview(ctx, sqlcgen.CreateReviewParams{
 		Rating:   int16(review.Rating),
@@ -50,15 +52,19 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 	return toDomainReview(row), nil
 }
 
-// CreateShopBurger は、shop の burger のうち名前が burgerName と完全に一致するものを
-// 返す。shop にその名前の burger がないときは、burger とその shops_burgers の link を
-// 作成する（Rails の find_or_create_burger、S6 P3-1）。(shop, name) には unique index が
-// 意図的に存在しない。同じ新しい名前を同時に作成する 2 つの creator が、両方とも burger を
-// insert しうる。これは Rails の find_or_create_burger にもある同じ race であり、parity
-// であってバグではない。返される burger は、この呼び出しの前の stats を持ち、burger_id
-// 経路での GetShopBurger とまったく同じである（まったく新しい burger ではゼロ）。
-// 複数の文を 1 つにまとめるので、途中で失敗しても、孤立した burger や link は残らない。
-// review の insert までを同じトランザクションにするのは、呼び出し側（UnitOfWork）の責務である。
+// CreateShopBurger は、ショップのバーガーのうち、名前が burgerName とちょうど一致するもの(前後の
+// 空白や大文字小文字も区別する)を返す。そのショップに同名のバーガーがなければ、バーガーを作成して
+// ショップと結び付ける(shops_burgers)。
+//
+// 返すバーガーの統計は、この呼び出しの前の値である(まったく新しいバーガーなら 0)。バーガー ID を
+// 指定した投稿で、読み取り(GetShopBurger)が返す値と同じ意味になる。
+//
+// (ショップ, 名前)には一意制約を付けていない。同じ新しい名前で同時に投稿した 2 人が、それぞれ
+// バーガーを作ることがある。名前の重複を許す仕様であって、不具合ではない。
+//
+// 検索から作成までの複数の文を 1 つにまとめるので、途中で失敗しても、作りかけのバーガーや結び付けが
+// 残ることはない。ただし、その後のレビューの登録まで同じトランザクションにするのは、呼び出し側
+// (UnitOfWork。まとめて 1 つのトランザクションにする範囲を、usecase が指定する仕組み)の役目である。
 func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID string, burgerName string) (domain.ShopReviewBurger, error) {
 	var burger domain.ShopReviewBurger
 	err := withTx(ctx, r.db, "create shop burger", func(q *sqlcgen.Queries) error {
@@ -89,11 +95,10 @@ func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID string, 
 	return burger, nil
 }
 
-// UpdateReviewContent は、id の、まだ kept な review の rating と comment
-// だけを永続化し、保存された行を返す。存在しないか discard 済みの場合は
-// domain.ErrReviewNotFound を返す。カラム単位に限定される：discarded_at は決して
-// 書き込まれないので、edit が soft delete を復活させることも、soft delete と
-// race することもない。
+// UpdateReviewContent は、削除されていないレビューの評価とコメントだけを更新し、更新後の行を
+// 返す。レビューが存在しない、または論理削除済みなら domain.ErrReviewNotFound を返す。更新する
+// 列を絞っているので、編集が、論理削除の目印(discarded_at)を消して削除を取り消したり、同時に
+// 行われた論理削除と食い違ったりすることはない。
 func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error) {
 	row, err := r.q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
 		ID:      id,
@@ -109,13 +114,11 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 	return toDomainReview(row), nil
 }
 
-// UpdateReviewContentAndPhotoKey は、id の、まだ kept な review の rating、
-// comment、photo_key を永続化し、存在しないか discard 済みの場合は
-// domain.ErrReviewNotFound を返す。既存のカラム単位の 2 つのステートメント
-// （UpdateReviewContent、続いて UpdateReviewPhotoKey）はただ 1 つのトランザクションで
-// 実行されるので、photo を伴う edit は、content と key をまとめて commit するか、何も
-// commit しないかのどちらかになる。2 番目のステートメントが返す行には、最初のステートメントの
-// rating/comment がすでに反映されている（同一トランザクション）。
+// UpdateReviewContentAndPhotoKey は、削除されていないレビューの評価・コメント・写真のキーを更新し、
+// 更新後の行を返す。レビューが存在しない、または論理削除済みなら domain.ErrReviewNotFound を返す。
+// 評価とコメントの更新と、写真のキーの更新は、1 つのトランザクションで行う。途中で失敗しても、
+// 写真のキーが付かないままコメントだけが確定することはない。写真のキーの更新が返す行には、
+// 直前の更新(評価とコメント)がすでに反映されている。
 func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
 	var row sqlcgen.Review
 	err := withTx(ctx, r.db, "update review content and photo key", func(q *sqlcgen.Queries) error {
@@ -148,9 +151,8 @@ func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, i
 	return toDomainReview(row), nil
 }
 
-// DiscardReview は review を soft delete する（discarded_at に時刻を刻み、
-// hard DELETE は決して行わない）。存在しない review や、すでに discard 済みの
-// review はどの行にも一致せず、domain.ErrReviewNotFound を返す。
+// DiscardReview はレビューを論理削除する(削除日時を記録するだけで、行は消さない)。レビューが
+// 存在しない、またはすでに論理削除済みなら domain.ErrReviewNotFound を返す。
 func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
 	if _, err := r.q.DiscardReview(ctx, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

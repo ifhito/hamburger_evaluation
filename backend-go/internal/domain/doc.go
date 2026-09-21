@@ -19,11 +19,13 @@
 //     Reviews、Users、SignupVerifications、MailDeliveries）に置く。Service は作らない。
 //   - 複数の集約を跨ぐ更新: 手順の途中で読み取り（usecase の *Query）を挟むかどうかで、置き場所が
 //     分かれる。読み取りを挟まない、書き込みだけの手順は、domain の Service（*Service）に置く。
-//     読み取りを挟む手順（例: review の書き込み → 統計の元になる facts の読み取り → 統計の保存。
+//     読み取りを挟む手順（例: review の書き込み → 統計の元になるレビューの読み取り → 統計の保存。
 //     退会 → 影響する burger の一覧の読み取り → 各 burger の統計の再計算）は、repository だけを持つ
 //     Service では表現できない（repository は読み取りを持たない）ので、トランザクションを持つ
-//     usecase が、UnitOfWork.Do の中で、各集約の書き込みオブジェクト（BurgerStats など）と Query を
-//     組み合わせて組み立てる。現時点では、後者だけがあり、Service は 1 つもない。
+//     usecase が、各集約の書き込みオブジェクト（BurgerStats など）と Query を組み合わせて、
+//     UnitOfWork(ここからここまでの書き込みと読み取りを、まとめて 1 つのトランザクションにする範囲を、
+//     usecase が指定する仕組み。途中でエラーになれば全体を取り消す)の中で組み立てる。
+//     現時点では、後者だけがあり、Service は 1 つもない。
 //
 // 書き込みオブジェクトと Service のルール（肥大化を防ぐための決まり。構造検査のテストで
 // 一部を強制する）:

@@ -14,8 +14,10 @@ import (
 )
 
 // allowedPrefixes は、interface 名の接尾辞ごとに許されるメソッド名の接頭辞を表す。
-// Repository の Lock は、書き込みの前に行を排他ロックして直列化する操作である（burger の
-// 統計の再計算。値を返さず、行も変更しない、書き込みの前段の排他制御で、読み取りではない）。
+// Repository に Lock を許しているのは、書き込みの前に、対象の行を排他ロック(他の処理が同じ行を
+// 同時に更新できないよう、いったん占有すること)するメソッドがあるため。バーガーの統計を計算し直す
+// 前に、バーガーの行を占有する処理がその例である。値を返さず、行も変更しないので、読み取りでは
+// なく、書き込みの前段の排他制御として扱う。
 var allowedPrefixes = map[string][]string{
 	"Query":      {"Get", "List"},
 	"Repository": {"Create", "Update", "Discard", "Lock"},
@@ -991,9 +993,9 @@ func (y Y) N() int { return y.Xs }`, ""},
 	}
 }
 
-// checkForbiddenSelectors は、Go のソースが、forbidden に挙げた "pkg.Name" の形の参照
-// （例: domain.CalculateBurgerStat、time.Now）を含まないことを確かめ、違反の説明を返す。
-// パッケージ名は識別子の名前で判定するので、フィールド（row.AverageRating など）には反応しない。
+// checkForbiddenSelectors は、Go のソースが、forbidden に挙げた「パッケージ名.名前」の形の参照
+// (例: domain.CalculateBurgerStat、time.Now)を含んでいないことを確かめ、違反の説明を返す。
+// 「row.AverageRating」のような、値のフィールドの参照は、パッケージの参照ではないので、違反にしない。
 func checkForbiddenSelectors(src string, forbidden []string) ([]string, error) {
 	f, err := parser.ParseFile(token.NewFileSet(), "src.go", src, 0)
 	if err != nil {
@@ -1015,14 +1017,16 @@ func checkForbiddenSelectors(src string, forbidden []string) ([]string, error) {
 	return violations, nil
 }
 
-// TestRecalculationLivesInUsecase は、統計の再計算の手順が usecase にあることを固定する（S17 AC1・AC5）。
-//   - adapter（repository・query・uow・handler）は、domain の統計の計算を呼ばない。adapter が持つのは、
-//     SQL の読み書きとトランザクションの管理だけである
-//   - 再計算に関わる usecase（unit_of_work.go・reviews.go・users.go）は、現在時刻を Clock から得て、
-//     time.Now を直接呼ばない（テストで時刻を固定できる）
+// TestRecalculationLivesInUsecase は、バーガーの統計を計算し直す手順が usecase にあり、
+// データベースを扱う層(adapter)には入り込んでいないことを、ソースコードを解析して確かめる。
+//   - adapter(repository・query・uow・handler)は、domain の統計の計算関数を呼ばない。adapter が
+//     計算まで持つと、計算のルールがデータベース操作の中に散らばり、テストで値を検算しづらくなる。
+//     adapter の役目は、SQL の読み書きとトランザクションの管理だけである
+//   - 再計算に関わる usecase(unit_of_work.go・reviews.go・users.go)は、現在時刻を time.Now で直接
+//     取得せず、Clock から受け取る。時刻を固定したテストで、保存される統計を再現できるようにするため
 func TestRecalculationLivesInUsecase(t *testing.T) {
 	calcs := []string{"domain.CalculateBurgerScore", "domain.CalculateBurgerStat", "domain.AverageRating", "domain.ReviewerTrustScore"}
-	t.Run("実際の adapter は domain の統計の計算を呼ばない", func(t *testing.T) {
+	t.Run("本番の adapter(repository・query・uow・handler)は、domain の統計の計算関数を呼んでいない", func(t *testing.T) {
 		checked := 0
 		for _, dir := range []string{"../adapter/repository", "../adapter/query", "../adapter/uow", "../adapter/handler"} {
 			for name, src := range productionSources(t, dir) {
@@ -1032,19 +1036,19 @@ func TestRecalculationLivesInUsecase(t *testing.T) {
 					t.Fatalf("%s: %v", name, err)
 				}
 				for _, msg := range v {
-					t.Errorf("%s: %s (再計算は usecase の BurgerStatsRecalculator が行う)", name, msg)
+					t.Errorf("%s: %s(統計の再計算は usecase の BurgerStatsRecalculator が行う)", name, msg)
 				}
 			}
 		}
-		// 空振りで通らないよう、検査したファイルがあることも確かめる。
+		// 検査対象のファイルが 1 つも見つからないまま、何も検査せずに成功してしまうのを防ぐ。
 		if checked < 10 {
-			t.Errorf("検査したファイルは %d 個しかない (10 個以上を期待)", checked)
+			t.Errorf("検査したファイルは %d 個しかない(10 個以上を期待)", checked)
 		}
 	})
 
-	// 再計算に関わる usecase(再計算の手順と、それを呼ぶ review・user の use case)だけを対象にする。
-	// signup の冪等キーの時間の窓(signup.go)は、別の時計(SignupConfig.Now)を持つ。
-	t.Run("再計算に関わる usecase は time.Now を直接呼ばない", func(t *testing.T) {
+	// 対象は、統計の再計算の手順と、それを呼ぶレビュー・ユーザーの usecase に限る。サインアップの
+	// 確認メールの再送間隔を測る時計(signup.go の SignupConfig.Now)は、別の目的の時計なので対象外。
+	t.Run("統計の再計算に関わる usecase は、現在時刻を time.Now で直接取得せず、Clock から受け取っている", func(t *testing.T) {
 		recalcFiles := map[string]bool{"unit_of_work.go": true, "reviews.go": true, "users.go": true}
 		checked := 0
 		for name, src := range productionSources(t, ".") {
@@ -1057,22 +1061,22 @@ func TestRecalculationLivesInUsecase(t *testing.T) {
 				t.Fatalf("%s: %v", name, err)
 			}
 			for _, msg := range v {
-				t.Errorf("%s: %s (現在時刻は usecase の Clock から得る)", name, msg)
+				t.Errorf("%s: %s(現在時刻は usecase の Clock から受け取る)", name, msg)
 			}
 		}
 		if checked != len(recalcFiles) {
-			t.Errorf("検査したファイルは %d 個 (%d 個を期待)", checked, len(recalcFiles))
+			t.Errorf("検査したファイルは %d 個(%d 個を期待)", checked, len(recalcFiles))
 		}
 	})
 
 	cases := []struct {
-		name, src, want string // want は期待する違反の説明の一部 (空なら違反なし)
+		name, src, want string // want は、期待する違反の説明の一部(空なら、違反なしを期待する)
 	}{
-		{"domain の計算の呼び出しを検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.CalculateBurgerScore(nil, t) }", "domain.CalculateBurgerScore"},
-		{"AverageRating の呼び出しを検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.AverageRating(nil) }", "domain.AverageRating"},
-		{"sqlc の行のフィールドは検出しない", "package p\nfunc f(row R) float64 { return row.AverageRating }", ""},
-		{"domain の型の参照は検出しない", "package p\nimport \"x/domain\"\nfunc f() domain.ReviewFact { return domain.ReviewFact{} }", ""},
-		{"time.Now の呼び出しを検出する", "package p\nimport \"time\"\nfunc f() { _ = time.Now() }", "time.Now"},
+		{"domain の統計の計算関数(CalculateBurgerScore)を呼ぶコードは、違反として検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.CalculateBurgerScore(nil, t) }", "domain.CalculateBurgerScore"},
+		{"domain の平均評価の計算関数(AverageRating)を呼ぶコードは、違反として検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.AverageRating(nil) }", "domain.AverageRating"},
+		{"データベースの行の値(row.AverageRating)の参照は、関数の呼び出しではないので、違反として検出しない", "package p\nfunc f(row R) float64 { return row.AverageRating }", ""},
+		{"domain の型(ReviewFact)を使うだけのコードは、違反として検出しない", "package p\nimport \"x/domain\"\nfunc f() domain.ReviewFact { return domain.ReviewFact{} }", ""},
+		{"time.Now を直接呼ぶコードは、違反として検出する", "package p\nimport \"time\"\nfunc f() { _ = time.Now() }", "time.Now"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1082,9 +1086,9 @@ func TestRecalculationLivesInUsecase(t *testing.T) {
 			}
 			switch {
 			case tc.want == "" && len(v) > 0:
-				t.Errorf("違反なしのはずが検出された: %v", v)
+				t.Errorf("違反なしを期待したのに、検出された: %v", v)
 			case tc.want != "" && !slices.ContainsFunc(v, func(m string) bool { return strings.Contains(m, tc.want) }):
-				t.Errorf("違反 %q が検出されなかった: %v", tc.want, v)
+				t.Errorf("期待した違反 %q が検出されなかった: %v", tc.want, v)
 			}
 		})
 	}

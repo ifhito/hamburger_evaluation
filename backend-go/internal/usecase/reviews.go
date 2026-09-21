@@ -69,9 +69,12 @@ type ReviewListFilter struct {
 
 // Reviews は review の use case を実装する。公開フィードと詳細、および
 // author に限定された create/edit/delete であり、review ごとに任意で 1 枚の
-// 写真を photos 経由で保存する（S10）。読み取りは query、書き込みは UnitOfWork の中で
-// domain の書き込みオブジェクトを通し、repository には依存しない。review の書き込みと
-// burger の統計の再計算は、1 つの UnitOfWork.Do（同一トランザクション）の中で組み立てる。
+// 写真を photos 経由で保存する。読み取りは query、書き込みは domain の書き込みオブジェクトを通し、
+// repository には依存しない。
+//
+// レビューの書き込みとバーガーの統計の再計算は、UnitOfWork(ここからここまでの書き込みと読み取りを、
+// まとめて 1 つのトランザクションにする範囲を、usecase が指定する仕組み)の中で行う。途中で
+// エラーになれば全体を取り消すので、レビューだけ、または統計だけが反映されることがない。
 type Reviews struct {
 	query  ReviewQuery
 	uow    UnitOfWork
@@ -130,9 +133,9 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id int64) (domai
 // いない名前で shop の burger を find-or-create する（Rails parity、
 // S6 P3-1）。どちらでもない場合は validation の失敗（422）であり、黙って
 // デフォルトを使うことは決してない。レスポンスの detail は、viewer と、
-// 存在確認のために解決した burger から組み立てる。再取得はしない。書き込み（名前の burger の
-// find-or-create を含む）と burger の統計の再計算は、1 つの UnitOfWork.Do の中で行うので、
-// どの段階で失敗しても、孤立した burger やリンクが commit されることはない。nil でない
+// 存在確認のために解決した burger から組み立てる。再取得はしない。バーガー名の経路でのバーガーの
+// 作成、レビューの登録、統計の再計算は、1 つの UnitOfWork(まとめて 1 つのトランザクションにする範囲)の
+// 中で行うので、どの段階で失敗しても、レビューのない作りかけのバーガーが残ることはない。nil でない
 // upload（handler で validate 済み/正規化済み、S10）は、insert の前に新しい
 // ランダムな key で保存される。その後 insert が失敗した場合は、アップロード
 // したばかりの blob を best-effort で削除するので、リクエストより長く残る
@@ -165,18 +168,19 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	var created domain.Review
 	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		if burgerID == "" {
-			// 名前の経路: burger をこのトランザクションの中で find-or-create する。
-			// 返る burger は、insert 前に保存されていた stats を持つ。
+			// バーガー名で投稿する場合は、このトランザクションの中で、名前のバーガーを探し、
+			// なければ作る。返るバーガーの統計は、この投稿より前の値である。
 			var err error
 			if burger, err = tx.Reviews.CreateShopBurger(ctx, shopID, burgerName); err != nil {
 				return err
 			}
 			review.BurgerID = burger.ID
 		}
-		// burger のロックは insert の「前」に取る。insert の FK チェックが burgers 行に
-		// KEY SHARE ロックを取り、その後でそれを FOR UPDATE に昇格させると、同時に走る
-		// 2 つの creator がデッドロックしうるからである。先に取っておけば、再計算の中の
-		// ロックは、コストのかからない再取得になる（行ロックはトランザクションが所有する）。
+		// バーガーの行のロックは、レビューを登録する「前」に取る。登録は、外部キーの確認のために
+		// バーガーの行へ弱い共有ロックをかける。その後で同じ行を更新用のロックに格上げしようと
+		// すると、同じバーガーへ同時に投稿した 2 人が互いを待ち合って止まる(デッドロック)ため。
+		// 先に取っておけば、再計算の中でもう一度ロックを取っても、同じトランザクションが持っている
+		// ロックの取り直しなので待たされない。
 		if err := tx.BurgerStats.Lock(ctx, review.BurgerID); err != nil {
 			return err
 		}

@@ -11,8 +11,10 @@ import (
 // Users は、ユーザー管理の use case を実装する。viewer から見えるビューでの
 // 詳細、および本人のみが行えるプロフィールの更新とアカウントの削除である。
 // 読み取りは query、書き込みは domain の書き込みオブジェクト（domain.Users）だけを
-// 通し、repository には依存しない。アカウントの削除と、そのユーザーの review が付く
-// burger の統計の再計算は、1 つの UnitOfWork.Do（同一トランザクション）の中で組み立てる。
+// 通し、repository には依存しない。アカウントの削除と、そのユーザーのレビューが付いている
+// バーガーの統計の再計算は、UnitOfWork(ここからここまでの書き込みと読み取りを、まとめて 1 つの
+// トランザクションにする範囲を、usecase が指定する仕組み)の中で行う。途中でエラーになれば
+// 全体を取り消すので、退会だけ、または統計だけが反映されることがない。
 type Users struct {
 	query  UserQuery
 	users  *domain.Users
@@ -126,13 +128,14 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 	return updated, nil
 }
 
-// Delete は対象ユーザーのアカウントを soft delete する。load（404。所有者で
-// なくても同じ）、domain の本人管理ルール（403）、そして discard の順で
-// 行い、hard DELETE は決して行わない。discard と、そのユーザーの kept な review が付く
-// すべての burger の統計の再計算（burger_id の昇順）は、1 つのトランザクションで行う。
-// ユーザーの review 自体は kept のままで（reviews.discarded_at は書き込まれない。Rails parity。
-// 非表示化は読み取り側の u.discarded_at フィルタで行う）、再計算が、discard 済みの
-// ユーザーの review を統計から外す。
+// Delete は対象ユーザーのアカウントを論理削除する(削除日時を記録するだけで、行は消さない)。
+// 順序は、対象の取得(存在しなければ 404。本人でなくても同じ)、domain の本人管理ルール
+// (本人でなければ 403)、そして論理削除である。論理削除と、そのユーザーのレビューが付いている
+// すべてのバーガーの統計の再計算(バーガー ID の昇順)は、1 つのトランザクションで行う。
+//
+// ユーザーのレビュー自体は削除しない(レビューの削除日時は書き込まない)。画面から隠すのは、
+// 読み取りの側で、削除済みのユーザーのレビューを除いて行う。統計の再計算も、削除済みの
+// ユーザーのレビューを元データから外すので、退会したユーザーの評価は統計に残らない。
 func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string) error {
 	target, err := s.query.GetActiveUserByID(ctx, targetID)
 	if err != nil {
