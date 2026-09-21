@@ -28,6 +28,42 @@ func (q *Queries) DeleteOAuthGrant(ctx context.Context, arg DeleteOAuthGrantPara
 	return result.RowsAffected(), nil
 }
 
+const deleteOAuthGrantsByUser = `-- name: DeleteOAuthGrantsByUser :exec
+DELETE FROM oauth_grants WHERE user_id = $1
+`
+
+// 利用者のすべての許可を削除する(退会のとき)。発行済みのトークンは、外部キーの連鎖削除で同時に消える。
+func (q *Queries) DeleteOAuthGrantsByUser(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, deleteOAuthGrantsByUser, userID)
+	return err
+}
+
+const getOAuthGrantByUserAndClient = `-- name: GetOAuthGrantByUserAndClient :one
+SELECT id, user_id, client_id, client_name, scopes, created_at, updated_at
+FROM oauth_grants
+WHERE user_id = $1 AND client_id = $2
+`
+
+type GetOAuthGrantByUserAndClientParams struct {
+	UserID   string
+	ClientID string
+}
+
+func (q *Queries) GetOAuthGrantByUserAndClient(ctx context.Context, arg GetOAuthGrantByUserAndClientParams) (OauthGrant, error) {
+	row := q.db.QueryRow(ctx, getOAuthGrantByUserAndClient, arg.UserID, arg.ClientID)
+	var i OauthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ClientID,
+		&i.ClientName,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertOAuthGrant = `-- name: UpsertOAuthGrant :one
 INSERT INTO oauth_grants (user_id, client_id, client_name, scopes)
 VALUES ($1, $2, $3, $4::text[])

@@ -147,7 +147,12 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 			ConsentURL:    cfg.OAuth.ConsentURL,
 			Secret:        []byte(cfg.OAuth.Secret),
 			StaticClients: cfg.OAuth.StaticClients,
-		}, domain.NewOAuthTokenSessions(repository.NewOAuthTokenSessionRepository(pool)), query.NewOAuthTokenSessionQuery(pool), oauthserver.NewHTTPMetadataFetcher())
+		}, oauthserver.Deps{
+			Sessions: uow.NewOAuthTokenSessionStore(pool),
+			Grants:   query.NewOAuthGrantQuery(pool),
+			Users:    userQuery,
+			Fetcher:  oauthserver.NewHTTPMetadataFetcher(),
+		})
 		if err != nil {
 			return fmt.Errorf("oauth server: %w", err)
 		}

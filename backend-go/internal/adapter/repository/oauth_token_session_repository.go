@@ -82,10 +82,11 @@ func (r *OAuthTokenSessionRepository) whyNotUpdated(ctx context.Context, kind do
 	return fmt.Errorf("%s: %w", op, domain.ErrOAuthTokenSessionInactive)
 }
 
-// UpdateOAuthTokenSessionsInactiveByRequest は、系列の、kind の記録をすべて無効にする。
-func (r *OAuthTokenSessionRepository) UpdateOAuthTokenSessionsInactiveByRequest(ctx context.Context, requestID string, kind domain.OAuthTokenKind) error {
-	if err := r.q.DeactivateOAuthTokenSessionsByRequest(ctx, sqlcgen.DeactivateOAuthTokenSessionsByRequestParams{RequestID: requestID, Kind: string(kind)}); err != nil {
-		return fmt.Errorf("update oauth token sessions inactive by request: %w", err)
+// UpdateOAuthRequestRevoked は、系列のアクセストークンを削除し、更新トークンを無効にする。1 つの SQL 文で
+// 行うので、途中で失敗したときに、片方だけが反映されることはない。
+func (r *OAuthTokenSessionRepository) UpdateOAuthRequestRevoked(ctx context.Context, requestID string) error {
+	if err := r.q.RevokeOAuthRequest(ctx, requestID); err != nil {
+		return fmt.Errorf("update oauth request revoked: %w", err)
 	}
 	return nil
 }
@@ -94,14 +95,6 @@ func (r *OAuthTokenSessionRepository) UpdateOAuthTokenSessionsInactiveByRequest(
 func (r *OAuthTokenSessionRepository) DiscardOAuthTokenSession(ctx context.Context, kind domain.OAuthTokenKind, signature string) error {
 	if err := r.q.DeleteOAuthTokenSession(ctx, sqlcgen.DeleteOAuthTokenSessionParams{Kind: string(kind), Signature: signature}); err != nil {
 		return fmt.Errorf("discard oauth token session: %w", err)
-	}
-	return nil
-}
-
-// DiscardOAuthTokenSessionsByRequest は、系列の、kind の記録をすべて削除する。
-func (r *OAuthTokenSessionRepository) DiscardOAuthTokenSessionsByRequest(ctx context.Context, requestID string, kind domain.OAuthTokenKind) error {
-	if err := r.q.DeleteOAuthTokenSessionsByRequest(ctx, sqlcgen.DeleteOAuthTokenSessionsByRequestParams{RequestID: requestID, Kind: string(kind)}); err != nil {
-		return fmt.Errorf("discard oauth token sessions by request: %w", err)
 	}
 	return nil
 }

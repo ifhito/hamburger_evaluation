@@ -20,7 +20,9 @@ CREATE TABLE oauth_token_sessions (
     CONSTRAINT oauth_token_sessions_signature_length CHECK (char_length(signature) BETWEEN 1 AND 200)
 );
 
--- 系列ごとの取り消しと、許可ごとの連鎖削除、期限切れの掃除のため。
+-- 系列ごとの取り消しと、許可ごと・利用者ごとの連鎖削除(外部キーの ON DELETE CASCADE は、参照する側に
+-- index がないと、削除のたびにこの表を全部読む)、期限切れの掃除のため。
 CREATE INDEX idx_oauth_token_sessions_request_id ON oauth_token_sessions (request_id);
 CREATE INDEX idx_oauth_token_sessions_grant_id ON oauth_token_sessions (grant_id);
+CREATE INDEX idx_oauth_token_sessions_user_id ON oauth_token_sessions (user_id);
 CREATE INDEX idx_oauth_token_sessions_expires_at ON oauth_token_sessions (expires_at);

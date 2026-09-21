@@ -64,6 +64,8 @@ func (u *UnitOfWork) Do(ctx context.Context, fn func(ctx context.Context, tx use
 		// 確認待ちの signup: 書き込みと読み取りの両方が、同じトランザクションに結び付く。
 		SignupVerifications: domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pgxTx)),
 		PendingSignups:      query.NewSignupVerificationQuery(pgxTx),
+		// OAuth の許可: 退会のとき、ユーザーの論理削除と同じトランザクションで、許可(と、発行済みのトークン)を取り消す。
+		OAuthGrants: domain.NewOAuthGrants(repository.NewOAuthGrantRepository(pgxTx)),
 	}
 	if err := fn(ctx, tx); err != nil {
 		return err

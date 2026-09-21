@@ -31,21 +31,6 @@ func (q *Queries) DeactivateOAuthTokenSession(ctx context.Context, arg Deactivat
 	return result.RowsAffected(), nil
 }
 
-const deactivateOAuthTokenSessionsByRequest = `-- name: DeactivateOAuthTokenSessionsByRequest :exec
-UPDATE oauth_token_sessions SET active = false
-WHERE request_id = $1 AND kind = $2 AND active
-`
-
-type DeactivateOAuthTokenSessionsByRequestParams struct {
-	RequestID string
-	Kind      string
-}
-
-func (q *Queries) DeactivateOAuthTokenSessionsByRequest(ctx context.Context, arg DeactivateOAuthTokenSessionsByRequestParams) error {
-	_, err := q.db.Exec(ctx, deactivateOAuthTokenSessionsByRequest, arg.RequestID, arg.Kind)
-	return err
-}
-
 const deleteExpiredOAuthTokenSessions = `-- name: DeleteExpiredOAuthTokenSessions :execrows
 DELETE FROM oauth_token_sessions
 WHERE id IN (
@@ -77,20 +62,6 @@ type DeleteOAuthTokenSessionParams struct {
 
 func (q *Queries) DeleteOAuthTokenSession(ctx context.Context, arg DeleteOAuthTokenSessionParams) error {
 	_, err := q.db.Exec(ctx, deleteOAuthTokenSession, arg.Kind, arg.Signature)
-	return err
-}
-
-const deleteOAuthTokenSessionsByRequest = `-- name: DeleteOAuthTokenSessionsByRequest :exec
-DELETE FROM oauth_token_sessions WHERE request_id = $1 AND kind = $2
-`
-
-type DeleteOAuthTokenSessionsByRequestParams struct {
-	RequestID string
-	Kind      string
-}
-
-func (q *Queries) DeleteOAuthTokenSessionsByRequest(ctx context.Context, arg DeleteOAuthTokenSessionsByRequestParams) error {
-	_, err := q.db.Exec(ctx, deleteOAuthTokenSessionsByRequest, arg.RequestID, arg.Kind)
 	return err
 }
 
@@ -163,6 +134,24 @@ func (q *Queries) InsertOAuthTokenSession(ctx context.Context, arg InsertOAuthTo
 		arg.Request,
 		arg.ExpiresAt,
 	)
+	return err
+}
+
+const revokeOAuthRequest = `-- name: RevokeOAuthRequest :exec
+WITH dropped AS (
+    DELETE FROM oauth_token_sessions AS a
+    WHERE a.request_id = $1 AND a.kind = 'access_token'
+    RETURNING a.id
+)
+UPDATE oauth_token_sessions AS r SET active = false
+WHERE r.request_id = $1 AND r.kind = 'refresh_token' AND r.active
+`
+
+// 系列(同じ認可から発行されたトークン)を取り消す: アクセストークンを削除し、更新トークンを、再利用の検知のために
+// 記録を残して無効にする。1 つの文(データを変更する CTE は、参照されなくても最後まで実行される)なので、
+// どちらかが失敗すれば、どちらも反映されない。
+func (q *Queries) RevokeOAuthRequest(ctx context.Context, requestID string) error {
+	_, err := q.db.Exec(ctx, revokeOAuthRequest, requestID)
 	return err
 }
 

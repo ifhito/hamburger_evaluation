@@ -179,12 +179,37 @@ type UoW struct {
 	// 削除)に使う代役である。未設定(nil)のものが使われると panic する。
 	SignupVerifications domain.SignupVerificationRepository
 	PendingSignups      usecase.SignupVerificationQuery
+	// Grants は、退会のときの、許可の取り消しを記録する代役である。未設定(nil)なら、Do が空のものを作る。
+	Grants *GrantRevocations
 	// BeginErr を設定すると、Do はトランザクションを開始できずにそのエラーを返す。CommitErr を
 	// 設定すると、fn が成功しても commit に失敗してそのエラーを返す(rollback として数える)。
 	BeginErr, CommitErr error
 	// Commits と Rollbacks は、commit と rollback になった回数である。
 	Commits, Rollbacks int
 }
+
+// GrantRevocations は、domain.OAuthGrantRepository の代役で、退会で許可を取り消された利用者の ID を、
+// 呼ばれた順に記録する。Err を設定すると、取り消しがそのエラーで失敗する。許可の作成・1 件の取り消しは、
+// 退会の手順の外の操作なので、呼ばれると panic して、テストが想定していない操作に気づける。
+type GrantRevocations struct {
+	UserIDs []string
+	Err     error
+}
+
+func (g *GrantRevocations) CreateOAuthGrant(context.Context, domain.CreateOAuthGrantParams) (string, error) {
+	panic("unexpected CreateOAuthGrant call")
+}
+
+func (g *GrantRevocations) DiscardOAuthGrant(context.Context, string, string) error {
+	panic("unexpected DiscardOAuthGrant call")
+}
+
+func (g *GrantRevocations) DiscardOAuthGrantsByUser(_ context.Context, userID string) error {
+	g.UserIDs = append(g.UserIDs, userID)
+	return g.Err
+}
+
+var _ domain.OAuthGrantRepository = (*GrantRevocations)(nil)
 
 var _ usecase.UnitOfWork = (*UoW)(nil)
 
@@ -196,7 +221,11 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 	if u.Stats == nil {
 		u.Stats = &Stats{}
 	}
+	if u.Grants == nil {
+		u.Grants = &GrantRevocations{}
+	}
 	tx := usecase.Tx{
+		OAuthGrants: domain.NewOAuthGrants(u.Grants),
 		Reviews:     domain.NewReviews(u.Reviews),
 		Users:       domain.NewUsers(u.Users),
 		BurgerStats: domain.NewBurgerStats(u.Stats),

@@ -152,6 +152,39 @@ func TestOAuthGrantRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("利用者のすべての許可を取り消すと、その利用者の許可とトークンの記録だけがすべて消え、別の利用者のものは残る", func(t *testing.T) {
+		conn, _ := dbtest.New(t)
+		alice := insertOAuthUser(ctx, t, conn, "a@example.com")
+		bob := insertOAuthUser(ctx, t, conn, "b@example.com")
+		grants := repository.NewOAuthGrantRepository(conn)
+		sessions := repository.NewOAuthTokenSessionRepository(conn)
+		exp := time.Now().Add(time.Hour)
+		for i, u := range []string{alice, alice, bob} {
+			g, err := grants.CreateOAuthGrant(ctx, domain.CreateOAuthGrantParams{UserID: u, ClientID: "app-" + string(rune('a'+i)), ClientName: "アプリ", Scopes: []string{domain.OAuthScopeRead}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := sessions.CreateOAuthTokenSession(ctx, newTokenSession(domain.OAuthTokenRefresh, "sig-"+string(rune('a'+i)), uid.N(i+1), g, u, exp)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := grants.DiscardOAuthGrantsByUser(ctx, alice); err != nil {
+			t.Fatal(err)
+		}
+		if n := countRows(ctx, t, conn, "oauth_grants WHERE user_id = '"+alice+"'"); n != 0 {
+			t.Errorf("alice の許可が %d 件残っている", n)
+		}
+		if n := countRows(ctx, t, conn, "oauth_token_sessions WHERE user_id = '"+alice+"'"); n != 0 {
+			t.Errorf("alice のトークンの記録が %d 件残っている", n)
+		}
+		if a, b := countRows(ctx, t, conn, "oauth_grants"), countRows(ctx, t, conn, "oauth_token_sessions"); a != 1 || b != 1 {
+			t.Errorf("bob の分が残っていない: grants=%d sessions=%d, want 1 と 1", a, b)
+		}
+		if err := grants.DiscardOAuthGrantsByUser(ctx, alice); err != nil {
+			t.Errorf("許可がない利用者への 2 回目の取り消しがエラーになった: %v", err)
+		}
+	})
+
 	t.Run("利用者が退会(削除)されると、その許可の記録も消える", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		userID := insertOAuthUser(ctx, t, conn, "a@example.com")
@@ -368,7 +401,7 @@ func TestOAuthTokenSessionRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("系列のアクセストークンを削除し、更新トークンを無効にしても、別の系列と、ほかの種類は変わらない", func(t *testing.T) {
+	t.Run("系列を取り消すと、その系列のアクセストークンは消え、更新トークンは無効で残り、別の系列は変わらない", func(t *testing.T) {
 		conn, _, userID, grantID := setup(t)
 		repo := repository.NewOAuthTokenSessionRepository(conn)
 		mine, other := uid.N(1), uid.N(2)
@@ -376,10 +409,7 @@ func TestOAuthTokenSessionRepository(t *testing.T) {
 		_ = repo.CreateOAuthTokenSession(ctx, newTokenSession(domain.OAuthTokenRefresh, "r1", mine, grantID, userID, future))
 		_ = repo.CreateOAuthTokenSession(ctx, newTokenSession(domain.OAuthTokenAccess, "a2", other, grantID, userID, future))
 		_ = repo.CreateOAuthTokenSession(ctx, newTokenSession(domain.OAuthTokenRefresh, "r2", other, grantID, userID, future))
-		if err := repo.DiscardOAuthTokenSessionsByRequest(ctx, mine, domain.OAuthTokenAccess); err != nil {
-			t.Fatal(err)
-		}
-		if err := repo.UpdateOAuthTokenSessionsInactiveByRequest(ctx, mine, domain.OAuthTokenRefresh); err != nil {
+		if err := repo.UpdateOAuthRequestRevoked(ctx, mine); err != nil {
 			t.Fatal(err)
 		}
 		if _, found := activeOf(t, conn, domain.OAuthTokenAccess, "a1"); found {
@@ -429,6 +459,74 @@ func TestOAuthTokenSessionRepository(t *testing.T) {
 		err := repository.NewOAuthTokenSessionRepository(conn).CreateOAuthTokenSession(ctx, newTokenSession("password", "s", uid.N(1), grantID, userID, future))
 		if err == nil {
 			t.Error("知らない種類の記録が保存できてしまった")
+		}
+	})
+}
+
+// 系列の取り消し(アクセストークンの削除と、更新トークンの無効化)は、途中で失敗したときに、片方だけが
+// 反映された状態にならない(どちらも変わらない)。
+func TestOAuthRevokeRequestIsAtomic(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed repository test in short mode")
+	}
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	userID := insertOAuthUser(ctx, t, conn, "a@example.com")
+	grantID, err := repository.NewOAuthGrantRepository(conn).CreateOAuthGrant(ctx, domain.CreateOAuthGrantParams{UserID: userID, ClientID: "app", ClientName: "アプリ", Scopes: []string{domain.OAuthScopeRead}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := repository.NewOAuthTokenSessionRepository(conn)
+	req := uid.N(1)
+	future := time.Now().Add(time.Hour)
+	for _, s := range []domain.OAuthTokenSession{
+		newTokenSession(domain.OAuthTokenAccess, "a", req, grantID, userID, future),
+		newTokenSession(domain.OAuthTokenRefresh, "r", req, grantID, userID, future),
+	} {
+		s.Active = true
+		if err := repo.CreateOAuthTokenSession(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("更新トークンの無効化が失敗したときは、アクセストークンの削除も取り消され、どちらも変わらない", func(t *testing.T) {
+		// 更新トークンの更新だけを必ず失敗させる(テスト用のトリガー)。
+		if _, err := conn.Exec(ctx, `CREATE FUNCTION fail_refresh_update() RETURNS trigger LANGUAGE plpgsql AS $$
+			BEGIN RAISE EXCEPTION 'injected failure'; END $$;
+			CREATE TRIGGER fail_refresh_update BEFORE UPDATE ON oauth_token_sessions
+			FOR EACH ROW WHEN (OLD.kind = 'refresh_token') EXECUTE FUNCTION fail_refresh_update()`); err != nil {
+			t.Fatal(err)
+		}
+		if err := domain.NewOAuthTokenSessions(repo).RevokeRequest(ctx, req); err == nil {
+			t.Fatal("取り消しが成功した(失敗するはずの状況)")
+		}
+		if n := countRows(ctx, t, conn, "oauth_token_sessions WHERE kind = 'access_token'"); n != 1 {
+			t.Errorf("アクセストークンの記録 = %d 件, want 1(取り消しが途中で失敗したので、削除も取り消される)", n)
+		}
+		if n := countRows(ctx, t, conn, "oauth_token_sessions WHERE kind = 'refresh_token' AND active"); n != 1 {
+			t.Errorf("有効な更新トークンの記録 = %d 件, want 1", n)
+		}
+	})
+
+	t.Run("失敗しなければ、アクセストークンは削除され、更新トークンは無効になり、別の系列は変わらない", func(t *testing.T) {
+		if _, err := conn.Exec(ctx, `DROP TRIGGER fail_refresh_update ON oauth_token_sessions`); err != nil {
+			t.Fatal(err)
+		}
+		other := newTokenSession(domain.OAuthTokenAccess, "a-other", uid.N(2), grantID, userID, future)
+		if err := repo.CreateOAuthTokenSession(ctx, other); err != nil {
+			t.Fatal(err)
+		}
+		if err := domain.NewOAuthTokenSessions(repo).RevokeRequest(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+		if n := countRows(ctx, t, conn, "oauth_token_sessions WHERE kind = 'access_token' AND request_id = '"+req+"'"); n != 0 {
+			t.Errorf("取り消した系列のアクセストークンが %d 件残っている", n)
+		}
+		if n := countRows(ctx, t, conn, "oauth_token_sessions WHERE kind = 'refresh_token' AND active"); n != 0 {
+			t.Errorf("取り消した系列の更新トークンが有効なまま (%d 件)", n)
+		}
+		if n := countRows(ctx, t, conn, "oauth_token_sessions WHERE signature = 'a-other'"); n != 1 {
+			t.Error("別の系列のトークンまで消えた")
 		}
 	})
 }

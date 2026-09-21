@@ -836,7 +836,7 @@ func TestNew(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := valid
 			tt.mutate(&cfg)
-			_, err := oauthserver.New(cfg, nil, nil, nil)
+			_, err := oauthserver.New(cfg, oauthserver.Deps{})
 			if (err == nil) != tt.ok {
 				t.Errorf("err = %v, want ok = %v", err, tt.ok)
 			}

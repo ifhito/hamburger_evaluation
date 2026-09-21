@@ -533,6 +533,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"idx_signup_verifications_expires_at",
 		"idx_oauth_token_sessions_request_id",
 		"idx_oauth_token_sessions_grant_id",
+		"idx_oauth_token_sessions_user_id",
 		"idx_oauth_token_sessions_expires_at",
 	}
 	for _, want := range wantIndexes {

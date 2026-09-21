@@ -46,6 +46,7 @@ func TestOAuthAccessTokensAuthenticate(t *testing.T) {
 		{"使えないトークンは、無効なトークンとして断る", fakeIntrospector{err: domain.ErrOAuthInvalidToken}, users, nil, false, domain.ErrOAuthInvalidToken},
 		{"別のサーバー宛てのトークンは、無効なトークンとして断る", fakeIntrospector{token: domain.OAuthAccessToken{UserID: alice.ID, Scopes: valid.Scopes, Audience: []string{"https://other.example.com/mcp"}}}, users, nil, false, domain.ErrOAuthInvalidToken},
 		{"書き込みの範囲がないトークンで書き込みを求めると、範囲の不足として断る", fakeIntrospector{token: valid}, users, []string{domain.OAuthScopeWrite}, false, domain.ErrOAuthInsufficientScope},
+		{"持ち主が退会していて、読み取りだけのトークンで書き込みを求めても、範囲の不足(403)ではなく、無効なトークン(401)として断る", fakeIntrospector{token: domain.OAuthAccessToken{UserID: "u-gone", Scopes: valid.Scopes, Audience: valid.Audience}}, users, []string{domain.OAuthScopeWrite}, false, domain.ErrOAuthInvalidToken},
 		{"持ち主が退会している(見つからない)トークンは、無効なトークンとして断る", fakeIntrospector{token: domain.OAuthAccessToken{UserID: "u-gone", Scopes: valid.Scopes, Audience: valid.Audience}}, users, nil, false, domain.ErrOAuthInvalidToken},
 		{"トークンの確認が保存先の障害で失敗したときは、無効なトークンではなく、障害として返す", fakeIntrospector{err: storageDown}, users, nil, false, storageDown},
 		{"持ち主の検索が障害で失敗したときは、無効なトークンではなく、障害として返す", fakeIntrospector{token: valid}, &fakeUserQuery{getByID: func(context.Context, string) (domain.User, error) { return domain.User{}, storageDown }}, nil, false, storageDown},
@@ -62,6 +63,9 @@ func TestOAuthAccessTokensAuthenticate(t *testing.T) {
 			}
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr == domain.ErrOAuthInvalidToken && errors.Is(err, domain.ErrOAuthInsufficientScope) {
+				t.Error("無効なトークンが、範囲の不足として扱われた")
 			}
 			if tt.wantErr == storageDown && errors.Is(err, domain.ErrOAuthInvalidToken) {
 				t.Error("障害が、無効なトークンとして扱われた")
