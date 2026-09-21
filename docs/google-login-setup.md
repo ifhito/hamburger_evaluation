@@ -31,9 +31,10 @@ Google が利用者に見せる「このアプリがあなたのアカウント�
 3. **承認済みのリダイレクト URI** に、次の値を**そのまま**追加します(手元で動かす場合)。
 
    ```
-   http://localhost:8080/auth/google/callback
+   http://localhost:5173/api/auth/google/callback
    ```
 
+   - **画面(5173)の `/api/…` を通る形**にします。画面の `/api` は、API(8080)へ転送されます。手続きの cookie(コードを使える相手を確かめる cookie を含む)は、画面から API を呼ぶ道筋(`/api/…`)で往復するので、戻り先も、同じ `/api` を含めます。**API に直接(`http://localhost:8080/auth/google/callback`)戻すと、画面からのサインインが、毎回「リンクが無効」になります**(交換の cookie の Path が、画面が呼ぶ `/api/auth/google/exchange` と合わないため)。
    - **完全に一致**させる必要があります(`http` か `https` か、ポート、末尾の `/` の有無、`localhost` か `127.0.0.1` か)。1 文字でも違うと、Google が `redirect_uri_mismatch` で断ります。
    - 「承認済みの JavaScript 生成元」は、空で構いません(このアプリは、画面から Google のスクリプトを読み込みません)。
 4. 作成すると、**クライアント ID** と **クライアントシークレット**(秘密の鍵)が表示されます。この 2 つを控えます(シークレットは、あとから画面で確かめられます)。
@@ -45,7 +46,7 @@ API を起動するシェルで、次を設定します(値は、控えたもの
 ```bash
 export GOOGLE_CLIENT_ID='xxxxxxxx.apps.googleusercontent.com'
 export GOOGLE_CLIENT_SECRET='ここに秘密の鍵'          # 秘密。履歴に残したくなければ、read -s を使う
-export GOOGLE_REDIRECT_URL='http://localhost:8080/auth/google/callback'   # 手順 3 で登録した値と同じ
+export GOOGLE_REDIRECT_URL='http://localhost:5173/api/auth/google/callback'   # 手順 3 で登録した値と同じ
 ```
 
 `GOOGLE_CLIENT_SECRET` を、履歴に残さずに設定するには:
@@ -56,7 +57,7 @@ read -rs GOOGLE_CLIENT_SECRET && export GOOGLE_CLIENT_SECRET   # 入力は画面
 
 `GOOGLE_CLIENT_ID` を設定すると、機能が有効になります。`GOOGLE_CLIENT_SECRET` と `GOOGLE_REDIRECT_URL` は、有効にするなら必須で、足りないと、API は、起動時に、足りない変数の名前(値ではなく)を出して止まります。
 
-**URL の制約**: 有効にするときは、`GOOGLE_REDIRECT_URL` と `APP_BASE_URL` は、**https の URL、または開発用のループバック(`localhost`・`127.0.0.1`・`[::1]`)の http** だけを受け付けます。外部のホストの http だと、認可コードや、1 回限りのコード(ログインの証に交換できる)が、平文で流れるので、起動時に断ります(変数の名前だけが出ます)。
+**URL の制約**: 有効にするときは、`GOOGLE_REDIRECT_URL` と `APP_BASE_URL`(既定は `http://localhost:5173`)は、**https の URL、または開発用のループバック(`localhost`・`127.0.0.1`・`[::1]`)の http** だけを受け付けます。`GOOGLE_REDIRECT_URL` の path は、`/auth/google/callback` で終わらなければなりません(前に `/api` などの接頭辞が付くのは構いません)。外部のホストの http だと、認可コードや、1 回限りのコード(ログインの証に交換できる)が、平文で流れるので、起動時に断ります(変数の名前だけが出ます)。
 
 ## 5. データベースを作り直す(初回だけ)
 
@@ -83,9 +84,7 @@ curl -s http://localhost:8080/meta | python3 -c "import sys,json; print(json.loa
 
 `['google']` と出れば有効です。空(`[]`)なら、環境変数が API に届いていません(手順 4 を見直して、`docker compose up -d` し直します)。
 
-### 6-A. 画面(frontend)が入っているとき(ブラウザで確かめる)
-
-「Google でサインイン」のボタンと、プロフィールの「Google」の欄は、**画面の変更(frontend の PR)が入ってから**使えます。入っていれば、次のとおりです。
+### ブラウザで確かめる
 
 ```bash
 cd frontend && docker compose up -d --build
@@ -93,34 +92,9 @@ cd frontend && docker compose up -d --build
 
 1. <http://localhost:5173/> を開き、サインインの画面に **「Sign in with Google」** のボタンが出ることを確かめます。
 2. ボタンを押し、テストユーザーに入れた Google アカウントでサインインします。
-3. 初めてなら、新規登録されて、アプリに戻ります(メールの確認は要りません)。ユーザー名は、Google の名前から決まります。プロフィールで変えられます。
-4. すでに、同じメールアドレス(大文字小文字は区別しません)でパスワードのアカウントがあるときは、**自動では結び付けません**。案内が出るので、パスワードでサインインし、プロフィールの「Google」から結び付けます。
-
-### 6-B. 画面がまだ入っていないとき(API だけを、ブラウザと curl で確かめる)
-
-画面がなくても、API だけで、サインインの手続きを確かめられます。
-
-1. ブラウザ(**同じブラウザ**)で、次の URL を開きます。Google のサインインの画面に移ります。
-
-   ```
-   http://localhost:8080/auth/google/start
-   ```
-
-2. テストユーザーに入れた Google アカウントで承認します。API が、結果を入れた**1 回限りのコード**を付けて、アプリの画面の URL(`APP_BASE_URL` の下の `/auth/google/complete?code=…`)へ移します。画面がないので、ブラウザは、エラー(接続できない・404)になりますが、**アドレスバーの `code=` の値**を控えます。さらに、そのブラウザの開発者ツール(Application → Cookies → `localhost`)で、**`google_login_handoff_` で始まる cookie の名前と値**を控えます(この cookie は、コードを使える相手を確かめるためのもので、**コードだけでは、交換できません**)。60 秒以内に、次へ進んでください。
-3. コードを交換して、結果を受け取ります。
-
-   ```bash
-   curl -s -X POST http://localhost:8080/auth/google/exchange \
-     -b 'google_login_handoff_……=控えた値' \
-     -H 'Content-Type: application/json' -d '{"code":"控えたコード"}'
-   ```
-
-   - サインインに成功すると、`id`・`username`・`email` と、ログインの証(`token`)が返ります。その `token` は、`Authorization: Bearer …` に付けて、`GET /me` などで確かめられます。
-   - すでに同じメールのアカウントがあるときは、409 と、案内の文言が返ります(結び付けもサインインもしません)。
-   - cookie がない・値が違うと、コードが無効なときと同じ 400 になります(コードは消費されません)。
-   - 同じコードは 1 回しか使えません(2 回目は 400)。
-
-4. 結び付け(ログイン済みの利用者が、Google を追加する)は、**この方法では、通しで確かめられません**。結び付けの手続きは、認証つきの POST(`POST /me/identities/google/link`)が、**その要求を出したブラウザ**に cookie を設定して始まり、返された Google の URL へ、**同じブラウザ**で移動する作りです(別のブラウザや別の端末で開くと、失敗します。被害者に開かせて、別人のアカウントに結び付ける攻撃を防ぐためです)。画面がないと、この「同じブラウザ」を作れないので、6-A の画面が入ってから、プロフィールの「Google」の欄で確かめてください。
+3. 初めてなら、新規登録されて、アプリに戻ります(メールの確認は要りません)。ユーザー名は、Google の名前から決まります(名前がなければ `user-` で始まる名前になります)。プロフィールで変えられます。
+4. すでに、同じメールアドレス(大文字小文字は区別しません)でパスワードのアカウントがあるときは、**自動では結び付けません**。案内が出るので、パスワードでサインインし、プロフィールの「Google」から結び付けます(結び付けの手続きは、押した**そのブラウザ**で始まります。別のブラウザで開いても、結び付きません)。
+5. 手続きが終わると、ブラウザの cookie(`google_login_flow_…`・`google_login_handoff_…`)は、残りません(開発者ツールの Application → Cookies で確かめられます)。
 
 ## うまくいかないとき
 
@@ -128,8 +102,9 @@ cd frontend && docker compose up -d --build
 |---|---|
 | `Error 400: redirect_uri_mismatch` | 手順 3 の「承認済みのリダイレクト URI」と、`GOOGLE_REDIRECT_URL` が、完全には一致していません。両方を見比べて、揃えます |
 | `Access blocked: … has not completed the Google verification process` / `Error 403: access_denied` | そのアカウントが「テストユーザー」に入っていません。手順 2 で追加します |
-| ボタンが出ない | `GET /meta` の `login_providers` が空です。API を起動したシェルで、`GOOGLE_CLIENT_ID` を設定してから、`docker compose up -d` し直します。空でなければ、画面(frontend)が、Google でのサインインの変更を含んでいません(6-A を参照) |
-| サインインが「失敗」になる(手続きの途中で戻される) | 画面を開いた場所と、API の場所を、**`localhost` で統一**します(`127.0.0.1` と混ぜると、手続きの cookie が届きません)。ブラウザの cookie を無効にしていないかも見ます |
+| ボタンが出ない | `GET /meta` の `login_providers` が空です。API を起動したシェルで、`GOOGLE_CLIENT_ID` を設定してから、`docker compose up -d` し直します。ブラウザが、古い `GET /meta` の応答(最大 1 時間キャッシュされます)を持っているだけのこともあります(ハードリロード。Google を**無効にした**直後は、逆に、最大 1 時間、ボタンが残り、押すと「not found」になることがあります)。`frontend/.env` などで `VITE_API_BASE_URL` に**別のオリジンの絶対 URL**(`http://localhost:8080` など)を設定していても、ボタンは出ません(交換の cookie が届かず、必ず失敗するため。既定の `/api` にします) |
+| 「The Google sign-in link is invalid or has expired」が毎回出る | `GOOGLE_REDIRECT_URL`(と、Google Cloud の「承認済みのリダイレクト URI」)が、画面の `/api` を通る形(`http://localhost:5173/api/auth/google/callback`)になっていません。API に直接(`:8080`)戻していないか、`/api` を付け忘れていないか、見直します。API の起動ログ(`cd backend-go && docker compose logs api-go`)に、`suspicious google login setting` と、`GOOGLE_REDIRECT_URL is on a different origin` または `has no path prefix` を含む `detail` が出ていれば、その可能性が高いです。ただし、API は、画面が API を呼ぶ道筋(既定は `/api`)を知らないので、警告は目安です(画面を `VITE_API_BASE_URL` で変えているときは、その道筋と、戻り先の接頭辞が合っているかを、自分で確かめます) |
+| サインインが「失敗」になる(手続きの途中で戻される) | **画面を開くアドレス**と、`GOOGLE_REDIRECT_URL`・`APP_BASE_URL` の**ホストを、同じにします**(`localhost` と `127.0.0.1` を混ぜると、cookie が届きません。設定は `localhost`、開くのは `127.0.0.1:5173`、は失敗します)。ブラウザの cookie を無効にしていないかも見ます |
 | 起動時に `GOOGLE_… is required` | 有効にしたのに、足りない変数があります(変数の名前だけが出ます) |
 
 ## 本番に公開するとき

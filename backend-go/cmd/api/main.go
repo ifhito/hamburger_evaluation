@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -44,8 +45,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+	logConfigWarnings(cfg)
 	if err := run(ctx, cfg, nil); err != nil {
 		log.Fatalf("server: %v", err)
+	}
+}
+
+// logConfigWarnings は、設定は有効でも、実際には失敗しやすい組み合わせ(Google の戻り先が、画面のオリジンを通らない
+// など)を、起動時のログに警告として出す(起動は止めない)。手順書は、このメッセージ(と detail の項目)で、原因を探させる。
+func logConfigWarnings(cfg infra.Config) {
+	for _, w := range cfg.GoogleWarnings() {
+		slog.Warn("suspicious google login setting", "detail", w)
 	}
 }
 

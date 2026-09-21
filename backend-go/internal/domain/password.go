@@ -1,7 +1,5 @@
 package domain
 
-import "fmt"
-
 const (
 	// MinPasswordBytes はパスワードの最小バイト数である。
 	// 規則の判定はこの domain だけが持つ。frontend の入力欄の説明文は、GET /meta が返すこの値から
@@ -11,30 +9,30 @@ const (
 	MaxPasswordBytes = 72
 )
 
-// ValidatePassword は password の強度ルールを検証し、違反ごとの Rails 形式 full message を返す。
+// PasswordIssues は password の強度ルールを検証し、違反ごとの文言(Message。言語に依らない形)を返す。
 // 有効なら nil を返す。
 //
 // 長さは文字数ではなくバイト数で数える（bcrypt の入力上限に合わせるため）。
 // 空文字列は "can't be blank" だけを返す。それ以外は該当する違反を
-// 「短い → 長い → 文字種」の順にすべて返す。メッセージは API の外部契約なので英語のまま。
+// 「短い → 長い → 文字種」の順にすべて返す。英語の文言は API の外部契約なので変えない。
 //
 // この規則の判定は domain だけが持ち、frontend は判定を持たない（説明文の表示と、
 // サーバーの 422 メッセージの表示だけを行う）。
-func ValidatePassword(password string) []string {
+func PasswordIssues(password string) []Message {
 	if password == "" {
-		return []string{"Password can't be blank"}
+		return []Message{Msg(keyPasswordBlank)}
 	}
-	var msgs []string
+	var issues []Message
 	if len(password) < MinPasswordBytes {
-		msgs = append(msgs, fmt.Sprintf("Password is too short (minimum is %d characters)", MinPasswordBytes))
+		issues = append(issues, Msg(keyPasswordTooShort, MinPasswordBytes))
 	}
 	if len(password) > MaxPasswordBytes {
-		msgs = append(msgs, fmt.Sprintf("Password is too long (maximum is %d characters)", MaxPasswordBytes))
+		issues = append(issues, Msg(keyPasswordTooLong, MaxPasswordBytes))
 	}
 	if !hasAllCharKinds(password) {
-		msgs = append(msgs, "Password must include letters, numbers and symbols")
+		issues = append(issues, Msg(keyPasswordCharKinds))
 	}
-	return msgs
+	return issues
 }
 
 // hasAllCharKinds は s が半角英字・半角数字・記号をそれぞれ 1 文字以上含むかを返す。

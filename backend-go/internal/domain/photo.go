@@ -8,7 +8,7 @@ package domain
 const (
 	// MaxPhotoBytes は、アップロードできる写真のファイルの大きさの上限(バイト。5 MiB)である。
 	// 使う場所: GET /meta の photo.max_bytes、handler の受け付けの判定とその 422 のメッセージ
-	// （readPhotoPart・photoTooLargeMessage）、レビュー投稿の本文の上限の導出（middleware の
+	// （readPhotoPart・msgPhotoTooLarge）、レビュー投稿の本文の上限の導出（middleware の
 	// maxReviewRequestBodyBytes）。internal/photo は使わない。
 	MaxPhotoBytes int64 = 5 << 20
 	// MaxPhotoEdge は、保存する写真の長辺の上限(ピクセル)である。これより大きい写真は、縮小して保存する

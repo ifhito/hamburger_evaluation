@@ -136,8 +136,8 @@ func assertValidationError(t *testing.T, err error, wantMsgs []string) {
 	if !errors.As(err, &vErr) {
 		t.Fatalf("error = %v (%T), want *domain.ValidationError", err, err)
 	}
-	if !reflect.DeepEqual(vErr.Messages, wantMsgs) {
-		t.Fatalf("validation messages = %q, want %q", vErr.Messages, wantMsgs)
+	if !reflect.DeepEqual(vErr.Texts(domain.LangEN), wantMsgs) {
+		t.Fatalf("validation messages = %q, want %q", vErr.Texts(domain.LangEN), wantMsgs)
 	}
 }
 
@@ -185,7 +185,7 @@ func TestAuthLogin(t *testing.T) {
 		})
 	}
 
-	// 認証情報が signup と同じ規則（domain.ValidateCredentials）を満たさないときは、
+	// 認証情報が signup と同じ規則（domain.CredentialsIssues）を満たさないときは、
 	// DB の検索も hash の比較も行わず、検証エラーを返す。
 	// getByEmail を設定しない fakeUserQuery は、呼ばれると panic するので、検索されないことも固定される。
 	rejected := []struct {
@@ -211,8 +211,8 @@ func TestAuthLogin(t *testing.T) {
 			if !errors.As(err, &vErr) {
 				t.Fatalf("Login error = %v, want *domain.ValidationError", err)
 			}
-			if !reflect.DeepEqual(vErr.Messages, tt.want) {
-				t.Errorf("Login messages = %v, want %v", vErr.Messages, tt.want)
+			if !reflect.DeepEqual(vErr.Texts(domain.LangEN), tt.want) {
+				t.Errorf("Login messages = %v, want %v", vErr.Texts(domain.LangEN), tt.want)
 			}
 			if token != "" {
 				t.Errorf("Login token = %q, want empty", token)

@@ -1,0 +1,60 @@
+.panel {
+  font-family: var(--ui-font);
+  background: var(--ui-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 56px 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  text-align: center;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.sub {
+  color: var(--ui-text-muted);
+}
+
+.code {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.skels {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, 100%);
+  margin-top: 8px;
+}
+
+.skel {
+  height: 16px;
+  border-radius: 8px;
+  background: var(--ui-surface-2);
+}
+
+.skel:nth-child(2) {
+  width: 70%;
+}
+
+.skel:nth-child(3) {
+  width: 85%;
+}
+
+@media (max-width: 720px) {
+  .panel {
+    padding: 40px 16px;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+}

@@ -5,12 +5,15 @@ export interface ReturnToState {
   from?: string;
 }
 
-// state から、このアプリの中の戻り先(/ で始まり、// や \ で始まらない)だけを取り出す。
-// それ以外は null(呼び出し側の既定の遷移先を使う)。
+// このアプリの中のパス(/ で始まり、// や \ で始まらない)ならそのまま、それ以外は null を返す。
+export function appPathOrNull(path: string | null | undefined): string | null {
+  if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return null;
+  return path;
+}
+
+// state から、このアプリの中の戻り先だけを取り出す。それ以外は null(呼び出し側の既定の遷移先を使う)。
 export function returnPathFrom(state: unknown): string | null {
   if (typeof state !== "object" || state === null) return null;
   const from = (state as ReturnToState).from;
-  if (typeof from !== "string") return null;
-  if (!from.startsWith("/") || from.startsWith("//") || from.startsWith("/\\")) return null;
-  return from;
+  return typeof from === "string" ? appPathOrNull(from) : null;
 }

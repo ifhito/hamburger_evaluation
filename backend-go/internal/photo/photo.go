@@ -34,10 +34,6 @@ var ErrUnsupportedImage = errors.New("unsupported image")
 // handler が別のメッセージにできるように、区別している。
 var ErrDimensionsTooLarge = fmt.Errorf("%w: dimensions exceed the limit", ErrUnsupportedImage)
 
-// DimensionsTooLargeMessage は、寸法（横・縦・画素数）が上限を超える写真を断るときに、利用者へ返す
-// メッセージである。上限の値（maxDimension・maxPixels）から作るので、上限と食い違わない。
-var DimensionsTooLargeMessage = fmt.Sprintf("Photo dimensions are too large (max %dpx per side and %d megapixels)", maxDimension, maxPixels/1_000_000)
-
 // ErrHEIFNotSupported は、HEIC / HEIF(iPhone の既定の形式)の写真を表す。対応しない形式の一種でも
 // ある(ErrUnsupportedImage でもある)。デコーダの依存とメモリの負担が、得られる価値に見合わないので、
 // 受け付けない。handler は、対応しない理由が分かる別のメッセージにする。
@@ -48,13 +44,14 @@ const (
 	// 画像は決して拡大されない。値は、GET /meta で frontend にも伝える上限として、
 	// domain が持つ。
 	maxEdge = domain.MaxPhotoEdge
-	// maxDimension と maxPixels は、画像ヘッダで宣言されたサイズの上限で
+	// MaxDimension(1 辺)と MaxPixels(画素数)は、画像ヘッダで宣言されたサイズの上限で
 	// あり、完全な decode の前にチェックされる（decompression bomb のガード）。
+	// handler が、断るときの文言に、この値を入れる(上限と食い違わない)。
 	// コンテナのメモリやデコーダーの特性に応じて調整しうる実装上の値なので、
 	// domain ではなくここに置く。24MP は実際のカメラ出力をカバーする。
 	// いずれにせよ長辺は 1600px に縮小される。
-	maxDimension = 10000
-	maxPixels    = 24_000_000
+	MaxDimension = 10000
+	MaxPixels    = 24_000_000
 	// maxDecodedBytes は、decode 後のピクセルバッファの推定メモリサイズ
 	// （bytesPerPixel × 宣言されたピクセル数）の上限である。これにより、
 	// 16-bit の画像が、ピクセル数のガードをすり抜けて約 2 倍大きい decode を
@@ -151,7 +148,7 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	if err != nil {
 		return Processed{}, fmt.Errorf("%w: %v", ErrUnsupportedImage, err)
 	}
-	if cfg.Width > maxDimension || cfg.Height > maxDimension || cfg.Width*cfg.Height > maxPixels {
+	if cfg.Width > MaxDimension || cfg.Height > MaxDimension || cfg.Width*cfg.Height > MaxPixels {
 		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the size limit", ErrDimensionsTooLarge, cfg.Width, cfg.Height)
 	}
 	if int64(cfg.Width)*int64(cfg.Height)*bytesPerPixel(cfg.ColorModel) > maxDecodedBytes {

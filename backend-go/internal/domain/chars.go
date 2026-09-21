@@ -1,9 +1,6 @@
 package domain
 
-import (
-	"fmt"
-	"unicode/utf8"
-)
+import "unicode/utf8"
 
 // 文字数の上限そのものは、ルールを持つ側(review.go・shop.go・username.go・email.go)に、
 // 検証の関数と並べて置く。ここには、上限の判定に共通の道具だけを置く。
@@ -13,12 +10,6 @@ import (
 // exceedsChars は s のコードポイント数が max を超えるかを返す。
 func exceedsChars(s string, max int) bool {
 	return utf8.RuneCountInString(s) > max
-}
-
-// tooLongMessage は上限超過の Rails 形式の full message を返す。メッセージは
-// API の外部契約なので英語のままである（password の "is too long" と同じ形）。
-func tooLongMessage(label string, max int) string {
-	return fmt.Sprintf("%s is too long (maximum is %d characters)", label, max)
 }
 
 // truncateChars は s を、先頭から max 文字(コードポイント)までに切り詰める。文字の途中では切らない。

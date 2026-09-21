@@ -88,6 +88,7 @@ backend-go/
 - 専用の Postgres を使う (ホストのポートは 5433)。
 - すべてのテーブルの ID(users・shops・burgers・reviews)は **UUID**(小文字・ハイフン区切りの正規形。DB の `gen_random_uuid()` が v4 で生成する)。URL・API・JWT(`user_id` claim)・frontend では、この文字列をそのまま扱う。正規形でない ID(大文字・ハイフンなし・整数)は、パスの `{id}`(`/users/{id}`・`/shops/{id}`・`/admin/shops/{id}`・`/reviews/{id}`)では存在しないものと同じ 404、クエリ(`user_id`・`shop_id`)と `POST /reviews` の本文(`shop_id`・`burger_id`。空は「指定なし」で、`shop_id` がなければ 404、`burger_id` がなければ `burger_name` の経路)では 422(`User id must be a valid UUID` など)にする(形式の判定は `domain.IsUUID` だけが持ち、frontend は判定しない)。一覧の並びは、id ではなく `created_at` や `name` と、同値の決着のための `id` で決める(UUID の id は作成順ではない)。レビューの一覧は `created_at` の降順、同時刻は `id` の降順で、同時刻のレビューが多数あっても、ページをまたいで重複・欠落がない。統計の再計算に使うレビューの順序も、`created_at` の昇順、同時刻は `id` の昇順である。
 - 認証は **JWT**。ログイン時にトークンを返し、以降は `Authorization: Bearer <token>` で送る。`user_id` が数値の旧形式のトークンは無効(401)。`JWT_SECRET` が未設定だと起動時にエラーで落ちる(fail-loud)ため、`docker compose up` の前に export する。
+- **エラーの文言の言語**: リクエストの `Accept-Language` で、日本語(`ja`)か英語(`en`)を選ぶ(q 値・`ja-JP`・`*` に従う。どちらでもない・ヘッダーなしは英語 = いままでの文言の契約)。言語を選ぶのは handler(`langOf`)だけで、文言は「キー + 引数」で表し、言語ごとの書式のカタログ(業務の規則の文言は `domain/messages.go` の `domain.Message`、handler が返す文言は `adapter/handler/messages.go` の `apiMessage`。型を分けている。英語・日本語の両方が必須で、値の並びも同じ。構造テスト(`internal/testutil/msgcheck`)が強制する)で文字列にする。本文の作り方は、`writeError`・`writeErrorList`・`writeErrorListWith`・`writeValidation`(言語に従う。`Vary: Accept-Language` も付く)と、`writeInternalError`(5xx。英語の固定)だけで、文字列を直接書いて本文を作ることは、構造テストが禁じる(言語の切り替えをすり抜けるため。MCP のツールの失敗も `t.failMessage`)。**日本語になるのは、この API のコードが返す、利用者に見える 4xx すべて**: 検証の失敗の 422、見つからない・権限・認証・リクエストの形・写真・クエリの誤り、Google のサインインの案内(交換の応答)、OAuth の許可の画面の 422(要求が不正な理由の診断の文は英語のまま、日本語の説明に添える)、`/mcp` の 401・403 と、MCP のツールの失敗(結果が大きすぎるときの案内だけは、ツールの説明と同じく日本語で固定)。**対応が済んでも英語のまま**: OAuth の RFC のプロトコルの識別子(`error` の値・`error_description`・`WWW-Authenticate`)、5xx の `internal server error`・`database unavailable`、成功の応答(`Confirmation email sent`)、標準ライブラリと SDK が自分で返す応答(写真の配信 `GET /photos/…` の 403・404・416、MCP の SDK が返すツールの入力の型の検証と、`/mcp` のヘッダー・プロトコルの版の誤り。本文が text/plain など、API のエラーの形ではない)。
 - signup は**メール確認つき**で、確認メールの送信設定(`SMTP_HOST`・`SMTP_PORT`・`MAIL_FROM`・`APP_BASE_URL`)が欠けていると起動時に落ちる。開発では compose の Mailpit が受け取る(`docker compose up` で足りる。Web UI は http://localhost:8025)。詳細は「signup の確認メール」。
 
 ### 統計の再計算(非同期)
@@ -281,7 +282,7 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 |---|---|---|
 | `GOOGLE_CLIENT_ID` | 任意(設定すると有効) | Google Cloud Console で作った OAuth クライアントの ID |
 | `GOOGLE_CLIENT_SECRET` | 有効なとき必須 | そのクライアントの秘密の鍵。**秘密。ログ・コード・PR・チャットに書かない。`.env` は Git に入れない** |
-| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:8080/auth/google/callback`)。**https、または開発用のループバックの http だけ**(起動時に断る。`APP_BASE_URL` も、有効なときは同じ制約)。画面と同じサイト(同じホスト)にして、手続きの cookie が届くようにする |
+| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:5173/api/auth/google/callback`。**画面の `/api` を通る形**にする。API に直接戻すと、画面が呼ぶ `/api/auth/google/exchange` に、交換の cookie が届かず、毎回失敗する)。**https、または開発用のループバックの http だけ**(起動時に断る。`APP_BASE_URL` も、有効なときは同じ制約)。画面と同じオリジンにして(画面の `/api` を通る形)、手続きの cookie が届くようにする |
 | `GOOGLE_OIDC_ISSUER` | 任意 | OpenID Connect の提供元。既定は `https://accounts.google.com`。テスト・隔離した確認で、代役に向けるためだけにある。https か、ループバック(`localhost`・`127.0.0.1`・`[::1]`)の http だけ許す。**本番では設定しない** |
 
 ### リモートの MCP サーバー(`/mcp`)
@@ -437,7 +438,7 @@ frontend/src/
 
 ### API の接続先
 
-- ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる。
+- ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる(別のオリジンの絶対 URL にすると、API は CORS に対応していないので、Google でのサインインは使えず、ボタンは出ない)。
 - 開発時は Vite の proxy が `/api` を Go API へ転送する。転送先の既定は `http://host.docker.internal:8080` で、`VITE_API_PROXY_TARGET` で変更できる。レビュー写真の `/photos` も同じ転送先へ proxy される(本番の nginx にも `/photos/` がある)。
 
 ### 写真の送信
@@ -452,6 +453,17 @@ frontend/src/
 - **画面の状態は、それを作った認可の要求(URL の query。`search`)に結び付ける**(`consentFlow.ts`)。同じ画面のまま query だけが変わったとき(履歴を戻る・進む)に、前のアプリの内容が残ったまま、新しいアプリへの許可を送ってしまうのを防ぐため: いまの URL のために作られた状態だけを見せ(それ以外は「確認中」で、ボタンも出ない)、許可・拒否として送るのは、いま画面に内容を見せている要求だけにする。URL が変わったら、前の取得は取り消し(`AbortController`)、遅れて返った応答は画面に届かない。
 - 画面は、`GET /oauth/authorize/request` の結果(アプリの名前・範囲と説明・`consentRequired`)を表示し、選択を `POST /oauth/authorize/decision` に送って、返ってきた `redirectTo`(アプリへの戻り先)へブラウザを移す。`consentRequired` が false(すでに許可済みの範囲に収まる)なら、尋ねずに許可を送る。**要求の検証・範囲の説明・尋ねる必要があるかの判断は、すべて backend が行い、frontend は表示と送信だけ**を行う(範囲の名前や説明を frontend に持たない)。アプリへの戻り先は、http(s) のときだけ開く(`isNavigable`。ページの中でコードが動くのを防ぐ確認)。
 - プロフィール(本人のときだけ。`canEdit`)に「Connected apps」を出す(`ConnectedApps`)。`GET /oauth/grants` の一覧(ページ送り。`X-Has-More` があるときに「Load more」で続きを取る。既存の一覧と同じ `useInfinitePages`。キャッシュのキーには利用者の id を含める)と、`DELETE /oauth/grants/{id}` の取り消し(確認のあと。読み込み済みの全ページを取り直す)。OAuth の認可サーバーが無効な環境(API が 404)では、何も出さない。
+
+### Google でのサインイン(`domains/auth`)
+
+backend の「Google のアカウントでのサインイン」(上の Backend の節)の、画面側。**判断は backend だけが持ち、frontend は、返された値と文言を出すだけ**。
+
+- サインインと新規登録の画面に、「Sign in with Google」「Sign up with Google」のリンク(`GoogleSignIn`。ボタンの見た目)を出す。**`GET /meta` の `loginProviders` に `google` が含まれるときだけ**で、取得できていない間・空のときは何も出さない(`googleEnabled`)。リンクは、ブラウザが API の `${API_BASE_URL}/auth/google/start` へ移動する(`googleStartUrl`。fetch ではない)。ログインが必要な画面から送られてきたときは、その画面(ルーターの state の `from`)を `return_to` として渡す。
+- `/auth/google/complete`(`GoogleCompletePage`。**ゲスト専用ではなく公開の route**。成功するとログイン状態になるため): backend が、成功も失敗も、1 回限りのコードに入れて、この画面へ戻す。画面は、`code` を**最初に 1 回だけ**読み、URL からはすぐに消し(履歴に残さない)、`POST /auth/google/exchange` で交換する(StrictMode の二重実行でも 1 回)。サインインの成功は `signInWithResponse` でログイン状態にして、戻り先(backend が確かめたアプリの中のパス。空は `/reviews`)へ。重複・失敗・無効なコードは、API の文言(`ApiError.messages`)をそのまま出し、「サインインへ戻る」は、失敗の応答が含める戻り先(`GoogleExchangeError.returnTo`。共有の `ApiError` ではなく、`exchangeGoogleCode` が本文から読む。backend が確かめたもの。許可の画面から来た利用者が、パスワードでサインインしたあと、そこへ戻れる)を、サインイン画面の state の `from` として渡す(画面は、戻り先を保存しない)。交換の要求は、同一オリジンなので、手続きを終えたブラウザの cookie(結び付けの値)が、そのまま付く(`withCredentials` は、明示のため。同一オリジンでは、なくても同じ)。失敗の本文の `return_to` は、interceptor が camelCase にして `ApiError.body` に持ち、`GoogleExchangeError` が読む。**交換が、サーバーの障害・通信の失敗で失敗したときは、backend がコードを消費しないので、コードをこの画面の state に持ったまま、「Try again」で、同じコードでもう一度交換する**(409・400 など、決まった失敗には出さない)。コードがない(URL から消したあとに、戻る操作でこの画面へ戻った)ときは、要求を送らない。画面を離れたあとに結果が返っても、勝手に移動させない。失敗の画面の導線(プロフィールへ / サインインへ)は、ログインの状態の復元(GET /me)が済んでから出す。**ログインの証(JWT)は URL に載らない。**
+- 本人のプロフィールに、Google の連携(`GoogleConnection`。`canEdit` のときだけ、`loginProviders` に含まれるときだけ): `GET /me/identities` の内容を出す。「結び付ける」は、**認証つきの `POST /me/identities/google/link`**(`authApi.startGoogleLink`)で、**このブラウザ**に手続きの cookie を設定して始め、返された Google の認可の URL(`redirectUrl`。http・https だけ移動する)へ移動する(戻り先はこのプロフィール)。**持ち運べる開始のコード(`link_code`)や開始の URL は使わない**(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに結び付ける攻撃を防ぐため)。この POST は、画面と同一オリジン(`/api` の転送)で出すので、応答の cookie が、そのまま保存され、Google からの戻りで送られる。「解除」は **API が返す `canUnlink` が true のときだけ**出す(解除してよいかの判断は backend の domain。false のときは理由の文言だけを出す)。
+- **Google の手続きの cookie は、同一オリジンの `/api` の道筋(`API_BASE_URL` が `/api` のような path)でだけ往復する**。`VITE_API_BASE_URL` を別のオリジンの絶対 URL にすると、cookie が保存・送信されず、Google でのサインインと結び付けは、毎回失敗する(API が CORS(資格情報つき)に対応していないので、その構成は対応しない。**画面は、API の根が別のオリジンの絶対 URL のとき、Google のボタンを出さない**(`googleEnabled`)。Google を使うときは、変えない)。backend は、`GOOGLE_REDIRECT_URL` が `APP_BASE_URL` と別のオリジンのとき・同じオリジンでも接頭辞(`/api`)がないときは、起動時に警告する(`Config.GoogleWarnings`。英語の `slog.Warn`。オリジンだけを出す。手元の設定は、`http://localhost:5173/api/auth/google/callback`)。
+- 一覧の取得に失敗したときは、エラーと「Retry」だけを出し、「未連携」とは表示しない(`ConnectionState`)。解除が済んだら(204)、再取得を待たずに、キャッシュから Google の連携を外し、「Google disconnected.」を出す(そのあとの再取得の成否は、解除の成否とは別)。**解除が 404 のときは、別のタブで、すでに解除済みなのか、Google の機能が止まっているのか、区別できない**ので、一覧を取り直して確かめ、Google の連携がなければ「解除済み」として扱い、残っている(または、取り直せない)ときは、失敗を出す。一覧の取得の失敗は、自動では再取得せず(失敗の表示と Retry が、「読み込み中」に切り替わって消えるため)、Retry を押したときだけ取り直す。「結び付ける」で Google へ移動したあと、bfcache で復元されたら、処理中を戻す(`pageshow`)。
+- Google のロゴは `google-g.svg`(Google のブランドの決まりに沿ったマーク)。
 
 ### Frontend コマンド
 

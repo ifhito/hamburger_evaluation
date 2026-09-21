@@ -12,10 +12,10 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// shopNotFoundMessage は、存在しない shop と隠された shop（および UUID の
+// msgShopNotFound は、存在しない shop と隠された shop（および UUID の
 // 正規形でない id）に共通の 404 body であり、shop が存在するかどうかをレスポンスから
 // 決して明かさないようにする。
-const shopNotFoundMessage = "Shop not found"
+var msgShopNotFound = apiMsg(keyShopNotFound)
 
 // shopResponse は GET /shops のトップレベル配列の要素 1 つである
 // （frontend の Shop、domains/shops/api/types.ts。ワイヤ上は snake_case）。
@@ -116,8 +116,8 @@ var integerPattern = regexp.MustCompile(`^[+-]?[0-9]+$`)
 // per_page の順で両方）を並べた 422 を書き込み済みで false を返すので、呼び出し
 // 側は何も書かずに return する。
 func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok bool) {
-	var msgs []string
-	parse := func(name, msg string) int {
+	var msgs []apiMessage
+	parse := func(name string, msg apiMessage) int {
 		raw := r.URL.Query().Get(name)
 		if raw == "" {
 			return 0
@@ -129,10 +129,10 @@ func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok b
 		n, _ := strconv.Atoi(raw) // 構文は検証済みなので、エラーは範囲外だけである。そのとき Atoi は clamp 済みの値を返す
 		return n
 	}
-	page = parse("page", "Page must be an integer")
-	perPage = parse("per_page", "Per page must be an integer")
+	page = parse("page", msgPageNotInteger)
+	perPage = parse("per_page", msgPerPageNotInteger)
 	if len(msgs) > 0 {
-		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: msgs})
+		writeErrorList(w, r, http.StatusUnprocessableEntity, msgs...)
 		return 0, 0, false
 	}
 	return page, perPage, true
@@ -151,7 +151,7 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 		list, hasMore, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"), page, perPage)
 		if err != nil {
 			log.Printf("shops: list: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			writeInternalError(w)
 			return
 		}
 		resp := make([]shopResponse, 0, len(list)) // nil ではない：[] として marshal される
@@ -174,11 +174,11 @@ func handleGetShop(shops *usecase.Shops) http.HandlerFunc {
 		detail, err := shops.Get(r.Context(), viewerPtr(r), id)
 		if err != nil {
 			if errors.Is(err, domain.ErrShopNotFound) {
-				writeError(w, http.StatusNotFound, shopNotFoundMessage)
+				writeError(w, r, http.StatusNotFound, msgShopNotFound)
 				return
 			}
 			log.Printf("shops: get: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			writeInternalError(w)
 			return
 		}
 		writeJSON(w, http.StatusOK, newShopDetailResponse(detail))
