@@ -23,6 +23,10 @@ type BurgerStatsQuery interface {
 	// ListReviewedBurgerIDsByUser は、ユーザーの有効なレビューが付いているバーガーの ID を、重複なしで
 	// 昇順に返す。ユーザーが退会したとき、統計を計算し直す対象を知るために使う。
 	ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]string, error)
+	// ListDueRecalcRequests は、再計算の時期が来ている依頼を、上限 batch 件まで返す。
+	// 次の再試行の時刻が now 以前(または未設定)で、失敗の回数が maxAttempts に達していないものが
+	// 対象である(達したものは打ち切り)。トランザクションの外の読み取りでもよい。
+	ListDueRecalcRequests(ctx context.Context, now time.Time, maxAttempts, batch int) ([]domain.RecalcRequest, error)
 }
 
 // Tx は、UnitOfWork.Do の中で使う、同じトランザクションに結び付いた書き込みと読み取りの組である
@@ -56,9 +60,13 @@ type Clock interface {
 	Now() time.Time
 }
 
-// BurgerStatsRecalculator(「バーガーの統計を再計算する役」の意味)は、バーガーの統計を計算し直す
-// 手順を持つ。UnitOfWork.Do の中で、レビューの書き込みと同じトランザクションから呼ぶ。手順は「バーガーの行をロックする →
-// 統計の元データを読む → domain の計算(CalculateBurgerStat)で統計を求める → 保存する」。
+// BurgerStatsRecalculator(「バーガーの統計を再計算する役」の意味)は、バーガーの統計の再計算に関する
+// 手順をまとめる。
+//
+// 再計算は、書き込み(レビューの投稿・編集・削除、退会)の中では行わない。書き込みは、同じ
+// トランザクションで「再計算の依頼」を登録するだけ(RequestRecalculation)で、統計の計算は、
+// バックグラウンドのワーカー(StatsWorker)が、あとから Recalculate で行う。そのため、書き込みの
+// 応答は統計の計算を待たず、統計は少し遅れて(通常は数秒以内に)反映される(結果整合)。
 type BurgerStatsRecalculator struct {
 	clock Clock
 }
@@ -68,13 +76,42 @@ func NewBurgerStatsRecalculator(clock Clock) *BurgerStatsRecalculator {
 	return &BurgerStatsRecalculator{clock: clock}
 }
 
-// Recalculate はバーガーの統計を計算し直して保存する。tx は UnitOfWork.Do が渡したものでなければ
-// ならない。
+// RequestRecalculation は、burger の統計の再計算を依頼する。tx は UnitOfWork.Do が渡したもので
+// なければならず、書き込みと同じトランザクションで登録される(書き込みがロールバックされれば、
+// 依頼も残らない)。統計は計算せず、burger の行もロックしない。
+func (r *BurgerStatsRecalculator) RequestRecalculation(ctx context.Context, tx Tx, burgerID string) error {
+	if err := tx.BurgerStats.RequestRecalc(ctx, burgerID); err != nil {
+		return fmt.Errorf("request burger stats recalculation: %w", err)
+	}
+	return nil
+}
+
+// RequestRecalculationReviewedBy は、user の kept な review が付くすべての burger の再計算を、
+// burger_id の昇順に依頼する(ユーザーの退会)。複数の行を、いつも同じ順序で登録すれば、並行する
+// 退会どうしが、互いの行を逆順に待ってデッドロックすることがない。昇順は、読み取りの実装も
+// 保証するが、ここでも並べ直して、順序を usecase の責務として明示する。burger の id は UUID の
+// 正規形（小文字・同じ長さ）なので、文字列としての昇順は、データベースの uuid 型の昇順と同じになる。
+func (r *BurgerStatsRecalculator) RequestRecalculationReviewedBy(ctx context.Context, tx Tx, userID string) error {
+	burgerIDs, err := tx.Stats.ListReviewedBurgerIDsByUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("list review burgers: %w", err)
+	}
+	slices.Sort(burgerIDs)
+	for _, burgerID := range burgerIDs {
+		if err := r.RequestRecalculation(ctx, tx, burgerID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Recalculate はバーガーの統計を計算し直して保存する(ワーカーが使う)。tx は UnitOfWork.Do が
+// 渡したものでなければならない。手順は「バーガーの行をロックする → 統計の元データを読む → domain の
+// 計算(CalculateBurgerStat)で統計を求める → 保存する」である。
 //
-// 最初にバーガーの行をロックするのは、同じバーガーの統計を同時に計算し直す 2 つの処理が、
-// 互いの追加分を知らないまま「読んでから上書き」して、片方の更新を取りこぼすのを防ぐため。
-// 同じトランザクションがすでに持っているロックを取り直しても待たされないので、呼び出し側が
-// 先にロックしていてもよい。
+// 最初にバーガーの行をロックするのは、同じバーガーの統計を同時に計算し直す 2 つの処理(複数の
+// インスタンスのワーカーなど)が、互いの追加分を知らないまま「読んでから上書き」して、片方の更新を
+// 取りこぼすのを防ぐため。同じトランザクションがすでに持っているロックを取り直しても待たされない。
 //
 // 1 つのトランザクションで複数のバーガーを計算し直すときは、バーガー ID の昇順に呼ぶこと。
 // 別々の処理が同じバーガーを逆の順序でロックすると、互いに相手のロックを待ち合って止まる
@@ -94,28 +131,6 @@ func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burger
 	now := r.clock.Now().Truncate(time.Microsecond)
 	if err := tx.BurgerStats.Save(ctx, domain.CalculateBurgerStat(burgerID, facts, now)); err != nil {
 		return fmt.Errorf("recalculate burger stats: save: %w", err)
-	}
-	return nil
-}
-
-// RecalculateReviewedBy は、ユーザーの有効なレビューが付いているすべてのバーガーの統計を、
-// バーガー ID の昇順に計算し直す(ユーザーの退会で使う)。昇順にするのは、同時に退会する 2 人の
-// レビューが同じバーガーに付いていても、ロックの順序がそろってデッドロックしないため。読み取りの
-// 実装も昇順で返すが、その順序に頼らず、ここで並べ直す。
-//
-// バーガーの ID は、小文字・ハイフン区切りの決まった形の UUID(文字列)なので、文字列として
-// 昇順に並べても、データベースの uuid 型の昇順と同じ順序になる。読み取り(SQL の ORDER BY)の
-// 並び順と、ここでの並べ直しの順序が食い違って、逆の順序でロックしてしまうことはない。
-func (r *BurgerStatsRecalculator) RecalculateReviewedBy(ctx context.Context, tx Tx, userID string) error {
-	burgerIDs, err := tx.Stats.ListReviewedBurgerIDsByUser(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("list review burgers: %w", err)
-	}
-	slices.Sort(burgerIDs)
-	for _, burgerID := range burgerIDs {
-		if err := r.Recalculate(ctx, tx, burgerID); err != nil {
-			return err
-		}
 	}
 	return nil
 }

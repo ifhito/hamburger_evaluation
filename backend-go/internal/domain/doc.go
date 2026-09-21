@@ -19,8 +19,8 @@
 //     Reviews、Users、SignupVerifications、MailDeliveries）に置く。Service は作らない。
 //   - 複数の集約を跨ぐ更新: 手順の途中で読み取り（usecase の *Query）を挟むかどうかで、置き場所が
 //     分かれる。読み取りを挟まない、書き込みだけの手順は、domain の Service（*Service）に置く。
-//     読み取りを挟む手順（例: review の書き込み → 統計の元になるレビューの読み取り → 統計の保存。
-//     退会 → 影響する burger の一覧の読み取り → 各 burger の統計の再計算。確認リンクでの登録
+//     読み取りを挟む手順（例: 統計の再計算 = burger の行のロック → 統計の元になるレビューの読み取り →
+//     統計の保存。退会 → 影響する burger の一覧の読み取り → 各 burger の再計算の依頼の登録。確認リンクでの登録
 //     = 確認待ちのロック → 確認待ちの読み取り → ユーザーの作成 → 確認待ちの削除）は、repository だけを持つ
 //     Service では表現できない（repository は読み取りを持たない）ので、トランザクションを持つ
 //     usecase が、各集約の書き込みオブジェクト（BurgerStats など）と Query を組み合わせて、

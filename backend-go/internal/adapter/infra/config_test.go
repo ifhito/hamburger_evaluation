@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,14 @@ func withMailConfig(cfg Config) Config {
 	cfg.SMTPSecurity = "starttls"
 	cfg.MailFrom = "noreply@example.com"
 	cfg.AppBaseURL = "https://app.example.com"
+	return cfg
+}
+
+// withStatsWorkerDefaults は、期待値に、統計のワーカーの既定の設定を足す(それ以外を指定しないテスト用)。
+func withStatsWorkerDefaults(cfg Config) Config {
+	cfg.StatsWorkerInterval = time.Second
+	cfg.StatsWorkerBatch = 20
+	cfg.StatsWorkerMaxAttempts = 8
 	return cfg
 }
 
@@ -185,7 +195,7 @@ func TestLoadConfig(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadConfig returned error: %v", err)
 			}
-			if want := withMailConfig(tt.want); got != want {
+			if want := withStatsWorkerDefaults(withMailConfig(tt.want)); got != want {
 				t.Fatalf("LoadConfig = %+v, want %+v", got, want)
 			}
 		})
@@ -310,4 +320,54 @@ func TestLoadConfigMail(t *testing.T) {
 			t.Fatalf("error = %v, want error without the password value", err)
 		}
 	})
+}
+
+func TestLoadConfigStatsWorker(t *testing.T) {
+	t.Run("設定すると、その値が使われる", func(t *testing.T) {
+		cfg, err := mailLoader(map[string]string{
+			"STATS_WORKER_INTERVAL":     "250ms",
+			"STATS_WORKER_BATCH":        "5",
+			"STATS_WORKER_MAX_ATTEMPTS": "3",
+		})
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if cfg.StatsWorkerInterval != 250*time.Millisecond || cfg.StatsWorkerBatch != 5 || cfg.StatsWorkerMaxAttempts != 3 {
+			t.Errorf("ワーカーの設定が違う: %+v", cfg)
+		}
+	})
+
+	// 不正な値は、起動を失敗させずに既定の値になる。ただし、黙って戻すと、設定したつもりの値が
+	// 効いていないことに気づけないので、どの変数かを警告のログに出す。
+	for name, tc := range map[string]struct {
+		env  map[string]string
+		want func(Config) bool
+	}{
+		"STATS_WORKER_INTERVAL が数値でない": {map[string]string{"STATS_WORKER_INTERVAL": "soon"}, func(c Config) bool { return c.StatsWorkerInterval == time.Second }},
+		"STATS_WORKER_INTERVAL が 0":    {map[string]string{"STATS_WORKER_INTERVAL": "0s"}, func(c Config) bool { return c.StatsWorkerInterval == time.Second }},
+		"STATS_WORKER_INTERVAL が負":     {map[string]string{"STATS_WORKER_INTERVAL": "-1s"}, func(c Config) bool { return c.StatsWorkerInterval == time.Second }},
+		"STATS_WORKER_BATCH が数値でない":    {map[string]string{"STATS_WORKER_BATCH": "many"}, func(c Config) bool { return c.StatsWorkerBatch == 20 }},
+		"STATS_WORKER_BATCH が 0":       {map[string]string{"STATS_WORKER_BATCH": "0"}, func(c Config) bool { return c.StatsWorkerBatch == 20 }},
+		"STATS_WORKER_MAX_ATTEMPTS が負": {map[string]string{"STATS_WORKER_MAX_ATTEMPTS": "-2"}, func(c Config) bool { return c.StatsWorkerMaxAttempts == 8 }},
+	} {
+		t.Run("不正な値は、警告のログを出して既定の値になる: "+name, func(t *testing.T) {
+			var logs bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+
+			cfg, err := mailLoader(tc.env)
+			if err != nil {
+				t.Fatalf("LoadConfig returned error: %v", err)
+			}
+			if !tc.want(cfg) {
+				t.Errorf("既定の値になっていない: %+v", cfg)
+			}
+			for key := range tc.env {
+				if !strings.Contains(logs.String(), key) {
+					t.Errorf("警告のログに変数名 %s がない: %s", key, logs.String())
+				}
+			}
+		})
+	}
 }

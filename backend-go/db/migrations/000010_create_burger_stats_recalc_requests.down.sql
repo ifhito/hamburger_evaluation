@@ -1,0 +1,1 @@
+DROP TABLE burger_stats_recalc_requests;

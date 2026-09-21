@@ -24,6 +24,16 @@ type BurgerStat struct {
 	CalculatedAt  pgtype.Timestamptz
 }
 
+type BurgerStatsRecalcRequest struct {
+	BurgerID      string
+	Version       int64
+	Attempts      int32
+	NextAttemptAt pgtype.Timestamptz
+	LastError     pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type MailDelivery struct {
 	ID             string
 	Kind           string

@@ -18,6 +18,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/uow"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/statsworkertest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -25,8 +26,10 @@ import (
 // このファイルは、usecase.UnitOfWork(ここからここまでをまとめて 1 つのトランザクションにする範囲を、
 // usecase が指定する仕組み)の pgx による実装を、実際の PostgreSQL に対して、本物の usecase
 // (usecase.Reviews / usecase.Users)・query・repository とつないで確かめる(環境変数 TEST_DATABASE_URL が
-// なければスキップする)。レビューの書き込みとバーガーの統計の再計算が 1 つのトランザクションで行われ、
-// 保存された統計が、保存されているレビューから domain の計算で求め直した値とちょうど一致することを確かめる。
+// なければスキップする)。レビューの書き込みは、同じトランザクションで「統計の再計算の依頼」を登録するだけで、
+// 統計の計算は、バックグラウンドのワーカーがあとから行う。そのため、書き込みの直後に統計を確かめるテストは、
+// 確かめる前に world.settle でワーカーを動かす。保存された統計が、保存されているレビューから domain の計算で
+// 求め直した値とちょうど一致することを確かめる。
 
 const (
 	insertUser   = `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
@@ -42,6 +45,7 @@ type world struct {
 	shop    string
 	unit    *uow.UnitOfWork
 	recalc  *usecase.BurgerStatsRecalculator
+	worker  *usecase.StatsWorker
 	reviews *usecase.Reviews
 	users   *usecase.Users
 	queries struct {
@@ -60,6 +64,7 @@ func newWorld(t *testing.T) *world {
 	w := &world{ctx: ctx, conn: conn, dbURL: dbURL}
 	w.unit = uow.New(conn)
 	w.recalc = usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
+	w.worker = statsworkertest.NewWorker(conn, infra.SystemClock{})
 	photos := storage.NewDisk(t.TempDir(), "/photos")
 	w.queries.review = query.NewReviewQuery(conn)
 	w.queries.shop = query.NewShopQuery(conn)
@@ -88,7 +93,13 @@ func (w *world) user(t *testing.T, name string) domain.User {
 	return domain.User{ID: id, Username: name}
 }
 
-// review は、usecase を通してレビューを投稿する(統計の再計算まで、本番と同じトランザクションで行われる)。
+// settle は、溜まった再計算の依頼を、ワーカーで処理する(統計を最新にする)。
+func (w *world) settle(t *testing.T) {
+	t.Helper()
+	statsworkertest.Settle(w.ctx, t, w.worker)
+}
+
+// review は、usecase を通してレビューを投稿する(統計の再計算の依頼が、同じトランザクションで登録される)。
 func (w *world) review(t *testing.T, viewer domain.User, burgerID string, rating int, comment string) domain.ReviewDetail {
 	t.Helper()
 	detail, err := w.reviews.Create(w.ctx, viewer, w.shop, burgerID, "", rating, comment, nil)
@@ -98,13 +109,13 @@ func (w *world) review(t *testing.T, viewer domain.User, burgerID string, rating
 	return detail
 }
 
-// TestUnitOfWorkBurgerStats は、レビューの投稿・編集・削除のたびに、バーガーの統計が、同じ
-// トランザクションの中で正しく計算し直されることを確かめる。確かめるのは次の 4 点。
+// TestUnitOfWorkBurgerStats は、レビューの投稿・編集・削除のあと、ワーカーが動くと、バーガーの統計が
+// 正しく計算し直されることを確かめる。確かめるのは次の 4 点。
 //   - 統計の行が、削除されていないレビュー(削除されたユーザーのものを除く)から求め直した値と
 //     ちょうど一致し続けること
-//   - 同じバーガーへ同時に投稿しても、片方の追加分を取りこぼさないこと
-//   - 書き込みに失敗したとき、統計に手を付けないこと
-//   - 統計の計算のあとで失敗したとき、レビューの書き込みも統計も巻き戻ること
+//   - 同じバーガーへ同時に投稿しても、どちらの投稿も統計に反映されること
+//   - 書き込みに失敗したとき、統計にも再計算の依頼にも手を付けないこと
+//   - 再計算の依頼を登録したあとで失敗したとき、レビューの書き込みも依頼も巻き戻ること
 func TestUnitOfWorkBurgerStats(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
@@ -114,25 +125,28 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 
 	var aliceReview, bobReview domain.ReviewDetail
 
-	t.Run("レビューを投稿するたびに、そのバーガーの統計(件数と平均)が、投稿を含めた値に更新される", func(t *testing.T) {
+	t.Run("レビューを投稿してワーカーが動くたびに、そのバーガーの統計(件数と平均)が、投稿を含めた値に更新される", func(t *testing.T) {
 		aliceReview = w.review(t, alice, burger, 5, "great")
+		w.settle(t)
 		stats := dbtest.RequireConsistentStats(ctx, t, conn, burger)
 		if stats.ReviewCount != 1 || stats.AverageRating != 5.0 {
 			t.Errorf("1 件目の投稿後の統計 = %+v, want 件数 1・平均 5.0", stats)
 		}
 
 		bobReview = w.review(t, bob, burger, 4, "good")
+		w.settle(t)
 		stats = dbtest.RequireConsistentStats(ctx, t, conn, burger)
 		if stats.ReviewCount != 2 || stats.AverageRating != 4.5 {
 			t.Errorf("2 件目の投稿後の統計 = %+v, want 件数 2・平均 4.5", stats)
 		}
 	})
 
-	t.Run("レビューの評価を 5 から 1 に編集すると、そのバーガーの統計(平均と加重スコア)が編集後の値に更新される", func(t *testing.T) {
+	t.Run("レビューの評価を 5 から 1 に編集してワーカーが動くと、そのバーガーの統計(平均と加重スコア)が編集後の値に更新される", func(t *testing.T) {
 		before := dbtest.RequireConsistentStats(ctx, t, conn, burger)
 		if _, err := w.reviews.Update(ctx, alice, aliceReview.ID, 1, "changed my mind", nil); err != nil {
 			t.Fatalf("レビューの編集に失敗した: %v", err)
 		}
+		w.settle(t)
 		stats := dbtest.RequireConsistentStats(ctx, t, conn, burger)
 		if stats.ReviewCount != 2 || stats.AverageRating != 2.5 {
 			t.Errorf("編集後の統計 = %+v, want 件数 2・平均 2.5", stats)
@@ -142,20 +156,22 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("レビューを削除すると、そのバーガーの統計が、削除したレビューを除いた値に更新される", func(t *testing.T) {
+	t.Run("レビューを削除してワーカーが動くと、そのバーガーの統計が、削除したレビューを除いた値に更新される", func(t *testing.T) {
 		if err := w.reviews.Delete(ctx, alice, aliceReview.ID); err != nil {
 			t.Fatalf("削除に失敗した: %v", err)
 		}
+		w.settle(t)
 		stats := dbtest.RequireConsistentStats(ctx, t, conn, burger)
 		if stats.ReviewCount != 1 || stats.AverageRating != 4.0 {
 			t.Errorf("削除後の統計 = %+v, want bob の評価 4 だけが残った値", stats)
 		}
 	})
 
-	t.Run("バーガーの最後の 1 件のレビューを削除すると、統計の行はなくならず、件数 0・平均 0 の行になる", func(t *testing.T) {
+	t.Run("バーガーの最後の 1 件のレビューを削除してワーカーが動くと、統計の行はなくならず、件数 0・平均 0 の行になる", func(t *testing.T) {
 		if err := w.reviews.Delete(ctx, bob, bobReview.ID); err != nil {
 			t.Fatalf("削除に失敗した: %v", err)
 		}
+		w.settle(t)
 		stats := dbtest.RequireConsistentStats(ctx, t, conn, burger)
 		want := dbtest.StoredBurgerStats{ReviewCount: 0, AverageRating: 0.0, WeightedScore: 0.0, Confidence: 0.0, CalculatedAt: stats.CalculatedAt}
 		if stats != want {
@@ -168,6 +184,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		carl := w.user(t, "carl")
 		aliceKept := w.review(t, alice, deletedUserBurger, 5, "mine stays")
 		w.review(t, carl, deletedUserBurger, 2, "mine vanishes")
+		w.settle(t)
 		if got := dbtest.RequireConsistentStats(ctx, t, conn, deletedUserBurger); got.ReviewCount != 2 {
 			t.Fatalf("ユーザー削除前の統計 = %+v, want 件数 2", got)
 		}
@@ -175,10 +192,11 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = now() WHERE id = $1`, carl.ID); err != nil {
 			t.Fatalf("ユーザーの論理削除に失敗した: %v", err)
 		}
-		// 削除されていないユーザーの書き込み(編集)で、統計の再計算を起こす。
+		// 削除されていないユーザーの書き込み(編集)で、統計の再計算の依頼を出し、ワーカーを動かす。
 		if _, err := w.reviews.Update(ctx, alice, aliceKept.ID, 4, "still here", nil); err != nil {
 			t.Fatalf("レビューの編集に失敗した: %v", err)
 		}
+		w.settle(t)
 
 		stats := dbtest.RequireConsistentStats(ctx, t, conn, deletedUserBurger)
 		if stats.ReviewCount != 1 || stats.AverageRating != 4.0 {
@@ -201,7 +219,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("同じバーガーに 2 人が同時に投稿しても、どちらの投稿も統計に反映され、更新を取りこぼさない", func(t *testing.T) {
+	t.Run("同じバーガーに 2 人が同時に投稿しても、どちらの投稿も統計に反映される", func(t *testing.T) {
 		pool, err := pgxpool.New(ctx, w.dbURL)
 		if err != nil {
 			t.Fatalf("接続プールを開けなかった: %v", err)
@@ -212,10 +230,9 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		dave := w.user(t, "dave")
 		erin := w.user(t, "erin")
 
-		// バーガーの行を FOR UPDATE でロックして順番に処理しないと、2 つのトランザクションが、
-		// どちらも相手の投稿を知らないまま「読んでから上書き」して、後から書いた側が件数 1 で
-		// 上書きしてしまう(更新の取りこぼし)。たまたま順番が合って失敗を見逃さないよう、新しい
-		// バーガーで 5 回繰り返す。
+		// 書き込みは再計算の依頼を登録するだけで、バーガーの行をロックしない。同時に投稿した 2 人は、
+		// 互いを待たずに確定でき、統計は、そのあとにワーカーが 1 回の再計算で最新にする。たまたま順番が
+		// 合って失敗を見逃さないよう、新しいバーガーで 5 回繰り返す。
 		for i := 0; i < 5; i++ {
 			raceBurger := w.burger(t, fmt.Sprintf("Race Burger %d", i))
 			start := make(chan struct{})
@@ -237,6 +254,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 					t.Fatalf("%d 回目: 同時の投稿が失敗した: %v", i, err)
 				}
 			}
+			w.settle(t)
 			stats := dbtest.RequireConsistentStats(ctx, t, conn, raceBurger)
 			if stats.ReviewCount != 2 || stats.AverageRating != 4.0 {
 				t.Fatalf("%d 回目: 統計 = %+v, want 2 人の投稿が両方反映された件数 2・平均 4.0", i, stats)
@@ -244,13 +262,14 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		}
 	})
 
-	t.Run("存在しない・削除済みのレビューの編集や削除に失敗したとき、バーガーの統計は書き換えられない", func(t *testing.T) {
+	t.Run("存在しない・削除済みのレビューの編集や削除に失敗したとき、バーガーの統計も再計算の依頼も書き換えられない", func(t *testing.T) {
 		errBurger := w.burger(t, "Error Burger")
 		w.review(t, alice, errBurger, 5, "baseline")
 		victim := w.review(t, bob, errBurger, 3, "to discard")
 		if err := w.reviews.Delete(ctx, bob, victim.ID); err != nil {
 			t.Fatalf("削除に失敗した: %v", err)
 		}
+		w.settle(t)
 		before := dbtest.RequireConsistentStats(ctx, t, conn, errBurger)
 
 		// 書き込みに失敗する場面は、UnitOfWork.Do(トランザクションの範囲を指定して実行する関数)を
@@ -261,7 +280,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 				if err := write(tx); err != nil {
 					return err
 				}
-				return w.recalc.Recalculate(ctx, tx, errBurger)
+				return w.recalc.RequestRecalculation(ctx, tx, errBurger)
 			})
 		}
 		if err := fail(func(tx usecase.Tx) error {
@@ -290,11 +309,15 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		if after != before || !after.CalculatedAt.Equal(before.CalculatedAt) {
 			t.Errorf("失敗した書き込みの後の統計 = %+v, want 変化なし %+v", after, before)
 		}
+		if n := dbtest.CountRecalcRequests(ctx, t, conn, errBurger); n != 0 {
+			t.Errorf("失敗した書き込みのあとの再計算の依頼 = %d 件, want 0 件(巻き戻る)", n)
+		}
 	})
 
-	t.Run("レビューの登録と統計の再計算まで終えたあとで失敗すると、登録したレビューも、計算し直した統計も巻き戻る", func(t *testing.T) {
+	t.Run("レビューの登録と再計算の依頼の登録まで終えたあとで失敗すると、登録したレビューも、依頼も巻き戻る", func(t *testing.T) {
 		rbBurger := w.burger(t, "Rollback Burger")
 		w.review(t, alice, rbBurger, 5, "baseline")
+		w.settle(t)
 		before := dbtest.RequireConsistentStats(ctx, t, conn, rbBurger)
 
 		boom := errors.New("boom")
@@ -303,16 +326,13 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if err := tx.BurgerStats.Lock(ctx, rbBurger); err != nil {
-				return err
-			}
 			if _, err := tx.Reviews.Create(ctx, review); err != nil {
 				return err
 			}
-			if err := w.recalc.Recalculate(ctx, tx, rbBurger); err != nil {
+			if err := w.recalc.RequestRecalculation(ctx, tx, rbBurger); err != nil {
 				return err
 			}
-			// 再計算まで済ませたあとで失敗させる。同じトランザクションの読み取りには、まだ確定して
+			// 依頼の登録まで済ませたあとで失敗させる。同じトランザクションの読み取りには、まだ確定して
 			// いないこの書き込みが見えていることも、あわせて確かめる。
 			facts, err := tx.Stats.ListBurgerReviewFacts(ctx, rbBurger)
 			if err != nil || len(facts) != 2 {
@@ -330,9 +350,12 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		if reviews != 1 {
 			t.Errorf("レビューの行数 = %d, want 失敗した登録が巻き戻って、最初の 1 件だけ", reviews)
 		}
+		if n := dbtest.CountRecalcRequests(ctx, t, conn, rbBurger); n != 0 {
+			t.Errorf("再計算の依頼 = %d 件, want 0 件(巻き戻る)", n)
+		}
 		after, _ := dbtest.FetchBurgerStats(ctx, t, conn, rbBurger)
 		if after != before {
-			t.Errorf("統計 = %+v, want 巻き戻った再計算の前の値 %+v", after, before)
+			t.Errorf("統計 = %+v, want 変化なし %+v", after, before)
 		}
 	})
 }
@@ -341,7 +364,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 // トランザクションにする範囲)の中で確かめる。
 // 同名のバーガーの再利用と、新しいバーガーの作成に加えて、レビューの登録に失敗したときに、作りかけの
 // バーガーやショップとの結び付けが確定しないこと(バーガーの作成からレビューの登録までが 1 つの
-// トランザクションであること)と、投稿と同じトランザクションで統計が計算し直されることを確かめる。
+// トランザクションであること)と、ワーカーが動いたあとに統計が計算し直されることを確かめる。
 func TestUnitOfWorkNamedBurger(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
@@ -389,7 +412,8 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 		if got := burgersNamed(t, "Cheese"); got != 1 {
 			t.Errorf("Cheese のバーガーの行数 = %d, want 重複なしの 1", got)
 		}
-		// 投稿と同じトランザクションの中で、統計が計算し直されている。
+		// 投稿が登録した再計算の依頼を、ワーカーが処理すると、統計が計算し直される。
+		w.settle(t)
 		if stats := dbtest.RequireConsistentStats(ctx, t, conn, cheese); stats.ReviewCount != 1 {
 			t.Errorf("統計 = %+v, want 計算し直された件数 1(新しいレビューだけ)", stats)
 		}
@@ -410,6 +434,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1 AND burger_id = $2`, w.shop, burger.ID); got != 1 {
 			t.Errorf("ショップとの結び付けの行数 = %d, want 1", got)
 		}
+		w.settle(t)
 		if stats := dbtest.RequireConsistentStats(ctx, t, conn, burger.ID); stats.ReviewCount != 1 {
 			t.Errorf("統計 = %+v, want 件数 1", stats)
 		}
@@ -452,9 +477,9 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 }
 
 // TestUnitOfWorkDiscardUser は、ユーザーの退会(論理削除)と、そのユーザーのレビューが付いている
-// バーガーの統計の再計算が、1 つのトランザクションで行われることを確かめる。あわせて、退会した
-// ユーザーのレビューが読み取りから隠れること、同時に退会する 2 人がデッドロックしないこと
-// (バーガー ID の昇順にロックするため)も確かめる。
+// バーガーの統計の再計算の依頼の登録が、1 つのトランザクションで行われ、ワーカーが動いたあとに
+// 統計が更新されることを確かめる。あわせて、退会したユーザーのレビューが読み取りから隠れること、
+// 同時に退会する 2 人がデッドロックしないこと(依頼をバーガー ID の昇順に登録するため)も確かめる。
 func TestUnitOfWorkDiscardUser(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
@@ -467,14 +492,21 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 	victimShared := w.review(t, victim, shared, 2, "meh")
 	aliceShared := w.review(t, alice, shared, 4, "good")
 	victimSolo := w.review(t, victim, solo, 5, "only mine")
+	w.settle(t)
 
-	t.Run("ユーザーが退会すると、削除日時が記録され、そのユーザーがレビューしたバーガーの統計が、そのレビューを除いた値に更新される", func(t *testing.T) {
+	t.Run("ユーザーが退会すると、削除日時が記録され、ワーカーが動いたあと、そのユーザーがレビューしたバーガーの統計が、そのレビューを除いた値に更新される", func(t *testing.T) {
 		if got := dbtest.RequireConsistentStats(ctx, t, conn, shared); got.ReviewCount != 2 {
 			t.Fatalf("退会前の shared の統計 = %+v, want 件数 2", got)
 		}
 		if err := w.users.Delete(ctx, victim, victim.ID); err != nil {
 			t.Fatalf("削除に失敗した: %v", err)
 		}
+		// 退会は、victim のレビューが付いた 2 つのバーガー(shared と solo)の再計算の依頼を、同じ
+		// トランザクションで登録した。統計は、ワーカーが動くまで、まだ古いままである。
+		if n := dbtest.CountRecalcRequests(ctx, t, conn, shared) + dbtest.CountRecalcRequests(ctx, t, conn, solo); n != 2 {
+			t.Errorf("退会直後の再計算の依頼 = %d 件, want shared と solo の 2 件", n)
+		}
+		w.settle(t)
 		// 論理削除なので、行は残り、削除日時(discarded_at)が記録されている。
 		var discardedAt *time.Time
 		if err := conn.QueryRow(ctx, `SELECT discarded_at FROM users WHERE id = $1`, victim.ID).Scan(&discardedAt); err != nil {
@@ -567,9 +599,9 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 		t.Cleanup(pool.Close)
 		poolUsers := usecase.NewUsers(query.NewUserQuery(pool), domain.NewUsers(repository.NewUserRepository(pool)), uow.New(pool), w.recalc, infra.BcryptPasswordHasher{})
 
-		// 2 人が、同じ 4 つのバーガーにレビューする。退会に伴う再計算は、バーガー ID の昇順に
-		// ロックするので、2 人が互いに逆の順序でロックして待ち合う(デッドロック)ことがない。
-		// たまたま順番が合って失敗を見逃さないよう、5 回繰り返す。
+		// 2 人が、同じ 4 つのバーガーにレビューする。退会は、再計算の依頼をバーガー ID の昇順に登録する
+		// ので、2 人が互いに逆の順序で同じ行を待ち合う(デッドロック)ことがない。たまたま順番が合って
+		// 失敗を見逃さないよう、5 回繰り返す。
 		for i := 0; i < 5; i++ {
 			burgers := make([]string, 4)
 			for j := range burgers {
@@ -581,6 +613,7 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 				w.review(t, left, id, 5, "l")
 				w.review(t, right, id, 3, "r")
 			}
+			w.settle(t)
 			start := make(chan struct{})
 			errs := make(chan error, 2)
 			for _, u := range []domain.User{left, right} {
@@ -596,6 +629,7 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 					t.Fatalf("%d 回目: 同時の退会が失敗した: %v", i, err)
 				}
 			}
+			w.settle(t)
 			for _, id := range burgers {
 				if stats := dbtest.RequireConsistentStats(ctx, t, conn, id); stats.ReviewCount != 0 {
 					t.Fatalf("%d 回目のバーガー %s: 統計 = %+v, want 2 人のレビューがどちらも除かれた件数 0", i, id, stats)

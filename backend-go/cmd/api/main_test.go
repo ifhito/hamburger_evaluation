@@ -139,6 +139,11 @@ func TestRunShutsDownCleanly(t *testing.T) {
 		SMTPSecurity: "none",
 		MailFrom:     "noreply@example.com",
 		AppBaseURL:   "http://localhost:5173",
+		// 統計のワーカーの設定(LoadConfig の既定と同じ)。データベースには届かないので、
+		// 各サイクルは失敗するが、停止のときに、処理中のサイクルを待って終わることを確かめる。
+		StatsWorkerInterval:    time.Second,
+		StatsWorkerBatch:       20,
+		StatsWorkerMaxAttempts: 8,
 	}
 
 	addrCh := make(chan string, 1)

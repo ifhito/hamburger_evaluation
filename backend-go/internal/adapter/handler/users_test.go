@@ -21,6 +21,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/uow"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/statsworkertest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -947,6 +948,8 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want %d (body %s)", rec.Code, http.StatusNoContent, rec.Body)
 	}
+	// 統計の再計算は、退会の応答のあとで、ワーカーが行う。以降の確認の前に、ワーカーを動かす。
+	statsworkertest.Settle(ctx, t, statsworkertest.NewWorker(conn, infra.SystemClock{}))
 	if rec.Body.Len() != 0 {
 		t.Errorf("delete body = %q, want empty", rec.Body.String())
 	}
@@ -1020,7 +1023,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	}
 
 	// 保存された統計も一致する：shared は B の rating だけを保ち、solo は
-	// ゼロの行に落ちる（discard の transaction 内で再計算される）。
+	// ゼロの行に落ちる（退会のあとにワーカーが再計算する）。
 	assertStats := func(burgerID string, wantCount int64, wantAvg float64) {
 		t.Helper()
 		var count int64
