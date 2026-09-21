@@ -38,12 +38,12 @@ export function useAdminShops(status?: ShopStatus) {
 export function useShopModeration() {
   const { mutate } = useSWRConfig();
   return {
-    approve: async (id: number): Promise<AdminShop> => {
+    approve: async (id: string): Promise<AdminShop> => {
       const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/approve`, {});
       await mutate(isShopKey);
       return res.data;
     },
-    reject: async (id: number, moderationNote: string): Promise<AdminShop> => {
+    reject: async (id: string, moderationNote: string): Promise<AdminShop> => {
       const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/reject`, {
         moderationNote,
       });
@@ -53,7 +53,7 @@ export function useShopModeration() {
   };
 }
 
-export function useUpdateShop(id: number) {
+export function useUpdateShop(id: string) {
   const { mutate } = useSWRConfig();
   return {
     update: async (data: ShopUpdateInput): Promise<AdminShop> => {

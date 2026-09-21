@@ -51,9 +51,7 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 	if filter.Keyword != "" {
 		params.CommentPattern = pgtype.Text{String: "%" + likeEscaper.Replace(filter.Keyword) + "%", Valid: true}
 	}
-	if filter.ShopID != nil {
-		params.FilterShopID = pgtype.Int8{Int64: *filter.ShopID, Valid: true}
-	}
+	params.FilterShopID = filter.ShopID
 	params.FilterUserID = filter.UserID
 	rows, err := r.q.ListPublicReviews(ctx, params)
 	if err != nil {
@@ -91,7 +89,7 @@ func (r *ReviewQuery) GetReview(ctx context.Context, id int64) (domain.ReviewDet
 }
 
 // GetShop は素の shop 行を返す。または domain.ErrShopNotFound を返す。
-func (r *ReviewQuery) GetShop(ctx context.Context, id int64) (domain.Shop, error) {
+func (r *ReviewQuery) GetShop(ctx context.Context, id string) (domain.Shop, error) {
 	row, err := r.q.GetShop(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -109,7 +107,7 @@ func (r *ReviewQuery) GetShop(ctx context.Context, id int64) (domain.Shop, error
 // GetShopBurger は、burger が shops_burgers 経由でその shop に紐づいている
 // とき、stats つきの burger を返す。そうでなければ domain.ErrBurgerNotFound
 // を返す。存在しない burger と別の shop の burger は区別できない。
-func (r *ReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error) {
+func (r *ReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error) {
 	row, err := r.q.GetShopBurgerWithStats(ctx, sqlcgen.GetShopBurgerWithStatsParams{
 		ShopID:   shopID,
 		BurgerID: burgerID,
@@ -128,7 +126,7 @@ func (r *ReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID int64)
 // なる。
 func toReviewDetail(
 	id int64, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz,
-	userID string, username string, burgerID int64, burgerName string,
+	userID string, username string, burgerID string, burgerName string,
 	reviewCount pgtype.Int8, averageRating, weightedScore, confidence pgtype.Float8,
 ) domain.ReviewDetail {
 	burger := rowmap.ShopReviewBurger(burgerID, burgerName, averageRating, reviewCount, weightedScore, confidence)

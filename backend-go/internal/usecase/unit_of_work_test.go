@@ -42,11 +42,11 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 		}
 		return domain.ReviewDetail{}, domain.ErrReviewNotFound
 	}
-	activeShop := domain.Shop{ID: 1, Name: "Active Diner", Status: domain.ShopStatusActive}
-	cheese := domain.ShopReviewBurger{ID: 5, Name: "Cheese"}
+	activeShop := domain.Shop{ID: uid.N(1), Name: "Active Diner", Status: domain.ShopStatusActive}
+	cheese := domain.ShopReviewBurger{ID: uid.N(5), Name: "Cheese"}
 	createQuery := &fakeReviewQuery{
-		getShop:       func(context.Context, int64) (domain.Shop, error) { return activeShop, nil },
-		getShopBurger: func(context.Context, int64, int64) (domain.ShopReviewBurger, error) { return cheese, nil },
+		getShop:       func(context.Context, string) (domain.Shop, error) { return activeShop, nil },
+		getShopBurger: func(context.Context, string, string) (domain.ShopReviewBurger, error) { return cheese, nil },
 	}
 
 	t.Run("delete は、該当の burger だけをロック → facts → 保存の順に再計算し、commit する", func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 		if err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID); err != nil {
 			t.Fatalf("Delete returned error: %v", err)
 		}
-		want := []string{"discard", "lock:5", "facts:5", "save:5"}
+		want := []string{"discard", "lock:" + uid.N(5), "facts:" + uid.N(5), "save:" + uid.N(5)}
 		if !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
 		}
@@ -123,7 +123,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 		}
 		// insert の FK チェックが取る KEY SHARE を FOR UPDATE に昇格させると、並行する creator が
 		// デッドロックしうるので、ロックは insert の前に取る。再計算の中のロックは再取得になる。
-		want := []string{"lock:5", "insert", "lock:5", "facts:5", "save:5"}
+		want := []string{"lock:" + uid.N(5), "insert", "lock:" + uid.N(5), "facts:" + uid.N(5), "save:" + uid.N(5)}
 		if !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
 		}
@@ -136,9 +136,9 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 		stats := &uowtest.Stats{}
 		uow := &uowtest.UoW{Stats: stats}
 		repo := &fakeReviewRepo{
-			createShopBurger: func(context.Context, int64, string) (domain.ShopReviewBurger, error) {
+			createShopBurger: func(context.Context, string, string) (domain.ShopReviewBurger, error) {
 				stats.Note("find-or-create")
-				return domain.ShopReviewBurger{ID: 7, Name: "Smash"}, nil
+				return domain.ShopReviewBurger{ID: uid.N(7), Name: "Smash"}, nil
 			},
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 				stats.Note("insert")
@@ -147,10 +147,10 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 			},
 		}
 		query := &fakeReviewQuery{getShop: createQuery.getShop}
-		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, 0, "Smash", 4, "ok", nil); err != nil {
+		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, "", "Smash", 4, "ok", nil); err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
-		want := []string{"find-or-create", "lock:7", "insert", "lock:7", "facts:7", "save:7"}
+		want := []string{"find-or-create", "lock:" + uid.N(7), "insert", "lock:" + uid.N(7), "facts:" + uid.N(7), "save:" + uid.N(7)}
 		if !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
 		}
@@ -161,20 +161,20 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 		stats := &uowtest.Stats{}
 		uow := &uowtest.UoW{Stats: stats}
 		repo := &fakeReviewRepo{
-			createShopBurger: func(context.Context, int64, string) (domain.ShopReviewBurger, error) {
-				return domain.ShopReviewBurger{ID: 7, Name: "Ghost"}, nil
+			createShopBurger: func(context.Context, string, string) (domain.ShopReviewBurger, error) {
+				return domain.ShopReviewBurger{ID: uid.N(7), Name: "Ghost"}, nil
 			},
 			createReview: func(context.Context, domain.Review) (domain.Review, error) { return domain.Review{}, insertErr },
 		}
 		query := &fakeReviewQuery{getShop: createQuery.getShop}
-		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, 0, "Ghost", 4, "ok", nil); !errors.Is(err, insertErr) {
+		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, "", "Ghost", 4, "ok", nil); !errors.Is(err, insertErr) {
 			t.Fatalf("Create error = %v, want wrapped %v", err, insertErr)
 		}
 		if uow.Commits != 0 || uow.Rollbacks != 1 {
 			t.Errorf("commit/rollback = %d/%d, want 0/1（孤立した burger を commit しない）", uow.Commits, uow.Rollbacks)
 		}
 		for _, op := range stats.Ops {
-			if op == "facts:7" || op == "save:7" {
+			if op == "facts:"+uid.N(7) || op == "save:"+uid.N(7) {
 				t.Errorf("insert の失敗のあとに再計算した: %v", stats.Ops)
 			}
 		}
@@ -201,7 +201,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 				if _, err := reviews.Update(ctx, alice, stored.ID, 5, "Better", processedIf(upload)); err != nil {
 					t.Fatalf("Update returned error: %v", err)
 				}
-				want := []string{"lock:5", "facts:5", "save:5"}
+				want := []string{"lock:" + uid.N(5), "facts:" + uid.N(5), "save:" + uid.N(5)}
 				if !reflect.DeepEqual(stats.Ops, want) {
 					t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
 				}
@@ -225,7 +225,7 @@ func TestBurgerStatsRecalculationUsesClockAndDomain(t *testing.T) {
 		{Rating: 5, CreatedAt: time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC), ReviewerHistory: domain.ReviewerHistory{Ratings: []float64{5, 3, 4}}},
 		{Rating: 3, CreatedAt: time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC), ReviewerHistory: domain.ReviewerHistory{Ratings: []float64{3}}},
 	}
-	stats := &uowtest.Stats{Facts: func(context.Context, int64) ([]domain.ReviewFact, error) { return facts, nil }}
+	stats := &uowtest.Stats{Facts: func(context.Context, string) ([]domain.ReviewFact, error) { return facts, nil }}
 	uow := &uowtest.UoW{Stats: stats, Reviews: &fakeReviewRepo{discardReview: func(context.Context, int64) error { return nil }}}
 	reviews := usecase.NewReviews(
 		&fakeReviewQuery{getReview: func(context.Context, int64) (domain.ReviewDetail, error) { return stored, nil }},
@@ -258,7 +258,7 @@ func TestUsersDeleteRecalculatesInAscendingOrder(t *testing.T) {
 	}
 
 	t.Run("burger_id の昇順に再計算して commit する(読み取りが昇順でなくても)", func(t *testing.T) {
-		stats := &uowtest.Stats{ReviewedBy: func(context.Context, string) ([]int64, error) { return []int64{9, 3, 5}, nil }}
+		stats := &uowtest.Stats{ReviewedBy: func(context.Context, string) ([]string, error) { return []string{uid.N(9), uid.N(3), uid.N(5)}, nil }}
 		uow := &uowtest.UoW{Stats: stats}
 		repo := &fakeUserRepo{discard: func(context.Context, string) error { stats.Note("discard"); return nil }}
 		if err := newUsersWithUoW(uow, repo).Delete(ctx, target, target.ID); err != nil {
@@ -266,9 +266,9 @@ func TestUsersDeleteRecalculatesInAscendingOrder(t *testing.T) {
 		}
 		want := []string{
 			"discard", "reviewed-by:" + target.ID,
-			"lock:3", "facts:3", "save:3",
-			"lock:5", "facts:5", "save:5",
-			"lock:9", "facts:9", "save:9",
+			"lock:" + uid.N(3), "facts:" + uid.N(3), "save:" + uid.N(3),
+			"lock:" + uid.N(5), "facts:" + uid.N(5), "save:" + uid.N(5),
+			"lock:" + uid.N(9), "facts:" + uid.N(9), "save:" + uid.N(9),
 		}
 		if !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
@@ -313,9 +313,9 @@ func TestUsersDeleteRecalculatesInAscendingOrder(t *testing.T) {
 	t.Run("途中の burger の再計算が失敗すると、全体が失敗して commit されない", func(t *testing.T) {
 		boom := errors.New("boom")
 		stats := &uowtest.Stats{
-			ReviewedBy: func(context.Context, string) ([]int64, error) { return []int64{3, 5}, nil },
-			Facts: func(_ context.Context, burgerID int64) ([]domain.ReviewFact, error) {
-				if burgerID == 5 {
+			ReviewedBy: func(context.Context, string) ([]string, error) { return []string{uid.N(3), uid.N(5)}, nil },
+			Facts: func(_ context.Context, burgerID string) ([]domain.ReviewFact, error) {
+				if burgerID == uid.N(5) {
 					return nil, boom
 				}
 				return nil, nil

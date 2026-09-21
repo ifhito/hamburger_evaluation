@@ -22,6 +22,6 @@ export function toPage<T>(res: AxiosResponse<T[]>): Page<T> {
 
 // offset ページングでは、ページの間に新規投稿があると前ページ末尾が次ページに再登場するため、
 // id で重複を除く(先頭出現の位置を保つ)。削除で 1 件飛ぶ場合は解消できない既知の制約
-export function mergePages<T extends { id: number }>(pages: Page<T>[]): T[] {
+export function mergePages<T extends { id: number | string }>(pages: Page<T>[]): T[] {
   return [...new Map(pages.flatMap((p) => p.items).map((item) => [item.id, item])).values()];
 }

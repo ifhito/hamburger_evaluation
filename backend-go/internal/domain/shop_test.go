@@ -18,10 +18,10 @@ func TestShopVisibility(t *testing.T) {
 	alice := domain.User{ID: uid.N(1), Username: "alice"}
 	admin := domain.User{ID: uid.N(2), Username: "root", Admin: true}
 
-	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
-	pendingOwn := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
-	pendingOther := domain.Shop{ID: 12, Status: domain.ShopStatusPending, CreatorID: ptr(uid.N(99))}
-	rejectedNoCreator := domain.Shop{ID: 13, Status: domain.ShopStatusRejected}
+	activeShop := domain.Shop{ID: uid.N(10), Status: domain.ShopStatusActive}
+	pendingOwn := domain.Shop{ID: uid.N(11), Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
+	pendingOther := domain.Shop{ID: uid.N(12), Status: domain.ShopStatusPending, CreatorID: ptr(uid.N(99))}
+	rejectedNoCreator := domain.Shop{ID: uid.N(13), Status: domain.ShopStatusRejected}
 
 	tests := []struct {
 		name   string
@@ -59,10 +59,10 @@ func TestShopCanBeReviewedBy(t *testing.T) {
 	bob := domain.User{ID: uid.N(2), Username: "bob"}
 	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
 
-	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
-	pendingOwn := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
-	pendingNoCreator := domain.Shop{ID: 12, Status: domain.ShopStatusPending}
-	rejectedOwn := domain.Shop{ID: 13, Status: domain.ShopStatusRejected, CreatorID: ptr(alice.ID)}
+	activeShop := domain.Shop{ID: uid.N(10), Status: domain.ShopStatusActive}
+	pendingOwn := domain.Shop{ID: uid.N(11), Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
+	pendingNoCreator := domain.Shop{ID: uid.N(12), Status: domain.ShopStatusPending}
+	rejectedOwn := domain.Shop{ID: uid.N(13), Status: domain.ShopStatusRejected, CreatorID: ptr(alice.ID)}
 
 	tests := []struct {
 		name   string
@@ -134,7 +134,7 @@ func TestShopModerationTransitions(t *testing.T) {
 
 	for _, from := range statuses {
 		t.Run("approve は "+string(from)+" から active にして note を消す", func(t *testing.T) {
-			shop := domain.Shop{ID: 1, Name: "Shack", Status: from, ModerationNote: ptr("old note")}
+			shop := domain.Shop{ID: uid.N(1), Name: "Shack", Status: from, ModerationNote: ptr("old note")}
 			got := shop.Approve()
 			if got.Status != domain.ShopStatusActive {
 				t.Errorf("status = %q, want %q", got.Status, domain.ShopStatusActive)
@@ -145,7 +145,7 @@ func TestShopModerationTransitions(t *testing.T) {
 		})
 
 		t.Run("reject は "+string(from)+" から rejected にして note を設定する", func(t *testing.T) {
-			shop := domain.Shop{ID: 1, Name: "Shack", Status: from}
+			shop := domain.Shop{ID: uid.N(1), Name: "Shack", Status: from}
 			got := shop.Reject(ptr("needs fixes"))
 			if got.Status != domain.ShopStatusRejected {
 				t.Errorf("status = %q, want %q", got.Status, domain.ShopStatusRejected)
@@ -157,7 +157,7 @@ func TestShopModerationTransitions(t *testing.T) {
 	}
 
 	t.Run("note なしの reject は以前の note を消す", func(t *testing.T) {
-		shop := domain.Shop{ID: 1, Status: domain.ShopStatusRejected, ModerationNote: ptr("old note")}
+		shop := domain.Shop{ID: uid.N(1), Status: domain.ShopStatusRejected, ModerationNote: ptr("old note")}
 		if got := shop.Reject(nil); got.ModerationNote != nil {
 			t.Errorf("ModerationNote = %v, want nil", *got.ModerationNote)
 		}
@@ -165,7 +165,7 @@ func TestShopModerationTransitions(t *testing.T) {
 
 	t.Run("遷移しても可視性の整合性が保たれる", func(t *testing.T) {
 		anon := domain.ShopVisibilityFor(nil)
-		shop := domain.Shop{ID: 1, Status: domain.ShopStatusPending}
+		shop := domain.Shop{ID: uid.N(1), Status: domain.ShopStatusPending}
 		if approved := shop.Approve(); !anon.CanView(approved) {
 			t.Error("approved shop is not anonymously visible")
 		}
@@ -196,9 +196,9 @@ func TestShopCanBeReviewedByViewer(t *testing.T) {
 	bob := domain.User{ID: uid.N(2), Username: "bob"}
 	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
 
-	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
-	pendingOwn := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
-	rejectedOwn := domain.Shop{ID: 13, Status: domain.ShopStatusRejected, CreatorID: ptr(alice.ID)}
+	activeShop := domain.Shop{ID: uid.N(10), Status: domain.ShopStatusActive}
+	pendingOwn := domain.Shop{ID: uid.N(11), Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
+	rejectedOwn := domain.Shop{ID: uid.N(13), Status: domain.ShopStatusRejected, CreatorID: ptr(alice.ID)}
 
 	tests := []struct {
 		name   string

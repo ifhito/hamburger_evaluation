@@ -27,7 +27,7 @@ var _ domain.BurgerStatRepository = (*BurgerStatRepository)(nil)
 
 // LockBurgerStat は burger の行を FOR UPDATE でロックする（LockBurgerForStats。lost-update の
 // 根拠はそのクエリのコメントを参照）。トランザクションがすでに持つロックの再取得は no-op である。
-func (r *BurgerStatRepository) LockBurgerStat(ctx context.Context, burgerID int64) error {
+func (r *BurgerStatRepository) LockBurgerStat(ctx context.Context, burgerID string) error {
 	if _, err := r.q.LockBurgerForStats(ctx, burgerID); err != nil {
 		return fmt.Errorf("lock burger stat: %w", err)
 	}

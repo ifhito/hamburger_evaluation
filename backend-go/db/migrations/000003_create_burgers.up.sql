@@ -1,5 +1,5 @@
 CREATE TABLE burgers (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),

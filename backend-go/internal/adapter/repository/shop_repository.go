@@ -55,7 +55,7 @@ func (r *ShopRepository) CreateShop(ctx context.Context, shop domain.Shop) (doma
 // 読み取りから書き込みまでの間に shop が消えた場合は domain.ErrShopNotFound
 // を返す。単一のカラムだけを書くことで、同時に行われた status の変更が古い
 // スナップショットによって元に戻されるのを防ぐ。
-func (r *ShopRepository) UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error) {
+func (r *ShopRepository) UpdateShopName(ctx context.Context, id string, name string) (domain.Shop, error) {
 	row, err := r.q.UpdateShopName(ctx, sqlcgen.UpdateShopNameParams{ID: id, Name: name})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -74,7 +74,7 @@ func (r *ShopRepository) UpdateShopName(ctx context.Context, id int64, name stri
 // 永続化し、保存された行を返す。読み取りから書き込みまでの間に shop が
 // 消えた場合は domain.ErrShopNotFound を返す。name に触れないことで、
 // 同時に行われた rename が古いスナップショットによって元に戻されるのを防ぐ。
-func (r *ShopRepository) UpdateShopStatus(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
+func (r *ShopRepository) UpdateShopStatus(ctx context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error) {
 	code, err := rowmap.ShopStatusCode(status)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("update shop status: %w", err)

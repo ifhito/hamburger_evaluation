@@ -25,7 +25,7 @@ type StoredBurgerStats struct {
 
 // FetchBurgerStats は burger_stats の行を直接読み取る。行が存在しない場合、
 // ok は false になる。
-func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) (StoredBurgerStats, bool) {
+func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) (StoredBurgerStats, bool) {
 	t.Helper()
 	var s StoredBurgerStats
 	err := conn.QueryRow(ctx,
@@ -45,7 +45,7 @@ func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerI
 // （repository が使うのと同じルールで）domain の fact として読み込み、
 // 各 fact の author の、すべての burger にわたる kept な rating を
 // reviewer の履歴として付ける。
-func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) []domain.ReviewFact {
+func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) []domain.ReviewFact {
 	t.Helper()
 	rows, err := conn.Query(ctx,
 		`SELECT r.rating, r.created_at, r.user_id
@@ -111,11 +111,11 @@ func KeptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID str
 // 切り詰めるのは、まさにこれが往復しても一致するようにするためである）、その
 // 行を返す。float は厳密に比較する：同じ入力を同じ純粋関数に通せば、同一の値に
 // ならなければならない。
-func RequireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) StoredBurgerStats {
+func RequireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) StoredBurgerStats {
 	t.Helper()
 	got, ok := FetchBurgerStats(ctx, t, conn, burgerID)
 	if !ok {
-		t.Fatalf("burger %d has no burger_stats row, want one", burgerID)
+		t.Fatalf("burger %s has no burger_stats row, want one", burgerID)
 	}
 	facts := keptReviewFacts(ctx, t, conn, burgerID)
 	score := domain.CalculateBurgerScore(facts, got.CalculatedAt)

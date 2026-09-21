@@ -37,7 +37,7 @@ type world struct {
 	ctx     context.Context
 	conn    *pgx.Conn
 	dbURL   string
-	shop    int64
+	shop    string
 	unit    *uow.UnitOfWork
 	recalc  *usecase.BurgerStatsRecalculator
 	reviews *usecase.Reviews
@@ -63,18 +63,18 @@ func newWorld(t *testing.T) *world {
 	w.queries.shop = query.NewShopQuery(conn)
 	w.reviews = usecase.NewReviews(w.queries.review, w.unit, w.recalc, photos)
 	w.users = usecase.NewUsers(query.NewUserQuery(conn), domain.NewUsers(repository.NewUserRepository(conn)), w.unit, w.recalc, infra.BcryptPasswordHasher{})
-	w.shop = dbtest.InsertRow(ctx, t, conn,
+	w.shop = dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
 	return w
 }
 
 // burger は、shop に紐づく burger を作って id を返す。
-func (w *world) burger(t *testing.T, name string) int64 {
+func (w *world) burger(t *testing.T, name string) string {
 	t.Helper()
-	id := dbtest.InsertRow(w.ctx, t, w.conn, insertBurger, name)
+	id := dbtest.InsertUUIDRow(w.ctx, t, w.conn, insertBurger, name)
 	if _, err := w.conn.Exec(w.ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, w.shop, id); err != nil {
-		t.Fatalf("link shop %d burger %d: %v", w.shop, id, err)
+		t.Fatalf("link shop %s burger %s: %v", w.shop, id, err)
 	}
 	return id
 }
@@ -87,7 +87,7 @@ func (w *world) user(t *testing.T, name string) domain.User {
 }
 
 // review は usecase を通して（同一トランザクションで再計算しながら）review を投稿する。
-func (w *world) review(t *testing.T, viewer domain.User, burgerID int64, rating int, comment string) domain.ReviewDetail {
+func (w *world) review(t *testing.T, viewer domain.User, burgerID string, rating int, comment string) domain.ReviewDetail {
 	t.Helper()
 	detail, err := w.reviews.Create(w.ctx, viewer, w.shop, burgerID, "", rating, comment, nil)
 	if err != nil {
@@ -339,7 +339,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	alice := w.user(t, "alice")
-	shopB := dbtest.InsertRow(ctx, t, conn,
+	shopB := dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Shop B", 1, nil, nil)
 
@@ -361,9 +361,9 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 	burgersNamed := func(t *testing.T, name string) int64 {
 		return countRows(t, `SELECT count(*) FROM burgers WHERE name = $1`, name)
 	}
-	named := func(t *testing.T, viewer domain.User, shopID int64, name string) domain.ReviewDetail {
+	named := func(t *testing.T, viewer domain.User, shopID string, name string) domain.ReviewDetail {
 		t.Helper()
-		detail, err := w.reviews.Create(ctx, viewer, shopID, 0, name, 4, "via name", nil)
+		detail, err := w.reviews.Create(ctx, viewer, shopID, "", name, 4, "via name", nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -377,7 +377,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 			t.Errorf("burger = %+v, want the seeded pre-insert stats %+v", created.Burger, want)
 		}
 		if created.ID == 0 || created.BurgerID != cheese || created.CreatedAt.IsZero() {
-			t.Errorf("created = %+v, want a stored review for burger %d", created.Review, cheese)
+			t.Errorf("created = %+v, want a stored review for burger %s", created.Review, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 1 {
 			t.Errorf("Cheese burger rows = %d, want no duplicate", got)
@@ -398,7 +398,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 			t.Errorf("burger = %+v, want zero pre-insert stats", *burger)
 		}
 		if created.BurgerID != burger.ID {
-			t.Errorf("review burger = %d, want %d", created.BurgerID, burger.ID)
+			t.Errorf("review burger = %s, want %s", created.BurgerID, burger.ID)
 		}
 		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1 AND burger_id = $2`, w.shop, burger.ID); got != 1 {
 			t.Errorf("link rows = %d, want 1", got)
@@ -411,7 +411,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 	t.Run("別の shop の同じ名前は別の burger 行になる", func(t *testing.T) {
 		burger := named(t, alice, shopB, "Cheese").Burger
 		if burger == nil || burger.ID == cheese {
-			t.Fatalf("burger = %+v, want a new row distinct from shop A's Cheese %d", burger, cheese)
+			t.Fatalf("burger = %+v, want a new row distinct from shop A's Cheese %s", burger, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 2 {
 			t.Errorf("Cheese burger rows = %d, want 2 (one per shop)", got)
@@ -429,7 +429,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 		// 未知の author は、burger と link の insert の後で reviews.user_id の
 		// FK に違反する。トランザクション全体が rollback されなければならない。
 		ghost := domain.User{ID: uid.N(99999), Username: "ghost"}
-		if _, err := w.reviews.Create(ctx, ghost, w.shop, 0, "Ghost", 4, "ok", nil); err == nil {
+		if _, err := w.reviews.Create(ctx, ghost, w.shop, "", "Ghost", 4, "ok", nil); err == nil {
 			t.Fatal("Create returned nil error, want the FK failure")
 		}
 		if got := burgersNamed(t, "Ghost"); got != 0 {
@@ -564,7 +564,7 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 		// 互いに逆順にロックして待ち合う（デッドロック）ことがない。繰り返すのは、運よく interleave
 		// しても race が隠れないようにするため。
 		for i := 0; i < 5; i++ {
-			burgers := make([]int64, 4)
+			burgers := make([]string, 4)
 			for j := range burgers {
 				burgers[j] = w.burger(t, fmt.Sprintf("Overlap %d-%d", i, j))
 			}
@@ -591,7 +591,7 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 			}
 			for _, id := range burgers {
 				if stats := dbtest.RequireConsistentStats(ctx, t, conn, id); stats.ReviewCount != 0 {
-					t.Fatalf("iteration %d burger %d: stats = %+v, want both users' reviews excluded", i, id, stats)
+					t.Fatalf("iteration %d burger %s: stats = %+v, want both users' reviews excluded", i, id, stats)
 				}
 			}
 		}

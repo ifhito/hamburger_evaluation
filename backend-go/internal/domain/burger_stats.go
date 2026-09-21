@@ -179,7 +179,7 @@ func clampFloat(value, low, high float64) float64 {
 // BurgerStat は、burger 1 件の導出された統計(kept な review の件数・平均・加重スコア・
 // 信頼度)と、それを計算した時刻である。burger_stats の 1 行に保存される。
 type BurgerStat struct {
-	BurgerID      int64
+	BurgerID      string
 	ReviewCount   int64
 	AverageRating float64
 	WeightedScore float64
@@ -190,7 +190,7 @@ type BurgerStat struct {
 // CalculateBurgerStat は、burger の kept な review の facts から、now 時点の統計を計算する。
 // 永続化には触れない純粋な計算で、facts がゼロ件のときはゼロの統計になる
 // （Rails BurgerScore.empty）。CalculatedAt は、スコアの計算に使った now そのものである。
-func CalculateBurgerStat(burgerID int64, facts []ReviewFact, now time.Time) BurgerStat {
+func CalculateBurgerStat(burgerID string, facts []ReviewFact, now time.Time) BurgerStat {
 	score := CalculateBurgerScore(facts, now)
 	return BurgerStat{
 		BurgerID:      burgerID,
@@ -217,7 +217,7 @@ type BurgerStatRepository interface {
 	// 1 つのトランザクションで複数の burger をロックするときは、burger_id の昇順に呼ばなければ
 	// ならない（デッドロックの回避）。存在しない burger は、wrap されたエラーを返す。
 	// 値を返さず、行を変更もしない、書き込みの前段の排他制御である（読み取りではない）。
-	LockBurgerStat(ctx context.Context, burgerID int64) error
+	LockBurgerStat(ctx context.Context, burgerID string) error
 	// UpdateBurgerStat は、burger_stats の行を stat の値で置き換える（行がなければ作る。upsert）。
 	UpdateBurgerStat(ctx context.Context, stat BurgerStat) error
 }
@@ -238,7 +238,7 @@ func NewBurgerStats(repo BurgerStatRepository) *BurgerStats {
 }
 
 // Lock は burger の統計の再計算を直列化するために、burger の行をロックする。
-func (s *BurgerStats) Lock(ctx context.Context, burgerID int64) error {
+func (s *BurgerStats) Lock(ctx context.Context, burgerID string) error {
 	return s.repo.LockBurgerStat(ctx, burgerID)
 }
 

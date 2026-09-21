@@ -32,7 +32,7 @@ DELETE FROM burgers
 WHERE id = $1
 `
 
-func (q *Queries) DeleteBurger(ctx context.Context, id int64) error {
+func (q *Queries) DeleteBurger(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, deleteBurger, id)
 	return err
 }
@@ -42,7 +42,7 @@ SELECT id, name, created_at, updated_at FROM burgers
 WHERE id = $1
 `
 
-func (q *Queries) GetBurger(ctx context.Context, id int64) (Burger, error) {
+func (q *Queries) GetBurger(ctx context.Context, id string) (Burger, error) {
 	row := q.db.QueryRow(ctx, getBurger, id)
 	var i Burger
 	err := row.Scan(
@@ -56,7 +56,7 @@ func (q *Queries) GetBurger(ctx context.Context, id int64) (Burger, error) {
 
 const listBurgers = `-- name: ListBurgers :many
 SELECT id, name, created_at, updated_at FROM burgers
-ORDER BY id
+ORDER BY created_at, id
 LIMIT $1 OFFSET $2
 `
 
@@ -99,7 +99,7 @@ RETURNING id, name, created_at, updated_at
 `
 
 type UpdateBurgerParams struct {
-	ID   int64
+	ID   string
 	Name string
 }
 

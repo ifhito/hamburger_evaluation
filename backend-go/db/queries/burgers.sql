@@ -9,7 +9,7 @@ WHERE id = $1;
 
 -- name: ListBurgers :many
 SELECT * FROM burgers
-ORDER BY id
+ORDER BY created_at, id
 LIMIT $1 OFFSET $2;
 
 -- name: UpdateBurger :one

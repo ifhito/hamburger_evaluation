@@ -35,7 +35,7 @@ func decodeJSONArray(t *testing.T, body []byte) []map[string]any {
 func TestGetShopCanReview(t *testing.T) {
 	repo := seedShops(uid.N(1)) // alice(1) は pending な shop 2 の creator。admin は id 2
 	repo.shops = append(repo.shops, domain.ShopDetail{
-		Shop: domain.Shop{ID: 5, Name: "Alice Rejected", Status: domain.ShopStatusRejected, CreatorID: shopPtr(uid.N(1))},
+		Shop: domain.Shop{ID: uid.N(5), Name: "Alice Rejected", Status: domain.ShopStatusRejected, CreatorID: shopPtr(uid.N(1))},
 	})
 	router, aliceAuth, adminAuth, _ := newShopsRouter(t, repo)
 
@@ -45,12 +45,12 @@ func TestGetShopCanReview(t *testing.T) {
 		auth string
 		want bool
 	}{
-		{name: "匿名は active な shop でも false", path: "/shops/1", auth: "", want: false},
-		{name: "ログイン済みのユーザーは active な shop で true", path: "/shops/1", auth: aliceAuth, want: true},
-		{name: "creator は自分の pending な shop で true", path: "/shops/2", auth: aliceAuth, want: true},
-		{name: "admin は pending な shop で true", path: "/shops/2", auth: adminAuth, want: true},
-		{name: "creator は自分の rejected な shop でも false（見えるが review できない）", path: "/shops/5", auth: aliceAuth, want: false},
-		{name: "admin は active な shop で true", path: "/shops/1", auth: adminAuth, want: true},
+		{name: "匿名は active な shop でも false", path: "/shops/" + uid.N(1), auth: "", want: false},
+		{name: "ログイン済みのユーザーは active な shop で true", path: "/shops/" + uid.N(1), auth: aliceAuth, want: true},
+		{name: "creator は自分の pending な shop で true", path: "/shops/" + uid.N(2), auth: aliceAuth, want: true},
+		{name: "admin は pending な shop で true", path: "/shops/" + uid.N(2), auth: adminAuth, want: true},
+		{name: "creator は自分の rejected な shop でも false（見えるが review できない）", path: "/shops/" + uid.N(5), auth: aliceAuth, want: false},
+		{name: "admin は active な shop で true", path: "/shops/" + uid.N(1), auth: adminAuth, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestReviewCanEdit(t *testing.T) {
 	}
 
 	t.Run("作成のレスポンスは投稿者本人なので true", func(t *testing.T) {
-		body := fmt.Sprintf(`{"review":{"rating":3,"comment":"mine","shop_id":%d,"burger_id":%d}}`, activeShopID, cheeseBurgerID)
+		body := fmt.Sprintf(`{"review":{"rating":3,"comment":"mine","shop_id":%q,"burger_id":%q}}`, activeShopID, cheeseBurgerID)
 		rec := do(router, http.MethodPost, "/reviews", body, bobAuth)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want 201 (body %s)", rec.Code, rec.Body)
@@ -132,9 +132,9 @@ func TestReviewCanEdit(t *testing.T) {
 	t.Run("shop 詳細に埋め込まれる review には can_edit を含めない", func(t *testing.T) {
 		// shop 詳細の review は閲覧者ごとの値を持たない（別の型）。frontend が誤って使えないようにする。
 		shopRepo := seedShops(uid.N(1))
-		shopRepo.reviews[1] = []domain.ShopReview{{ID: 9, Rating: 4, User: &domain.UserRef{ID: uid.N(3), Username: "bob"}}}
+		shopRepo.reviews[uid.N(1)] = []domain.ShopReview{{ID: 9, Rating: 4, User: &domain.UserRef{ID: uid.N(3), Username: "bob"}}}
 		shopRouter, _, _, _ := newShopsRouter(t, shopRepo)
-		rec := do(shopRouter, http.MethodGet, "/shops/1", "", "")
+		rec := do(shopRouter, http.MethodGet, "/shops/"+uid.N(1), "", "")
 		reviews, ok := decodeJSONObject(t, rec.Body.Bytes())["reviews"].([]any)
 		if !ok || len(reviews) != 1 {
 			t.Fatalf("reviews = %v, want 1 element (body %s)", reviews, rec.Body)
@@ -176,7 +176,7 @@ func TestListShopsHasMore(t *testing.T) {
 			repo.shops = nil
 			for i := 1; i <= tt.total; i++ {
 				repo.shops = append(repo.shops, domain.ShopDetail{Shop: domain.Shop{
-					ID: int64(i), Name: fmt.Sprintf("Shop %03d", i), Status: domain.ShopStatusActive,
+					ID: uid.N(i), Name: fmt.Sprintf("Shop %03d", i), Status: domain.ShopStatusActive,
 				}})
 			}
 			router, _, _, _ := newShopsRouter(t, repo)

@@ -38,8 +38,8 @@ type reviewParamsRequest struct {
 	Review struct {
 		Rating     int    `json:"rating"`
 		Comment    string `json:"comment"`
-		ShopID     int64  `json:"shop_id"`
-		BurgerID   int64  `json:"burger_id"`
+		ShopID     string `json:"shop_id"`
+		BurgerID   string `json:"burger_id"`
 		BurgerName string `json:"burger_name"`
 	} `json:"review"`
 }
@@ -66,8 +66,8 @@ const photoUnsupportedMessage = "Photo must be a JPEG, PNG, or WebP image"
 type multipartReviewForm struct {
 	rating     int
 	comment    string
-	shopID     int64
-	burgerID   int64
+	shopID     string
+	burgerID   string
 	burgerName string
 	photo      *photo.Processed
 }
@@ -90,9 +90,10 @@ func isMultipart(r *http.Request) bool {
 // 名前の値は捨てられる。false は、エラーレスポンスが既に書き込まれたことを
 // 意味する：グローバルな body cap が作動した場合は 413、サイズ超過または
 // 画像でない写真には 422、不正な multipart（photo part の重複や、text
-// フィールドの cap 超過を含む）には 400 である。rating/shop_id/burger_id が
-// 存在しない、または数値でない場合は 0 にデコードされ、JSON の body と同じ
-// validation/not-found の経路に流れる。
+// フィールドの cap 超過を含む）には 400 である。rating が存在しない、または
+// 数値でない場合は 0 にデコードされ、shop_id/burger_id が存在しない場合は空になり、
+// JSON の body と同じ validation/not-found の経路に流れる（shop_id/burger_id の形式の
+// 判定は validReviewTargetIDs が行う）。
 func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartReviewForm, bool) {
 	var form multipartReviewForm
 	mr, err := r.MultipartReader()
@@ -137,9 +138,9 @@ func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartRev
 		case "comment":
 			form.comment = value
 		case "shop_id":
-			form.shopID, _ = strconv.ParseInt(value, 10, 64)
+			form.shopID = value
 		case "burger_id":
-			form.burgerID, _ = strconv.ParseInt(value, 10, 64)
+			form.burgerID = value
 		case "burger_name":
 			form.burgerName = value
 		}
@@ -279,7 +280,7 @@ func writeReviewError(w http.ResponseWriter, op string, err error) {
 // reviewListFilter は GET /reviews の省略可能な rating/keyword/shop_id/user_id の
 // クエリフィルタをパースする（Rails ReviewQuery。user_id は本 API の拡張）。
 // 空の値は存在しないものと数える（params[:x].present?）。false は、rating、
-// shop_id が整数でない、または user_id が UUID の正規形でない場合の 422 が既に
+// shop_id・user_id が UUID の正規形でない場合の 422 が既に
 // 書き込まれたことを意味する。rating と shop_id については Rails からの意図的な
 // fail-loud な乖離であり（Rails はゴミを 0 にキャストして黙って空のリストを返す）、
 // user_id は Rails に対応物がないため、同じ fail-loud の形に揃えただけである。
@@ -294,12 +295,11 @@ func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewLis
 		filter.Rating = &rating
 	}
 	if raw := r.URL.Query().Get("shop_id"); raw != "" {
-		shopID, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{"Shop id must be an integer"}})
+		if !domain.IsUUID(raw) {
+			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{"Shop id must be a valid UUID"}})
 			return usecase.ReviewListFilter{}, false
 		}
-		filter.ShopID = &shopID
+		filter.ShopID = &raw
 	}
 	if raw := r.URL.Query().Get("user_id"); raw != "" {
 		if !domain.IsUUID(raw) {
@@ -360,6 +360,27 @@ func handleGetReview(reviews *usecase.Reviews) http.HandlerFunc {
 	}
 }
 
+// validReviewTargetIDs は POST /reviews の shop_id・burger_id の形式を判定する。
+// 空は「指定なし」である: shop_id がなければ存在しない shop（404）、burger_id が
+// なければ burger_name の経路になる。空でなく UUID の正規形でない値は 422 で、
+// false は、そのレスポンスが既に書き込まれたことを意味する。形式の判定は
+// domain.IsUUID が持つ。
+func validReviewTargetIDs(w http.ResponseWriter, form multipartReviewForm) bool {
+	if form.shopID == "" {
+		writeError(w, http.StatusNotFound, shopNotFoundMessage)
+		return false
+	}
+	if !domain.IsUUID(form.shopID) {
+		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{"Shop id must be a valid UUID"}})
+		return false
+	}
+	if form.burgerID != "" && !domain.IsUUID(form.burgerID) {
+		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{"Burger id must be a valid UUID"}})
+		return false
+	}
+	return true
+}
+
 // handleCreateReview は RequireAuth の背後で POST /reviews を処理する：作成
 // された review を伴う 201。チェックの順序（shop の 404、reviewable の 403、
 // burger の 404、validation の 422）は usecase で決まり、ここでは決して
@@ -388,6 +409,9 @@ func handleCreateReview(reviews *usecase.Reviews) http.HandlerFunc {
 				burgerID:   req.Review.BurgerID,
 				burgerName: req.Review.BurgerName,
 			}
+		}
+		if !validReviewTargetIDs(w, form) {
+			return
 		}
 		detail, err := reviews.Create(r.Context(), viewer, form.shopID, form.burgerID,
 			form.burgerName, form.rating, form.comment, form.photo)

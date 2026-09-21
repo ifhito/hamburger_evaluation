@@ -16,9 +16,10 @@ type Review struct {
 	// いないときは nil である（S10）。key はここでは不透明な値であり、URL は
 	// usecase が photo storage を介して組み立てる。domain 自身が組み立てる
 	// ことは決してない。
-	PhotoKey  *string
-	AuthorID  string
-	BurgerID  int64
+	PhotoKey *string
+	AuthorID string
+	// BurgerID は burger の UUID の正規形である。
+	BurgerID  string
 	CreatedAt time.Time
 }
 
@@ -81,7 +82,7 @@ func ValidateBurgerName(name string) error {
 // review を組み立てる。comment は渡された値のまま保存され（存在のみが
 // validate される）、ユーザーのテキストを決して trim しない Rails に合わせて
 // いる。
-func NewReview(rating int, comment string, authorID string, burgerID int64) (Review, error) {
+func NewReview(rating int, comment string, authorID string, burgerID string) (Review, error) {
 	if err := ValidateReviewContent(rating, comment); err != nil {
 		return Review{}, err
 	}
@@ -140,7 +141,7 @@ type ReviewRepository interface {
 	// stats はゼロである。burger とリンクの作成は、呼び出し側のトランザクションに
 	// 入る（review の insert が失敗しても、孤立した burger やリンクを残さないため、
 	// 呼び出し側は同じトランザクションで CreateReview まで行う）。
-	CreateShopBurger(ctx context.Context, shopID int64, burgerName string) (ShopReviewBurger, error)
+	CreateShopBurger(ctx context.Context, shopID string, burgerName string) (ShopReviewBurger, error)
 	// UpdateReviewContent は、id の、まだ kept な review の rating と comment
 	// だけを永続化し、保存された行を返す。存在しないか discard 済みのときは
 	// （wrap された）ErrReviewNotFound を返す。カラム限定の書き込み
@@ -186,7 +187,7 @@ func (s *Reviews) Create(ctx context.Context, review Review) (Review, error) {
 // CreateShopBurger は、shop の burger のうち指定された名前と完全一致するものを返す
 // （なければ burger とリンクを作る）。返される burger は、呼び出しの前に保存されていた
 // stats を持つ。
-func (s *Reviews) CreateShopBurger(ctx context.Context, shopID int64, burgerName string) (ShopReviewBurger, error) {
+func (s *Reviews) CreateShopBurger(ctx context.Context, shopID string, burgerName string) (ShopReviewBurger, error) {
 	return s.repo.CreateShopBurger(ctx, shopID, burgerName)
 }
 

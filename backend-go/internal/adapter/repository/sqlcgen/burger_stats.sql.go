@@ -16,7 +16,7 @@ DELETE FROM burger_stats
 WHERE burger_id = $1
 `
 
-func (q *Queries) DeleteBurgerStats(ctx context.Context, burgerID int64) error {
+func (q *Queries) DeleteBurgerStats(ctx context.Context, burgerID string) error {
 	_, err := q.db.Exec(ctx, deleteBurgerStats, burgerID)
 	return err
 }
@@ -26,7 +26,7 @@ SELECT burger_id, review_count, average_rating, weighted_score, confidence, calc
 WHERE burger_id = $1
 `
 
-func (q *Queries) GetBurgerStats(ctx context.Context, burgerID int64) (BurgerStat, error) {
+func (q *Queries) GetBurgerStats(ctx context.Context, burgerID string) (BurgerStat, error) {
 	row := q.db.QueryRow(ctx, getBurgerStats, burgerID)
 	var i BurgerStat
 	err := row.Scan(
@@ -61,7 +61,7 @@ type ListBurgerReviewFactsRow struct {
 // 決定に従い、Rails の burger.reviews.kept よりも意図的に厳しくしている）。
 // active な shop によるフィルタは行わない。統計はすべての kept な review を
 // 集計する（Rails と同様）。
-func (q *Queries) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]ListBurgerReviewFactsRow, error) {
+func (q *Queries) ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]ListBurgerReviewFactsRow, error) {
 	rows, err := q.db.Query(ctx, listBurgerReviewFacts, burgerID)
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ FOR UPDATE
 // 可能性がある（lost update）。burgers 行への FOR UPDATE により、
 // 2 つ目のトランザクションはここで 1 つ目がコミットするまでブロックされる。
 // その次の文は、その時点でコミット済みの review を見る。
-func (q *Queries) LockBurgerForStats(ctx context.Context, id int64) (int64, error) {
+func (q *Queries) LockBurgerForStats(ctx context.Context, id string) (string, error) {
 	row := q.db.QueryRow(ctx, lockBurgerForStats, id)
 	err := row.Scan(&id)
 	return id, err
@@ -148,7 +148,7 @@ RETURNING burger_id, review_count, average_rating, weighted_score, confidence, c
 `
 
 type UpsertBurgerStatsParams struct {
-	BurgerID      int64
+	BurgerID      string
 	ReviewCount   int64
 	AverageRating float64
 	WeightedScore float64

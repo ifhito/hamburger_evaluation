@@ -21,7 +21,7 @@ type CreateReviewParams struct {
 	Rating   int16
 	Comment  pgtype.Text
 	UserID   string
-	BurgerID int64
+	BurgerID string
 	PhotoKey pgtype.Text
 }
 
@@ -60,9 +60,9 @@ RETURNING burger_id
 // しかも 1 回だけ行う。すでに discard 済みの review はどの行にもマッチせず、
 // not found として現れる。burger_id を返すので、呼び出し元は同じ
 // トランザクション内でその burger の統計を再計算できる。
-func (q *Queries) DiscardReview(ctx context.Context, id int64) (int64, error) {
+func (q *Queries) DiscardReview(ctx context.Context, id int64) (string, error) {
 	row := q.db.QueryRow(ctx, discardReview, id)
-	var burger_id int64
+	var burger_id string
 	err := row.Scan(&burger_id)
 	return burger_id, err
 }
@@ -87,7 +87,7 @@ type GetReviewDetailRow struct {
 	CreatedAt     pgtype.Timestamptz
 	UserID        string
 	UserUsername  string
-	BurgerID      int64
+	BurgerID      string
 	BurgerName    string
 	ReviewCount   pgtype.Int8
 	AverageRating pgtype.Float8
@@ -139,11 +139,11 @@ WHERE r.discarded_at IS NULL
   )
   AND ($1::bigint IS NULL OR r.rating = $1::bigint)
   AND ($2::text IS NULL OR r.comment ILIKE $2::text)
-  AND ($3::bigint IS NULL OR EXISTS (
+  AND ($3::uuid IS NULL OR EXISTS (
       SELECT 1
       FROM shops_burgers fsb
       JOIN shops fs ON fs.id = fsb.shop_id AND fs.status = 1
-      WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = $3::bigint
+      WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = $3::uuid
   ))
   AND ($4::uuid IS NULL OR r.user_id = $4::uuid)
 ORDER BY r.created_at DESC, r.id DESC
@@ -153,7 +153,7 @@ LIMIT $6 OFFSET $5
 type ListPublicReviewsParams struct {
 	FilterRating   pgtype.Int8
 	CommentPattern pgtype.Text
-	FilterShopID   pgtype.Int8
+	FilterShopID   *string
 	FilterUserID   *string
 	PageOffset     int32
 	PageLimit      int32
@@ -167,7 +167,7 @@ type ListPublicReviewsRow struct {
 	CreatedAt     pgtype.Timestamptz
 	UserID        string
 	UserUsername  string
-	BurgerID      int64
+	BurgerID      string
 	BurgerName    string
 	ReviewCount   pgtype.Int8
 	AverageRating pgtype.Float8
@@ -250,15 +250,15 @@ ORDER BY burger_id
 // 欠かせない。統計の再計算（usecase の BurgerStatsRecalculator）は各 burger を FOR UPDATE でロックし、
 // 複数の burger を扱う呼び出し元はすべて burger_id の昇順でロックしなければ
 // ならない。そうすれば、burger の集合が重なってもデッドロックしない。
-func (q *Queries) ListUserKeptReviewBurgerIDs(ctx context.Context, userID string) ([]int64, error) {
+func (q *Queries) ListUserKeptReviewBurgerIDs(ctx context.Context, userID string) ([]string, error) {
 	rows, err := q.db.Query(ctx, listUserKeptReviewBurgerIDs, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []string
 	for rows.Next() {
-		var burger_id int64
+		var burger_id string
 		if err := rows.Scan(&burger_id); err != nil {
 			return nil, err
 		}

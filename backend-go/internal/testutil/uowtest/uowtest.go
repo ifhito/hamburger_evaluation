@@ -6,7 +6,6 @@ package uowtest
 
 import (
 	"context"
-	"strconv"
 	"sync"
 	"time"
 
@@ -38,9 +37,9 @@ type Stats struct {
 	// Saved は保存された統計である（順序つき）。
 	Saved []domain.BurgerStat
 	// Facts は ListBurgerReviewFacts の振る舞いである。
-	Facts func(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error)
+	Facts func(ctx context.Context, burgerID string) ([]domain.ReviewFact, error)
 	// ReviewedBy は ListReviewedBurgerIDsByUser の振る舞いである。
-	ReviewedBy func(ctx context.Context, userID string) ([]int64, error)
+	ReviewedBy func(ctx context.Context, userID string) ([]string, error)
 	// LockErr と SaveErr は、ロックと保存のエラーである。
 	LockErr, SaveErr error
 }
@@ -61,14 +60,14 @@ func (s *Stats) record(op string) {
 func (s *Stats) Note(op string) { s.record(op) }
 
 // LockBurgerStat は、ロックの呼び出しを記録する。
-func (s *Stats) LockBurgerStat(_ context.Context, burgerID int64) error {
-	s.record("lock:" + itoa(burgerID))
+func (s *Stats) LockBurgerStat(_ context.Context, burgerID string) error {
+	s.record("lock:" + burgerID)
 	return s.LockErr
 }
 
 // UpdateBurgerStat は、保存された統計を記録する。
 func (s *Stats) UpdateBurgerStat(_ context.Context, stat domain.BurgerStat) error {
-	s.record("save:" + itoa(stat.BurgerID))
+	s.record("save:" + stat.BurgerID)
 	if s.SaveErr != nil {
 		return s.SaveErr
 	}
@@ -79,8 +78,8 @@ func (s *Stats) UpdateBurgerStat(_ context.Context, stat domain.BurgerStat) erro
 }
 
 // ListBurgerReviewFacts は、Facts があればそれを返し、なければ空を返す。
-func (s *Stats) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error) {
-	s.record("facts:" + itoa(burgerID))
+func (s *Stats) ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]domain.ReviewFact, error) {
+	s.record("facts:" + burgerID)
 	if s.Facts == nil {
 		return nil, nil
 	}
@@ -88,7 +87,7 @@ func (s *Stats) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]do
 }
 
 // ListReviewedBurgerIDsByUser は、ReviewedBy があればそれを返し、なければ空を返す。
-func (s *Stats) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]int64, error) {
+func (s *Stats) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]string, error) {
 	s.record("reviewed-by:" + userID)
 	if s.ReviewedBy == nil {
 		return nil, nil
@@ -136,5 +135,3 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 	u.Commits++
 	return nil
 }
-
-func itoa(n int64) string { return strconv.FormatInt(n, 10) }

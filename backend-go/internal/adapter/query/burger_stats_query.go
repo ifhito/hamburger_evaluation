@@ -27,7 +27,7 @@ var _ usecase.BurgerStatsQuery = (*BurgerStatsQuery)(nil)
 // ListBurgerReviewFacts は、burger の kept な review（author が discard 済みの user である
 // ものを除く）を facts として返す。各 fact には、その author が、すべての burger にわたって
 // つけた kept な rating（reviewer の履歴）を付ける。
-func (r *BurgerStatsQuery) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error) {
+func (r *BurgerStatsQuery) ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]domain.ReviewFact, error) {
 	rows, err := r.q.ListBurgerReviewFacts(ctx, burgerID)
 	if err != nil {
 		return nil, fmt.Errorf("list burger review facts: %w", err)
@@ -65,7 +65,7 @@ func (r *BurgerStatsQuery) ListBurgerReviewFacts(ctx context.Context, burgerID i
 // ListReviewedBurgerIDsByUser は、user の kept な review が付く burger の id を、重複なしで
 // burger_id の昇順に返す。昇順は、複数の burger をロックする再計算がデッドロックしないための
 // 規約で、SQL の ORDER BY が保証する。
-func (r *BurgerStatsQuery) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]int64, error) {
+func (r *BurgerStatsQuery) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]string, error) {
 	ids, err := r.q.ListUserKeptReviewBurgerIDs(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list reviewed burger ids by user: %w", err)

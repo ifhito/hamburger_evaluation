@@ -59,7 +59,7 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 // 経路での GetShopBurger とまったく同じである（まったく新しい burger ではゼロ）。
 // 複数の文を 1 つにまとめるので、途中で失敗しても、孤立した burger や link は残らない。
 // review の insert までを同じトランザクションにするのは、呼び出し側（UnitOfWork）の責務である。
-func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID int64, burgerName string) (domain.ShopReviewBurger, error) {
+func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID string, burgerName string) (domain.ShopReviewBurger, error) {
 	var burger domain.ShopReviewBurger
 	err := withTx(ctx, r.db, "create shop burger", func(q *sqlcgen.Queries) error {
 		found, err := q.GetShopBurgerByNameWithStats(ctx, sqlcgen.GetShopBurgerByNameWithStatsParams{

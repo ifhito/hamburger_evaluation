@@ -1,6 +1,6 @@
 CREATE TABLE shops_burgers (
-    shop_id bigint NOT NULL REFERENCES shops (id),
-    burger_id bigint NOT NULL REFERENCES burgers (id),
+    shop_id uuid NOT NULL REFERENCES shops (id),
+    burger_id uuid NOT NULL REFERENCES burgers (id),
     UNIQUE (shop_id, burger_id)
 );
 

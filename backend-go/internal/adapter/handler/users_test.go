@@ -886,8 +886,8 @@ type usersFeedItem struct {
 		ID string `json:"id"`
 	} `json:"user"`
 	Burger struct {
-		ID          int64 `json:"id"`
-		ReviewCount int64 `json:"review_count"`
+		ID          string `json:"id"`
+		ReviewCount int64  `json:"review_count"`
 	} `json:"burger"`
 }
 
@@ -908,24 +908,24 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 
 	// 承認済みの（active な）shop 1 件が 2 つの burger を提供し、直接 seed
 	// している。moderation はこのシナリオの範囲外である。
-	var shopID, sharedID, soloID int64
+	var shopID, sharedID, soloID string
 	if err := conn.QueryRow(ctx, `INSERT INTO shops (name, status) VALUES ('Active One', 1) RETURNING id`).Scan(&shopID); err != nil {
 		t.Fatalf("insert shop: %v", err)
 	}
-	for name, dst := range map[string]*int64{"Shared": &sharedID, "Solo": &soloID} {
+	for name, dst := range map[string]*string{"Shared": &sharedID, "Solo": &soloID} {
 		if err := conn.QueryRow(ctx, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, name).Scan(dst); err != nil {
 			t.Fatalf("insert burger %s: %v", name, err)
 		}
 	}
-	for _, burgerID := range []int64{sharedID, soloID} {
+	for _, burgerID := range []string{sharedID, soloID} {
 		if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopID, burgerID); err != nil {
-			t.Fatalf("link burger %d: %v", burgerID, err)
+			t.Fatalf("link burger %s: %v", burgerID, err)
 		}
 	}
 
-	postReview := func(auth string, burgerID int64, rating int, comment string) int64 {
+	postReview := func(auth string, burgerID string, rating int, comment string) int64 {
 		t.Helper()
-		body := fmt.Sprintf(`{"review":{"rating":%d,"comment":%q,"shop_id":%d,"burger_id":%d}}`, rating, comment, shopID, burgerID)
+		body := fmt.Sprintf(`{"review":{"rating":%d,"comment":%q,"shop_id":%q,"burger_id":%q}}`, rating, comment, shopID, burgerID)
 		rec := do(router, http.MethodPost, "/reviews", body, auth)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("post review: status = %d (body %s)", rec.Code, rec.Body)
@@ -1002,7 +1002,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	}
 
 	// shop の detail は B の review だけを列挙する。
-	rec = do(router, http.MethodGet, fmt.Sprintf("/shops/%d", shopID), "", "")
+	rec = do(router, http.MethodGet, fmt.Sprintf("/shops/%s", shopID), "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("shop detail status = %d (body %s)", rec.Code, rec.Body)
 	}
@@ -1021,15 +1021,15 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 
 	// 保存された統計も一致する：shared は B の rating だけを保ち、solo は
 	// ゼロの行に落ちる（discard の transaction 内で再計算される）。
-	assertStats := func(burgerID, wantCount int64, wantAvg float64) {
+	assertStats := func(burgerID string, wantCount int64, wantAvg float64) {
 		t.Helper()
 		var count int64
 		var avg float64
 		if err := conn.QueryRow(ctx, `SELECT review_count, average_rating FROM burger_stats WHERE burger_id = $1`, burgerID).Scan(&count, &avg); err != nil {
-			t.Fatalf("select stats for burger %d: %v", burgerID, err)
+			t.Fatalf("select stats for burger %s: %v", burgerID, err)
 		}
 		if count != wantCount || avg != wantAvg {
-			t.Errorf("burger %d stats = (count %d, avg %v), want (count %d, avg %v)", burgerID, count, avg, wantCount, wantAvg)
+			t.Errorf("burger %s stats = (count %d, avg %v), want (count %d, avg %v)", burgerID, count, avg, wantCount, wantAvg)
 		}
 	}
 	assertStats(sharedID, 1, 4.0)

@@ -17,10 +17,10 @@ type BurgerStatsQuery interface {
 	// ListBurgerReviewFacts は、burger の統計の元になる kept な review を facts として返す。
 	// discard 済みの review と、discard 済みの user の review は除外する。各 fact には、その
 	// review の author が、すべての burger にわたってつけた kept な rating（reviewer の履歴）が付く。
-	ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error)
+	ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]domain.ReviewFact, error)
 	// ListReviewedBurgerIDsByUser は、user の kept な review が付く burger の id を、重複なしで
 	// burger_id の昇順に返す（ユーザーの退会で統計を再計算する対象）。
-	ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]int64, error)
+	ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]string, error)
 }
 
 // Tx は UnitOfWork.Do の中で使う、トランザクションに束縛された書き込みと読み取りである。
@@ -67,7 +67,7 @@ func NewBurgerStatsRecalculator(clock Clock) *BurgerStatsRecalculator {
 // no-op である。1 つのトランザクションで複数の burger を再計算するときは、burger_id の昇順に
 // 呼ばなければならない（デッドロックの回避）。対象の review がゼロ件でも、ゼロの統計を保存する
 // （Rails BurgerScore.empty）。
-func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burgerID int64) error {
+func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burgerID string) error {
 	if err := tx.BurgerStats.Lock(ctx, burgerID); err != nil {
 		return fmt.Errorf("recalculate burger stats: lock burger: %w", err)
 	}
@@ -87,6 +87,8 @@ func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burger
 // RecalculateReviewedBy は、user の kept な review が付くすべての burger の統計を、burger_id の
 // 昇順に再計算する（ユーザーの退会。並行する退会がデッドロックしないよう、ロックの順序を固定する）。
 // 昇順は、読み取りの実装が保証するが、ここでも並べ直して、順序を usecase の責務として明示する。
+// burger の id は UUID の正規形（小文字・同じ長さ）なので、文字列としての昇順は、データベースの
+// uuid 型の昇順と同じになる（読み取りの ORDER BY と、ここでの並べ直しで順序が食い違わない）。
 func (r *BurgerStatsRecalculator) RecalculateReviewedBy(ctx context.Context, tx Tx, userID string) error {
 	burgerIDs, err := tx.Stats.ListReviewedBurgerIDsByUser(ctx, userID)
 	if err != nil {
