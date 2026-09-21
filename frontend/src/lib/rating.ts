@@ -1,9 +1,9 @@
-// rating の表示のための定数と整形。範囲(1〜5)の有効・無効の判断は backend の domain だけが持つ。
-// ここは選択肢と星の描画のための値で、範囲外の値でも例外にならないようにするだけである。
-export const RATING_MAX = 5;
-
-/** rating を「★★★☆☆」の形に整形する。範囲外の値は 0〜RATING_MAX に丸める(例外にしない)。 */
-export function formatRating(rating: number): string {
-  const filled = Math.min(Math.max(Math.trunc(rating), 0), RATING_MAX);
-  return "★".repeat(filled) + "☆".repeat(RATING_MAX - filled);
+// rating を「★★★☆☆」の形に整形する(表示だけ)。範囲(最小・最大)の値と、有効・無効の判断は
+// backend の domain だけが持ち、GET /meta で受け取った max を渡す。max が分かるまで(undefined)は、
+// 空の星を描かず、rating の分の ★ だけを返す。範囲外の値でも例外にしない。
+export function formatRating(rating: number, max: number | undefined): string {
+  const filled = Math.max(Math.trunc(rating), 0);
+  if (max === undefined) return "★".repeat(filled);
+  const shown = Math.min(filled, max);
+  return "★".repeat(shown) + "☆".repeat(max - shown);
 }

@@ -45,12 +45,7 @@ function UserUpdateForm({ id }: { id: string }) {
     setIsUpdating(true);
     try {
       const updated = await update(data);
-      refreshUser({
-        id: updated.id,
-        username: updated.username,
-        email: updated.email,
-        admin: updated.admin,
-      });
+      refreshUser({ username: updated.username, email: updated.email });
       void navigate(`/users/${id}`);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("users.update.updateError")]);
@@ -75,7 +70,7 @@ function UserUpdateForm({ id }: { id: string }) {
 
   return (
     <Layout title={t("users.update.title")}>
-      <form onSubmit={(e) => void handleUpdate(e)} className={styles.form}>
+      <form onSubmit={(e) => void handleUpdate(e)} className={styles.form} noValidate>
         {serverError && <ErrorMessage message={serverError} />}
         <Input
           id="username"

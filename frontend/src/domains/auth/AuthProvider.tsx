@@ -9,15 +9,9 @@ import {
 import { useAtom } from "jotai";
 import { authUserAtom, authTokenAtom } from "../../states/authAtom";
 import { authApi } from "./api/authApiClient";
-import {
-  getToken,
-  setToken,
-  removeToken,
-  getStoredUser,
-  setStoredUser,
-  removeStoredUser,
-} from "./storage";
-import type { AuthUser, LoginRequest, SignupRequest } from "./types";
+import { ApiError } from "../../api/client/buildApiClient";
+import { getToken, setToken, removeToken } from "./storage";
+import type { AuthUser, CurrentUserResponse, LoginRequest, SignupRequest } from "./types";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -26,48 +20,44 @@ interface AuthContextValue {
   login(data: LoginRequest): Promise<void>;
   signup(data: SignupRequest): Promise<void>;
   logout(): Promise<void>;
-  refreshUser(user: AuthUser): void;
+  // プロフィールの更新後に、表示する名前・メールを差し替える(権限 canModerate は変わらない)。
+  refreshUser(updated: Pick<AuthUser, "username" | "email">): void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function decodeJwtPayload(token: string): Record<string, unknown> {
-  try {
-    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(atob(base64)) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-function isTokenExpired(token: string): boolean {
-  const payload = decodeJwtPayload(token);
-  if (typeof payload.exp !== "number") return true;
-  return Date.now() / 1000 > payload.exp;
+function toAuthUser(res: CurrentUserResponse): AuthUser {
+  return { id: res.id, username: res.username, email: res.email, canModerate: res.canModerate };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useAtom(authUserAtom);
   const [token, setTokenAtom] = useAtom(authTokenAtom);
-  const [isLoading, setIsLoading] = useState(true);
+  // 保存済みのトークンがあるときだけ、backend に問い合わせて復元する(その間は isLoading)。
+  const [isLoading, setIsLoading] = useState(() => getToken() !== null);
 
   useEffect(() => {
     const storedToken = getToken();
-    if (storedToken && !isTokenExpired(storedToken)) {
-      const storedUser = getStoredUser() as AuthUser | null;
-      if (storedUser) {
-        // 古い保存ユーザーには admin がないことがあるため、必ず boolean にそろえる。
-        setUser({ ...storedUser, admin: Boolean(storedUser.admin) });
+    if (!storedToken) return;
+    let cancelled = false;
+    authApi
+      .me()
+      .then((me) => {
+        if (cancelled) return;
+        setUser(toAuthUser(me));
         setTokenAtom(storedToken);
-      } else {
-        removeToken();
-      }
-    } else if (storedToken) {
-      removeToken();
-      removeStoredUser();
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsLoading(false);
+      })
+      .catch((e: unknown) => {
+        // 無効・期限切れ(401)のときだけ、トークンを捨てる。通信エラーなど一時的な失敗では、
+        // トークンを消さない(ログアウト状態で表示するだけ。再読み込みで復元できる)。
+        if (!cancelled && e instanceof ApiError && e.status === 401) removeToken();
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [setUser, setTokenAtom]);
 
   const signup = useCallback(
@@ -75,9 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authApi.signup(data);
       setToken(res.token);
       setTokenAtom(res.token);
-      const authUser: AuthUser = { id: res.id, username: res.username, email: res.email, admin: res.admin };
-      setUser(authUser);
-      setStoredUser(authUser);
+      setUser(toAuthUser(res));
     },
     [setUser, setTokenAtom]
   );
@@ -87,9 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authApi.login(data);
       setToken(res.token);
       setTokenAtom(res.token);
-      const authUser: AuthUser = { id: res.id, username: res.username, email: res.email, admin: res.admin };
-      setUser(authUser);
-      setStoredUser(authUser);
+      setUser(toAuthUser(res));
     },
     [setUser, setTokenAtom]
   );
@@ -101,15 +87,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // エラーは無視し、いずれにせよローカルの状態をクリアする
     }
     removeToken();
-    removeStoredUser();
     setTokenAtom(null);
     setUser(null);
   }, [setUser, setTokenAtom]);
 
   const refreshUser = useCallback(
-    (updatedUser: AuthUser) => {
-      setUser(updatedUser);
-      setStoredUser(updatedUser);
+    (updated: Pick<AuthUser, "username" | "email">) => {
+      setUser((current) => (current ? { ...current, ...updated } : current));
     },
     [setUser]
   );

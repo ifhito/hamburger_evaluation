@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useUser } from "../hooks/useUser";
 import { useReviews } from "../../reviews/hooks/useReviews";
+import { useRatingRange } from "../../reviews/hooks/useRatingRange";
 import { formatDate } from "../../../lib/date";
 import { formatRating } from "../../../lib/rating";
 import { Button } from "../../../components/Button";
@@ -14,6 +15,7 @@ export default function UserDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { user: authUser, isLoading: authLoading } = useAuth();
+  const ratingRange = useRatingRange();
 
   // 認証状態の復元前は authUser が null でも token は localStorage にあり得る。閲覧者が確定してから取得する
   const {
@@ -63,7 +65,7 @@ export default function UserDetailPage() {
         {userReviews?.map((review) => (
           <div key={review.id} className={styles.reviewCard}>
             <div className={styles.reviewHeader}>
-              <span>{formatRating(review.rating)}</span>
+              <span>{formatRating(review.rating, ratingRange?.max)}</span>
               <span className={styles.reviewDate}>{formatDate(review.createdAt)}</span>
             </div>
             <p className={styles.reviewComment}>{review.comment}</p>

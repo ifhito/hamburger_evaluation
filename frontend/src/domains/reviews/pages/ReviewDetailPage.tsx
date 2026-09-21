@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
 import { useDeleteReview } from "../hooks/useReviewMutations";
+import { useRatingRange } from "../hooks/useRatingRange";
 import { formatDate } from "../../../lib/date";
 import { formatRating } from "../../../lib/rating";
 import { Button } from "../../../components/Button";
@@ -16,6 +17,7 @@ export default function ReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
+  const ratingRange = useRatingRange();
   // 編集・削除できるか(canEdit)は backend が返す。閲覧者ごとに違うので、認証状態が確定してから取得する
   const { data: review, isLoading, error } = useReview(Number(id), user?.id ?? null, {
     enabled: !authLoading,
@@ -42,7 +44,7 @@ export default function ReviewDetailPage() {
       {review && (
         <div className={styles.card}>
           <div className={styles.cardHeader}>
-            <span className={styles.rating}>{formatRating(review.rating)}</span>
+            <span className={styles.rating}>{formatRating(review.rating, ratingRange?.max)}</span>
             <span className={styles.date}>{formatDate(review.createdAt)}</span>
           </div>
           <p className={styles.comment}>{review.comment}</p>

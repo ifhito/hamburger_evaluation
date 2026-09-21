@@ -12,7 +12,7 @@ type Story = StoryObj<typeof RatingSelect>
 
 function Controlled() {
   const [value, setValue] = useState(3)
-  return <RatingSelect value={value} onChange={setValue} />
+  return <RatingSelect value={value} onChange={setValue} min={1} max={5} />
 }
 
 export const Default: Story = { render: () => <Controlled /> }

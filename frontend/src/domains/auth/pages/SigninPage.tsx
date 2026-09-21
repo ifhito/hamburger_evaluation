@@ -33,7 +33,7 @@ export default function SigninPage() {
 
   return (
     <Layout title={t("auth.signin.title")}>
-      <form onSubmit={(e) => void onSubmit(e)} className={styles.form}>
+      <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
         {serverError && <ErrorMessage message={serverError} />}
         <Input
           id="email"

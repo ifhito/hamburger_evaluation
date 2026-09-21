@@ -1,6 +1,12 @@
 import { buildApiClient } from "../../../api/client/buildApiClient";
 import { getToken } from "../storage";
-import type { SignupRequest, SignupResponse, LoginRequest, LoginResponse } from "../types";
+import type {
+  CurrentUserResponse,
+  SignupRequest,
+  SignupResponse,
+  LoginRequest,
+  LoginResponse,
+} from "../types";
 
 export const authApiClient = buildApiClient(getToken);
 
@@ -11,6 +17,11 @@ export const authApi = {
   },
   async login(data: LoginRequest): Promise<LoginResponse> {
     const res = await authApiClient.post<LoginResponse>("/login", data);
+    return res.data;
+  },
+  // 保存済みのトークンで、現在のユーザーを取得する。トークンの有効性は backend が判断する(無効・期限切れは 401)。
+  async me(): Promise<CurrentUserResponse> {
+    const res = await authApiClient.get<CurrentUserResponse>("/me");
     return res.data;
   },
   async logout(): Promise<{ message: string }> {

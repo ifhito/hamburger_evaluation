@@ -85,6 +85,7 @@ const en = {
     edit: {
       title: "Edit Review",
       loading: "Loading\u2026",
+      forbidden: "You can't edit this review.",
       comment: "Comment",
       submit: "Save Changes",
       cancel: "Cancel",
