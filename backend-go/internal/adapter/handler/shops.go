@@ -23,6 +23,24 @@ type shopResponse struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	// PhotoURL は、ショップの写真(そのショップで、写真つきで最も新しいレビューの写真)の公開 URL で、
+	// 写真つきのレビューがないときは null。AverageRating は評価の平均(小数 1 桁)で、レビューがないときは
+	// null。ReviewCount はレビューの件数。集計の意味は domain.ShopSummary が持ち、ここは写すだけである。
+	PhotoURL      *string  `json:"photo_url"`
+	AverageRating *float64 `json:"average_rating"`
+	ReviewCount   int64    `json:"review_count"`
+}
+
+// newShopResponse は、一覧に出るショップを、集計つきで wire の形にする(GET /shops と MCP の list_shops が共有する)。
+func newShopResponse(listing domain.ShopListing) shopResponse {
+	return shopResponse{
+		ID:            listing.ID,
+		Name:          listing.Name,
+		Status:        string(listing.Status),
+		PhotoURL:      listing.Summary.PhotoURL,
+		AverageRating: listing.Summary.AverageRating,
+		ReviewCount:   listing.Summary.ReviewCount,
+	}
 }
 
 // shopDetailResponse は GET /shops/{id} の body である
@@ -37,6 +55,10 @@ type shopDetailResponse struct {
 	Creator        *userRefResponse     `json:"creator"`
 	Reviews        []shopReviewResponse `json:"reviews"`
 	CanReview      bool                 `json:"can_review"`
+	// PhotoURL・AverageRating・ReviewCount は、shopResponse と同じ集計である。
+	PhotoURL      *string  `json:"photo_url"`
+	AverageRating *float64 `json:"average_rating"`
+	ReviewCount   int64    `json:"review_count"`
 }
 
 type userRefResponse struct {
@@ -129,7 +151,7 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 		}
 		resp := make([]shopResponse, 0, len(list)) // nil ではない：[] として marshal される
 		for _, shop := range list {
-			resp = append(resp, shopResponse{ID: shop.ID, Name: shop.Name, Status: string(shop.Status)})
+			resp = append(resp, newShopResponse(shop))
 		}
 		setHasMore(w, hasMore)
 		writeJSON(w, http.StatusOK, resp)
@@ -167,6 +189,9 @@ func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 		Creator:        newUserRefResponse(detail.Creator),
 		Reviews:        make([]shopReviewResponse, 0, len(detail.Reviews)),
 		CanReview:      detail.CanReview,
+		PhotoURL:       detail.Summary.PhotoURL,
+		AverageRating:  detail.Summary.AverageRating,
+		ReviewCount:    detail.Summary.ReviewCount,
 	}
 	for _, review := range detail.Reviews {
 		item := shopReviewResponse{

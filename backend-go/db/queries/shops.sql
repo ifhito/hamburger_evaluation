@@ -90,3 +90,30 @@ RETURNING *;
 -- name: DeleteShop :exec
 DELETE FROM shops
 WHERE id = $1;
+
+-- name: ListShopSummaries :many
+-- 指定した shop それぞれの、レビューの件数・評価の平均・ショップの写真のキー(写真つきで
+-- 最も新しいレビューの写真)。集計の対象は、ListShopReviews(shop 詳細に出るレビュー)と同じ範囲:
+-- discard されていない user の、discard されていない review。集計の意味と丸めは
+-- domain.ShopSummary が持つ。1 回の集約で、shop の件数に比例してクエリを増やさない。
+-- レビューのない shop は行を返さない(呼び出し側が、空の集計にする)。
+WITH kept AS (
+    SELECT sb.shop_id, r.id, r.rating, r.photo_key, r.created_at
+    FROM reviews r
+    JOIN shops_burgers sb ON sb.burger_id = r.burger_id
+    JOIN users u ON u.id = r.user_id
+    WHERE sb.shop_id = ANY(sqlc.arg(shop_ids)::uuid[])
+      AND r.discarded_at IS NULL AND u.discarded_at IS NULL
+), latest_photo AS (
+    SELECT DISTINCT ON (shop_id) shop_id, photo_key
+    FROM kept
+    WHERE photo_key IS NOT NULL
+    ORDER BY shop_id, created_at DESC, id DESC
+)
+SELECT k.shop_id,
+       COUNT(*)::bigint AS review_count,
+       AVG(k.rating)::float8 AS average_rating,
+       lp.photo_key
+FROM kept k
+LEFT JOIN latest_photo lp ON lp.shop_id = k.shop_id
+GROUP BY k.shop_id, lp.photo_key;

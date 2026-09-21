@@ -170,6 +170,8 @@ type ShopDetail struct {
 	// CanReview は、viewer がこの shop に review を投稿できるかである。viewer ごとに
 	// 決まる値なので、詳細を返す usecase が CanBeReviewedByViewer で設定する。
 	CanReview bool
+	// Summary は、レビューの件数・評価の平均・ショップの写真である。詳細を返す usecase が設定する。
+	Summary ShopSummary
 }
 
 // ShopReview は shop 詳細に表示される review 1 件であり、その author と、

@@ -109,6 +109,15 @@ backend-go/
 | `STATS_WORKER_BATCH` | `20` | 1 サイクルで取り出す依頼の上限の件数 |
 | `STATS_WORKER_MAX_ATTEMPTS` | `8` | 1 つの依頼を、失敗しながら再試行する上限の回数 |
 
+### ショップの集計(写真・平均評価・レビュー件数)
+
+`GET /shops`・`GET /shops/:id`(と MCP の `list_shops`・`get_shop`)は、ショップごとに `photo_url`(写真がなければ `null`)・`average_rating`(レビューがなければ `null`)・`review_count` を返す。**意味は domain の `ShopSummary` が持つ**(handler は写すだけ)。
+
+- **数える範囲**: 消されていないレビューで、書いた人が退会していないもの(レビュー一覧 `ListShopReviews` の見え方と同じ)。レビューはバーガーに付くので、ショップのレビューは `shops_burgers` を通して数える。
+- **平均**: 小数 1 桁(`domain.RoundAverageRating`。4.25 → 4.3)。
+- **写真**: そのショップで、**写真つきのレビューのうち最も新しいもの**(`created_at` の新しい順、同時刻は `id` の大きい順)の写真。ショップ専用の写真はない。消されたレビュー・退会した人のレビューの写真は使わない。写真の URL は、レビューの写真と同じく usecase が `PhotoStorage.URL` で組み立てる(`usecase.WithPhotoURLs`)。
+- **取り方**: 一覧 1 ページにつき、`ShopQuery.ListShopSummaries(ids)` の 1 回(`ListShops` と合わせて 2 回)。件数に比例しない(N+1 でない)。`burger_stats`(バーガーごと)は、ショップの平均には使えないので、`reviews` を集計するクエリにした。非同期の統計と違って、書き込み直後から反映される。
+
 ### signup の確認メール
 
 `POST /signup` は、入力を検証したあと、**登録の有無にかかわらず同じ応答(202)**を返す。応答の違いから、第三者が「この email は登録済みか」を判別できないようにするためである。
@@ -327,8 +336,8 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**
-- `GET /shops` — ショップ一覧 (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される。次のページがあるかを、レスポンスヘッダー `X-Has-More: true|false` で返す。本文は従来どおりの配列で、1 ページの件数は backend が決め、frontend は件数から最終ページを推測しない)
-- `GET /shops/:id` — ショップ 1 件の取得 (`can_review`: 閲覧者がこのショップにレビューを書けるか。domain の `CanBeReviewedBy` の結果で、匿名は `false`。frontend は「レビューを書く」ボタンをこの値で出し分ける)
+- `GET /shops` — ショップ一覧 (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される。次のページがあるかを、レスポンスヘッダー `X-Has-More: true|false` で返す。本文は従来どおりの配列で、1 ページの件数は backend が決め、frontend は件数から最終ページを推測しない)。各ショップに集計の `photo_url`・`average_rating`・`review_count` を含む(下の「ショップの集計」)
+- `GET /shops/:id` — ショップ 1 件の取得 (`can_review`: 閲覧者がこのショップにレビューを書けるか。domain の `CanBeReviewedBy` の結果で、匿名は `false`。frontend は「レビューを書く」ボタンをこの値で出し分ける。一覧と同じ集計 `photo_url`・`average_rating`・`review_count` も含む)
 - `POST /shops` — ショップの申請 (要認証)
 
 **レビュー**

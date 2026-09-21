@@ -33,6 +33,22 @@ type shopStoreFake struct {
 	err                   error
 	listCalls             int
 	lastLimit, lastOffset int32
+	// summaries は shop の id ごとの集計。ない shop は「レビューなし」(空の集計)になる。
+	summaries map[string]domain.ShopSummary
+}
+
+// ListShopSummaries は、指定した shop の集計を返す(summaries にない shop は空の集計)。
+func (f *shopStoreFake) ListShopSummaries(_ context.Context, shopIDs []string) (map[string]domain.ShopSummary, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	out := make(map[string]domain.ShopSummary, len(shopIDs))
+	for _, id := range shopIDs {
+		if summary, ok := f.summaries[id]; ok {
+			out[id] = summary
+		}
+	}
+	return out, nil
 }
 
 var (
@@ -88,7 +104,7 @@ func (f *shopStoreFake) ListShopReviews(_ context.Context, shopID string) ([]dom
 
 // newShopsRouter は、auth kit と与えられた shop の fake で router を配線し、
 // 通常のユーザーと admin 用に発行した Bearer ヘッダーを返す。
-func newShopsRouter(t *testing.T, repo *shopStoreFake) (router http.Handler, aliceAuth, adminAuth string, aliceID string) {
+func newShopsRouter(t *testing.T, repo *shopStoreFake, opts ...usecase.ShopsOption) (router http.Handler, aliceAuth, adminAuth string, aliceID string) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
 	alice := users.seed("alice", "alice@example.com", "Password123!")
@@ -103,7 +119,7 @@ func newShopsRouter(t *testing.T, repo *shopStoreFake) (router http.Handler, ali
 		t.Fatalf("issue admin token: %v", err)
 	}
 	reviewRepo := newReviewStoreFake()
-	return handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(repo, domain.NewShops(repo)),
+	return handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(repo, domain.NewShops(repo), opts...),
 			reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
 			usersUsecase(users, hasherFake{}), nil, nil, nil),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID
@@ -140,17 +156,17 @@ func TestListShops(t *testing.T) {
 	}{
 		{
 			name:     "匿名の閲覧者には、承認済みのショップだけが見える",
-			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:       "作成者には、自分の承認待ちのショップも、状態つきで見える",
 			authHeader: aliceAuth,
-			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending"}]`,
+			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:       "管理者には、すべての状態のショップが見える",
 			authHeader: adminAuth,
-			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending"},{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected"}]`,
+			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 	}
 	for _, tt := range tests {
@@ -182,7 +198,7 @@ func TestListShopsParams(t *testing.T) {
 		{
 			name:     "keyword は部分文字列で絞り込む",
 			query:    "?keyword=diner",
-			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:     "keyword に一致するものがなければ空配列になる",
@@ -193,12 +209,12 @@ func TestListShopsParams(t *testing.T) {
 			name:       "per_page=1 page=2 は 2 番目の shop を返す",
 			query:      "?per_page=1&page=2",
 			authHeader: adminAuth,
-			wantBody:   `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending"}]`,
+			wantBody:   `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:     "範囲外の page と per_page はデフォルト値に fallback する",
 			query:    "?page=0&per_page=0",
-			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:     "データの範囲外の page は空配列になる",
@@ -266,7 +282,7 @@ func TestGetShopDetail(t *testing.T) {
 		`{"id":"` + uid.N(9) + `","rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
 		`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
 		`{"id":"` + uid.N(8) + `","rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
-		`"burger":{"id":"` + uid.N(6) + `","name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}],"can_review":false}`
+		`"burger":{"id":"` + uid.N(6) + `","name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}],"can_review":false,"photo_url":null,"average_rating":null,"review_count":0}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

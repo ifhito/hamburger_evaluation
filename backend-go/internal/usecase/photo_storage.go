@@ -20,3 +20,8 @@ type PhotoStorage interface {
 	// URL は、クライアントが写真を取得するのに使う公開 URL を返す。
 	URL(key string) string
 }
+
+// PhotoURLs は、保存された写真のキーを、クライアントが取得する公開 URL に直す(PhotoStorage の URL だけの部分)。
+type PhotoURLs interface {
+	URL(key string) string
+}

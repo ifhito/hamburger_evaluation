@@ -170,6 +170,66 @@ func (q *Queries) ListShopReviews(ctx context.Context, shopID string) ([]ListSho
 	return items, nil
 }
 
+const listShopSummaries = `-- name: ListShopSummaries :many
+WITH kept AS (
+    SELECT sb.shop_id, r.id, r.rating, r.photo_key, r.created_at
+    FROM reviews r
+    JOIN shops_burgers sb ON sb.burger_id = r.burger_id
+    JOIN users u ON u.id = r.user_id
+    WHERE sb.shop_id = ANY($1::uuid[])
+      AND r.discarded_at IS NULL AND u.discarded_at IS NULL
+), latest_photo AS (
+    SELECT DISTINCT ON (shop_id) shop_id, photo_key
+    FROM kept
+    WHERE photo_key IS NOT NULL
+    ORDER BY shop_id, created_at DESC, id DESC
+)
+SELECT k.shop_id,
+       COUNT(*)::bigint AS review_count,
+       AVG(k.rating)::float8 AS average_rating,
+       lp.photo_key
+FROM kept k
+LEFT JOIN latest_photo lp ON lp.shop_id = k.shop_id
+GROUP BY k.shop_id, lp.photo_key
+`
+
+type ListShopSummariesRow struct {
+	ShopID        string
+	ReviewCount   int64
+	AverageRating float64
+	PhotoKey      pgtype.Text
+}
+
+// 指定した shop それぞれの、レビューの件数・評価の平均・ショップの写真のキー(写真つきで
+// 最も新しいレビューの写真)。集計の対象は、ListShopReviews(shop 詳細に出るレビュー)と同じ範囲:
+// discard されていない user の、discard されていない review。集計の意味と丸めは
+// domain.ShopSummary が持つ。1 回の集約で、shop の件数に比例してクエリを増やさない。
+// レビューのない shop は行を返さない(呼び出し側が、空の集計にする)。
+func (q *Queries) ListShopSummaries(ctx context.Context, shopIds []string) ([]ListShopSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listShopSummaries, shopIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListShopSummariesRow
+	for rows.Next() {
+		var i ListShopSummariesRow
+		if err := rows.Scan(
+			&i.ShopID,
+			&i.ReviewCount,
+			&i.AverageRating,
+			&i.PhotoKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listShops = `-- name: ListShops :many
 SELECT id, name, status, moderation_note, creator_id FROM shops
 WHERE ($1::boolean
