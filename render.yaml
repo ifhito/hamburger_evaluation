@@ -59,3 +59,22 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+
+  # フロントエンド(Phase 6 の検証で使う)。API は Cloud Run に転送する。
+  - type: web
+    name: hamburger-frontend
+    runtime: static
+    plan: free
+    branch: docs/deploy-verification
+    rootDir: frontend
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    staticPublishPath: ./dist
+    routes:
+      # /api/* を API へ転送する。SPA の書き換えより先に評価される必要がある。
+      - type: rewrite
+        source: /api/*
+        destination: https://burger-stack-421794940461.asia-northeast1.run.app/*
+      # SPA の deep link(/reviews/<uuid> への直接アクセス)。
+      - type: rewrite
+        source: /*
+        destination: /index.html

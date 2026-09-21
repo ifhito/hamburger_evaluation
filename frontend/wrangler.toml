@@ -1,0 +1,17 @@
+# Cloudflare Workers(Static Assets)。Phase 6 の検証で使う。
+#
+#   pnpm run build
+#   wrangler login        # 初回のみ
+#   wrangler deploy
+name = "hamburger-frontend"
+main = "worker/index.js"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+# SPA なので、見つからない path は index.html を返す(deep link 対応)。
+not_found_handling = "single-page-application"
+
+[vars]
+API_ORIGIN = "https://burger-stack-421794940461.asia-northeast1.run.app"
