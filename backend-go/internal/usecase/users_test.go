@@ -232,7 +232,9 @@ func TestPasswordRuleParity(t *testing.T) {
 	for _, tt := range passwords {
 		t.Run(tt.name, func(t *testing.T) {
 			signupRepo := &fakeSignupRepo{
-				create: func(context.Context, domain.CreateSignupVerificationParams) (bool, error) { return true, nil },
+				create: func(context.Context, domain.CreateSignupVerificationParams) (domain.SignupVerificationReceipt, error) {
+					return acceptedReceipt, nil
+				},
 			}
 			signupErr := newSignups(notRegistered, signupRepo, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig).Request(
 				context.Background(),

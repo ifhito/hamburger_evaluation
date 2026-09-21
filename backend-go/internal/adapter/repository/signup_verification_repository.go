@@ -29,23 +29,23 @@ var _ domain.SignupVerificationRepository = (*SignupVerificationRepository)(nil)
 
 // CreateSignupVerification は、email（大文字小文字を区別しない）の確認待ちを upsert する。
 // 前回の送信から domain.SignupResendInterval 以内なら、DB の文が行を返さないので、
-// accepted=false を返す（何も変えていない）。
-func (r *SignupVerificationRepository) CreateSignupVerification(ctx context.Context, params domain.CreateSignupVerificationParams) (bool, error) {
-	_, err := r.q.UpsertSignupVerification(ctx, sqlcgen.UpsertSignupVerificationParams{
+// Accepted=false の結果を返す（何も変えていない）。有効期間は domain.SignupTokenTTL である。
+func (r *SignupVerificationRepository) CreateSignupVerification(ctx context.Context, params domain.CreateSignupVerificationParams) (domain.SignupVerificationReceipt, error) {
+	row, err := r.q.UpsertSignupVerification(ctx, sqlcgen.UpsertSignupVerificationParams{
 		Email:                 params.Email,
 		Username:              params.Username,
 		PasswordDigest:        params.PasswordDigest,
 		TokenHash:             params.TokenHash,
-		TtlSeconds:            params.TTL.Seconds(),
+		TtlSeconds:            domain.SignupTokenTTL.Seconds(),
 		ResendIntervalSeconds: domain.SignupResendInterval.Seconds(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
+			return domain.SignupVerificationReceipt{}, nil
 		}
-		return false, fmt.Errorf("create signup verification: %w", err)
+		return domain.SignupVerificationReceipt{}, fmt.Errorf("create signup verification: %w", err)
 	}
-	return true, nil
+	return domain.SignupVerificationReceipt{Accepted: true, ID: row.ID, Generation: int(row.Generation)}, nil
 }
 
 // CreateUserFromSignupVerification は、tokenHash の期限内の確認待ちをロックし、その内容で

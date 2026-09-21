@@ -2,7 +2,8 @@
 -- 同じ email(大文字小文字を区別しない)の確認待ちを、最新の入力で置き換える。
 -- 前回の送信から resend_interval_seconds 以内なら何も変えず、行を返さない(呼び出し側は
 -- 「送信を見送った」と扱う)。判定と書き込みが 1 文なので、並行する signup でも
--- 送信の間隔は破られない。時刻はすべて DB の now() を使い、アプリとの時計のずれを避ける。
+-- 送信の間隔は破られない。置き換えるたびに generation が 1 増える(確認メールの冪等キーに使う)。
+-- 時刻はすべて DB の now() を使い、アプリとの時計のずれを避ける。
 INSERT INTO signup_verifications (email, username, password_digest, token_hash, expires_at, last_sent_at)
 VALUES (
     @email,
@@ -18,9 +19,10 @@ SET email = EXCLUDED.email,
     password_digest = EXCLUDED.password_digest,
     token_hash = EXCLUDED.token_hash,
     expires_at = EXCLUDED.expires_at,
-    last_sent_at = now()
+    last_sent_at = now(),
+    generation = signup_verifications.generation + 1
 WHERE signup_verifications.last_sent_at <= now() - make_interval(secs => @resend_interval_seconds::float8)
-RETURNING id;
+RETURNING id, generation;
 
 -- name: LockSignupVerificationByTokenHash :one
 -- 期限内の確認待ちの行をロックして返す。確認の transaction の先頭で使うので、

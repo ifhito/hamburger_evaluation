@@ -69,9 +69,9 @@ type recordingSignupRepo struct {
 	discarded []int
 }
 
-func (r *recordingSignupRepo) CreateSignupVerification(_ context.Context, p CreateSignupVerificationParams) (bool, error) {
+func (r *recordingSignupRepo) CreateSignupVerification(_ context.Context, p CreateSignupVerificationParams) (SignupVerificationReceipt, error) {
 	r.created = append(r.created, p)
-	return true, nil
+	return SignupVerificationReceipt{Accepted: true, ID: "id", Generation: 1}, nil
 }
 
 func (r *recordingSignupRepo) CreateUserFromSignupVerification(_ context.Context, tokenHash string) (User, error) {

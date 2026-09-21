@@ -3,7 +3,6 @@ package infra
 import (
 	"context"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,50 +15,58 @@ const (
 	asyncMailerWorkers = 2
 	// asyncMailerQueueSize は、送信待ちのメールを溜める有界のキューの大きさである。
 	asyncMailerQueueSize = 100
-	// asyncMailerSendTimeout は、1 通の送信の上限である。
+	// asyncMailerSendTimeout は、1 通の処理（記録・送信）の上限である。
 	asyncMailerSendTimeout = 20 * time.Second
-	// recentMailWindow は、同じ宛先・同じ件名のメールを続けて送らない間隔である
-	// （確認メールの間隔と同じ）。
-	recentMailWindow = domain.SignupResendInterval
-	// recentMailLimit は、間隔の記録の最大件数である（メモリの上限）。
-	recentMailLimit = 4096
+	// resultRecordTimeout は、送信の結果（sent / failed）を記録する DB 呼び出しの上限である。
+	// 送信の timeout が尽きたあとでも結果を記録できるように、送信の context とは別に持つ。
+	resultRecordTimeout = 5 * time.Second
 )
 
 // mailDeliverer は、メールを 1 通、同期的に送る。SMTPMailer がこれを満たす。
 type mailDeliverer interface {
-	Deliver(ctx context.Context, mail usecase.Mail) error
+	Deliver(ctx context.Context, msg mailMessage) error
 }
 
-// AsyncMailer は、usecase.Mailer を非同期に実装する。Send は、有界のキューに入れて即座に返り、
-// 少数の worker が SMTP へ送る。送信の失敗・遅延・キューの満杯は、Send の呼び出し側には
-// 見えない（失敗はログに出す。応答時間や結果から、登録の有無を推測されないため）。
-// 同じ宛先・同じ件名のメールは、60 秒に 1 通に絞る（DB の判定を通らない通知メールを
-// 使った、第三者へのメールの大量送信を抑える。プロセスごとの記録で、複数のインスタンスで
-// 共有はしない）。
+// mailJob は、キューに入れる 1 通分の仕事である。文面（msg）は、受け付けた時点で作ってある。
+type mailJob struct {
+	kind domain.MailKind
+	key  string
+	msg  mailMessage
+}
+
+// AsyncMailer は、usecase.Mailer を非同期に実装する。メソッドは、文面を組み立てて有界のキューに入れ、
+// 即座に返る。少数の worker が、次の順で処理する。
+//
+//  1. 冪等キーで送信の記録を pending で作る（domain.MailDeliveries）。同じキーの要求はすでに扱って
+//     いるので、送らない（同じ要求は、メールが 1 通だけ出る）
+//  2. SMTP で送る
+//  3. 結果を sent / failed（試行の回数・失敗の種類・切り詰めた理由）で記録する
+//
+// 送信の失敗・遅延・キューの満杯・記録の失敗は、呼び出し側には見えない（失敗はログに出す。応答の中身と
+// 時間が、これらで変わらないので、登録の有無を推測されない）。再送はしない。記録できなかったときは、
+// 冪等を守るために送らない（重複して送るより、送らないほうを選ぶ）。
 type AsyncMailer struct {
 	deliverer mailDeliverer
+	records   *domain.MailDeliveries
 	timeout   time.Duration
-	queue     chan usecase.Mail
+	queue     chan mailJob
 	wg        sync.WaitGroup
 
 	mu     sync.Mutex
 	closed bool
-	recent map[string]time.Time
-	now    func() time.Time
 }
 
 // NewAsyncMailer は worker を起動して AsyncMailer を返す。終了時は Close を呼ぶこと。
-func NewAsyncMailer(deliverer mailDeliverer) *AsyncMailer {
-	return newAsyncMailer(deliverer, asyncMailerWorkers, asyncMailerQueueSize, asyncMailerSendTimeout)
+func NewAsyncMailer(deliverer mailDeliverer, records *domain.MailDeliveries) *AsyncMailer {
+	return newAsyncMailer(deliverer, records, asyncMailerWorkers, asyncMailerQueueSize, asyncMailerSendTimeout)
 }
 
-func newAsyncMailer(deliverer mailDeliverer, workers, queueSize int, timeout time.Duration) *AsyncMailer {
+func newAsyncMailer(deliverer mailDeliverer, records *domain.MailDeliveries, workers, queueSize int, timeout time.Duration) *AsyncMailer {
 	m := &AsyncMailer{
 		deliverer: deliverer,
+		records:   records,
 		timeout:   timeout,
-		queue:     make(chan usecase.Mail, queueSize),
-		recent:    make(map[string]time.Time),
-		now:       time.Now,
+		queue:     make(chan mailJob, queueSize),
 	}
 	for i := 0; i < workers; i++ {
 		m.wg.Add(1)
@@ -70,60 +77,76 @@ func newAsyncMailer(deliverer mailDeliverer, workers, queueSize int, timeout tim
 
 var _ usecase.Mailer = (*AsyncMailer)(nil)
 
-// Send はメールをキューに入れて即座に返る。閉じた後・キューが満杯・直前に同じ宛先へ同じ件名を
-// 送った場合は、送らずに捨て、ログにだけ残す（宛先の値はログに出さない）。
-func (m *AsyncMailer) Send(mail usecase.Mail) {
-	key := strings.ToLower(mail.To) + "\x00" + mail.Subject
+// SendSignupConfirmation は、確認リンクつきのメールをキューに入れて即座に返る。
+func (m *AsyncMailer) SendSignupConfirmation(n usecase.SignupConfirmation) {
+	m.enqueue(mailJob{kind: domain.MailKindSignupConfirmation, key: n.IdempotencyKey, msg: renderSignupConfirmation(n)})
+}
 
+// SendAlreadyRegistered は、「すでに登録済み」の通知をキューに入れて即座に返る。
+func (m *AsyncMailer) SendAlreadyRegistered(n usecase.AlreadyRegisteredNotice) {
+	m.enqueue(mailJob{kind: domain.MailKindAlreadyRegistered, key: n.IdempotencyKey, msg: renderAlreadyRegistered(n)})
+}
+
+// enqueue は仕事をキューに入れて即座に返る。閉じたあと・キューが満杯のときは、捨てて、ログにだけ残す
+// （宛先の値はログに出さない）。
+func (m *AsyncMailer) enqueue(job mailJob) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
 		log.Printf("mail: dropped (mailer is closed)")
 		return
 	}
-	now := m.now()
-	if last, ok := m.recent[key]; ok && now.Sub(last) < recentMailWindow {
-		log.Printf("mail: dropped (sent to the same recipient within %s)", recentMailWindow)
-		return
-	}
 	select {
-	case m.queue <- mail:
-		m.remember(key, now)
+	case m.queue <- job:
 	default:
 		log.Printf("mail: dropped (queue is full)")
 	}
 }
 
-// remember は、送った時刻を記録する。上限に達したら、まず期間外の記録を掃除し、それでも
-// 上限なら記録しない（メモリを増やさない。間隔の絞りが効かなくなるだけで、送信はできる）。
-func (m *AsyncMailer) remember(key string, now time.Time) {
-	if len(m.recent) >= recentMailLimit {
-		for k, t := range m.recent {
-			if now.Sub(t) >= recentMailWindow {
-				delete(m.recent, k)
-			}
-		}
-		if len(m.recent) >= recentMailLimit {
-			return
-		}
-	}
-	m.recent[key] = now
-}
-
 func (m *AsyncMailer) work() {
 	defer m.wg.Done()
-	for mail := range m.queue {
-		ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
-		if err := m.deliverer.Deliver(ctx, mail); err != nil {
-			log.Printf("mail: delivery failed: %v", err)
-		}
-		cancel()
+	for job := range m.queue {
+		m.process(job)
 	}
 }
 
-// Close は、新しいメールの受け付けを止め、キューに残っているメールを送り切るのを、ctx が
-// 終わるまで待つ。呼び出し後の Send は捨てられる。ctx が先に終わったときは ctx.Err() を返す
-// （worker は、実行中の送信が timeout で終わるまで残りうる）。
+// process は、1 通分を、記録 → 送信 → 結果の記録の順で処理する。
+func (m *AsyncMailer) process(job mailJob) {
+	ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
+	defer cancel()
+
+	id, recorded, err := m.records.Record(ctx, domain.CreateMailDeliveryParams{
+		Kind:           job.kind,
+		Recipient:      job.msg.To,
+		IdempotencyKey: job.key,
+	})
+	if err != nil {
+		log.Printf("mail: record delivery (not sent): %v", err)
+		return
+	}
+	if !recorded {
+		return // 同じ冪等キーの要求は、すでに扱っている。
+	}
+
+	sendErr := m.deliverer.Deliver(ctx, job.msg)
+
+	resultCtx, resultCancel := context.WithTimeout(context.Background(), resultRecordTimeout)
+	defer resultCancel()
+	if sendErr == nil {
+		if err := m.records.MarkSent(resultCtx, id); err != nil {
+			log.Printf("mail: record result: %v", err)
+		}
+		return
+	}
+	log.Printf("mail: delivery failed: %v", sendErr)
+	if err := m.records.MarkFailed(resultCtx, id, classifyDeliveryError(sendErr), sendErr.Error()); err != nil {
+		log.Printf("mail: record result: %v", err)
+	}
+}
+
+// Close は、新しいメールの受け付けを止め、キューに残っているメールを処理し切るのを、ctx が
+// 終わるまで待つ。呼び出し後の送信は捨てられる。ctx が先に終わったときは ctx.Err() を返す
+// （worker は、実行中の処理が timeout で終わるまで残りうる）。
 func (m *AsyncMailer) Close(ctx context.Context) error {
 	m.mu.Lock()
 	if !m.closed {

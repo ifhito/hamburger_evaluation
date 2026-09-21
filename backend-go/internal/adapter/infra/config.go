@@ -1,5 +1,3 @@
-// Package infra は infrastructure に関する関心事（環境変数からの設定、
-// database pool の構築、JWT の発行/検証、パスワードのハッシュ化）を保持する。
 package infra
 
 import (
@@ -19,8 +17,6 @@ const (
 	defaultPhotoBaseURL  = "/photos"
 	photoStorageDiskMode = "disk"
 	photoStorageS3Mode   = "s3"
-
-	defaultSignupTokenTTL = 24 * time.Hour
 
 	// SMTP の接続の保護の方式（SMTP_SECURITY）。
 	smtpSecurityStartTLS = "starttls"
@@ -91,9 +87,6 @@ type Config struct {
 	// AppBaseURL は確認リンクの生成元（frontend の URL）である。APP_BASE_URL、必須。
 	// 末尾の "/" は取り除かれる。
 	AppBaseURL string
-	// SignupTokenTTL は signup の確認トークンの有効期間である。SIGNUP_TOKEN_TTL
-	// （"24h" のような Go の duration）、デフォルトは 24h、正の値でなければならない。
-	SignupTokenTTL time.Duration
 }
 
 // LoadConfig は getenv を通して設定を読み込む（通常は os.Getenv で、
@@ -101,7 +94,7 @@ type Config struct {
 // JWT_TTL が正の duration でない場合、DB_MAX_CONNS が正の整数でない場合、
 // PHOTO_STORAGE が "disk" でも "s3" でもない場合、s3 モードで必須の
 // 変数のいずれかが欠けている場合、または確認メールの設定（SMTP_*、MAIL_FROM、
-// APP_BASE_URL、SIGNUP_TOKEN_TTL）が欠けている・不正な場合に失敗する。
+// APP_BASE_URL）が欠けている・不正な場合に失敗する。
 func LoadConfig(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		Port:        getenv("PORT"),
@@ -185,7 +178,6 @@ func loadMailConfig(getenv func(string) string, cfg *Config) error {
 	cfg.SMTPSecurity = getenv("SMTP_SECURITY")
 	cfg.MailFrom = getenv("MAIL_FROM")
 	cfg.AppBaseURL = getenv("APP_BASE_URL")
-	cfg.SignupTokenTTL = defaultSignupTokenTTL
 
 	if cfg.SMTPHost == "" {
 		return fmt.Errorf("SMTP_HOST is required")
@@ -231,13 +223,5 @@ func loadMailConfig(getenv func(string) string, cfg *Config) error {
 		return fmt.Errorf("APP_BASE_URL must be an http(s) URL without query or fragment, got %q", cfg.AppBaseURL)
 	}
 	cfg.AppBaseURL = strings.TrimRight(cfg.AppBaseURL, "/")
-
-	if raw := getenv("SIGNUP_TOKEN_TTL"); raw != "" {
-		ttl, err := time.ParseDuration(raw)
-		if err != nil || ttl <= 0 {
-			return fmt.Errorf("SIGNUP_TOKEN_TTL must be a positive duration, got %q", raw)
-		}
-		cfg.SignupTokenTTL = ttl
-	}
 	return nil
 }

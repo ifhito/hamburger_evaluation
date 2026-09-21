@@ -22,7 +22,7 @@ import (
 )
 
 // testSignupConfig は、handler のテストで使う signup の設定である。
-var testSignupConfig = usecase.SignupConfig{BaseURL: "https://app.example.com", TokenTTL: 24 * time.Hour}
+var testSignupConfig = usecase.SignupConfig{BaseURL: "https://app.example.com"}
 
 const (
 	signupAcceptedBody = `{"message":"Confirmation email sent"}`
@@ -30,39 +30,58 @@ const (
 	confirmLinkPrefix  = "https://app.example.com/signup/confirm?token="
 )
 
-// mailRecorder は、送るよう頼まれたメールを記録する usecase.Mailer の fake である。
+// mailRecorder は、出すよう頼まれたメールの意図を記録する usecase.Mailer の fake である。
 type mailRecorder struct {
-	mu   sync.Mutex
-	sent []usecase.Mail
+	mu            sync.Mutex
+	confirmations []usecase.SignupConfirmation
+	notices       []usecase.AlreadyRegisteredNotice
 }
 
-func (m *mailRecorder) Send(mail usecase.Mail) {
+var _ usecase.Mailer = (*mailRecorder)(nil)
+
+func (m *mailRecorder) SendSignupConfirmation(n usecase.SignupConfirmation) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.sent = append(m.sent, mail)
+	m.confirmations = append(m.confirmations, n)
 }
 
-func (m *mailRecorder) all() []usecase.Mail {
+func (m *mailRecorder) SendAlreadyRegistered(n usecase.AlreadyRegisteredNotice) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]usecase.Mail(nil), m.sent...)
+	m.notices = append(m.notices, n)
 }
 
-// lastToken は、最後に送られた確認メールのリンクから、平文のトークンを取り出す。
+func (m *mailRecorder) counts() (confirmations, notices int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.confirmations), len(m.notices)
+}
+
+// lastToken は、最後に頼まれた確認メールのリンクから、平文のトークンを取り出す。
 func (m *mailRecorder) lastToken(t *testing.T) string {
 	t.Helper()
-	mails := m.all()
-	for i := len(mails) - 1; i >= 0; i-- {
-		if idx := strings.Index(mails[i].Body, confirmLinkPrefix); idx >= 0 {
-			return strings.Fields(mails[i].Body[idx+len(confirmLinkPrefix):])[0]
-		}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.confirmations) == 0 {
+		t.Fatal("確認メールが頼まれていない")
 	}
-	t.Fatalf("確認リンクつきのメールが送られていない: %+v", mails)
-	return ""
+	return tokenFromLink(t, m.confirmations[len(m.confirmations)-1].ConfirmURL)
+}
+
+// tokenFromLink は、確認メールのリンクから、平文のトークンを取り出す。
+func tokenFromLink(t *testing.T, link string) string {
+	t.Helper()
+	raw, ok := strings.CutPrefix(link, confirmLinkPrefix)
+	if !ok {
+		t.Fatalf("リンク %q は %s で始まらない", link, confirmLinkPrefix)
+	}
+	return raw
 }
 
 // signupRow は signupStoreFake が持つ確認待ちの 1 行である。
 type signupRow struct {
+	id                                 string
+	generation                         int
 	email, username, digest, tokenHash string
 	expiresAt, lastSentAt              time.Time
 }
@@ -83,19 +102,25 @@ func newSignupStoreFake(users *userStoreFake) *signupStoreFake {
 	return &signupStoreFake{users: users, rows: map[string]*signupRow{}, now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 }
 
-func (f *signupStoreFake) CreateSignupVerification(_ context.Context, p domain.CreateSignupVerificationParams) (bool, error) {
+func (f *signupStoreFake) CreateSignupVerification(_ context.Context, p domain.CreateSignupVerificationParams) (domain.SignupVerificationReceipt, error) {
 	if f.err != nil {
-		return false, f.err
+		return domain.SignupVerificationReceipt{}, f.err
 	}
 	key := strings.ToLower(p.Email)
-	if row, ok := f.rows[key]; ok && f.now.Sub(row.lastSentAt) < domain.SignupResendInterval {
-		return false, nil
+	generation := 1
+	id := uid.N(1000 + len(f.rows))
+	if row, ok := f.rows[key]; ok {
+		if f.now.Sub(row.lastSentAt) < domain.SignupResendInterval {
+			return domain.SignupVerificationReceipt{}, nil
+		}
+		generation, id = row.generation+1, row.id
 	}
 	f.rows[key] = &signupRow{
+		id: id, generation: generation,
 		email: p.Email, username: p.Username, digest: p.PasswordDigest, tokenHash: p.TokenHash,
-		expiresAt: f.now.Add(p.TTL), lastSentAt: f.now,
+		expiresAt: f.now.Add(domain.SignupTokenTTL), lastSentAt: f.now,
 	}
-	return true, nil
+	return domain.SignupVerificationReceipt{Accepted: true, ID: id, Generation: generation}, nil
 }
 
 func (f *signupStoreFake) CreateUserFromSignupVerification(ctx context.Context, tokenHash string) (domain.User, error) {
@@ -179,8 +204,8 @@ func TestSignupConfirmFlow(t *testing.T) {
 	if len(kit.users.users) != 0 {
 		t.Fatalf("確認の前に users が作られた: %d 件", len(kit.users.users))
 	}
-	if mails := kit.mailer.all(); len(mails) != 1 || mails[0].To != "alice@example.com" || mails[0].Subject != "Confirm your email address" {
-		t.Fatalf("確認メール = %+v, want 1 通", mails)
+	if c, n := kit.mailer.counts(); c != 1 || n != 0 || kit.mailer.confirmations[0].To != "alice@example.com" {
+		t.Fatalf("確認 %d 件・通知 %d 件, want 宛先 alice@example.com の確認 1 件だけ", c, n)
 	}
 
 	token := kit.mailer.lastToken(t)
@@ -227,16 +252,14 @@ func TestSignupResponsesAreIndistinguishable(t *testing.T) {
 		t.Errorf("users = %d 件, want 1（登録済みの signup で users は変わらない）", len(kit.users.users))
 	}
 
-	mails := kit.mailer.all()
-	if len(mails) != 2 {
-		t.Fatalf("送られたメール = %d 通, want 2", len(mails))
+	if c, n := kit.mailer.counts(); c != 1 || n != 1 {
+		t.Fatalf("確認 %d 件・通知 %d 件, want 1 件ずつ", c, n)
 	}
-	if mails[0].To != "eve@example.com" || !strings.Contains(mails[0].Body, confirmLinkPrefix) {
-		t.Errorf("未登録への確認メール = %+v", mails[0])
+	if conf := kit.mailer.confirmations[0]; conf.To != "eve@example.com" || !strings.HasPrefix(conf.ConfirmURL, confirmLinkPrefix) {
+		t.Errorf("未登録への確認 = %+v", conf)
 	}
-	if mails[1].To != "bob@example.com" || mails[1].Subject != "You already have an account" ||
-		strings.Contains(mails[1].Body, "token") || strings.Contains(mails[1].Body, "confirm") {
-		t.Errorf("登録済みへの通知メール = %+v（確認リンク・トークンを含めない）", mails[1])
+	if note := kit.mailer.notices[0]; note.To != "bob@example.com" || note.SignInURL != "https://app.example.com/signin" {
+		t.Errorf("登録済みへの通知 = %+v（ログイン画面の URL だけを持つ。確認のリンク・トークンを持たない）", note)
 	}
 
 	t.Run("検証エラーは登録の有無に依存せず、「登録済み」を示すメッセージも返らない", func(t *testing.T) {
@@ -317,8 +340,8 @@ func TestSignupResendWindow(t *testing.T) {
 	if rec.Code != http.StatusAccepted || rec.Body.String() != signupAcceptedBody {
 		t.Fatalf("間隔内の再 signup = %d %s, want 202 %s", rec.Code, rec.Body, signupAcceptedBody)
 	}
-	if n := len(kit.mailer.all()); n != 1 {
-		t.Fatalf("間隔内の再 signup でメールが送られた（合計 %d 通, want 1）", n)
+	if c, _ := kit.mailer.counts(); c != 1 {
+		t.Fatalf("間隔内の再 signup で確認メールが頼まれた（合計 %d 件, want 1）", c)
 	}
 
 	kit.store.now = kit.store.now.Add(31 * time.Second)
@@ -326,8 +349,12 @@ func TestSignupResendWindow(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("間隔後の再 signup status = %d, want 202", rec.Code)
 	}
-	if n := len(kit.mailer.all()); n != 2 {
-		t.Fatalf("間隔後の再 signup で送られたメール = 合計 %d 通, want 2", n)
+	if c, _ := kit.mailer.counts(); c != 2 {
+		t.Fatalf("間隔後の再 signup で頼まれた確認メール = 合計 %d 件, want 2", c)
+	}
+	// 置き換えたので、確認メールの冪等キー（確認待ちの id + 世代）は、世代が進んで別のキーになる。
+	if k1, k2 := kit.mailer.confirmations[0].IdempotencyKey, kit.mailer.confirmations[1].IdempotencyKey; k1 == k2 {
+		t.Errorf("再 signup の確認メールの冪等キーが同じ: %q（世代が進むので別のキーになる）", k1)
 	}
 	secondToken := kit.mailer.lastToken(t)
 	if secondToken == firstToken {
@@ -362,7 +389,7 @@ func TestSignupConfirmRejections(t *testing.T) {
 		token func(kit *signupKit, token string) string
 		setup func(kit *signupKit)
 	}{
-		{"期限切れ", func(_ *signupKit, tok string) string { return tok }, func(kit *signupKit) { kit.store.now = kit.store.now.Add(25 * time.Hour) }},
+		{"期限切れ", func(_ *signupKit, tok string) string { return tok }, func(kit *signupKit) { kit.store.now = kit.store.now.Add(domain.SignupTokenTTL + time.Hour) }},
 		{"存在しない", func(*signupKit, string) string { return "does-not-exist" }, nil},
 		// 末尾の 1 文字を必ず別の文字に変える（元の末尾が "A" のとき "A" に変えると、改ざんにならない）。
 		{"改ざん(末尾を変える)", func(_ *signupKit, tok string) string {
@@ -502,8 +529,7 @@ func TestSignupConfirmIntegration(t *testing.T) {
 	if count("users") != 1 || count("signup_verifications") != 0 {
 		t.Errorf("登録済みの signup 後: users = %d, signup_verifications = %d, want 1 と 0", count("users"), count("signup_verifications"))
 	}
-	mails := mailer.all()
-	if last := mails[len(mails)-1]; last.Subject != "You already have an account" || strings.Contains(last.Body, "token") {
-		t.Errorf("登録済みへのメール = %+v", last)
+	if _, n := mailer.counts(); n != 1 {
+		t.Errorf("登録済みへの通知の意図 = %d 件, want 1", n)
 	}
 }

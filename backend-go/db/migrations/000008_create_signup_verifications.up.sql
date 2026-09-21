@@ -9,8 +9,12 @@ CREATE TABLE signup_verifications (
     token_hash text NOT NULL,
     expires_at timestamptz NOT NULL,
     last_sent_at timestamptz NOT NULL DEFAULT now(),
+    -- 確認メールを出した回数。再 signup で確認待ちを置き換えるたびに 1 増える。確認メールの
+    -- 冪等キー(確認待ちの id + 世代)に使い、同じ世代のメールは 1 通しか出ないようにする。
+    generation integer NOT NULL DEFAULT 1,
     created_at timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT signup_verifications_token_hash_key UNIQUE (token_hash)
+    CONSTRAINT signup_verifications_token_hash_key UNIQUE (token_hash),
+    CONSTRAINT signup_verifications_generation_check CHECK (generation >= 1)
 );
 
 -- email は入力どおりに保存し(users.email と同じ)、大文字小文字を区別しない一意性で、

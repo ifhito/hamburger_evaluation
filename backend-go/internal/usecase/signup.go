@@ -15,26 +15,47 @@ import (
 // 最大件数である（専用のバックグラウンドジョブは作らない）。
 const discardExpiredLimit = 20
 
-// Mail は、送る 1 通のメールである（プレーンテキスト）。
-type Mail struct {
-	To      string
-	Subject string
-	Body    string
+// SignupConfirmation は、「signup の確認メールを送る」という意図である。宛先と、確認のリンクの
+// URL と、その有効期間という、意味のある値だけを持つ。件名・本文・書式は持たない（文面は送信側が決める）。
+type SignupConfirmation struct {
+	// To は宛先の email である。
+	To string
+	// ConfirmURL は、確認のリンクの URL である（平文のトークンを含む）。
+	ConfirmURL string
+	// ValidFor は、リンクの有効期間である。
+	ValidFor time.Duration
+	// IdempotencyKey は、この要求の冪等キーである。同じキーの要求は、メールが 1 通しか出ない。
+	IdempotencyKey string
 }
 
-// Mailer は、メールを送る契約である（送信のみ）。実装は呼び出しを待たせない（非同期）ので、
-// 送信の成否・遅延は呼び出し側に見えず、応答時間から登録の有無を推測されない。失敗は
-// 実装がログに出す。
+// AlreadyRegisteredNotice は、「登録済みの email に、すでに登録済みであることを知らせる」という
+// 意図である。確認のリンク・トークンは持たない。
+type AlreadyRegisteredNotice struct {
+	// To は宛先の email である。
+	To string
+	// SignInURL は、ログイン画面の URL である。
+	SignInURL string
+	// IdempotencyKey は、この要求の冪等キーである。同じキーの要求は、メールが 1 通しか出ない。
+	IdempotencyKey string
+}
+
+// Mailer は、signup に関するメールを出す契約である。メソッドは、ドメインの意図を表す。
+// メールの件名・本文・書式や、送信のプロバイダー（SMTP など）の形式・エラーは、実装が受け止め、
+// この契約の外へ出さない。実装は呼び出しを待たせない（非同期）ので、送信の成否・遅延は呼び出し側に
+// 見えず、応答時間から登録の有無を推測されない。送信の記録と失敗のログも実装が担う。
 type Mailer interface {
-	Send(mail Mail)
+	// SendSignupConfirmation は、確認リンクつきのメールを出す。
+	SendSignupConfirmation(n SignupConfirmation)
+	// SendAlreadyRegistered は、「すでに登録済み」の通知を出す。
+	SendAlreadyRegistered(n AlreadyRegisteredNotice)
 }
 
-// SignupConfig は、signup の確認メールと確認トークンの設定である。
+// SignupConfig は、signup の確認メールのリンクの設定である。
 type SignupConfig struct {
 	// BaseURL は、確認メールのリンクの生成元（frontend の URL。末尾に / を付けない）である。
 	BaseURL string
-	// TokenTTL は、確認トークンの有効期間である。
-	TokenTTL time.Duration
+	// Now は現在時刻を返す（冪等キーの時間の窓に使う）。nil なら time.Now である。テストが時計を進めるために注入する。
+	Now func() time.Time
 }
 
 // SignupInput は signup use case の入力である。PasswordConfirmation は
@@ -103,7 +124,11 @@ func (s *Signups) Request(ctx context.Context, input SignupInput) error {
 	_, err = s.query.GetActiveUserByEmail(ctx, input.Email)
 	switch {
 	case err == nil:
-		s.mailer.Send(s.alreadyRegisteredMail(input.Email))
+		s.mailer.SendAlreadyRegistered(AlreadyRegisteredNotice{
+			To:             input.Email,
+			SignInURL:      s.cfg.BaseURL + "/signin",
+			IdempotencyKey: domain.AlreadyRegisteredMailKey(input.Email, s.now()),
+		})
 		return nil
 	case !errors.Is(err, domain.ErrUserNotFound):
 		return fmt.Errorf("get user by email: %w", err)
@@ -113,18 +138,22 @@ func (s *Signups) Request(ctx context.Context, input SignupInput) error {
 	if err != nil {
 		return err
 	}
-	accepted, err := s.verifications.Create(ctx, domain.CreateSignupVerificationParams{
+	receipt, err := s.verifications.Create(ctx, domain.CreateSignupVerificationParams{
 		Email:          input.Email,
 		Username:       input.Username,
 		PasswordDigest: digest,
 		TokenHash:      token.Hash,
-		TTL:            s.cfg.TokenTTL,
 	})
 	if err != nil {
 		return fmt.Errorf("create signup verification: %w", err)
 	}
-	if accepted {
-		s.mailer.Send(s.confirmationMail(input.Email, token.Raw))
+	if receipt.Accepted {
+		s.mailer.SendSignupConfirmation(SignupConfirmation{
+			To:             input.Email,
+			ConfirmURL:     s.cfg.BaseURL + "/signup/confirm?token=" + url.QueryEscape(token.Raw),
+			ValidFor:       domain.SignupTokenTTL,
+			IdempotencyKey: domain.SignupConfirmationMailKey(receipt.ID, receipt.Generation),
+		})
 	}
 	return nil
 }
@@ -156,45 +185,10 @@ func (s *Signups) discardExpired(ctx context.Context) {
 	}
 }
 
-// confirmationMail は、確認リンクつきのメールを作る。本文には利用者が入力した値（username など）を
-// 入れない（第三者の email で signup した人が、本文に任意の文言を差し込めないようにするため）。
-func (s *Signups) confirmationMail(to, rawToken string) Mail {
-	link := s.cfg.BaseURL + "/signup/confirm?token=" + url.QueryEscape(rawToken)
-	return Mail{
-		To:      to,
-		Subject: "Confirm your email address",
-		Body: "Please confirm your email address to finish creating your account:\n\n" +
-			link + "\n\n" +
-			"This link expires in " + humanizeDuration(s.cfg.TokenTTL) + ".\n" +
-			"If you didn't sign up, you can safely ignore this email.\n",
+// now は現在時刻を返す。
+func (s *Signups) now() time.Time {
+	if s.cfg.Now != nil {
+		return s.cfg.Now()
 	}
-}
-
-// alreadyRegisteredMail は、登録済みの email への通知を作る。確認トークンは含めず、
-// ログイン画面へのリンクだけを入れる。
-func (s *Signups) alreadyRegisteredMail(to string) Mail {
-	return Mail{
-		To:      to,
-		Subject: "You already have an account",
-		Body: "Someone tried to sign up with this email address, but an account already exists.\n\n" +
-			"You can sign in here:\n\n" +
-			s.cfg.BaseURL + "/signin\n\n" +
-			"If this wasn't you, you can safely ignore this email.\n",
-	}
-}
-
-// humanizeDuration は、有効期間を英語の短い言い回しにする（"24 hours"、"90 minutes"）。
-func humanizeDuration(d time.Duration) string {
-	if d >= time.Hour && d%time.Hour == 0 {
-		hours := int(d / time.Hour)
-		if hours == 1 {
-			return "1 hour"
-		}
-		return fmt.Sprintf("%d hours", hours)
-	}
-	minutes := int((d + time.Minute - 1) / time.Minute)
-	if minutes <= 1 {
-		return "1 minute"
-	}
-	return fmt.Sprintf("%d minutes", minutes)
+	return time.Now()
 }

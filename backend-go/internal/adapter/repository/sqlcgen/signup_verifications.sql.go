@@ -39,7 +39,7 @@ func (q *Queries) DeleteSignupVerification(ctx context.Context, id string) error
 }
 
 const lockSignupVerificationByTokenHash = `-- name: LockSignupVerificationByTokenHash :one
-SELECT id, email, username, password_digest, token_hash, expires_at, last_sent_at, created_at FROM signup_verifications
+SELECT id, email, username, password_digest, token_hash, expires_at, last_sent_at, generation, created_at FROM signup_verifications
 WHERE token_hash = $1 AND expires_at > now()
 FOR UPDATE
 `
@@ -57,6 +57,7 @@ func (q *Queries) LockSignupVerificationByTokenHash(ctx context.Context, tokenHa
 		&i.TokenHash,
 		&i.ExpiresAt,
 		&i.LastSentAt,
+		&i.Generation,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -78,9 +79,10 @@ SET email = EXCLUDED.email,
     password_digest = EXCLUDED.password_digest,
     token_hash = EXCLUDED.token_hash,
     expires_at = EXCLUDED.expires_at,
-    last_sent_at = now()
+    last_sent_at = now(),
+    generation = signup_verifications.generation + 1
 WHERE signup_verifications.last_sent_at <= now() - make_interval(secs => $6::float8)
-RETURNING id
+RETURNING id, generation
 `
 
 type UpsertSignupVerificationParams struct {
@@ -92,11 +94,17 @@ type UpsertSignupVerificationParams struct {
 	ResendIntervalSeconds float64
 }
 
+type UpsertSignupVerificationRow struct {
+	ID         string
+	Generation int32
+}
+
 // 同じ email(大文字小文字を区別しない)の確認待ちを、最新の入力で置き換える。
 // 前回の送信から resend_interval_seconds 以内なら何も変えず、行を返さない(呼び出し側は
 // 「送信を見送った」と扱う)。判定と書き込みが 1 文なので、並行する signup でも
-// 送信の間隔は破られない。時刻はすべて DB の now() を使い、アプリとの時計のずれを避ける。
-func (q *Queries) UpsertSignupVerification(ctx context.Context, arg UpsertSignupVerificationParams) (string, error) {
+// 送信の間隔は破られない。置き換えるたびに generation が 1 増える(確認メールの冪等キーに使う)。
+// 時刻はすべて DB の now() を使い、アプリとの時計のずれを避ける。
+func (q *Queries) UpsertSignupVerification(ctx context.Context, arg UpsertSignupVerificationParams) (UpsertSignupVerificationRow, error) {
 	row := q.db.QueryRow(ctx, upsertSignupVerification,
 		arg.Email,
 		arg.Username,
@@ -105,7 +113,7 @@ func (q *Queries) UpsertSignupVerification(ctx context.Context, arg UpsertSignup
 		arg.TtlSeconds,
 		arg.ResendIntervalSeconds,
 	)
-	var id string
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertSignupVerificationRow
+	err := row.Scan(&i.ID, &i.Generation)
+	return i, err
 }

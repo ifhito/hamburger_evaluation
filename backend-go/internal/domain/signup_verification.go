@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+// SignupTokenTTL は、signup の確認トークンの有効期間である。有効期間は業務のルールで、
+// 環境ごとに変える設定ではないので、ここに置く（確認メールの本文の「有効期間」も、この値を渡す）。
+const SignupTokenTTL = 24 * time.Hour
+
 // SignupResendInterval は、同じ email への確認メールを送る最小の間隔である。
 // この間隔より短い再 signup は、応答は同じでも、確認待ちの行を変えず、メールも送らない
 // （第三者の email に確認メールを大量に送らせる悪用を抑えるため）。
@@ -47,13 +51,21 @@ func HashSignupToken(raw string) string {
 
 // CreateSignupVerificationParams は、確認待ちの signup として保存するフィールドを
 // 保持する。パスワードはハッシュ化済みで、トークンは Hash（平文は渡さない）である。
-// TTL は、確認トークンの有効期間である。
+// 有効期間は SignupTokenTTL で、repository が使う。
 type CreateSignupVerificationParams struct {
 	Email          string
 	Username       string
 	PasswordDigest string
 	TokenHash      string
-	TTL            time.Duration
+}
+
+// SignupVerificationReceipt は、確認待ちの保存の結果である。Accepted=false は、前回の送信から
+// SignupResendInterval 以内で、何も変えなかったことを表す（ID・Generation は空）。Accepted のときの
+// ID と Generation は、確認メールの冪等キー（SignupConfirmationMailKey）の材料になる。
+type SignupVerificationReceipt struct {
+	Accepted   bool
+	ID         string
+	Generation int
 }
 
 // SignupVerificationRepository は、確認待ちの signup の書き込みの契約である。domain が
@@ -62,9 +74,9 @@ type CreateSignupVerificationParams struct {
 type SignupVerificationRepository interface {
 	// CreateSignupVerification は、params の email（大文字小文字を区別しない）の確認待ちを、
 	// 最新の入力で置き換えて保存する（なければ作る）。前回の送信から SignupResendInterval
-	// 以内なら何も変えず、accepted=false を返す（メールを送らない合図）。判定と書き込みは
-	// 1 つの文で行うので、並行しても間隔は破られない。
-	CreateSignupVerification(ctx context.Context, params CreateSignupVerificationParams) (accepted bool, err error)
+	// 以内なら何も変えず、Accepted=false を返す（メールを送らない合図）。判定と書き込みは
+	// 1 つの文で行うので、並行しても間隔は破られない。置き換えるたびに Generation が 1 増える。
+	CreateSignupVerification(ctx context.Context, params CreateSignupVerificationParams) (SignupVerificationReceipt, error)
 	// CreateUserFromSignupVerification は、tokenHash の確認待ちをロックし、その内容で
 	// users を作成し、確認待ちを削除する。すべて 1 つの transaction で行う。期限切れ・存在しない・
 	// 使用済みの確認待ちは（wrap された）ErrSignupTokenInvalid を返し、確認までの間に同じ email の
@@ -92,8 +104,8 @@ func NewSignupVerifications(repo SignupVerificationRepository) *SignupVerificati
 }
 
 // Create は確認待ちを保存する。前回の送信から SignupResendInterval 以内なら、何も変えず、
-// accepted=false を返す。
-func (s *SignupVerifications) Create(ctx context.Context, params CreateSignupVerificationParams) (bool, error) {
+// Accepted=false の結果を返す。
+func (s *SignupVerifications) Create(ctx context.Context, params CreateSignupVerificationParams) (SignupVerificationReceipt, error) {
 	return s.repo.CreateSignupVerification(ctx, params)
 }
 

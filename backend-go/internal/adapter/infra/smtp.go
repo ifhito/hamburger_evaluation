@@ -5,16 +5,46 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
+
+// このパッケージ内で起こす、送っても直らない種類のエラー（classifyDeliveryError が恒久的な失敗に翻訳する）。
+var (
+	errInvalidMessage      = errors.New("smtp: invalid header value")
+	errSTARTTLSUnsupported = errors.New("smtp: server does not support STARTTLS")
+	errAuthUnsupported     = errors.New("smtp: server does not support AUTH")
+)
+
+// classifyDeliveryError は、SMTP の実装のエラーを、domain の言葉（一時的な失敗・恒久的な失敗）に
+// 翻訳する。SMTP の応答コード（4xx は一時的、5xx は恒久的）や、TLS の証明書の検証の失敗、
+// 送る前に拒否した不正なヘッダー・暗号化できないサーバーは、恒久的な失敗である。接続できない・
+// タイムアウトなど、それ以外は一時的な失敗として扱う。プロバイダーのエラーの型は、ここから外へ出さない。
+func classifyDeliveryError(err error) domain.MailFailure {
+	var protoErr *textproto.Error
+	var certErr *tls.CertificateVerificationError
+	switch {
+	case errors.As(err, &protoErr):
+		if protoErr.Code >= 500 {
+			return domain.MailFailurePermanent
+		}
+		return domain.MailFailureTemporary
+	case errors.Is(err, errInvalidMessage), errors.Is(err, errSTARTTLSUnsupported), errors.Is(err, errAuthUnsupported),
+		errors.As(err, &certErr):
+		return domain.MailFailurePermanent
+	default:
+		return domain.MailFailureTemporary
+	}
+}
 
 // defaultSMTPTimeout は、1 通の送信（接続から QUIT まで）の上限である。
 const defaultSMTPTimeout = 15 * time.Second
@@ -57,10 +87,10 @@ func NewSMTPMailer(cfg Config) (*SMTPMailer, error) {
 // Deliver は m を 1 通送る。接続から送信までを、ctx と timeout のうち早い方で打ち切る。
 // ヘッダーに入る値（宛先・件名・送信元）に改行が含まれていれば、接続する前に拒否する
 // （ヘッダーインジェクションの防止）。エラーに、パスワードや本文は含めない。
-func (m *SMTPMailer) Deliver(ctx context.Context, msg usecase.Mail) error {
+func (m *SMTPMailer) Deliver(ctx context.Context, msg mailMessage) error {
 	to, err := mail.ParseAddress(msg.To)
 	if err != nil || to.Address != msg.To || strings.ContainsAny(msg.To+msg.Subject+m.from, "\r\n") {
-		return fmt.Errorf("smtp: invalid header value")
+		return errInvalidMessage
 	}
 	data, err := m.buildMessage(msg)
 	if err != nil {
@@ -87,7 +117,7 @@ func (m *SMTPMailer) Deliver(ctx context.Context, msg usecase.Mail) error {
 	if m.security == smtpSecurityStartTLS {
 		if ok, _ := c.Extension("STARTTLS"); !ok {
 			// 暗号化できないサーバーには、認証情報も本文も送らない（平文への格下げを拒否する）。
-			return fmt.Errorf("smtp: server does not support STARTTLS")
+			return errSTARTTLSUnsupported
 		}
 		if err := c.StartTLS(m.tlsConfigFor()); err != nil {
 			return fmt.Errorf("smtp: starttls: %w", err)
@@ -95,7 +125,7 @@ func (m *SMTPMailer) Deliver(ctx context.Context, msg usecase.Mail) error {
 	}
 	if m.user != "" {
 		if ok, _ := c.Extension("AUTH"); !ok {
-			return fmt.Errorf("smtp: server does not support AUTH")
+			return errAuthUnsupported
 		}
 		if err := c.Auth(smtp.PlainAuth("", m.user, m.password, m.host)); err != nil {
 			return fmt.Errorf("smtp: auth: %w", err)
@@ -145,7 +175,7 @@ func (m *SMTPMailer) tlsConfigFor() *tls.Config {
 
 // buildMessage は、プレーンテキスト（UTF-8）のメッセージを組み立てる。本文の改行は、
 // net/smtp の Data() の書き込みが CRLF に変換し、行頭の "." も処理する。
-func (m *SMTPMailer) buildMessage(msg usecase.Mail) ([]byte, error) {
+func (m *SMTPMailer) buildMessage(msg mailMessage) ([]byte, error) {
 	id := make([]byte, 16)
 	if _, err := rand.Read(id); err != nil {
 		return nil, fmt.Errorf("smtp: message id: %w", err)

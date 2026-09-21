@@ -77,7 +77,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	if err != nil {
 		return err
 	}
-	mailer := infra.NewAsyncMailer(smtpMailer)
+	mailer := infra.NewAsyncMailer(smtpMailer, domain.NewMailDeliveries(repository.NewMailDeliveryRepository(pool)))
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
@@ -91,7 +91,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		infra.BcryptPasswordHasher{},
 		mailer,
 		jwtCodec,
-		usecase.SignupConfig{BaseURL: cfg.AppBaseURL, TokenTTL: cfg.SignupTokenTTL},
+		usecase.SignupConfig{BaseURL: cfg.AppBaseURL},
 	)
 
 	// Review 写真の storage（S10）：s3 モードでは S3 互換、それ以外では

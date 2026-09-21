@@ -22,7 +22,6 @@ func withMailConfig(cfg Config) Config {
 	cfg.SMTPSecurity = "starttls"
 	cfg.MailFrom = "noreply@example.com"
 	cfg.AppBaseURL = "https://app.example.com"
-	cfg.SignupTokenTTL = 24 * time.Hour
 	return cfg
 }
 
@@ -245,31 +244,30 @@ func mailLoader(overrides map[string]string) (Config, error) {
 
 // TestLoadConfigMail は、確認メールの設定（S16、AC11・AC15）を検証する。
 func TestLoadConfigMail(t *testing.T) {
-	t.Run("既定値: STARTTLS、認証なし、24 時間", func(t *testing.T) {
+	t.Run("既定値: STARTTLS、認証なし", func(t *testing.T) {
 		cfg, err := mailLoader(nil)
 		if err != nil {
 			t.Fatalf("LoadConfig returned error: %v", err)
 		}
-		if cfg.SMTPSecurity != "starttls" || cfg.SMTPUser != "" || cfg.SMTPPassword != "" || cfg.SignupTokenTTL != 24*time.Hour {
+		if cfg.SMTPSecurity != "starttls" || cfg.SMTPUser != "" || cfg.SMTPPassword != "" {
 			t.Errorf("既定値が違う: %+v", cfg)
 		}
 	})
 
 	t.Run("明示した値が使われ、APP_BASE_URL の末尾の / は取り除かれる", func(t *testing.T) {
 		cfg, err := mailLoader(map[string]string{
-			"SMTP_PORT":        "465",
-			"SMTP_SECURITY":    "tls",
-			"SMTP_USER":        "resend",
-			"SMTP_PASSWORD":    "test-only-api-key",
-			"MAIL_FROM":        "Hamburger <noreply@example.com>",
-			"APP_BASE_URL":     "http://localhost:5173/",
-			"SIGNUP_TOKEN_TTL": "1h",
+			"SMTP_PORT":     "465",
+			"SMTP_SECURITY": "tls",
+			"SMTP_USER":     "resend",
+			"SMTP_PASSWORD": "test-only-api-key",
+			"MAIL_FROM":     "Hamburger <noreply@example.com>",
+			"APP_BASE_URL":  "http://localhost:5173/",
 		})
 		if err != nil {
 			t.Fatalf("LoadConfig returned error: %v", err)
 		}
 		if cfg.SMTPPort != 465 || cfg.SMTPSecurity != "tls" || cfg.SMTPUser != "resend" || cfg.SMTPPassword != "test-only-api-key" ||
-			cfg.MailFrom != "Hamburger <noreply@example.com>" || cfg.AppBaseURL != "http://localhost:5173" || cfg.SignupTokenTTL != time.Hour {
+			cfg.MailFrom != "Hamburger <noreply@example.com>" || cfg.AppBaseURL != "http://localhost:5173" {
 			t.Errorf("読み込んだ値が違う: %+v", cfg)
 		}
 	})
@@ -297,8 +295,6 @@ func TestLoadConfigMail(t *testing.T) {
 		{"APP_BASE_URL が欠けている", map[string]string{"APP_BASE_URL": ""}},
 		{"APP_BASE_URL が http(s) でない", map[string]string{"APP_BASE_URL": "ftp://app.example.com"}},
 		{"APP_BASE_URL にクエリがある", map[string]string{"APP_BASE_URL": "https://app.example.com/?a=b"}},
-		{"SIGNUP_TOKEN_TTL が duration でない", map[string]string{"SIGNUP_TOKEN_TTL": "soon"}},
-		{"SIGNUP_TOKEN_TTL が 0 以下", map[string]string{"SIGNUP_TOKEN_TTL": "0s"}},
 	}
 	for _, tt := range failures {
 		t.Run("起動時に失敗する: "+tt.name, func(t *testing.T) {

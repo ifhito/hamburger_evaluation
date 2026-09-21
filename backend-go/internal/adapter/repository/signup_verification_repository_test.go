@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,7 +21,6 @@ func signupParams(email, token string) domain.CreateSignupVerificationParams {
 		Username:       "alice",
 		PasswordDigest: "digest(" + token + ")",
 		TokenHash:      domain.HashSignupToken(token),
-		TTL:            24 * time.Hour,
 	}
 }
 
@@ -47,14 +45,14 @@ func TestSignupVerificationRepository(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewSignupVerificationRepository(conn)
 
-		accepted, err := repo.CreateSignupVerification(ctx, signupParams("Alice@Example.com", "first"))
-		if err != nil || !accepted {
-			t.Fatalf("1 回目 = (%v, %v), want (true, nil)", accepted, err)
+		first, err := repo.CreateSignupVerification(ctx, signupParams("Alice@Example.com", "first"))
+		if err != nil || !first.Accepted || !domain.IsUUID(first.ID) || first.Generation != 1 {
+			t.Fatalf("1 回目 = (%+v, %v), want Accepted・UUID の ID・世代 1", first, err)
 		}
 		// 大文字小文字だけが違う email は、同じ確認待ちとして扱われ、間隔内なので見送られる。
-		accepted, err = repo.CreateSignupVerification(ctx, signupParams("alice@example.com", "second"))
-		if err != nil || accepted {
-			t.Fatalf("間隔内の 2 回目 = (%v, %v), want (false, nil)", accepted, err)
+		skipped, err := repo.CreateSignupVerification(ctx, signupParams("alice@example.com", "second"))
+		if err != nil || skipped != (domain.SignupVerificationReceipt{}) {
+			t.Fatalf("間隔内の 2 回目 = (%+v, %v), want 空の結果（Accepted=false）", skipped, err)
 		}
 		var email, tokenHash string
 		if err := conn.QueryRow(ctx, "SELECT email, token_hash FROM signup_verifications").Scan(&email, &tokenHash); err != nil {
@@ -79,9 +77,9 @@ func TestSignupVerificationRepository(t *testing.T) {
 		}
 		again := signupParams("ALICE@example.com", "second")
 		again.Username = "alice2"
-		accepted, err := repo.CreateSignupVerification(ctx, again)
-		if err != nil || !accepted {
-			t.Fatalf("間隔後の 2 回目 = (%v, %v), want (true, nil)", accepted, err)
+		receipt, err := repo.CreateSignupVerification(ctx, again)
+		if err != nil || !receipt.Accepted || receipt.Generation != 2 {
+			t.Fatalf("間隔後の 2 回目 = (%+v, %v), want Accepted・世代 2（置き換えるたびに 1 増える）", receipt, err)
 		}
 		var email, username, digest, tokenHash string
 		if err := conn.QueryRow(ctx, "SELECT email, username, password_digest, token_hash FROM signup_verifications").

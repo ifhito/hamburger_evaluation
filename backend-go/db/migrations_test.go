@@ -136,7 +136,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	t.Helper()
 
-	wantTables := []string{"burger_stats", "burgers", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
+	wantTables := []string{"burger_stats", "burgers", "mail_deliveries", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
 	gotTables := queryStrings(ctx, t, conn,
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
@@ -156,6 +156,17 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burgers/name/text/NO",
 		"burgers/created_at/timestamp with time zone/NO",
 		"burgers/updated_at/timestamp with time zone/NO",
+		// mail_deliveries は 000009（S16）で追加された。
+		"mail_deliveries/id/uuid/NO",
+		"mail_deliveries/kind/text/NO",
+		"mail_deliveries/recipient/text/NO",
+		"mail_deliveries/idempotency_key/text/NO",
+		"mail_deliveries/status/text/NO",
+		"mail_deliveries/failure_kind/text/YES",
+		"mail_deliveries/attempts/integer/NO",
+		"mail_deliveries/last_error/text/YES",
+		"mail_deliveries/created_at/timestamp with time zone/NO",
+		"mail_deliveries/sent_at/timestamp with time zone/YES",
 		"reviews/id/bigint/NO",
 		"reviews/rating/smallint/NO",
 		"reviews/comment/text/YES",
@@ -184,6 +195,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"signup_verifications/token_hash/text/NO",
 		"signup_verifications/expires_at/timestamp with time zone/NO",
 		"signup_verifications/last_sent_at/timestamp with time zone/NO",
+		"signup_verifications/generation/integer/NO",
 		"signup_verifications/created_at/timestamp with time zone/NO",
 		"users/id/uuid/NO",
 		"users/email/text/NO",
@@ -237,6 +249,12 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burger_stats/burger_stats_burger_id_fkey/f",
 		"signup_verifications/signup_verifications_pkey/p",
 		"signup_verifications/signup_verifications_token_hash_key/u",
+		"signup_verifications/signup_verifications_generation_check/c",
+		"mail_deliveries/mail_deliveries_pkey/p",
+		"mail_deliveries/mail_deliveries_idempotency_key_key/u",
+		"mail_deliveries/mail_deliveries_kind_check/c",
+		"mail_deliveries/mail_deliveries_status_check/c",
+		"mail_deliveries/mail_deliveries_sent_at_check/c",
 	}
 	for _, want := range wantConstraints {
 		if !constraints[want] {
