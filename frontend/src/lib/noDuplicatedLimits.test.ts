@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import en from "../locale/en";
 
-// frontend のソース(テストとストーリーを除く)を、文字列として読む。
+// frontend のソース(テスト・ストーリー・テスト用の道具 src/test/ を除く)を、文字列として読む。
+// src/test/ は、テストのためだけの道具で、本番には入らない(待ち時間などの数字が、上限の数字と重なっても、規則の複製ではない)。
 const sources = import.meta.glob<string>("/src/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true });
-const productionSources = Object.entries(sources).filter(([path]) => !/\.(test|stories)\.tsx?$/.test(path));
+const productionSources = Object.entries(sources).filter(([path]) => !/\.(test|stories)\.tsx?$/.test(path) && !path.startsWith("/src/test/"));
 
 describe("backend の規則(文字数の上限・パスワードの長さ)を frontend に書かない", () => {
   // 上限は、GET /meta が返す値を使う。次の数字は backend の現在の上限で(コメント 2000・自己紹介と却下メモ 500・
