@@ -6,8 +6,8 @@ export interface ReturnToState {
 }
 
 // このアプリの中のパス(/ で始まり、// や \ で始まらない)ならそのまま、それ以外は null を返す。
-export function appPathOrNull(path: string): string | null {
-  if (!path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return null;
+export function appPathOrNull(path: string | null | undefined): string | null {
+  if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return null;
   return path;
 }
 

@@ -32,3 +32,11 @@ describe("appPathOrNull", () => {
     }
   });
 });
+
+describe("appPathOrNull(値がない・文字列でないとき)", () => {
+  it("undefined・null・文字列でない値は、落ちずに null にする(古い・想定外の応答の本文に備える)", () => {
+    for (const bad of [undefined, null, 1, {}, []]) {
+      expect(appPathOrNull(bad as unknown as string), String(bad)).toBeNull();
+    }
+  });
+});
