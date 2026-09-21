@@ -52,10 +52,14 @@ export async function type(input: HTMLInputElement, value: string): Promise<void
   });
 }
 
+// 待つ時間(ミリ秒)。テストの道具の値で、backend の規則の数字とは関係がない(noDuplicatedLimits の検査と重ならない値にしている)。
+const WAIT_TIMEOUT_MS = 3_000;
+const WAIT_INTERVAL_MS = 10;
+
 // 条件が満たされるまで(非同期の更新を act の中で流しながら)待つ。
 export async function eventually(assertion: () => void): Promise<void> {
   await act(async () => {
-    await vi.waitFor(assertion, { timeout: 2000, interval: 10 });
+    await vi.waitFor(assertion, { timeout: WAIT_TIMEOUT_MS, interval: WAIT_INTERVAL_MS });
   });
 }
 
