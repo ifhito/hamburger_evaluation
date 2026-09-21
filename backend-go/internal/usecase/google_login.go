@@ -202,8 +202,9 @@ func (g *GoogleLogins) signIn(ctx context.Context, ident domain.ExternalIdentity
 		user, err = tx.Users.Create(ctx, domain.CreateUserParams{
 			Email:    ident.Email,
 			Username: domain.UsernameFromProfile(ident.Name),
-			// パスワードでサインインする方法は持たない。新しいユーザーは、決して admin にならない。
-			Admin: false,
+			// パスワードでサインインする方法は持たない(明示する)。新しいユーザーは、決して admin にならない。
+			Passwordless: true,
+			Admin:        false,
 		})
 		if err != nil {
 			return err

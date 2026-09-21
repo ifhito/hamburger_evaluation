@@ -231,6 +231,41 @@ func TestUserRepositoryManagement(t *testing.T) {
 	})
 }
 
+// TestUserRepositoryPasswordDigest は、「パスワードなし」のアカウントが、明示したときだけ作られ、空の digest が
+// 黙って「パスワードなし」(NULL)にならないことを、実際の PostgreSQL で確かめる。呼び出し側の不具合で digest が
+// 空になっても、パスワードでサインインできないアカウントが、エラーにならずにできてしまうことを防ぐ。
+func TestUserRepositoryPasswordDigest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed repository test in short mode")
+	}
+	ctx := context.Background()
+
+	t.Run("digest が空のまま(パスワードなしを明示せずに)作ろうとすると、エラーになり、アカウントは作られない", func(t *testing.T) {
+		conn, _ := dbtest.New(t)
+		repo := repository.NewUserRepository(conn)
+
+		if _, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "empty@example.com", Username: "empty"}); err == nil {
+			t.Fatal("空の digest でアカウントが作られた(NULL のパスワードなしのアカウントになっていないか)")
+		}
+		if n := countRows(ctx, t, conn, "users"); n != 0 {
+			t.Fatalf("利用者が %d 人", n)
+		}
+	})
+
+	t.Run("パスワードなしを明示したときだけ、パスワードなし(NULL)のアカウントが作られる", func(t *testing.T) {
+		conn, _ := dbtest.New(t)
+		repo := repository.NewUserRepository(conn)
+
+		if _, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "g@example.com", Username: "g", Passwordless: true}); err != nil {
+			t.Fatal(err)
+		}
+		var isNull bool
+		if err := conn.QueryRow(ctx, `SELECT password_digest IS NULL FROM users WHERE email = 'g@example.com'`).Scan(&isNull); err != nil || !isNull {
+			t.Fatalf("password_digest IS NULL = %v(%v), want true", isNull, err)
+		}
+	})
+}
+
 // TestUserRepositoryEmailUniqueIgnoringCase は、メールの一意性が、大文字小文字を区別せずに、DB の制約で守られる
 // こと(事前の確認だけに頼らない)を、実際の PostgreSQL で確かめる。
 func TestUserRepositoryEmailUniqueIgnoringCase(t *testing.T) {
@@ -264,7 +299,7 @@ func TestUserRepositoryEmailUniqueIgnoringCase(t *testing.T) {
 		if err := repo.DiscardUser(ctx, gone.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "gone@example.com", Username: "again"}); !errors.Is(err, domain.ErrEmailTaken) {
+		if _, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "gone@example.com", Username: "again", PasswordDigest: "d"}); !errors.Is(err, domain.ErrEmailTaken) {
 			t.Fatalf("err = %v, want ErrEmailTaken", err)
 		}
 	})

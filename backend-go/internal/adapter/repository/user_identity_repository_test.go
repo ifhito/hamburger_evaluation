@@ -158,7 +158,7 @@ func TestUserIdentityRepository(t *testing.T) {
 	t.Run("パスワードなしの利用者を作れる(空文字列の digest は NULL として保存され、DB には空文字列を入れられない)", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		users := repository.NewUserRepository(conn)
-		none, err := users.CreateUser(ctx, domain.CreateUserParams{Email: "g@example.com", Username: "g"})
+		none, err := users.CreateUser(ctx, domain.CreateUserParams{Email: "g@example.com", Username: "g", Passwordless: true})
 		if err != nil {
 			t.Fatalf("パスワードなしの作成: %v", err)
 		}
