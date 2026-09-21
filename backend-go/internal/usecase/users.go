@@ -58,9 +58,9 @@ func (in UpdateUserInput) passwordPresent() bool {
 	return in.Password != nil && *in.Password != ""
 }
 
-// validate は Rails parity の full message を返す。valid なら空である。
-// メッセージは username、自己紹介文（domain.ValidateBio。送られたときだけ判定する）、email（domain.ValidateEmail）、password
-// （domain.ValidatePassword）、confirmation の順に並ぶ。email を送らない入力（nil）、
+// validate は検証の失敗の文言(キー + 引数。英語は Rails parity の full message)を返す。valid なら空である。
+// メッセージは username、自己紹介文（domain.BioIssues。送られたときだけ判定する）、email（domain.EmailIssues）、password
+// （domain.PasswordIssues）、confirmation の順に並ぶ。email を送らない入力（nil）、
 // 現在の値と同じ email を送る入力、パスワードを変更しない入力（nil と ""）には、
 // それぞれの規則を適用しない。email の形式の規則は、新しく設定するときだけ判定する
 // （規則ができる前の、形式が合わない email を持つ既存ユーザーが、同じ値を含めた

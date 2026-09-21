@@ -48,29 +48,24 @@ var (
 	ErrForbidden = errors.New("forbidden")
 )
 
-// ValidationError は、検証の失敗を保持する。Items は言語に依らない文言(Message)で、handler が、
-// 利用者の言語(Texts)で文字列にする。Messages は、同じ内容の英語の文言(API の文言の契約。Rails 形式の
-// full message。例:"Username can't be blank")で、ログや、言語を選ばない呼び出しに使う。
-// NewValidationError で作ると、両方がそろう。
+// ValidationError は、検証の失敗を保持する。文言は、言語に依らない形(Message)で持ち、handler が、
+// 利用者の言語(Texts)で文字列にする。
 type ValidationError struct {
-	Messages []string
-	Items    []Message
+	Items []Message
 }
 
-// NewValidationError は、items から、Items と、その英語の文言 Messages がそろった *ValidationError を作る。
+// NewValidationError は、items を持つ *ValidationError を作る。
 func NewValidationError(items ...Message) *ValidationError {
-	return &ValidationError{Messages: Texts(LangEN, items), Items: items}
+	return &ValidationError{Items: items}
 }
 
-// Texts は、失敗の文言を l の言語の文字列で返す。Items がなければ(Messages だけで作られたものは)、
-// 英語の Messages を返す。
+// Texts は、失敗の文言を l の言語の文字列で返す。英語(LangEN)は、API の文言の契約(Rails 形式の
+// full message。例:"Username can't be blank")である。
 func (e *ValidationError) Texts(l Lang) []string {
-	if len(e.Items) == 0 {
-		return e.Messages
-	}
 	return Texts(l, e.Items)
 }
 
+// Error は、ログや、言語を選ばない呼び出し向けに、英語の文言で返す。
 func (e *ValidationError) Error() string {
-	return "validation failed: " + strings.Join(e.Messages, ", ")
+	return "validation failed: " + strings.Join(e.Texts(LangEN), ", ")
 }

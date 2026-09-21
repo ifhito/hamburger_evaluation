@@ -29,15 +29,15 @@ const (
 	keyPasswordConfirm   = "password.confirmation_mismatch"
 )
 
-// Catalog は、検証の失敗の文言のカタログである。キーは Message.Key。
-var Catalog = map[string]Entry{
-	keyReviewRatingRange: {EN: "Rating must be in %d..%d", JA: "評価は %d〜%d の整数で入力してください"},
+// catalog は、検証の失敗の文言のカタログである。キーは Message.Key。
+var catalog = map[string]Entry{
+	keyReviewRatingRange: {EN: "Rating must be in %d..%d", JA: "評価は %d〜%d の整数で指定してください"},
 	keyCommentBlank:      {EN: "Comment can't be blank", JA: "コメントを入力してください"},
 	keyCommentTooLong:    {EN: "Comment is too long (maximum is %d characters)", JA: "コメントが長すぎます(最大 %d 文字)"},
-	keyBurgerNameBlank:   {EN: "Burger name can't be blank", JA: "バーガー名を入力してください"},
-	keyBurgerNameTooLong: {EN: "Burger name is too long (maximum is %d characters)", JA: "バーガー名が長すぎます(最大 %d 文字)"},
-	keyShopNameBlank:     {EN: "Name can't be blank", JA: "ショップ名を入力してください"},
-	keyShopNameTooLong:   {EN: "Name is too long (maximum is %d characters)", JA: "ショップ名が長すぎます(最大 %d 文字)"},
+	keyBurgerNameBlank:   {EN: "Burger name can't be blank", JA: "バーガーの名前を入力してください"},
+	keyBurgerNameTooLong: {EN: "Burger name is too long (maximum is %d characters)", JA: "バーガーの名前が長すぎます(最大 %d 文字)"},
+	keyShopNameBlank:     {EN: "Name can't be blank", JA: "ショップの名前を入力してください"},
+	keyShopNameTooLong:   {EN: "Name is too long (maximum is %d characters)", JA: "ショップの名前が長すぎます(最大 %d 文字)"},
 	keyModerationNote:    {EN: "Moderation note is too long (maximum is %d characters)", JA: "却下の理由が長すぎます(最大 %d 文字)"},
 	keyBioTooLong:        {EN: "Bio is too long (maximum is %d characters)", JA: "自己紹介が長すぎます(最大 %d 文字)"},
 	keyUsernameBlank:     {EN: "Username can't be blank", JA: "ユーザー名を入力してください"},

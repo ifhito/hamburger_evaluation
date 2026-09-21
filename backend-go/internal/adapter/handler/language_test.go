@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
@@ -30,23 +31,39 @@ func doWithLanguage(router http.Handler, method, path, body, authHeader, acceptL
 func TestValidationErrorsFollowAcceptLanguage(t *testing.T) {
 	type call struct {
 		name   string
-		route  func(t *testing.T) (router http.Handler, auth string)
+		route  func(t *testing.T) (router http.Handler, auth, path string)
 		method string
 		path   string
 		body   string
 		en, ja string
 	}
-	authKit := func(t *testing.T) (http.Handler, string) {
+	// route の 3 つめの値は、経路が準備の結果で決まるとき(作ったレビューの id など)の path である(空なら call.path)。
+	authKit := func(t *testing.T) (http.Handler, string, string) {
 		_, auth, _ := newAuthKit()
-		return newTestRouterWith(t, okPinger, auth), ""
+		return newTestRouterWith(t, okPinger, auth), "", ""
 	}
-	shopsKit := func(t *testing.T) (http.Handler, string) {
+	shopsKit := func(t *testing.T) (http.Handler, string, string) {
 		router, alice, _, _ := newShopsRouter(t, &shopStoreFake{})
-		return router, alice
+		return router, alice, ""
 	}
-	reviewsKit := func(t *testing.T) (http.Handler, string) {
+	adminShopsKit := func(t *testing.T) (http.Handler, string, string) {
+		router, _, admin, _ := newShopsRouter(t, seedShops(uid.N(1)))
+		return router, admin, ""
+	}
+	reviewsKit := func(t *testing.T) (http.Handler, string, string) {
 		router, alice, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
-		return router, alice
+		return router, alice, ""
+	}
+	editReviewKit := func(t *testing.T) (http.Handler, string, string) {
+		router, alice, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
+		reviewID, _ := seedFeed(t, router, alice)
+		return router, alice, "/reviews/" + reviewID
+	}
+	usersKit := func(t *testing.T) (http.Handler, string, string) {
+		repo, router, token := newUsersRouter(t)
+		alice := repo.seed("alice", "alice@example.com", "Password123!")
+		repo.seed("bob", "bob@example.com", "Password123!")
+		return router, token(alice.ID), ""
 	}
 	reviewBody := fmt.Sprintf(`{"review":{"rating":0,"comment":"","shop_id":%q,"burger_id":%q}}`, activeShopID, cheeseBurgerID)
 	calls := []call{
@@ -69,10 +86,38 @@ func TestValidationErrorsFollowAcceptLanguage(t *testing.T) {
 			`{"errors":["ユーザー名を入力してください"]}`},
 		{"ショップの追加: 名前が空", shopsKit, http.MethodPost, "/shops", `{"shop":{"name":"   "}}`,
 			`{"errors":["Name can't be blank"]}`,
-			`{"errors":["ショップ名を入力してください"]}`},
+			`{"errors":["ショップの名前を入力してください"]}`},
 		{"レビューの投稿: 評価が範囲外で、コメントが空(評価の文言が先)", reviewsKit, http.MethodPost, "/reviews", reviewBody,
 			`{"errors":["Rating must be in 1..5","Comment can't be blank"]}`,
-			`{"errors":["評価は 1〜5 の整数で入力してください","コメントを入力してください"]}`},
+			`{"errors":["評価は 1〜5 の整数で指定してください","コメントを入力してください"]}`},
+		{"レビューの投稿: バーガーの名前が空", reviewsKit, http.MethodPost, "/reviews",
+			fmt.Sprintf(`{"review":{"rating":5,"comment":"good","shop_id":%q,"burger_name":"  "}}`, activeShopID),
+			`{"errors":["Burger name can't be blank"]}`,
+			`{"errors":["バーガーの名前を入力してください"]}`},
+		{"レビューの編集: 評価が範囲外で、コメントが空", editReviewKit, http.MethodPut, "",
+			`{"review":{"rating":6,"comment":""}}`,
+			`{"errors":["Rating must be in 1..5","Comment can't be blank"]}`,
+			`{"errors":["評価は 1〜5 の整数で指定してください","コメントを入力してください"]}`},
+		{"プロフィールの更新: 自己紹介が長すぎる", usersKit, http.MethodPut, "/users/" + uid.N(1),
+			fmt.Sprintf(`{"user":{"bio":%q}}`, strings.Repeat("a", domain.MaxBioChars+1)),
+			fmt.Sprintf(`{"errors":["Bio is too long (maximum is %d characters)"]}`, domain.MaxBioChars),
+			fmt.Sprintf(`{"errors":["自己紹介が長すぎます(最大 %d 文字)"]}`, domain.MaxBioChars)},
+		{"プロフィールの更新: 使われているメールアドレス", usersKit, http.MethodPut, "/users/" + uid.N(1),
+			`{"user":{"email":"bob@example.com"}}`,
+			`{"errors":["Email has already been taken"]}`,
+			`{"errors":["このメールアドレスは、すでに使われています"]}`},
+		{"プロフィールの更新: パスワードの確認欄が一致しない", usersKit, http.MethodPut, "/users/" + uid.N(1),
+			`{"user":{"password":"Password123!","password_confirmation":"other"}}`,
+			`{"errors":["Password confirmation doesn't match Password"]}`,
+			`{"errors":["パスワード(確認)が、パスワードと一致しません"]}`},
+		{"管理者のショップ名の変更: 名前が空", adminShopsKit, http.MethodPut, "/admin/shops/" + uid.N(2),
+			`{"shop":{"name":""}}`,
+			`{"errors":["Name can't be blank"]}`,
+			`{"errors":["ショップの名前を入力してください"]}`},
+		{"管理者の却下: 理由が長すぎる", adminShopsKit, http.MethodPost, "/admin/shops/" + uid.N(1) + "/reject",
+			fmt.Sprintf(`{"moderation_note":%q}`, strings.Repeat("x", domain.MaxModerationNoteChars+1)),
+			fmt.Sprintf(`{"errors":["Moderation note is too long (maximum is %d characters)"]}`, domain.MaxModerationNoteChars),
+			fmt.Sprintf(`{"errors":["却下の理由が長すぎます(最大 %d 文字)"]}`, domain.MaxModerationNoteChars)},
 	}
 	langs := []struct {
 		name   string
@@ -89,8 +134,11 @@ func TestValidationErrorsFollowAcceptLanguage(t *testing.T) {
 	for _, c := range calls {
 		for _, l := range langs {
 			t.Run(c.name+" / "+l.name, func(t *testing.T) {
-				router, auth := c.route(t)
-				rec := doWithLanguage(router, c.method, c.path, c.body, auth, l.header)
+				router, auth, path := c.route(t)
+				if path == "" {
+					path = c.path
+				}
+				rec := doWithLanguage(router, c.method, path, c.body, auth, l.header)
 				if rec.Code != http.StatusUnprocessableEntity {
 					t.Fatalf("status = %d, want 422 (body %s)", rec.Code, rec.Body)
 				}

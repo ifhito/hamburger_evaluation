@@ -12,17 +12,12 @@ import (
 // （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxUsernameChars = 50
 
-// ValidateUsername は username の規則を検証し、違反の Rails 形式 full message を返す。
+// UsernameIssues は username の規則を検証し、違反の文言(Message。言語に依らない形)を返す。
 // 有効なら nil を返す。空文字列は "Username can't be blank" だけを返し、
 // 上限（MaxUsernameChars 文字）を超えるときは "Username is too long ..." だけを返す。
 //
 // この規則の判定は domain だけが持つ。signup と、プロフィール更新（送られたときだけ）が
 // 同じ関数を通る。
-func ValidateUsername(username string) []string {
-	return Texts(LangEN, UsernameIssues(username))
-}
-
-// UsernameIssues は、ValidateUsername の判定を、言語に依らない文言(Message)で返す。有効なら nil を返す。
 func UsernameIssues(username string) []Message {
 	if username == "" {
 		return []Message{Msg(keyUsernameBlank)}
@@ -45,7 +40,7 @@ const usernameGeneratedPrefix = "user-"
 // 表示名は、次のように整える: 書式の文字(Cf。双方向の上書き・ゼロ幅の文字など、表示を逆転させたり、見えない
 // 文字で別人に見せかけたりできるもの)は取り除き、制御文字(Cc)は空白として扱い、空白(行・段落の区切り Zl・Zp と
 // 全角の空白を含む)の連続は 1 つにまとめ、上限(MaxUsernameChars 文字)までに切り詰めて、切り詰めた末尾の空白も取り除く。
-// 結果は、ValidateUsername の規則を必ず満たす。ユーザー名は重複してよい(一意の制約はない)ので、重複の確認や
+// 結果は、UsernameIssues の規則を必ず満たす。ユーザー名は重複してよい(一意の制約はない)ので、重複の確認や
 // 番号の付け足しはしない。利用者は、あとでプロフィールから変更できる。
 func UsernameFromProfile(name string) string {
 	name = strings.Map(func(r rune) rune {

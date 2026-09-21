@@ -38,7 +38,7 @@ func formatArgs(t *testing.T, format string) []string {
 }
 
 func TestCatalogEntriesHaveBothLanguages(t *testing.T) {
-	for key, entry := range Catalog {
+	for key, entry := range catalog {
 		if strings.TrimSpace(entry.EN) == "" {
 			t.Errorf("キー %q の英語の文言が空である", key)
 		}
@@ -49,7 +49,7 @@ func TestCatalogEntriesHaveBothLanguages(t *testing.T) {
 }
 
 func TestCatalogEntriesUseTheSameValuesInBothLanguages(t *testing.T) {
-	for key, entry := range Catalog {
+	for key, entry := range catalog {
 		if en, ja := formatArgs(t, entry.EN), formatArgs(t, entry.JA); !reflect.DeepEqual(en, ja) {
 			t.Errorf("キー %q: 英語の値の使い方 %v と、日本語 %v が食い違う(日本語でも、同じ値を入れる)", key, en, ja)
 		}
@@ -94,22 +94,29 @@ func TestCatalogAndKeyConstantsMatch(t *testing.T) {
 	values := map[string]bool{}
 	for name, value := range keyConstants(t) {
 		values[value] = true
-		if _, ok := Catalog[value]; !ok {
+		if _, ok := catalog[value]; !ok {
 			t.Errorf("定数 %s のキー %q が、カタログにない", name, value)
 		}
 	}
-	for key := range Catalog {
+	for key := range catalog {
 		if !values[key] {
 			t.Errorf("カタログのキー %q に対応する `key…` の定数がない(使われていない文言は、消す)", key)
 		}
 	}
 }
 
-// TestMessagesInTheCodeAreInTheCatalog は、domain と usecase のコードが Msg(...) で作る文言のキーが、
-// カタログにあることを確かめる。キーは、文字列のリテラルか、messages.go の `key…` の定数だけを許す。
-func TestMessagesInTheCodeAreInTheCatalog(t *testing.T) {
+// msgCall は、コードの中の Msg(...) の呼び出し 1 つである。
+type msgCall struct {
+	pos  string
+	key  string
+	args []ast.Expr
+}
+
+// scanMessages は、domain と usecase の(テスト以外の)コードから、Msg(...) の呼び出しと、Msg を通さずに
+// 直接書かれた Message{...} を集める。キーは、文字列のリテラルか、messages.go の `key…` の定数だけを許す。
+func scanMessages(t *testing.T) (calls []msgCall, direct []string) {
+	t.Helper()
 	consts := keyConstants(t)
-	found := 0
 	for _, dir := range []string{".", filepath.Join("..", "usecase")} {
 		fset := token.NewFileSet()
 		pkgs, err := parser.ParseDir(fset, dir, func(fi fs.FileInfo) bool {
@@ -121,28 +128,87 @@ func TestMessagesInTheCodeAreInTheCatalog(t *testing.T) {
 		for _, pkg := range pkgs {
 			for path, file := range pkg.Files {
 				ast.Inspect(file, func(n ast.Node) bool {
-					call, ok := n.(*ast.CallExpr)
-					if !ok || len(call.Args) == 0 || !isMsgCall(call.Fun) {
-						return true
-					}
-					found++
-					var key string
-					switch arg := call.Args[0].(type) {
-					case *ast.BasicLit:
-						key, _ = strconv.Unquote(arg.Value)
-					case *ast.Ident:
-						key = consts[arg.Name]
-					}
-					if _, ok := Catalog[key]; !ok {
-						t.Errorf("%s: Msg のキーが、カタログにない(またはキーを、リテラル・key… の定数で書いていない): %s", fset.Position(call.Pos()), path)
+					switch n := n.(type) {
+					case *ast.CallExpr:
+						if len(n.Args) == 0 || !isMsgCall(n.Fun) {
+							return true
+						}
+						var key string
+						switch arg := n.Args[0].(type) {
+						case *ast.BasicLit:
+							key, _ = strconv.Unquote(arg.Value)
+						case *ast.Ident:
+							key = consts[arg.Name]
+						}
+						calls = append(calls, msgCall{pos: fset.Position(n.Pos()).String(), key: key, args: n.Args[1:]})
+					case *ast.CompositeLit:
+						if isMessageType(n.Type) && path != "message.go" {
+							direct = append(direct, fset.Position(n.Pos()).String())
+						}
 					}
 					return true
 				})
 			}
 		}
 	}
-	if found == 0 {
+	return calls, direct
+}
+
+// argCount は、書式が使う引数の数(いちばん後ろの引数の番号)である。
+func argCount(t *testing.T, format string) int {
+	t.Helper()
+	most := 0
+	for _, use := range formatArgs(t, format) {
+		n, _ := strconv.Atoi(strings.SplitN(use, ":", 2)[0])
+		if n > most {
+			most = n
+		}
+	}
+	return most
+}
+
+// TestMessagesInTheCodeAreInTheCatalog は、コードが Msg(...) で作る文言について、次を確かめる。
+// キーがカタログにある / 引数の数が、書式の値の数と同じ / 使われていない文言がない /
+// Msg を通さない Message{...} がない(通さないと、キーの検査をすり抜ける)。
+func TestMessagesInTheCodeAreInTheCatalog(t *testing.T) {
+	calls, direct := scanMessages(t)
+	if len(calls) == 0 {
 		t.Fatal("Msg(...) の呼び出しが 1 つも見つからない(検査が空振りしている)")
+	}
+	used := map[string]bool{}
+	for _, call := range calls {
+		entry, ok := catalog[call.key]
+		if !ok {
+			t.Errorf("%s: Msg のキーが、カタログにない(またはキーを、リテラル・key… の定数で書いていない)", call.pos)
+			continue
+		}
+		used[call.key] = true
+		if want := argCount(t, entry.EN); len(call.args) != want {
+			t.Errorf("%s: キー %q の書式は引数を %d 個使うが、%d 個渡している", call.pos, call.key, want, len(call.args))
+		}
+		for i, arg := range call.args {
+			lit, ok := arg.(*ast.BasicLit)
+			if !ok {
+				continue
+			}
+			for _, use := range formatArgs(t, entry.EN) {
+				n, verb, _ := strings.Cut(use, ":")
+				if n != strconv.Itoa(i+1) {
+					continue
+				}
+				if (verb == "d") != (lit.Kind == token.INT) {
+					t.Errorf("%s: キー %q の %d 番目の引数(%s)の型が、書式の %%%s と合わない", call.pos, call.key, i+1, lit.Value, verb)
+				}
+			}
+		}
+	}
+	for key := range catalog {
+		if !used[key] {
+			t.Errorf("カタログのキー %q が、コードのどこでも使われていない(使われていない文言は、消す)", key)
+		}
+	}
+	for _, pos := range direct {
+		t.Errorf("%s: Message は Msg(key, args...) で作る(直接書くと、キーの検査をすり抜ける)", pos)
 	}
 }
 
@@ -152,6 +218,16 @@ func isMsgCall(fun ast.Expr) bool {
 		return f.Name == "Msg"
 	case *ast.SelectorExpr:
 		return f.Sel.Name == "Msg"
+	}
+	return false
+}
+
+func isMessageType(typ ast.Expr) bool {
+	switch f := typ.(type) {
+	case *ast.Ident:
+		return f.Name == "Message"
+	case *ast.SelectorExpr:
+		return f.Sel.Name == "Message"
 	}
 	return false
 }
@@ -174,18 +250,14 @@ func TestMessageTextFollowsTheLanguage(t *testing.T) {
 
 func TestValidationErrorTextsFollowTheLanguage(t *testing.T) {
 	err := NewValidationError(Msg(keyReviewRatingRange, MinRating, MaxRating), Msg(keyCommentBlank))
-	if want := []string{"Rating must be in 1..5", "Comment can't be blank"}; !reflect.DeepEqual(err.Messages, want) {
-		t.Errorf("Messages(従来の英語) = %v, want %v", err.Messages, want)
+	if want := []string{"Rating must be in 1..5", "Comment can't be blank"}; !reflect.DeepEqual(err.Texts(LangEN), want) {
+		t.Errorf("Texts(en) = %v, want %v", err.Texts(LangEN), want)
 	}
-	if want := []string{"評価は 1〜5 の整数で入力してください", "コメントを入力してください"}; !reflect.DeepEqual(err.Texts(LangJA), want) {
+	if want := []string{"評価は 1〜5 の整数で指定してください", "コメントを入力してください"}; !reflect.DeepEqual(err.Texts(LangJA), want) {
 		t.Errorf("Texts(ja) = %v, want %v", err.Texts(LangJA), want)
 	}
-	if !reflect.DeepEqual(err.Texts(LangEN), err.Messages) {
-		t.Errorf("Texts(en) = %v, want Messages %v", err.Texts(LangEN), err.Messages)
-	}
-	legacy := &ValidationError{Messages: []string{"Legacy message"}}
-	if got := legacy.Texts(LangJA); !reflect.DeepEqual(got, legacy.Messages) {
-		t.Errorf("Items のない ValidationError の Texts(ja) = %v, want 英語の Messages %v", got, legacy.Messages)
+	if want := "validation failed: Rating must be in 1..5, Comment can't be blank"; err.Error() != want {
+		t.Errorf("Error() = %q, want %q", err.Error(), want)
 	}
 }
 

@@ -157,7 +157,7 @@ func TestSignupsRequestValidation(t *testing.T) {
 			wantMsgs: []string{"Password is too long (maximum is 72 characters)"},
 		},
 		{
-			// 強度ルール（domain.ValidatePassword）が signup に適用されていることを示す代表例。
+			// 強度ルール（domain.PasswordIssues）が signup に適用されていることを示す代表例。
 			// 全パターンと境界の網羅は domain のテストが担う。
 			name:     "弱い password は短さと文字種の 2 件の検証エラーになる",
 			input:    usecase.SignupInput{Username: "alice", Email: "a@example.com", Password: "abc123"},

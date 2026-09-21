@@ -8,18 +8,13 @@ package domain
 // （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxBioChars = 500
 
-// ValidateBio は自己紹介文の規則を検証し、違反の Rails 形式 full message を返す。
+// BioIssues は自己紹介文の規則を検証し、違反の文言(Message。言語に依らない形)を返す。
 // 有効なら nil を返す。空文字列は「未設定」として有効で（書いた自己紹介文を消せる）、
 // 上限（MaxBioChars 文字）を超えるときは "Bio is too long ..." だけを返す。
-// メッセージは API の外部契約なので英語のままである。
+// 英語の文言は API の外部契約なので変えない。
 //
 // この規則の判定は domain だけが持ち、frontend は判定を持たない（サーバーの 422
 // メッセージの表示だけを行う）。プロフィール更新で、送られたときだけ判定する。
-func ValidateBio(bio string) []string {
-	return Texts(LangEN, BioIssues(bio))
-}
-
-// BioIssues は、ValidateBio の判定を、言語に依らない文言(Message)で返す。有効なら nil を返す。
 func BioIssues(bio string) []Message {
 	if exceedsChars(bio, MaxBioChars) {
 		return []Message{Msg(keyBioTooLong, MaxBioChars)}

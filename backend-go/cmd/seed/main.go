@@ -34,7 +34,7 @@ import (
 )
 
 // devPassword は、すべての fixture ユーザーに共通のパスワードである
-// （開発専用）。domain.ValidatePassword を満たす値でなければならない
+// （開発専用）。domain.PasswordIssues を満たす値でなければならない
 // （main_test.go が固定する）。
 const devPassword = "Password123!"
 

@@ -9,20 +9,15 @@ const (
 	MaxPasswordBytes = 72
 )
 
-// ValidatePassword は password の強度ルールを検証し、違反ごとの Rails 形式 full message を返す。
+// PasswordIssues は password の強度ルールを検証し、違反ごとの文言(Message。言語に依らない形)を返す。
 // 有効なら nil を返す。
 //
 // 長さは文字数ではなくバイト数で数える（bcrypt の入力上限に合わせるため）。
 // 空文字列は "can't be blank" だけを返す。それ以外は該当する違反を
-// 「短い → 長い → 文字種」の順にすべて返す。メッセージは API の外部契約なので英語のまま。
+// 「短い → 長い → 文字種」の順にすべて返す。英語の文言は API の外部契約なので変えない。
 //
 // この規則の判定は domain だけが持ち、frontend は判定を持たない（説明文の表示と、
 // サーバーの 422 メッセージの表示だけを行う）。
-func ValidatePassword(password string) []string {
-	return Texts(LangEN, PasswordIssues(password))
-}
-
-// PasswordIssues は、ValidatePassword の判定を、言語に依らない文言(Message)で返す。有効なら nil を返す。
 func PasswordIssues(password string) []Message {
 	if password == "" {
 		return []Message{Msg(keyPasswordBlank)}

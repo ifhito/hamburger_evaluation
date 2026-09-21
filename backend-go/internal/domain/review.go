@@ -39,7 +39,7 @@ const MaxCommentChars = 2000
 
 // ValidateReviewContent は、書き込み可能な review の属性に対して Rails の
 // validation を強制する。rating は MinRating..MaxRating の整数でなければならず、comment は
-// 存在しなければならない。失敗した場合は、Rails の full message そのままを
+// 存在しなければならない。失敗した場合は、文言(キー + 引数。英語は Rails の full message そのまま)を
 // *ValidationError に入れて返し、rating のメッセージが先に来る。
 func ValidateReviewContent(rating int, comment string) error {
 	var issues []Message

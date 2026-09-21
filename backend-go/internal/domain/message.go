@@ -33,7 +33,7 @@ func (e Entry) Format(l Lang, args ...any) string {
 }
 
 // Message は、利用者に見える文言を、言語に依らない形(キー + 引数)で表す。文字列にするのは、
-// 言語を知っている側(handler)で、カタログ(Catalog)の書式に引数を入れる。
+// 言語を知っている側(handler)で、カタログ(catalog)の書式に引数を入れる。
 type Message struct {
 	Key  string
 	Args []any
@@ -44,15 +44,9 @@ func Msg(key string, args ...any) Message {
 	return Message{Key: key, Args: args}
 }
 
-// Text は、この domain の文言のカタログ(Catalog)で、l の言語の文字列にする。カタログにないキーは、
+// Text は、この domain の文言のカタログ(catalog)で、l の言語の文字列にする。カタログにないキーは、
 // キーをそのまま返す(構造テストが、カタログにないキーを検出する)。
 func (m Message) Text(l Lang) string {
-	return Render(Catalog, l, m)
-}
-
-// Render は、カタログ catalog で m を l の言語の文字列にする。domain の外の層(handler)も、自分の
-// カタログを、同じ仕組みで文字列にするために使う。カタログにないキーは、キーをそのまま返す。
-func Render(catalog map[string]Entry, l Lang, m Message) string {
 	entry, ok := catalog[m.Key]
 	if !ok {
 		return m.Key
