@@ -59,10 +59,17 @@ export default function GoogleCompletePage() {
         res = await authApi.exchangeGoogleCode(code);
       } catch (e) {
         // 交換そのものの失敗。サーバーの障害・通信の失敗は、コードが消費されていないので、やり直せる。
+        // サーバーの障害(5xx)・通信の失敗は、サーバーの生の文言(internal server error など)ではなく、こちらの文言で案内する。
+        // 決まった失敗(409・400)は、API の文言をそのまま出す。
+        const retryable = !(e instanceof ApiError) || isServerError(e.status);
         setFailure(
           e instanceof ApiError
-            ? { messages: e.messages, returnTo: e instanceof GoogleExchangeError ? e.returnTo : "", retryable: isServerError(e.status) }
-            : { messages: [t("auth.google.error")], returnTo: "", retryable: true },
+            ? {
+                messages: retryable ? [t("auth.google.complete.temporary")] : e.messages,
+                returnTo: e instanceof GoogleExchangeError ? e.returnTo : "",
+                retryable,
+              }
+            : { messages: [t("auth.google.complete.temporary")], returnTo: "", retryable },
         );
         return;
       }
@@ -83,7 +90,7 @@ export default function GoogleCompletePage() {
     setFailure(null);
     setAttempt((n) => n + 1);
   };
-  const shown: Failure | null = code ? failure : { messages: [t("auth.google.error")], returnTo: "", retryable: false };
+  const shown: Failure | null = code ? failure : { messages: [t("auth.google.complete.expired")], returnTo: "", retryable: false };
   // 失敗の画面の導線は、ログインの状態の復元(GET /me)が済んでから決める(復元の前は、ログイン中でも、user がまだない)。
 
   return (

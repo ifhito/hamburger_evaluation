@@ -69,6 +69,8 @@ const en = {
         backToSignin: "Back to sign in",
         backToProfile: "Back to your profile",
         retry: "Try again",
+        temporary: "Something went wrong on our side. Please try again.",
+        expired: "This sign-in link is no longer available. Please start again.",
       },
       profile: {
         heading: "Google",

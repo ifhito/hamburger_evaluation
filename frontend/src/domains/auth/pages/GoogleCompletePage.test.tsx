@@ -164,11 +164,11 @@ describe("GoogleCompletePage(Google から戻ったあとの、コードの交�
     expect(localStorage.getItem("token")).toBeNull();
   });
 
-  it("サーバーの文言がない失敗(通信の失敗など)は、予備の文言を出す", async () => {
+  it("サーバーの文言がない失敗(通信の失敗など)は、こちらの文言を出す", async () => {
     exchangeGoogleCode.mockRejectedValue(new Error("network down"));
     const page = await showBrowser();
 
-    await eventually(() => expect(page.textContent).toContain("Google sign-in failed. Please try again."));
+    await eventually(() => expect(page.textContent).toContain("Something went wrong on our side. Please try again."));
   });
 
   it("ログイン中の利用者の手続きが失敗したときは、サインインではなく、プロフィールへ戻るリンクを出す", async () => {
@@ -318,7 +318,7 @@ describe("コードのない画面(URL から消したあとの、戻る操作�
   it("コードがないときは、交換の要求を送らず、失敗の案内とサインインへの導線を出す", async () => {
     const page = await showAt("/auth/google/complete");
 
-    await eventually(() => expect(page.textContent).toContain("Google sign-in failed. Please try again."));
+    await eventually(() => expect(page.textContent).toContain("This sign-in link is no longer available. Please start again."));
     expect(exchangeGoogleCode).not.toHaveBeenCalled();
     expect(byText(page, "a", "Back to sign in")).toBeDefined();
     expect(byText(page, "button", "Try again")).toBeUndefined();
@@ -398,5 +398,40 @@ describe("交換に成功したあとの処理が失敗したとき(コードは
     await eventually(() => expect(page.textContent).toContain("Google sign-in failed. Please try again."));
 
     expect(byText(page, "button", "Try again")).toBeUndefined();
+  });
+});
+
+describe("交換の応答が、想定した形でないとき(古い backend・書き換えるプロキシ)", () => {
+  it("成功(サインイン)の本文に return_to がなくても、サインインは反映し、既定の画面(/reviews)へ行く(失敗の案内を出さない)", async () => {
+    const withoutReturnTo: Record<string, unknown> = { ...signedIn("") };
+    delete withoutReturnTo.returnTo;
+    exchangeGoogleCode.mockResolvedValue(withoutReturnTo as unknown as GoogleExchangeResponse);
+    const page = await showAt("/auth/google/complete?code=one-time-code");
+
+    await eventually(() => expect(probeOf(page)).toBe("/reviews|carol"));
+
+    expect(localStorage.getItem("token")).toBe("jwt-from-google");
+  });
+});
+
+describe("失敗の案内の文言", () => {
+  it("サーバーの障害(5xx)・通信の失敗は、サーバーの生の文言(internal server error など)ではなく、こちらの文言で案内する", async () => {
+    for (const failure of [new ApiError(["internal server error"], 500), new ApiError(["Backend service unavailable"], 503), new Error("network down")]) {
+      exchangeGoogleCode.mockReset();
+      exchangeGoogleCode.mockRejectedValue(failure);
+      const page = await showAt("/auth/google/complete?code=one-time-code");
+
+      await eventually(() => expect(page.textContent).toContain("Something went wrong on our side. Please try again."));
+
+      expect(page.textContent).not.toContain("internal server error");
+      expect(page.textContent).not.toContain("Backend service unavailable");
+      await cleanup();
+    }
+  });
+
+  it("コードがないとき(手続きの cookie がない・時間切れなど)は、「もう使えない。最初からやり直す」と案内する", async () => {
+    const page = await showAt("/auth/google/complete");
+
+    await eventually(() => expect(page.textContent).toContain("This sign-in link is no longer available. Please start again."));
   });
 });
