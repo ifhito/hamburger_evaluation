@@ -425,6 +425,24 @@ func checkNoRepositoryImport(src string) ([]string, error) {
 	return violations, nil
 }
 
+// checkNoQueryImport は、Go のソースが読み取りの実装パッケージ(adapter/query)を import していない
+// ことを確かめ、違反の説明を返す。adapter/repository(書き込み)は、adapter/query(読み取り)に
+// 依存してはならない。テストも同じで、書き込みの結果は SQL で直接確かめる。
+func checkNoQueryImport(src string) ([]string, error) {
+	f, err := parser.ParseFile(token.NewFileSet(), "src.go", src, parser.ImportsOnly)
+	if err != nil {
+		return nil, err
+	}
+	var violations []string
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		if strings.HasSuffix(path, "/internal/adapter/query") {
+			violations = append(violations, path+" を import している (読み取りの adapter/query と書き込みの adapter/repository は、テストを含めて互いに依存しない)")
+		}
+	}
+	return violations, nil
+}
+
 // productionSources は、dir にあるテスト以外の Go ファイルの (ファイル名, 内容) を返す。
 func productionSources(t *testing.T, dir string) map[string]string {
 	t.Helper()
@@ -444,6 +462,32 @@ func productionSources(t *testing.T, dir string) map[string]string {
 		sources[filepath.Join(dir, e.Name())] = string(src)
 	}
 	return sources
+}
+
+// sourcesWithTests は、dir にある Go ファイル(テストを含む。サブディレクトリは含まない)の
+// (ファイル名, 内容) と、そのうちのテストファイルの数を返す。
+func sourcesWithTests(t *testing.T, dir string) (map[string]string, int) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := map[string]string{}
+	testFiles := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+			continue
+		}
+		src, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources[filepath.Join(dir, e.Name())] = string(src)
+		if strings.HasSuffix(e.Name(), "_test.go") {
+			testFiles++
+		}
+	}
+	return sources, testFiles
 }
 
 // TestPersistenceInterfaceNaming は、永続化の依存の規約を固定する。
@@ -558,6 +602,37 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 				for _, msg := range append(v, imports...) {
 					t.Errorf("%s: %s", name, msg)
 				}
+			}
+		}
+	})
+
+	t.Run("adapter/repository と adapter/query は、テストを含めて互いに依存しない", func(t *testing.T) {
+		// 読み取り(adapter/query)と書き込み(adapter/repository)は兄弟の adapter で、どちらも他方に
+		// 依存しない(共有してよいのは sqlcgen・rowmap・testutil だけ)。テストも同じ:
+		// repository のテストは書き込みの結果を SQL で直接確かめ、query のテストは SQL の INSERT で
+		// データを用意する。
+		repoSources, repoTestFiles := sourcesWithTests(t, "../adapter/repository")
+		querySources, queryTestFiles := sourcesWithTests(t, "../adapter/query")
+		// 空振りで通らないよう、両方のパッケージにテストファイルがあることも確かめる。
+		if repoTestFiles == 0 || queryTestFiles == 0 {
+			t.Fatalf("テストファイルが見つからない (repository %d 個、query %d 個。どちらも 1 個以上を期待)", repoTestFiles, queryTestFiles)
+		}
+		for name, src := range repoSources {
+			v, err := checkNoQueryImport(src)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			for _, msg := range v {
+				t.Errorf("%s: %s", name, msg)
+			}
+		}
+		for name, src := range querySources {
+			v, err := checkNoRepositoryImport(src)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			for _, msg := range v {
+				t.Errorf("%s: %s", name, msg)
 			}
 		}
 	})
@@ -739,6 +814,26 @@ func (y Y) N() int { return y.Xs }`, ""},
 	for _, tc := range repositoryImportCases {
 		t.Run(tc.name, func(t *testing.T) {
 			v, err := checkNoRepositoryImport(tc.src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(v, "\n"); (tc.want == "") != (got == "") || !strings.Contains(got, tc.want) {
+				t.Errorf("違反 = %q, 期待 = %q", got, tc.want)
+			}
+		})
+	}
+
+	queryImportCases := []struct {
+		name, src, want string
+	}{
+		{"query の実装パッケージの import を検出する", "package p_test\nimport \"example.com/x/internal/adapter/query\"", "adapter/query"},
+		{"repository のテストが query を import する場合も検出する(テストのソースも同じ検査を通る)", "package repository_test\nimport (\n\t\"testing\"\n\t\"example.com/x/internal/adapter/query\"\n)", "adapter/query"},
+		{"共有してよい rowmap の import は許す", "package p\nimport \"example.com/x/internal/adapter/rowmap\"", ""},
+		{"共有してよい sqlcgen の import は許す", "package p\nimport \"example.com/x/internal/adapter/repository/sqlcgen\"", ""},
+	}
+	for _, tc := range queryImportCases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := checkNoQueryImport(tc.src)
 			if err != nil {
 				t.Fatal(err)
 			}
