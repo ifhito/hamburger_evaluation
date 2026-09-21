@@ -138,8 +138,10 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		}
 	}()
 
-	// OAuth の認可サーバーは、OAUTH_ISSUER を設定したときだけ有効になる(設定がなければ、窓口は登録されない)。
+	// OAuth の認可サーバーとリモートの MCP サーバーは、OAUTH_ISSUER を設定したときだけ有効になる(設定が
+	// なければ、窓口は登録されない)。
 	var oauth handler.OAuthEndpoints
+	var mcp handler.MCPEndpoints
 	if cfg.OAuth.Enabled {
 		oauthServer, err := oauthserver.New(oauthserver.Config{
 			Issuer:        cfg.OAuth.Issuer,
@@ -157,9 +159,21 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 			return fmt.Errorf("oauth server: %w", err)
 		}
 		oauth = oauthServer
+
+		// リモートの MCP サーバー(/mcp)は、認可サーバーのトークンで認証する。ツールの実体は、
+		// 上で組み立てた usecase を直接呼ぶ。認可サーバーが無効なら、/mcp も登録されない。
+		mcpServer, err := handler.NewMCPServer(
+			usecase.NewOAuthAccessTokens(oauthServer, userQuery, cfg.OAuth.Resource),
+			shops, reviews, users,
+			handler.MCPConfig{Resource: cfg.OAuth.Resource, Issuer: cfg.OAuth.Issuer},
+		)
+		if err != nil {
+			return fmt.Errorf("mcp server: %w", err)
+		}
+		mcp = mcpServer
 	}
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles, oauth), ready)
+	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles, oauth, mcp), ready)
 }
 
 // serve は、明示的な timeout を設定した http.Server（素の ListenAndServe は

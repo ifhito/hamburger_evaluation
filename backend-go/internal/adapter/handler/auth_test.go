@@ -148,7 +148,7 @@ func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.
 	shopRepo := &shopStoreFake{}
 	return handler.NewRouter(p, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
 		reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-		usersUsecase(users, hasherFake{}), nil, nil)
+		usersUsecase(users, hasherFake{}), nil, nil, nil)
 }
 
 // do は router に対して 1 件の request を in-process で実行し、recorder を

@@ -41,13 +41,14 @@ type OAuthEndpoints interface {
 // catch-all の "/" より優先される）、s3 モードでは nil で、写真の URL は
 // 代わりに bucket の公開ドメインを指す。oauth は nil でない場合（OAuth の認可サーバーが有効な
 // とき）、認可サーバーの情報・認可・トークン・取り消しの窓口を登録する。nil なら、これらは未登録で、
-// 404 になる。
-func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler, oauth OAuthEndpoints) http.Handler {
+// 404 になる。mcp は nil でない場合（リモートの MCP サーバーが有効なとき）、POST /mcp と保護された
+// リソースの情報の窓口を登録する。nil なら未登録で、404 になる。
+func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler, oauth OAuthEndpoints, mcp MCPEndpoints) http.Handler {
 	mux := http.NewServeMux()
 	if photoFiles != nil {
 		mux.Handle("GET /photos/", http.StripPrefix("/photos/", photoFiles))
 	}
-	registerRoutes(mux, append(oauthRoutes(oauth), []route{
+	registerRoutes(mux, append(append(oauthRoutes(oauth), mcpRoutes(mcp)...), []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(signups)}},
 		{path: "/signup/confirm", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignupConfirm(signups)}},
@@ -133,6 +134,23 @@ func oauthRoutes(oauth OAuthEndpoints) []route {
 		{path: "/oauth/token", methods: map[string]http.HandlerFunc{http.MethodPost: oauth.HandleToken}},
 		{path: "/oauth/revoke", methods: map[string]http.HandlerFunc{http.MethodPost: oauth.HandleRevoke}},
 	}
+}
+
+// mcpRoutes は、リモートの MCP サーバーの route を返す。mcp が nil なら、何も返さない。POST /mcp の
+// 認証(OAuth のアクセストークン)は、ツールごとに必要な範囲が違うため、窓口の中で行う(RequireAuth は
+// 付けない)。保護されたリソースの情報は、トークンなしで読める。
+func mcpRoutes(mcp MCPEndpoints) []route {
+	if mcp == nil {
+		return nil
+	}
+	routes := []route{
+		{path: "/mcp", methods: map[string]http.HandlerFunc{http.MethodPost: mcp.HandleMCP}},
+		{path: protectedResourceMetadataRoot, methods: map[string]http.HandlerFunc{http.MethodGet: mcp.HandleProtectedResourceMetadata}},
+	}
+	if p := mcp.ProtectedResourceMetadataPath(); p != protectedResourceMetadataRoot {
+		routes = append(routes, route{path: p, methods: map[string]http.HandlerFunc{http.MethodGet: mcp.HandleProtectedResourceMetadata}})
+	}
+	return routes
 }
 
 // registerRoutes は、各 route の "METHOD path" パターン（method ごとの
