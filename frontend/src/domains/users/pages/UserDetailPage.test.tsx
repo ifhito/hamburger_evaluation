@@ -6,7 +6,7 @@ import { cleanup, mount } from "../../../test/dom";
 import UserDetailPage from "./UserDetailPage";
 
 // プロフィールの、連携の欄(Google・許可したアプリ)を出す条件だけを確かめる。データの取得と、欄の中身は、差し替える。
-const state = vi.hoisted(() => ({ canEdit: true, authUser: { id: "7", username: "carol" } as { id: string; username: string } | null }));
+const state = vi.hoisted(() => ({ canEdit: true, authUser: { id: "9", username: "dave" } as { id: string; username: string } | null }));
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: state.authUser, isLoading: false }) }));
 vi.mock("../hooks/useUser", () => ({
   useUser: () => ({ data: { id: "7", username: "carol", bio: "", email: "c@example.com", canEdit: state.canEdit }, isLoading: false, error: undefined }),
@@ -29,7 +29,7 @@ const show = () =>
 
 beforeEach(() => {
   state.canEdit = true;
-  state.authUser = { id: "7", username: "carol" };
+  state.authUser = { id: "9", username: "dave" };
 });
 afterEach(cleanup);
 
@@ -37,8 +37,8 @@ describe("UserDetailPage の連携の欄(Google・許可したアプリ)", () =>
   it("本人のプロフィール(backend が canEdit を返し、ログイン中)にだけ、出す", async () => {
     const page = await show();
 
-    expect(page.textContent).toContain("google-connection:7");
-    expect(page.textContent).toContain("connected-apps:7");
+    expect(page.textContent).toContain("google-connection:9"); // viewerId は、ログイン中の利用者(表示しているプロフィールの id ではない)
+    expect(page.textContent).toContain("connected-apps:9");
   });
 
   it("他人のプロフィール(canEdit が false)では、どちらも出さない", async () => {
