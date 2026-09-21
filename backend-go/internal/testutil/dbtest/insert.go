@@ -7,20 +7,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// InsertRow は sql（id を RETURN する必要がある）で insert し、新しい id を返す。
-// adapter/query と adapter/repository のテストが、互いに依存せずに fixture を用意するための
-// 共通の道具である。
-func InsertRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, args ...any) int64 {
-	t.Helper()
-	var id int64
-	if err := conn.QueryRow(ctx, sql, args...).Scan(&id); err != nil {
-		t.Fatalf("insert %q: %v", sql, err)
-	}
-	return id
-}
-
-// InsertUUIDRow は InsertRow と同様だが、id が UUID の表(users・shops・burgers)のために、
-// 生成された id を UUID の正規形の文字列で返す。
+// InsertUUIDRow は sql（id を RETURN する必要がある）で insert し、生成された id を UUID の正規形の
+// 文字列で返す。adapter/query と adapter/repository のテストが、互いに依存せずに fixture を用意する
+// ための共通の道具である。
 func InsertUUIDRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, args ...any) string {
 	t.Helper()
 	var id string

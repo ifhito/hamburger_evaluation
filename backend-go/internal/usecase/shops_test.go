@@ -147,7 +147,7 @@ func TestShopsGet(t *testing.T) {
 		Shop:    domain.Shop{ID: uid.N(10), Name: "Pending Shack", Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID)},
 		Creator: &domain.UserRef{ID: alice.ID, Username: "alice"},
 	}
-	reviews := []domain.ShopReview{{ID: 3, Rating: 4, CreatedAt: time.Now()}}
+	reviews := []domain.ShopReview{{ID: uid.N(3), Rating: 4, CreatedAt: time.Now()}}
 
 	query := &fakeShopQuery{
 		getShopWithCreator: func(_ context.Context, id string) (domain.ShopDetail, error) {

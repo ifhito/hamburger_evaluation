@@ -99,7 +99,7 @@ func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID string, 
 // 返す。レビューが存在しない、または論理削除済みなら domain.ErrReviewNotFound を返す。更新する
 // 列を絞っているので、編集が、論理削除の目印(discarded_at)を消して削除を取り消したり、同時に
 // 行われた論理削除と食い違ったりすることはない。
-func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error) {
+func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id string, rating int, comment string) (domain.Review, error) {
 	row, err := r.q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
 		ID:      id,
 		Rating:  int16(rating),
@@ -119,7 +119,7 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 // 評価とコメントの更新と、写真のキーの更新は、1 つのトランザクションで行う。途中で失敗しても、
 // 写真のキーが付かないままコメントだけが確定することはない。写真のキーの更新が返す行には、
 // 直前の更新(評価とコメント)がすでに反映されている。
-func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error) {
 	var row sqlcgen.Review
 	err := withTx(ctx, r.db, "update review content and photo key", func(q *sqlcgen.Queries) error {
 		if _, err := q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
@@ -153,7 +153,7 @@ func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, i
 
 // DiscardReview はレビューを論理削除する(削除日時を記録するだけで、行は消さない)。レビューが
 // 存在しない、またはすでに論理削除済みなら domain.ErrReviewNotFound を返す。
-func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
+func (r *ReviewRepository) DiscardReview(ctx context.Context, id string) error {
 	if _, err := r.q.DiscardReview(ctx, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("discard review: %w", domain.ErrReviewNotFound)

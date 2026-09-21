@@ -881,7 +881,7 @@ func TestUserIDsAreUUIDsIntegration(t *testing.T) {
 // usersFeedItem は、これらの統合テストの assertion が関心を持つ review の
 // JSON の一部分である。
 type usersFeedItem struct {
-	ID   int64 `json:"id"`
+	ID   string `json:"id"`
 	User struct {
 		ID string `json:"id"`
 	} `json:"user"`
@@ -923,7 +923,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		}
 	}
 
-	postReview := func(auth string, burgerID string, rating int, comment string) int64 {
+	postReview := func(auth string, burgerID string, rating int, comment string) string {
 		t.Helper()
 		body := fmt.Sprintf(`{"review":{"rating":%d,"comment":%q,"shop_id":%q,"burger_id":%q}}`, rating, comment, shopID, burgerID)
 		rec := do(router, http.MethodPost, "/reviews", body, auth)
@@ -931,7 +931,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 			t.Fatalf("post review: status = %d (body %s)", rec.Code, rec.Body)
 		}
 		var resp struct {
-			ID int64 `json:"id"`
+			ID string `json:"id"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode review: %v", err)
@@ -979,7 +979,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Fatalf("decode feed: %v", err)
 	}
 	if len(feed) != 1 || feed[0].ID != bobShared || feed[0].User.ID != bobID {
-		t.Fatalf("feed = %s, want exactly bob's review %d", rec.Body, bobShared)
+		t.Fatalf("feed = %s, want exactly bob's review %s", rec.Body, bobShared)
 	}
 	sharedInFeed := 0
 	for _, item := range feed {
@@ -994,10 +994,10 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 
 	// A の review は detail エンドポイントから消えており、
 	// もともと存在しなかった review と区別できない。
-	for _, id := range []int64{aliceShared, aliceSolo} {
-		rec := do(router, http.MethodGet, fmt.Sprintf("/reviews/%d", id), "", "")
+	for _, id := range []string{aliceShared, aliceSolo} {
+		rec := do(router, http.MethodGet, fmt.Sprintf("/reviews/%s", id), "", "")
 		if rec.Code != http.StatusNotFound || rec.Body.String() != `{"error":"Review not found"}` {
-			t.Errorf("GET /reviews/%d = %d %s, want 404 Review not found", id, rec.Code, rec.Body)
+			t.Errorf("GET /reviews/%s = %d %s, want 404 Review not found", id, rec.Code, rec.Body)
 		}
 	}
 
@@ -1013,7 +1013,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Fatalf("decode shop detail: %v", err)
 	}
 	if len(shopDetail.Reviews) != 1 || shopDetail.Reviews[0].ID != bobShared {
-		t.Fatalf("shop reviews = %s, want exactly bob's review %d", rec.Body, bobShared)
+		t.Fatalf("shop reviews = %s, want exactly bob's review %s", rec.Body, bobShared)
 	}
 	if got := shopDetail.Reviews[0].Burger.ReviewCount; got != 1 {
 		t.Errorf("shop detail shared review_count = %d, want 1", got)

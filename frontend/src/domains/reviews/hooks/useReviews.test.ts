@@ -3,7 +3,7 @@ import { getKey } from "./useReviews";
 import type { Page } from "../../../api/page";
 import type { ReviewView } from "../api/types";
 
-function review(id: number): ReviewView {
+function review(id: string): ReviewView {
   return {
     id,
     rating: 3,
@@ -18,7 +18,7 @@ function review(id: number): ReviewView {
 
 // ページの件数はテストの関心ではない。続きがあるかは hasMore(backend の判断)だけで決まる
 function page(hasMore: boolean, count = 1): Page<ReviewView> {
-  return { items: Array.from({ length: count }, (_, i) => review(i + 1)), hasMore };
+  return { items: Array.from({ length: count }, (_, i) => review(`00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`)), hasMore };
 }
 
 const userId = "0b0e3a5c-8d54-4c1a-9f33-2a9d6f1c7e10";

@@ -239,7 +239,7 @@ func TestGetShopDetail(t *testing.T) {
 	repo := seedShops(uid.N(1))
 	repo.reviews[uid.N(1)] = []domain.ShopReview{
 		{
-			ID:        9,
+			ID:        uid.N(9),
 			Rating:    4,
 			Comment:   shopPtr("Tasty"),
 			CreatedAt: time.Date(2024, 5, 1, 12, 0, 0, 0, time.UTC),
@@ -249,7 +249,7 @@ func TestGetShopDetail(t *testing.T) {
 			},
 		},
 		{
-			ID:        8,
+			ID:        uid.N(8),
 			Rating:    2,
 			CreatedAt: time.Date(2024, 4, 1, 12, 0, 0, 0, time.UTC),
 			User:      &domain.UserRef{ID: uid.N(3), Username: "bob"},
@@ -263,9 +263,9 @@ func TestGetShopDetail(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
 	want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"creator":null,"reviews":[` +
-		`{"id":9,"rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
+		`{"id":"` + uid.N(9) + `","rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
 		`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
-		`{"id":8,"rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
+		`{"id":"` + uid.N(8) + `","rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
 		`"burger":{"id":"` + uid.N(6) + `","name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}],"can_review":false}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)

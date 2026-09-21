@@ -8,11 +8,11 @@ import type { ReviewView } from "../api/types";
 // enabled: viewerId がまだ確定していない間(認証状態の復元前)は false にする。
 // token は localStorage にあるのに viewerId が null のまま取得すると、本人向けの応答(can_edit が true)が匿名キーに入ってしまう。
 // enabled が false、または id が空なら null を返して取得しない。
-export function reviewKey(id: number | undefined, viewerId: string | null, enabled = true) {
+export function reviewKey(id: string | undefined, viewerId: string | null, enabled = true) {
   return enabled && id ? (["/reviews", id, viewerId] as const) : null;
 }
 
-export function useReview(id: number | undefined, viewerId: string | null, options?: { enabled?: boolean }) {
+export function useReview(id: string | undefined, viewerId: string | null, options?: { enabled?: boolean }) {
   return useSWR<ReviewView>(reviewKey(id, viewerId, options?.enabled ?? true), async ([, reviewId]) => {
     const res = await reviewApiClient.get<ReviewView>(`/reviews/${reviewId}`);
     return res.data;

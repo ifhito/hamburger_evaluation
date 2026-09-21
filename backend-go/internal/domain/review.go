@@ -9,7 +9,8 @@ import (
 
 // Review は burger review の行を表す domain 上の表現である。
 type Review struct {
-	ID      int64
+	// ID は UUID の正規形（小文字・ハイフン区切り）である。DB が生成し、形式の判定は IsUUID が持つ。
+	ID      string
 	Rating  int
 	Comment *string
 	// PhotoKey は review の写真の storage key であり、写真が添付されて
@@ -143,15 +144,15 @@ type ReviewRepository interface {
 	// UpdateReviewContent は、削除されていないレビューの評価とコメントだけを更新し、更新後のレビューを
 	// 返す。レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す。
 	// 更新する列を評価とコメントに絞っているので、削除の目印(discarded_at)を書き換えることはない。
-	UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (Review, error)
+	UpdateReviewContent(ctx context.Context, id string, rating int, comment string) (Review, error)
 	// UpdateReviewContentAndPhotoKey は、削除されていないレビューの評価・コメント・写真のキーを
 	// まとめて更新し、更新後のレビューを返す。評価とコメントの更新と、写真のキーの更新は 1 つの
 	// トランザクションで行うので、写真のキーが付かないままコメントだけが確定することはない。
 	// レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す(何も確定しない)。
-	UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (Review, error)
+	UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (Review, error)
 	// DiscardReview はレビューを論理削除する(削除日時を記録するだけで、行は消さない)。レビューが
 	// 存在しない、またはすでに論理削除済みなら、包んだ ErrReviewNotFound を返す。
-	DiscardReview(ctx context.Context, id int64) error
+	DiscardReview(ctx context.Context, id string) error
 }
 
 // ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
@@ -188,17 +189,17 @@ func (s *Reviews) CreateShopBurger(ctx context.Context, shopID string, burgerNam
 
 // UpdateContent は、id の、まだ kept な review の rating と comment だけを永続化し、
 // 保存された行を返す。
-func (s *Reviews) UpdateContent(ctx context.Context, id int64, rating int, comment string) (Review, error) {
+func (s *Reviews) UpdateContent(ctx context.Context, id string, rating int, comment string) (Review, error) {
 	return s.repo.UpdateReviewContent(ctx, id, rating, comment)
 }
 
 // UpdateContentAndPhotoKey は、id の、まだ kept な review の rating、comment、
 // および photo_key を atomic に永続化し、保存された行を返す。
-func (s *Reviews) UpdateContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (Review, error) {
+func (s *Reviews) UpdateContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (Review, error) {
 	return s.repo.UpdateReviewContentAndPhotoKey(ctx, id, rating, comment, photoKey)
 }
 
 // Discard は review を soft delete する。
-func (s *Reviews) Discard(ctx context.Context, id int64) error {
+func (s *Reviews) Discard(ctx context.Context, id string) error {
 	return s.repo.DiscardReview(ctx, id)
 }

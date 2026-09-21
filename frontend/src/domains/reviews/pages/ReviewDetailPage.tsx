@@ -19,7 +19,7 @@ export default function ReviewDetailPage() {
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
   // 編集・削除できるか(canEdit)は backend が返す。閲覧者ごとに違うので、認証状態が確定してから取得する
-  const { data: review, isLoading, error } = useReview(Number(id), user?.id ?? null, {
+  const { data: review, isLoading, error } = useReview(id, user?.id ?? null, {
     enabled: !authLoading,
   });
   const { destroy } = useDeleteReview();
@@ -29,7 +29,7 @@ export default function ReviewDetailPage() {
     if (!confirm(t("reviews.detail.deleteConfirm"))) return;
     setIsDeleting(true);
     try {
-      await destroy(Number(id));
+      await destroy(id ?? "");
       void navigate("/reviews");
     } finally {
       setIsDeleting(false);

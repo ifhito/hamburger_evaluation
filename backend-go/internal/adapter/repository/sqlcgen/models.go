@@ -38,7 +38,7 @@ type MailDelivery struct {
 }
 
 type Review struct {
-	ID          int64
+	ID          string
 	Rating      int16
 	Comment     pgtype.Text
 	UserID      string

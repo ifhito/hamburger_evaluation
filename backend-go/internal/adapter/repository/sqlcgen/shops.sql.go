@@ -120,7 +120,7 @@ ORDER BY r.created_at DESC, r.id DESC
 `
 
 type ListShopReviewsRow struct {
-	ID            int64
+	ID            string
 	Rating        int16
 	Comment       pgtype.Text
 	CreatedAt     pgtype.Timestamptz
