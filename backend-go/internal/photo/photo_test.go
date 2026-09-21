@@ -389,6 +389,45 @@ func TestProcessRejections(t *testing.T) {
 	}
 }
 
+// TestProcessDimensionLimits は、寸法の上限(1 辺 10000 px・24,000,000 画素)の境界を、ヘッダーだけの
+// PNG で固定する。上限ちょうどは、寸法が大きすぎるエラーにならない(ヘッダーの先の画素のデータがないので、
+// 別の理由で失敗する)。上限を超えると、寸法が大きすぎるエラーになる。画素数の上限は、両方の辺が
+// 10000 以下の組のうち、24,000,000 を超える最小の積(2557 x 9386 = 24,000,002)で確かめる。
+func TestProcessDimensionLimits(t *testing.T) {
+	tests := []struct {
+		name         string
+		w, h         uint32
+		wantTooLarge bool
+	}{
+		{"幅が 10000 ちょうどは上限内", 10000, 1, false},
+		{"高さが 10000 ちょうどは上限内", 1, 10000, false},
+		{"幅が 10001 は上限を超える", 10001, 1, true},
+		{"高さが 10001 は上限を超える", 1, 10001, true},
+		{"画素数が 24,000,000 ちょうど(6000 x 4000)は上限内", 6000, 4000, false},
+		{"画素数が 24,000,000 を超える最小の積(2557 x 9386)は上限を超える", 2557, 9386, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := photo.Process(context.Background(), bytes.NewReader(pngHeader(t, tt.w, tt.h, 8)))
+			if err == nil {
+				t.Fatal("ヘッダーだけの PNG が成功した")
+			}
+			if got := errors.Is(err, photo.ErrDimensionsTooLarge); got != tt.wantTooLarge {
+				t.Errorf("寸法が大きすぎるエラーか = %v, want %v (err %v)", got, tt.wantTooLarge, err)
+			}
+		})
+	}
+}
+
+// TestDimensionsTooLargeMessage は、寸法が大きすぎるときに利用者へ返すメッセージが、上限の値を含めて
+// 変わらないことを固定する(API の契約)。
+func TestDimensionsTooLargeMessage(t *testing.T) {
+	const want = "Photo dimensions are too large (max 10000px per side and 24 megapixels)"
+	if photo.DimensionsTooLargeMessage != want {
+		t.Errorf("DimensionsTooLargeMessage = %q, want %q", photo.DimensionsTooLargeMessage, want)
+	}
+}
+
 // TestProcessRejectionCauses は、断る理由を、呼び出し側が見分けられることを確かめる:
 // 寸法が大きすぎる写真と、HEIC / HEIF の写真は、それぞれ専用のエラーになる(どちらも、対応しない画像の
 // 一種でもある)。それ以外の対応しないファイル(AVIF や写真でないもの)は、どちらでもない。

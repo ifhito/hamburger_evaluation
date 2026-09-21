@@ -32,7 +32,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       SMTP_SECURITY: none
-      MAIL_FROM: noreply@hamburger.example.com
+      MAIL_FROM: "BurgerStack <noreply@burgerstack.example.com>"
       # 確認メールのリンクの生成元(frontend の URL)。
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
       # OAuth の認可サーバー(AI アプリがログインと許可だけでつなぐ仕組み)。OAUTH_ISSUER を設定した

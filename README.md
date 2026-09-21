@@ -1,4 +1,4 @@
-# Hamburger Evaluation
+# BurgerStack
 
 ハンバーガーのレビュー投稿アプリです。ユーザー登録、ログイン、レビュー投稿、プロフィール更新ができます。構成は `backend-go/` の Go API と `frontend/` の React SPA に分かれています。
 

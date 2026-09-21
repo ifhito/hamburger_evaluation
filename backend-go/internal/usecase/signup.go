@@ -87,10 +87,20 @@ type SignupInput struct {
 func (in SignupInput) validate() []string {
 	msgs := domain.ValidateUsername(in.Username)
 	msgs = append(msgs, domain.ValidateCredentials(in.Email, in.Password)...)
-	if in.PasswordConfirmation != nil && *in.PasswordConfirmation != in.Password {
-		msgs = append(msgs, "Password confirmation doesn't match Password")
-	}
+	msgs = append(msgs, passwordConfirmationErrors(in.Password, in.PasswordConfirmation)...)
 	return msgs
+}
+
+// passwordConfirmationErrors は、確認欄に入力された値（confirmation。入力がなければ nil）が
+// パスワード（password）と一致することを確かめ、一致しなければそのメッセージを返す。確認欄が nil の
+// ときは、確認を求めていないので、常に問題なしである（登録・プロフィールの更新のどちらも、確認欄は
+// 任意）。確認欄は入力欄同士の整合の確認（フォームの都合）で、サービスの規則ではないので、domain には
+// 置かず、登録とプロフィールの更新の use case が共有する。
+func passwordConfirmationErrors(password string, confirmation *string) []string {
+	if confirmation != nil && *confirmation != password {
+		return []string{"Password confirmation doesn't match Password"}
+	}
+	return nil
 }
 
 // Signups は、メール確認つきの signup の use case を実装する。アカウントは、確認メールの

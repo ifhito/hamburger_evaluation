@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BurgerStack のロゴ案(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { width: 1440px; padding: 40px; }
+  .lead { margin-top: 8px; font-size: 14px; line-height: 1.7; color: var(--text-muted); max-width: 1100px; }
+  .v { margin-top: 48px; padding-top: 16px; border-top: 2px solid var(--text); }
+  .v h2 { display: flex; align-items: baseline; gap: 12px; }
+  .v h2 small { font-size: 14px; font-weight: 400; color: var(--text-muted); }
+  .hdr { display: flex; align-items: center; gap: 24px; height: 64px; margin: 16px 0; padding: 0 24px; border: 1px solid var(--border); border-radius: 8px; }
+  .hdr .logo { margin-right: auto; }
+  .hdr .t { font-size: 14px; color: var(--text-muted); }
+  .hdr .u { font-size: 14px; color: var(--text-muted); }
+  .hdr .lang-btn { min-width: 44px; height: 44px; border: 0; border-radius: 8px; font-size: 14px; font-weight: 500; }
+  .cap { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .cells { display: grid; grid-template-columns: 300px 250px 250px 240px 1fr; gap: 12px; }
+  .cell { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; }
+  .cell .box { display: flex; align-items: center; justify-content: center; gap: 24px; min-height: 96px; }
+  .fav { display: flex; align-items: flex-end; gap: 14px; }
+  .fav div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); }
+  .cr { font-size: 12px; line-height: 1.6; }
+  .cr b { font-weight: 700; }
+  .pc { font-size: 13px; line-height: 1.7; }
+  .pc b { font-weight: 700; }
+  .jp { display: flex; flex-direction: column; gap: 6px; }
+  .jp .h1 { font-size: 22px; font-weight: 700; line-height: 1.3; }
+  .jp p { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+  .jbar { display: flex; align-items: center; gap: 12px; height: 48px; border-bottom: 1px solid var(--border); }
+  .jbar .logo { margin-right: auto; }
+  .jbar span { font-size: 12px; color: var(--text-muted); }
+  .rec { margin-top: 48px; padding: 20px 24px; border: 2px solid var(--text); border-radius: 8px; font-size: 14px; line-height: 1.8; }
+  .rec b { font-weight: 700; }
+  /* 案 1: 文字だけ。いまの「Hamburger [Evaluation]」の札の作りを引き継ぐ(黄色は面だけ。文字は黒) */
+  .l1 { display: inline-flex; align-items: center; gap: .3em; font-weight: 700; letter-spacing: .02em; line-height: 1.5; white-space: nowrap; }
+  .l1 .pill { padding: 0 .5em; border-radius: .3em; background: var(--accent); color: var(--on-accent); font-weight: 500; }
+  /* 案 2: 記号(積み上がった 4 段)+ 文字 */
+  .l2 { display: inline-flex; align-items: center; gap: .4em; letter-spacing: .01em; line-height: 1.5; white-space: nowrap; }
+  .l2 b { font-weight: 700; }
+  .l2 i { font-style: normal; font-weight: 400; }
+  /* 案 3: 文字そのものが段になる。上のバンズ = Burger、チーズ、パティ = Stack、下のバンズ */
+  .l3 { display: inline-flex; flex-direction: column; font-weight: 700; line-height: 1; text-align: center; }
+  .l3 > div { border: .16em solid #111; }
+  .l3 .bun { padding: .3em .9em .25em; border-radius: 1.4em 1.4em .2em .2em; background: var(--c-bun); color: #111; }
+  .l3 .cheese { height: .42em; margin: -.16em .3em; border-radius: .2em; background: var(--c-cheese); position: relative; z-index: 1; }
+  .l3 .patty { padding: .32em .9em .28em; margin-top: -.16em; border-radius: .5em; background: var(--c-patty); color: #fff; }
+  .l3 .bunb { height: .55em; margin: -.16em .1em 0; border-radius: .1em .1em .8em .8em; background: var(--c-bun); }
+  /* 派生の案(記号をもっとシンプルに)*/
+  #simple { padding-bottom: 24px; background: #fff; }
+  .rd { display: grid; grid-template-columns: 190px 90px 90px 210px 170px 1fr; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .rd .cap { font-size: 12px; }
+  .rd .px { display: inline-block; line-height: 0; background: #fff; }
+  .rd .zoom { line-height: 0; }
+  .rd .zoom img { image-rendering: pixelated; }
+  .rd .say { font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+  .dark { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; background: #202124; color: #bbb; font-size: 11px; }
+  .side { display: flex; align-items: center; gap: 12px; }
+  .side .num { font-size: 18px; font-weight: 700; }
+  /* 一筆書き(黄色の 1 本の線)*/
+  #oneline { padding-bottom: 24px; background: #fff; }
+  .lc { position: relative; display: inline-flex; align-items: center; line-height: 1.5; white-space: nowrap; }
+  .lc .lc-t b { font-weight: 700; } .lc .lc-t i { font-style: normal; font-weight: 400; }
+  .lc svg.under { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  .pl { display: grid; grid-template-columns: 90px 320px 300px 200px 190px 1fr; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .pl .pn { font-size: 12px; font-weight: 700; line-height: 1.5; }
+  .pl .cap { font-size: 11px; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; }
+  .pl .hdr2 { display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; }
+  .pl .hdr2 .t { font-size: 12px; color: var(--text-muted); }
+  .pl .hdr2 .logo { margin-right: auto; }
+  .pl .fav { gap: 10px; align-items: flex-end; }
+  .pl .cr { font-size: 11px; line-height: 1.5; }
+  .ph { display: flex; gap: 24px; align-items: flex-start; padding: 12px 0; }
+</style>
+</head>
+<body>
+  <h1>BurgerStack のロゴ案</h1>
+  <p class="lead">アプリの名前を「BurgerStack」(ハンバーガーが積み上がっていく感じ)にするための、ロゴの 3 案です。色は、これまでの白・黒・グレー・マスタード黄だけです(バーガーの部品の色は、記号にだけ使います)。書体は、いまの画面と同じ Noto Sans JP です。黄色は白い地では文字にも線にも使えないので、面だけに使い、その上の文字は黒にします。下の各案は、(a) ヘッダーに置いたところ、(b) 大きく、(c) 小さく、(d) 白黒にしたところ、(e) ファビコン、(f) 文字と面のコントラスト比(実測)、(g) 日本語の画面に置いたところ、の順に並べています。</p>
+  <div id="app"></div>
+  <div class="rec" id="rec"></div>
+  <div id="simple">
+    <h1 style="margin-top:72px">案 2 をシンプルにした派生の案(2a・2b・2c)</h1>
+    <p class="lead">案 2(記号 + 文字)が選ばれ、「記号をもっとシンプルに」との要望が出たので、記号だけを変えた 3 案です。文字の部分(Burger は太字、Stack は標準の太さ)は、案 2 のままです。色は、これまでの白・黒・マスタード黄だけで、バンズやパティの茶色は使いません(評価のバーガーの、茶・緑・赤の線画と、色の系統が違って見えるようにするため)。見比べる基準として、前回の案 2 を、先頭に置きます。</p>
+    <h2 style="margin-top:32px">小さいところで、段の数と形が読めるか(実寸と、画素を 8 倍に拡大した図)</h2>
+    <div id="reading"></div>
+    <div id="derived"></div>
+    <div class="rec" id="rec2"></div>
+  </div>
+  <div id="oneline">
+    <h1 style="margin-top:72px">一筆書きの黄色い線で描く案(1a・1b・1c)</h1>
+    <p class="lead">利用者の要望「ロゴを、一筆書きの黄色い線で描けませんか」への案です。ペンを離さない 1 本の連続した線(丸い端・一定の太さ・マスタード黄)で、BurgerStack を描きます。文字の部分(Burger は太字、Stack は標準の太さ、黒)は、前の案 2 のままです。前の案(1〜3・2a〜2c)は、残してあります。<br><b>最大の課題</b>: 黄色の線は、白地に対して 1.85:1 で、線としては見えにくいことです。そこで、各案を、次の 3 つの置き方で並べて、比べます。<b>(i) 黒い角丸の札の上に黄色の線</b>(黄と黒は 10.20:1)、<b>(ii) 白地に、黄色の線 + 細い黒の縁取り</b>(一筆書きの雰囲気は、崩れる)、<b>(iii) 白地に、太めの黄色の線だけ</b>(太さで補う)。</p>
+    <ul class="lead" style="margin-top:6px;padding-left:20px">
+      <li><b>1a 蛇行する積み重ね</b>: 線が、右へ(下のバンズ)→ 折り返して左へ(パティ)→ 折り返して右へ(波のチーズ)→ 折り返して左へ、上に丸いドーム(上のバンズ)。4 段の折り返しが積み重ねに見え、全体が「S」(Stack)の字にもなる。</li>
+      <li><b>1b バーガーをなぞる線</b>: ドームの上のバンズ → レタスの波 → パティ → 下のバンズを、ペンを離さずになぞった、落書き風のバーガー。</li>
+      <li><b>1c 記号から文字へつながる線</b>: 1a の記号を描いた線が、そのまま「BurgerStack」の下線へ流れる。</li>
+    </ul>
+    <h2 style="margin-top:32px">小さいところで、線の折り返しが読めるか(実寸と、画素を 8 倍に拡大した図)</h2>
+    <div id="reading2"></div>
+    <div id="lines"></div>
+    <div class="rec" id="rec3"></div>
+  </div>
+
+<script src="rating-icons.js"></script>
+<script>
+  const C = Burger.COLOR, INK = '#111111';
+  const root = document.documentElement;
+  root.style.setProperty('--c-bun', C.bun); root.style.setProperty('--c-patty', C.patty); root.style.setProperty('--c-cheese', C.cheese);
+
+  // ---- ロゴの部品(高さ h[px] を渡すと、その大きさで描く) ----
+  const BUN_TOP = 'M 6 36 C 6 15 30 2 60 2 C 90 2 114 15 114 36 C 114 38 113 39 111 39 L 9 39 C 7 39 6 38 6 36 Z';
+  const BUN_BOTTOM = 'M 8 82 L 112 82 C 112 91 108 98 98 98 L 22 98 C 12 98 8 91 8 82 Z';
+  // 積み上がった 4 段の記号(上のバンズ・チーズ・パティ・下のバンズ)。細部は描かない(小さくても 4 段が見えるように)
+  const mark = (h, stroke, gray) => {
+    const sw = +(stroke / (h / 100)).toFixed(2), g = (c) => (gray ? Burger.grayOf(c) : c);
+    const p = (d, f) => `<path d="${d}" fill="${g(f)}" stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+    const r = (x, y, w, hh, rx, f) => `<rect x="${x}" y="${y}" width="${w}" height="${hh}" rx="${rx}" fill="${g(f)}" stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+    return `<svg viewBox="0 0 120 100" width="${h * 1.2}" height="${h}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${p(BUN_BOTTOM, C.bun)}${r(2, 55, 116, 25, 11, C.patty)}${r(5, 42, 110, 13, 5, C.cheese)}${p(BUN_TOP, C.bun)}</svg>`;
+  };
+  const L1 = (h) => `<span class="l1" style="font-size:${h * 0.625}px">Burger<span class="pill">Stack</span></span>`;
+  const L2 = (h) => `<span class="l2" style="font-size:${h * 0.625}px">${mark(h, h >= 28 ? 1.6 : 1.2)}<span><b>Burger</b><i>Stack</i></span></span>`;
+  const L3 = (h) => `<span class="l3" style="font-size:${h / 4.2}px"><div class="bun">Burger</div><div class="cheese"></div><div class="patty">Stack</div><div class="bunb"></div></span>`;
+
+  // ---- ファビコン(正方形。文字が入らない案は記号だけ) ----
+  const fav1 = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="30" height="30" rx="7" fill="${C.cheese}" stroke="${INK}" stroke-width="2"/><text x="16" y="23.5" text-anchor="middle" font-family="Noto Sans JP, sans-serif" font-weight="700" font-size="21" fill="${INK}">S</text></svg>`;
+  const fav2 = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0 10)">${mark(100, 0).replace(/<svg[^>]*>|<\/svg>/g, '').replace(/stroke-width="[^"]*"/g, 'stroke-width="7"')}</g></svg>`;
+  const fav3 = (s) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><clipPath id="c${s}"><rect x="1" y="1" width="30" height="30" rx="8"/></clipPath><g clip-path="url(#c${s})"><rect width="32" height="32" fill="${C.bun}"/><rect y="11" width="32" height="4" fill="${C.cheese}"/><rect y="15" width="32" height="9" fill="${C.patty}"/><rect y="24" width="32" height="8" fill="${C.bun}"/></g><rect x="1" y="1" width="30" height="30" rx="8" fill="none" stroke="${INK}" stroke-width="2"/></svg>`;
+
+  // ---- コントラスト比(実測。WCAG の相対輝度) ----
+  const lum = (hex) => { const v = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return ((x + 0.05) / (y + 0.05)).toFixed(2) + ':1'; };
+  const crRow = (label, a, b, need) => `<div><b>${ratio(a, b)}</b> ${label}${need ? ` <span class="muted">(${need})</span>` : ''}</div>`;
+
+  const V = [
+    { no: 1, name: '文字だけ', note: 'Burger は黒、Stack は黄色の札(いまの「Hamburger [Evaluation]」の作りを引き継ぐ)', logo: L1, hHdr: 32, hBig: 50, fav: fav1, favNote: '黄色の四角に S(バーガーを思わせる形はない)',
+      cr: [crRow('「Stack」の黒い文字 / 黄色の札', '#111111', '#e9b824', 'AA は 4.5 以上'), crRow('「Burger」の黒い文字 / 白', '#111111', '#ffffff', '')],
+      pc: '<b>長所</b> いまの画面と同じ作りで、いちばん軽い(文字と面だけ。画像がいらない)。20px でも読める。実装も、Penpot への反映も、いちばん簡単。<br><b>弱点</b> 名前の「積み上がる」も、バーガーも、絵では伝わらない。ファビコンは「S」だけで、記号としては弱い。' },
+    { no: 2, name: '記号 + 文字', note: '積み上がった 4 段(バンズ・チーズ・パティ・バンズ)の記号を、文字の左に置く。Burger は太字、Stack は標準の太さ', logo: L2, hHdr: 32, hBig: 44, fav: fav2, favNote: '記号だけ(文字なし)',
+      cr: [crRow('黒い文字 / 白', '#111111', '#ffffff', 'AA は 4.5 以上'), crRow('黒い輪郭 / 白(記号の境界)', '#111111', '#ffffff', '3 以上'), crRow('バンズの色 / 白(輪郭で補う)', C.bun, '#ffffff', '3 未満'), crRow('チーズの色 / 白(輪郭で補う)', C.cheese, '#ffffff', '3 未満')],
+      pc: '<b>長所</b> 記号がバーガーの積み上がりを表し、評価の水位のバーガーと同じ絵の系統になる。記号だけでファビコンにできる(32px なら 4 段が見える)。文字は軽いまま。<br><b>弱点</b> 記号を SVG の画像として持つ必要がある。16px では 4 段がつぶれ気味。評価のバーガーと似ていて、満点の評価と見間違えるおそれが、少しある(4 段で、細部がないので、区別はできる)。' },
+    { no: 3, name: '文字が積み上がる', note: '「Burger」が上のバンズ、間にチーズ、「Stack」がパティ、下にバンズ。文字そのものが、バーガーの段になる', logo: L3, hHdr: 48, hBig: 110, fav: fav3, favNote: '4 段の色の帯(文字なし)',
+      cr: [crRow('「Burger」の黒い文字 / バンズの色', '#111111', C.bun, 'AA は 4.5 以上'), crRow('「Stack」の白い文字 / パティの色', '#ffffff', C.patty, 'AA は 4.5 以上'), crRow('黒い輪郭 / 白', '#111111', '#ffffff', '3 以上')],
+      pc: '<b>長所</b> 名前の意味(積み上がるバーガー)が、いちばんはっきり伝わる。1 つで完結する。<br><b>弱点</b> 2 段組なので、高さが要る。32px の高さだと文字が 8px 前後で読めず、ヘッダーには 48px が要る。小さい所(20px)では、まったく読めない。横並びの別版が、結局、要る(ロゴが 2 種類になる)。CSS の段の重ね方が凝っていて、いちばん重い。' },
+  ];
+
+  const hdr = (v, gray) => `<div class="hdr" ${gray ? 'style="filter:grayscale(1)"' : ''}><span class="logo">${v.logo(v.hHdr)}</span><span class="t">ショップ</span><span class="t">レビュー</span><span class="u">alice</span><span class="u">サインアウト</span><span class="lang-btn" style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center">JA</span></div>`;
+  document.getElementById('app').innerHTML = V.map((v) => `
+    <section class="v">
+      <h2>案 ${v.no} ${v.name} <small>${v.note}</small></h2>
+      <div class="cap">(a) ヘッダーに置いたところ(高さ ${v.hHdr}px${v.no === 3 ? '。他の案は 32px。この案は、32px だと読めないので、48px' : ''})</div>
+      ${hdr(v)}
+      <div class="cells">
+        <div class="cell"><div class="cap">(b) 大きく(案 1・2 は幅 約 240px。案 3 は、縦長なので、高さ 110px)</div><div class="box">${v.logo(v.hBig)}</div></div>
+        <div class="cell"><div class="cap">(c) 小さく(高さ 20px。読めるか)</div><div class="box">${v.logo(20)}</div><div class="cap">(d) 白黒にしたところ(高さ 32px)</div><div class="box" style="min-height:48px;filter:grayscale(1)">${v.logo(32)}</div></div>
+        <div class="cell"><div class="cap">(e) ファビコン(実寸 32px・16px と、4 倍の図)</div><div class="fav"><div>${v.fav(32)}32px</div><div>${v.fav(16)}16px</div><div>${v.fav(64)}4 倍</div></div><div class="cap">${v.favNote}</div></div>
+        <div class="cell"><div class="cap">(f) コントラスト比(実測)</div><div class="cr">${v.cr.join('')}</div></div>
+        <div class="cell"><div class="cap">(g) 日本語の画面に置いたところ</div><div class="jp"><div class="jbar"><span class="logo">${v.logo(v.no === 3 ? 40 : 28)}</span><span>ショップ</span><span>レビュー</span></div><div class="h1">ショップ</div><p>BurgerStack で、食べたバーガーを積み上げよう(見本の文)。</p></div></div>
+      </div>
+      <p class="pc" style="margin-top:12px">${v.pc}</p>
+    </section>`).join('');
+  document.getElementById('rec').innerHTML = '<b>私の推奨: 案 2(記号 + 文字)</b><br>記号が「積み上がるバーガー」を表し、評価の水位のバーガーと同じ絵の系統になるので、アプリ全体の見た目が揃います。記号だけでファビコンにでき、文字の部分は案 1 と同じく軽いままです。案 1 は最も安全で軽い代わりに、名前の意味が絵で伝わりません。案 3 は意味がいちばん伝わりますが、小さい所で読めず、横並びの別版も要るので、ロゴの管理が重くなります。<br>案 2 を選ぶ場合の弱点(16px の記号がつぶれ気味・評価のバーガーと似ている)は、記号の段を 4 段のまま太くする、評価のバーガーの近くではロゴを出さない、で下げられます。';
+
+  // ================= 派生の案(記号をもっとシンプルに) =================
+  const YEL = C.cheese, K = INK;
+  const Svg = (h, body) => `<svg viewBox="0 0 120 100" width="${h * 1.2}" height="${h}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
+  const bodyOf = (svg) => svg.replace(/<svg[^>]*>|<\/svg>/g, '');
+  // 2a: 3 段(上のバンズ・パティ・下のバンズ)。バンズは黄色、パティは黒のベタ。細い黒の輪郭
+  const B2a = (() => { const st = `stroke="${K}" stroke-width="3.5" stroke-linejoin="round"`;
+    return `<path d="M 8 35 C 8 15 30 5 60 5 C 90 5 112 15 112 35 Z" fill="${YEL}" ${st}/>` +
+           `<rect x="4" y="44" width="112" height="22" rx="11" fill="${K}" ${st}/>` +
+           `<path d="M 8 75 L 112 75 C 112 88 106 95 96 95 L 24 95 C 14 95 8 88 8 75 Z" fill="${YEL}" ${st}/>`; })();
+  // 2b: 黒のベタの丸い棒を積む。チーズの黄色は、黒の棒に挟んだ細い 1 本(輪郭なし)
+  const B2b = `<rect x="10" y="10" width="100" height="22" rx="11" fill="${K}"/><rect x="12" y="32" width="96" height="7" fill="${YEL}"/><rect x="4" y="39" width="112" height="22" rx="11" fill="${K}"/><rect x="10" y="70" width="100" height="22" rx="11" fill="${K}"/>`;
+  // 2c: 同じ大きさの丸い帯を 3 段。中の 1 段だけ黄色。黒の輪郭
+  const B2c = [6, 38, 70].map((y, i) => `<rect x="6" y="${y}" width="108" height="20" rx="10" fill="${i === 1 ? YEL : '#ffffff'}" stroke="${K}" stroke-width="5"/>`).join('');
+  const B2base = bodyOf(mark(100, 0)).replace(/stroke-width="[^"]*"/g, 'stroke-width="5"');
+  const Lx = (body) => (h) => `<span class="l2" style="font-size:${h * 0.625}px">${Svg(h, body)}<span><b>Burger</b><i>Stack</i></span></span>`;
+  // ファビコン: 白い丸い角の下地に、記号を置く(暗いタブでも、黒の輪郭が消えないように)
+  const favT = (body, s) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="#ffffff"/><svg x="3" y="5.5" width="26" height="21.67" viewBox="0 0 120 100">${body}</svg></svg>`;
+  const D = [
+    { id: 'base', name: '前回の案 2(基準)', body: B2base },
+    { id: '2a', name: '2a 3 段', body: B2a, note: '上のバンズ・パティ・下のバンズの 3 段に減らす。バンズは黄色、パティは黒のベタ。輪郭は細い黒。茶色を使わない',
+      cr: [crRow('黒の輪郭 / 白(記号の境界)', K, '#ffffff', '3 以上'), crRow('黄色の面 / 白', YEL, '#ffffff', '3 未満。黒の輪郭で補う'), crRow('黄色の面 / 黒の輪郭', YEL, K, ''), crRow('黒い文字 / 白', K, '#ffffff', 'AA は 4.5 以上')],
+      pc: '<b>長所</b> バーガーらしい形(丸いバンズ + パティ)が残り、色が黄と黒だけなので、評価の水位のバーガー(茶・緑・赤)と色の系統が違う。3 段なので、案 2 の 4 段より、つぶれにくい。<br><b>弱点</b> 輪郭つきの形は、16px だと、線が細くなって、バンズとパティのすき間が消える。評価のバーガーと並べると、色は違うが、形(丸いバンズ + パティ + 下のバンズ)は似ていて、紛らわしさは、完全には消えない。記号としては、3 案のなかで、いちばん詳しい。' },
+    { id: '2b', name: '2b 黒の棒を積む', body: B2b, note: '黒のベタの丸い棒を 3 本積み、上と中の間に、黄色の細い線(チーズ)を 1 本はさむ。輪郭なし',
+      cr: [crRow('黒の棒 / 白(記号の境界)', K, '#ffffff', '3 以上'), crRow('黄色の線 / 黒の棒(黄色の線は、黒の棒にはさまれている)', YEL, K, '3 以上'), crRow('黄色の線 / 白(線の両端の、ごく小さい部分だけ)', YEL, '#ffffff', '3 未満'), crRow('黒い文字 / 白', K, '#ffffff', 'AA は 4.5 以上')],
+      pc: '<b>長所</b> いちばんシンプル。線がなくベタなので、16px でも、3 本の棒が読める。「積み重ね(Stack)」の意味が、そのまま伝わる。評価のバーガーとは、絵の系統が、はっきり違う。<br><b>弱点</b> バーガーだと分かる手がかりが、黄色の 1 本と、パティの棒が少し広いことだけで、弱い。何も知らない人には、「黒い棒のロゴ」に見えるかもしれない。' },
+    { id: '2c', name: '2c 丸い帯を積む', body: B2c, note: '同じ大きさの丸い帯を 3 段。中の 1 段だけ黄色。黒の輪郭。バーガーというより、積み重ねの抽象記号',
+      cr: [crRow('黒の輪郭 / 白(記号の境界)', K, '#ffffff', '3 以上'), crRow('黄色の面 / 白', YEL, '#ffffff', '3 未満。黒の輪郭で補う'), crRow('黄色の面 / 黒の輪郭', YEL, K, ''), crRow('黒い文字 / 白', K, '#ffffff', 'AA は 4.5 以上')],
+      pc: '<b>長所</b> 形が、いちばん幾何学的で、評価のバーガーとは、絵の系統がはっきり違う。3 段で、すき間が広く、16px でも、3 段の数は数えられる。<br><b>弱点</b> バーガーの手がかりが、ほぼ無い(黄色がチーズに見えるかどうかだけ)。名前の「Burger」との結びつきが弱く、「ただの積み重ね」に見える。白い面が多く、16px では輪郭が灰色にかすんで、全体が薄くなる(3 段は数えられるが、3 案のなかでは、いちばん弱い)。' },
+  ];
+  D.forEach((d) => { d.L = d.id === 'base' ? L2 : Lx(d.body); d.mk = (h) => Svg(h, d.body); d.fav = (sz) => favT(d.body, sz); });
+
+  // ---- 小さいところの読みやすさ(実寸 20px・16px と、画素の拡大) ----
+  document.getElementById('reading').innerHTML = D.map((d) => `
+    <div class="rd">
+      <div><b>${d.name}</b></div>
+      <div><div class="cap">記号 20px</div><span class="px" id="px-${d.id}-20">${d.mk(20)}</span></div>
+      <div><div class="cap">記号 16px</div><span class="px" id="px-${d.id}-16">${d.mk(16)}</span></div>
+      <div><div class="cap">20px の 8 倍</div><div class="zoom" data-zoom="px-${d.id}-20"></div></div>
+      <div><div class="cap">16px の 8 倍</div><div class="zoom" data-zoom="px-${d.id}-16"></div></div>
+      <div class="say" id="say-${d.id}"></div>
+    </div>`).join('');
+
+  // ---- 派生の案ごとの比較(a〜g と、評価のバーガーとの並び・暗いタブ) ----
+  const rate = (v, sz) => Burger.svgOf(Burger.resolve({ variant: 'B', value: v, max: 5, size: sz }));
+  const hdr2 = (d) => `<div class="hdr"><span class="logo">${d.L(32)}</span><span class="t">ショップ</span><span class="t">レビュー</span><span class="u">alice</span><span class="u">サインアウト</span><span class="lang-btn" style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center">JA</span></div>`;
+  document.getElementById('derived').innerHTML = D.filter((d) => d.id !== 'base').map((d) => `
+    <section class="v">
+      <h2>${d.name} <small>${d.note}</small></h2>
+      <div class="cap">(a) ヘッダーに置いたところ(高さ 32px)</div>
+      ${hdr2(d)}
+      <div class="cells">
+        <div class="cell"><div class="cap">(b) 大きく(幅 約 240px)</div><div class="box">${d.L(44)}</div></div>
+        <div class="cell"><div class="cap">(c) 小さく(高さ 20px。読めるか)</div><div class="box">${d.L(20)}</div><div class="cap">(d) 白黒にしたところ(高さ 32px)</div><div class="box" style="min-height:48px;filter:grayscale(1)">${d.L(32)}</div></div>
+        <div class="cell"><div class="cap">(e) ファビコン(実寸 32px・16px と、4 倍の図)</div><div class="fav"><div>${d.fav(32)}32px</div><div>${d.fav(16)}16px</div><div>${d.fav(64)}4 倍</div></div><div class="dark">${d.fav(16)}${d.fav(32)}<span>暗いタブの上(下地が白なので消えない)</span></div></div>
+        <div class="cell"><div class="cap">(f) コントラスト比(実測)</div><div class="cr">${d.cr.join('')}</div></div>
+        <div class="cell"><div class="cap">(g) 日本語の画面に置いたところ</div><div class="jp"><div class="jbar"><span class="logo">${d.L(28)}</span><span>ショップ</span><span>レビュー</span></div><div class="h1">ショップ</div><p>BurgerStack で、食べたバーガーを積み上げよう(見本の文)。</p></div>
+          <div class="cap" style="margin-top:6px">評価のバーガー(4.5)と並べたところ</div><div class="side">${d.mk(32)}<span class="side" style="gap:8px">${rate(4.5, 'sm')}<span class="num">4.5</span></span></div></div>
+      </div>
+      <p class="pc" style="margin-top:12px">${d.pc}</p>
+    </section>`).join('');
+
+  const SAY = {
+    base: '20px: 4 段が、色の帯として見える。16px: 輪郭とすき間が混ざり、どこまでが 1 段か分かりにくい(4 段は、つぶれ気味)。',
+    '2a': '20px: 黄・黒・黄の 3 段が読める。16px: 色の違いで 3 段は数えられるが、輪郭がぼやけ、すき間は灰色の帯になる。',
+    '2b': '20px・16px とも、3 本の黒い棒が、はっきり読める。黄色の線は、20px ではやや薄く、16px では 1 画素の細い線になるが、見える。',
+    '2c': '20px: 3 段は数えられるが、輪郭が灰色にかすんで薄い。16px: 輪郭がさらに薄れ、中の黄色だけが目立つ。3 案のなかでは、いちばん弱い。',
+  };
+  Object.keys(SAY).forEach((k) => { document.getElementById('say-' + k).textContent = SAY[k]; });
+  document.getElementById('rec2').innerHTML = '<b>私の推奨: 2b(黒の棒を積む)</b><br>いちばんシンプルで、線がなくベタなので、16px でも 3 本の棒が読めます(2a は輪郭がぼやけ、2c は薄くなります)。「積み重ね(Stack)」の意味が、そのまま伝わり、評価の水位のバーガーとは、絵の系統がはっきり違うので、紛らわしさもなくなります。黒と黄だけなので、茶色などを足さずに済みます。<br><b>弱点</b>は、バーガーだと分かる手がかりが、黄色の 1 本(チーズ)と、パティの棒が少し広いことだけで、弱いことです。「Burger」という文字が隣にあるので、実際には、文字が補いますが、記号だけ(ファビコン)では「黒い棒」に見えるかもしれません。<br><b>選び方の目安</b>: バーガーらしさを残したいなら 2a(ただし 16px の輪郭のぼやけは、ファビコンだけ、輪郭なしの版にして補う必要があります)、記号としての単純さと小さい所の読みやすさを取るなら 2b です。2c は、名前との結びつきが弱く、おすすめしません。<br><b>文字の部分</b>(Burger は太字、Stack は標準の太さ)は、案 2 のままにしました。変える提案はありません。';
+
+  // ================= 一筆書き(黄色の 1 本の線) =================
+  const f2 = (v) => Math.round(v * 100) / 100;
+  // 水平の取っ手つきの波。xs → xe を n 区間で進み、y → y-A → y … と上下する(n は偶数)
+  const wv = (xs, xe, y, n, A) => { const dx = (xe - xs) / n, k = 0.36 * dx; let d = '';
+    for (let i = 0; i < n; i++) { const xa = xs + dx * i, xb = xa + dx, ya = y - (i % 2 ? A : 0), yb = y - ((i + 1) % 2 ? A : 0);
+      d += ` C ${f2(xa + k)} ${ya} ${f2(xb - k)} ${yb} ${f2(xb)} ${yb}`; }
+    return d; };
+  const P = {
+    // 1a: 下から、右へ(下のバンズ)→ 左へ(パティ)→ 右へ(波)→ 左へ、上のドーム。折り返しの半径は 11
+    a: `M 22 90 L 98 90 A 11 11 0 0 0 98 68 L 22 68 A 11 11 0 0 1 22 46${wv(22, 98, 46, 4, 10)} A 11 11 0 0 0 98 24 C 98 0 22 0 22 24`,
+    // 1b: ドーム(左から右へ)→ レタスの波(右から左へ)→ 左の縁を下りて、パティ(右へ)→ 下のバンズの鉢(右から左へ回り込む)
+    b: `M 12 44 C 12 6 108 6 108 44${wv(108, 12, 44, 6, -6)} L 12 58 L 108 58 L 108 68 C 108 86 96 91 84 91 L 36 91 C 24 91 12 86 12 68`,
+    // 1c: 1a を逆向きにして、始まりを「下線の右端(xt)」にする。全体を dy だけ下げる(文字の下に下線を通すため)
+    c: (xt, dy = 4) => `M ${xt} ${90 + dy} L 22 ${90 + dy} A 11 11 0 0 1 22 ${68 + dy} L 98 ${68 + dy} A 11 11 0 0 0 98 ${46 + dy}${wv(98, 22, 46 + dy, 4, 10)} A 11 11 0 0 1 22 ${24 + dy} C 22 ${dy} 98 ${dy} 98 ${24 + dy}`,
+  };
+  // 線の太さ(単位は、記号の座標。高さ 100 のとき)。tile: 黒い札の上 / edge: 黄色の線(+ 両側に 3 の黒) / thick: 太い黄色だけ
+  const W = { a: { tile: 8.5, edge: 8, thick: 12 }, b: { tile: 7.5, edge: 7.5, thick: 10.5 }, c: { tile: 8.5, edge: 8, thick: 12 } };
+  const stk = (d, col, w) => `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const TILE = `<rect x="-6" y="-8" width="132" height="116" rx="24" fill="${K}"/>`;
+  const draw = (d, kind, mode) => (mode === 'tile' ? TILE + stk(d, YEL, W[kind].tile) : mode === 'edge' ? stk(d, K, W[kind].edge + 6) + stk(d, YEL, W[kind].edge) : stk(d, YEL, W[kind].thick));
+  // 記号だけ(1c は、しっぽを tail の長さだけ付ける)。svg の大きさは、高さ h、幅は 1.2h(しっぽの分だけ広がる)
+  const sym1 = (kind, mode, h, tail = 0) => {
+    if (kind !== 'c') return `<svg viewBox="0 0 120 100" width="${h * 1.2}" height="${h}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="overflow:visible">${draw(P[kind], kind, mode)}</svg>`;
+    const Wu = 120 + tail; let body = draw(P.c(112 + tail), 'c', mode);
+    if (mode === 'tile' && tail) body = body.replace(TILE, TILE + `<rect x="100" y="80" width="${Wu - 100 + 6}" height="28" rx="14" fill="${K}"/>`);
+    return `<svg viewBox="0 0 ${Wu} 100" width="${Wu * h / 100}" height="${h}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="overflow:visible">${body}</svg>`;
+  };
+  // ロゴ全体(記号 + 文字)。1c は、文字の幅を測ってから、下線を通す(フォントが読み込まれたあとに作る)
+  const gap1 = (h, mode) => h * 0.625 * 0.4 + (mode === 'tile' ? h * 0.06 : 0);
+  const Lo = (kind, mode) => (h) => kind !== 'c'
+    ? `<span class="l2" style="font-size:${h * 0.625}px;gap:${gap1(h, mode)}px">${sym1(kind, mode, h)}<span><b>Burger</b><i>Stack</i></span></span>`
+    : `<span class="lc" data-h="${h}" data-mode="${mode}" style="font-size:${h * 0.625}px;height:${h}px"><span class="lc-s" style="width:${h * 1.2 + gap1(h, mode)}px"></span><span class="lc-t"><b>Burger</b><i>Stack</i></span></span>`;
+  const buildLc = () => document.querySelectorAll('.lc').forEach((el) => {
+    if (el.querySelector('svg')) return;
+    const h = +el.dataset.h, mode = el.dataset.mode, u = h / 100, tw = el.querySelector('.lc-t').offsetWidth, W2 = h * 1.2 + gap1(h, mode) + tw, Wu = W2 / u;
+    let body = draw(P.c(Wu - 5), 'c', mode);
+    if (mode === 'tile') body = body.replace(TILE, TILE + `<rect x="100" y="80" width="${Wu - 100 + 2}" height="28" rx="14" fill="${K}"/>`);
+    el.insertAdjacentHTML('afterbegin', `<svg class="under" viewBox="0 0 ${Wu} 100" width="${W2}" height="${h}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`);
+  });
+  document.fonts.ready.then(() => setTimeout(buildLc, 50));
+
+  // ファビコン: 札の上に、記号を置く(1c は、しっぽなしの 1a の形)
+  const favO = (kind, mode, s) => { const d = kind === 'b' ? P.b : P.a, w = { tile: 11, edge: 10, thick: 14 }[mode] * (kind === 'b' ? 0.92 : 1);
+    const bg = mode === 'tile' ? K : '#ffffff', inner = mode === 'tile' ? stk(d, YEL, w) : mode === 'edge' ? stk(d, K, w + 7) + stk(d, YEL, w) : stk(d, YEL, w);
+    return `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="${bg}"/>${mode !== 'tile' ? '<rect x="0.5" y="0.5" width="31" height="31" rx="6.5" fill="none" stroke="#dedcd6"/>' : ''}<svg x="3.5" y="5.5" width="25" height="20.8" viewBox="0 0 120 100">${inner}</svg></svg>`; };
+
+  const PL = [['tile', '(i) 黒い札の上'], ['edge', '(ii) 黒の縁取り'], ['thick', '(iii) 太い黄色だけ']];
+  const K3 = [{ k: 'a', name: '1a 蛇行する積み重ね' }, { k: 'b', name: '1b バーガーをなぞる線' }, { k: 'c', name: '1c 下線へつながる線' }];
+  const CRV = { tile: [crRow('黄の線 / 黒い札', YEL, K, '3 以上'), crRow('黒い文字 / 白', K, '#ffffff', 'AA は 4.5 以上')], edge: [crRow('黒の縁取り / 白', K, '#ffffff', '3 以上'), crRow('黄の線 / 黒の縁取り', YEL, K, '3 以上'), crRow('黄の線 / 白(縁取りの外)', YEL, '#ffffff', '3 未満')], thick: [crRow('黄の線 / 白', YEL, '#ffffff', '3 未満。見えにくい'), crRow('黒い文字 / 白', K, '#ffffff', 'AA は 4.5 以上')] };
+
+  // ---- 小さいところの読みやすさ ----
+  const RD = [{ id: 'ref2b', name: '参考: 2b(黒の棒)', mk: (h) => Svg(h, B2b) }].concat(K3.flatMap((v) => PL.map(([m, mn]) => ({ id: `${v.k}-${m}`, name: `${v.name.split(' ')[0]} ${mn}`, mk: (h) => sym1(v.k, m, h, v.k === 'c' ? 26 : 0) }))));
+  document.getElementById('reading2').innerHTML = RD.map((d) => `
+    <div class="rd">
+      <div><b>${d.name}</b></div>
+      <div><div class="cap">20px</div><span class="px" id="px-${d.id}-20">${d.mk(20)}</span></div>
+      <div><div class="cap">16px</div><span class="px" id="px-${d.id}-16">${d.mk(16)}</span></div>
+      <div><div class="cap">20px の 8 倍</div><div class="zoom" data-zoom="px-${d.id}-20"></div></div>
+      <div><div class="cap">16px の 8 倍</div><div class="zoom" data-zoom="px-${d.id}-16"></div></div>
+      <div class="say" id="say2-${d.id}"></div>
+    </div>`).join('');
+
+  // ---- 案ごとの比較 ----
+  const hdr3 = (L) => `<div class="hdr2"><span class="logo">${L(32)}</span><span class="t">ショップ</span><span class="t">レビュー</span></div>`;
+  document.getElementById('lines').innerHTML = K3.map((v) => `
+    <section class="v">
+      <h2>${v.name}</h2>
+      ${PL.map(([m, mn]) => { const L = Lo(v.k, m); return `
+      <div class="pl">
+        <div class="pn">${mn}</div>
+        <div><div class="cap">(a) ヘッダー(高さ 32px)</div>${hdr3(L)}</div>
+        <div><div class="cap">(b) 大きく</div>${L(44)}</div>
+        <div><div class="cap">(c) 小さく(20px)</div>${L(20)}<div class="cap" style="margin-top:8px">(d) 白黒(32px)</div><div style="filter:grayscale(1)">${L(32)}</div></div>
+        <div><div class="cap">(e) ファビコン(32・16px・4 倍)</div><div class="fav"><div>${favO(v.k, m, 32)}</div><div>${favO(v.k, m, 16)}</div><div>${favO(v.k, m, 64)}</div></div></div>
+        <div><div class="cap">(f) コントラスト比(実測)</div><div class="cr">${CRV[m].join('')}</div></div>
+      </div>`; }).join('')}
+      <div class="ph">
+        <div style="width:420px"><div class="cap">(g) 日本語の画面に置いたところ((i) の札)</div><div class="jp"><div class="jbar"><span class="logo">${Lo(v.k, 'tile')(28)}</span><span>ショップ</span><span>レビュー</span></div><div class="h1">ショップ</div><p>BurgerStack で、食べたバーガーを積み上げよう(見本の文)。</p></div></div>
+        <div style="width:300px"><div class="cap">(h) 評価のバーガー(4.5)と並べたところ</div><div class="side">${sym1(v.k, 'tile', 36)}<span class="side" style="gap:8px">${rate(4.5, 'sm')}<span class="num">4.5</span></span></div></div>
+        <div class="pc" id="pc-${v.k}" style="flex:1"></div>
+      </div>
+    </section>`).join('');
+
+  const SAY2 = {
+    ref2b: '3 本の棒と、チーズの黄色の線が、はっきり読める(前回の推奨。読みやすさの基準)。',
+    'a-tile': '20px・16px とも、ドーム・波・パティ・下の線の 4 本と、左右の折り返しが読める。波は、16px でつぶれ気味の点線に見える。',
+    'a-edge': '縁取りが、線と線のすき間を埋め、16px では、波がにじんだ茶色のかたまりになる。折り返しが読みにくい。',
+    'a-thick': '形は読めるが、黄色が白に淡く溶け、20px 以下では、とても薄い(1.85:1)。',
+    'b-tile': '16px でも、ドーム・レタスの波・パティ・下のバンズの 4 つが読め、バーガーだと分かる。一筆書きの 3 案のなかで、いちばん読みやすい。',
+    'b-edge': '16px では、縁取りで波がにじむが、バーガーの輪郭は読める。黒っぽくなり、黄色い一筆書きらしさが薄れる。',
+    'b-thick': '形は読めるが、白に淡く溶ける(1.85:1)。',
+    'c-tile': '記号は 1a と同じ。黒い札のしっぽ(下線)が、16px でも見える。',
+    'c-edge': '1a の(ii)と同じく、16px では、縁取りでにじむ。しっぽも、黒がちになる。',
+    'c-thick': 'しっぽの下線が淡く、16px では消えかかる。',
+  };
+  Object.keys(SAY2).forEach((k) => { const el = document.getElementById('say2-' + k); if (el) el.textContent = SAY2[k]; });
+  document.getElementById('pc-a').innerHTML = '<b>長所</b> 折り返しが「積み重ね」に見え、全体が「S」(Stack)にも見える。評価のバーガー(茶・緑・赤の塗り)とは、絵の系統が違う。1 本の path だけで、実装が軽い。黒い札の上では、16px でも 4 本の線と折り返しが読める。<br><b>弱点</b> バーガーだと分かる手がかりは、ドームと波だけで、記号だけでは「波打つ線」に見える。黄色は白地で 1.85:1 なので、黒い札がほぼ必須になる(縁取りは 16px でにじみ、太い黄色だけは淡い)。';
+  document.getElementById('pc-b').innerHTML = '<b>長所</b> バーガーだと、いちばんはっきり分かる。黒い札の上では、16px でも読める。<br><b>弱点</b> 「積み重ね(Stack)」より「バーガーの輪郭」に見える。評価のバーガー(黒い輪郭のバーガー)と形が似ていて、紛らわしい(違いは、黄色の線か、茶・緑の塗りかだけ)。落書き風で、縁の線が重なるので、一筆書きの流れ(線が続くこと)は、見えにくい。';
+  document.getElementById('pc-c').innerHTML = '<b>長所</b> 一筆書きの意味が、いちばん伝わる(記号から文字へ、線が流れる)。<br><b>弱点</b> 文字の幅を測って下線を通すので、実装が重い(文字の幅が変わると、線の長さも合わせる必要がある)。20px 以下の下線は細く、白地では消えかかる。日本語の見出しと並ぶと、英字の下線は、少し飾りが強い。ファビコンは、1a と同じ記号だけになる。';
+  document.getElementById('rec3').innerHTML = '<b>これまでの全案を通じた推奨: 1a(蛇行する積み重ね)を、(i)黒い札の上に置く形</b><br>理由: (1) 黄色の線は、白地で 1.85:1 で見えにくく、黒い札の上(10.20:1)だけが、16px まで確実に読めます(縁取りは 16px でにじみ、太い黄色だけは淡くなります)。(2) 折り返しが「積み重ね」に見え、全体が「S」にも見えるので、名前(BurgerStack)の意味と合います。(3) 評価のバーガーとは、絵の系統が違い(1b は形が似ていて紛らわしい)、1 本の path で実装も軽く、ファビコン・アプリのアイコンにも、そのまま使えます。<br><b>代償</b>: ヘッダーに、黒い札(小さな黒い四角)が入ります。白い地に黒い文字という、いまの画面の中では、いちばん濃い部分になるので、目立ちます。それが強すぎるなら、前回の 2b(黒の棒。黒い札なし)が、次の候補です。<br><b>1b</b>は、バーガーだと、いちばんはっきり分かりますが、評価のバーガーと紛らわしく、一筆書きの流れも見えにくいので、推奨しません。<b>1c</b>は、一筆書きの意味が最も伝わりますが、実装が重く、小さいと下線が消えかかるので、将来の飾りの候補にとどめます。<br><b>置き方</b>: (i)黒い札の上を推奨。(ii)黒の縁取りは、16px でにじみ、一筆書きの雰囲気も崩れるので、推奨しません。(iii)太い黄色だけは、大きい所(サインイン画面の大きなロゴなど)でだけ、使えます。<br><b>オプション(作っていません)</b>: 一筆書きなので、サインイン画面などで、線が「描かれていく」動きを付けられます(<code>stroke-dasharray</code> と <code>stroke-dashoffset</code>。path に <code>pathLength="1"</code> を付ければ、長さを測らずに済みます)。<code>prefers-reduced-motion</code> のときは動かさず、最初から描き終えた形で出します。CSS 数行で軽い一方、丸い端が、描き始めの一瞬に点として見えること、ページを移るたびに動かすとうるさいこと(サインイン画面など、1 回だけ)に注意が要ります。黒い札の上なら、動きも目立ちます。';
+</script>
+</body>
+</html>

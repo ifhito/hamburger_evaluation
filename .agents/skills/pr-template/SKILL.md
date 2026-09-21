@@ -3,7 +3,7 @@ name: pr-template
 description: このリポジトリでプルリクエストの説明を作成・更新するときに使う。PR 本文は固定のセクション構成で日本語で書く。実測に基づくテスト結果は必須。
 allowed-tools: [Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(gh pr:*)]
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

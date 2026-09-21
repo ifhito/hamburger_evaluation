@@ -3,7 +3,7 @@ name: focused-review
 description: 汎用のフォーカスレビュー・レンズ集 — fail-loud、consistency、concurrency、performance、resources(メモリ/CPU/リーク)、security、test quality。差分をこれらの観点のいずれかでレビューするとき、または差分が触れる範囲に合うレンズを選ぶときに使う。
 allowed-tools: [Read, Grep, Glob, Bash(git status:*), Bash(git diff:*)]
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:
