@@ -17,13 +17,13 @@ import (
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeShopQuery struct {
-	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error)
+	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error)
 	getShopWithCreator     func(ctx context.Context, id int64) (domain.ShopDetail, error)
 	listShopReviews        func(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
 	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
 }
 
-func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
+func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
 	if f.listShops == nil {
 		panic("unexpected ListShops call")
 	}
@@ -103,12 +103,12 @@ func TestShopsListPagination(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotLimit, gotOffset int32
 			query := &fakeShopQuery{
-				listShops: func(_ context.Context, _ domain.ShopVisibility, _ string, limit, offset int32) ([]domain.Shop, error) {
+				listShops: func(_ context.Context, _ domain.ShopVisibility, _ string, limit, offset int32) ([]domain.Shop, bool, error) {
 					gotLimit, gotOffset = limit, offset
-					return []domain.Shop{}, nil
+					return []domain.Shop{}, false, nil
 				},
 			}
-			if _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", tt.page, tt.perPage); err != nil {
+			if _, _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", tt.page, tt.perPage); err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}
 			if gotLimit != tt.wantLimit || gotOffset != tt.wantOffset {
@@ -124,12 +124,12 @@ func TestShopsListVisibilityDescriptor(t *testing.T) {
 	admin := domain.User{ID: uid.N(5), Admin: true}
 	var got domain.ShopVisibility
 	query := &fakeShopQuery{
-		listShops: func(_ context.Context, vis domain.ShopVisibility, _ string, _, _ int32) ([]domain.Shop, error) {
+		listShops: func(_ context.Context, vis domain.ShopVisibility, _ string, _, _ int32) ([]domain.Shop, bool, error) {
 			got = vis
-			return nil, nil
+			return nil, false, nil
 		},
 	}
-	if _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), &admin, "burger", 1, 20); err != nil {
+	if _, _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), &admin, "burger", 1, 20); err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
 	if !got.ViewAll || got.ViewerID != nil {
@@ -169,6 +169,7 @@ func TestShopsGet(t *testing.T) {
 		}
 		want := pending
 		want.Reviews = reviews
+		want.CanReview = true // creator は自分の pending な shop に review できる
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("Get = %+v, want %+v", got, want)
 		}
@@ -449,4 +450,75 @@ func TestShopsModeration(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestShopsGetCanReview は、詳細の CanReview が domain の reviewable ルール
+// （匿名は false）どおりに設定されることを固定する。
+func TestShopsGetCanReview(t *testing.T) {
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	bob := domain.User{ID: uid.N(2), Username: "bob"}
+	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
+	byStatus := map[int64]domain.ShopDetail{
+		10: {Shop: domain.Shop{ID: 10, Status: domain.ShopStatusActive}},
+		11: {Shop: domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID)}},
+		12: {Shop: domain.Shop{ID: 12, Status: domain.ShopStatusRejected, CreatorID: strPtr(alice.ID)}},
+	}
+	query := &fakeShopQuery{
+		getShopWithCreator: func(_ context.Context, id int64) (domain.ShopDetail, error) { return byStatus[id], nil },
+		listShopReviews:    func(context.Context, int64) ([]domain.ShopReview, error) { return nil, nil },
+	}
+	shops := newShops(query, &fakeShopRepo{})
+
+	tests := []struct {
+		name   string
+		viewer *domain.User
+		id     int64
+		want   bool
+	}{
+		{name: "匿名は active な shop でも false", viewer: nil, id: 10, want: false},
+		{name: "ログイン済みの一般ユーザーは active な shop で true", viewer: &bob, id: 10, want: true},
+		{name: "creator は自分の pending な shop で true", viewer: &alice, id: 11, want: true},
+		{name: "admin は pending な shop で true", viewer: &admin, id: 11, want: true},
+		{name: "creator は rejected な shop でも false", viewer: &alice, id: 12, want: false},
+		{name: "admin は rejected な shop でも false", viewer: &admin, id: 12, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := shops.Get(context.Background(), tt.viewer, tt.id)
+			if err != nil {
+				t.Fatalf("Get returned error: %v", err)
+			}
+			if got.CanReview != tt.want {
+				t.Errorf("CanReview = %v, want %v", got.CanReview, tt.want)
+			}
+		})
+	}
+}
+
+// TestShopsListHasMore は、一覧の次のページの有無（has_more）が query の判定のまま
+// 返ること、query の失敗では false とエラーが返ることを固定する。
+func TestShopsListHasMore(t *testing.T) {
+	for _, want := range []bool{true, false} {
+		query := &fakeShopQuery{
+			listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.Shop, bool, error) {
+				return []domain.Shop{{ID: 1}}, want, nil
+			},
+		}
+		_, got, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", 1, 20)
+		if err != nil {
+			t.Fatalf("List returned error: %v", err)
+		}
+		if got != want {
+			t.Errorf("hasMore = %v, want %v", got, want)
+		}
+	}
+
+	failing := &fakeShopQuery{
+		listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.Shop, bool, error) {
+			return nil, true, io.ErrUnexpectedEOF
+		},
+	}
+	if _, hasMore, err := newShops(failing, &fakeShopRepo{}).List(context.Background(), nil, "", 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) || hasMore {
+		t.Errorf("List = (hasMore %v, err %v), want (false, %v)", hasMore, err, io.ErrUnexpectedEOF)
+	}
 }

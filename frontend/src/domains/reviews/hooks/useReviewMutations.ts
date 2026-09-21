@@ -1,6 +1,6 @@
 import { useSWRConfig } from "swr";
 import { reviewApiClient } from "../api/reviewApiClient";
-import type { Review, ReviewCreateInput, ReviewUpdateInput } from "../api/types";
+import type { ReviewCreateInput, ReviewUpdateInput, ReviewView } from "../api/types";
 
 // multipart のフィールド名は API に合わせた snake_case。JSON と違い自動変換は掛からない。
 function toFormData(fields: Record<string, string | number>, photo: File): FormData {
@@ -28,16 +28,20 @@ export function toUpdateFormData(data: ReviewUpdateInput, photo: File): FormData
   return toFormData({ rating: data.rating, comment: data.comment }, photo);
 }
 
-function isReviewKey(key: unknown): boolean {
-  return typeof key === "string" && key.startsWith("/reviews");
+// 一覧のキー(文字列 "/reviews?…")と、詳細のキー(["/reviews", id, viewerId])の両方に一致する
+export function isReviewKey(key: unknown): boolean {
+  return (
+    (typeof key === "string" && key.startsWith("/reviews")) ||
+    (Array.isArray(key) && key[0] === "/reviews")
+  );
 }
 
 export function useCreateReview() {
   const { mutate } = useSWRConfig();
   return {
-    create: async (data: ReviewCreateInput, photo?: File | null): Promise<Review> => {
+    create: async (data: ReviewCreateInput, photo?: File | null): Promise<ReviewView> => {
       const body = photo ? toCreateFormData(data, photo) : { review: data };
-      const res = await reviewApiClient.post<Review>("/reviews", body);
+      const res = await reviewApiClient.post<ReviewView>("/reviews", body);
       await mutate(isReviewKey);
       return res.data;
     },
@@ -47,9 +51,9 @@ export function useCreateReview() {
 export function useUpdateReview(id: number) {
   const { mutate } = useSWRConfig();
   return {
-    update: async (data: ReviewUpdateInput, photo?: File | null): Promise<Review> => {
+    update: async (data: ReviewUpdateInput, photo?: File | null): Promise<ReviewView> => {
       const body = photo ? toUpdateFormData(data, photo) : { review: data };
-      const res = await reviewApiClient.put<Review>(`/reviews/${id}`, body);
+      const res = await reviewApiClient.put<ReviewView>(`/reviews/${id}`, body);
       await mutate(isReviewKey);
       return res.data;
     },

@@ -13,10 +13,16 @@ describe("isShopKey", () => {
     expect(isShopKey("/admin/shops?status=pending")).toBe(true);
   });
 
+  it("matches the viewer-keyed detail key", () => {
+    expect(isShopKey(["/shops", 1, 3])).toBe(true);
+    expect(isShopKey(["/shops", 1, null])).toBe(true);
+  });
+
   it("does not match unrelated keys", () => {
     expect(isShopKey("/reviews")).toBe(false);
     expect(isShopKey("/users")).toBe(false);
     expect(isShopKey(123)).toBe(false);
     expect(isShopKey(null)).toBe(false);
+    expect(isShopKey(["/users", 1, 3])).toBe(false);
   });
 });

@@ -208,9 +208,19 @@ func writeMultipartReadError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusBadRequest, "invalid multipart body")
 }
 
+// reviewResponse は /reviews 系（一覧・詳細・作成・更新）の review 1 件である。shop 詳細に
+// 埋め込まれる review（shopReviewResponse）に、viewer ごとの can_edit を足したもの。
+// can_edit は、viewer がその review を編集・削除できるか（domain の所有権ルール）で、
+// 匿名は false。frontend は所有者の比較をせず、この値でボタンを出し分ける。
+type reviewResponse struct {
+	shopReviewResponse
+	CanEdit bool `json:"can_edit"`
+}
+
 // newReviewResponse は domain の payload を、shop detail の reviews と共有する
-// wire 形状（frontend の Review、domains/reviews/api/types.ts。ワイヤ上は snake_case）に対応させる。
-func newReviewResponse(detail domain.ReviewDetail) shopReviewResponse {
+// wire 形状（frontend の Review、domains/reviews/api/types.ts。ワイヤ上は snake_case）に
+// can_edit を足して対応させる。
+func newReviewResponse(detail domain.ReviewDetail) reviewResponse {
 	resp := shopReviewResponse{
 		ID:        detail.ID,
 		Rating:    detail.Rating,
@@ -229,7 +239,7 @@ func newReviewResponse(detail domain.ReviewDetail) shopReviewResponse {
 			Confidence:    detail.Burger.Confidence,
 		}
 	}
-	return resp
+	return reviewResponse{shopReviewResponse: resp, CanEdit: detail.CanEdit}
 }
 
 // reviewIDPathValue は {id} の path value をパースする。false は統一された
@@ -304,8 +314,9 @@ func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewLis
 // handleListReviews は GET /reviews を処理する：active な shop の burger の
 // review の、公開されたトップレベルの JSON 配列で、任意で rating/keyword/
 // shop_id/user_id のフィルタにより絞り込まれ、新しい順で、ページネーションされる。
-// OptionalAuth の viewer は、ここでは絞り込みに関与しない。filter と
-// page / per_page のどちらも不正な場合は、filter の 422 が先に返る。
+// OptionalAuth の viewer は、絞り込みには関与せず、各 review の can_edit にだけ使う。
+// 次のページの有無は、レスポンスヘッダー X-Has-More（true / false）で返す。
+// filter と page / per_page のどちらも不正な場合は、filter の 422 が先に返る。
 func handleListReviews(reviews *usecase.Reviews) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		filter, ok := reviewListFilter(w, r)
@@ -316,16 +327,17 @@ func handleListReviews(reviews *usecase.Reviews) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		list, err := reviews.List(r.Context(), filter, page, perPage)
+		list, hasMore, err := reviews.List(r.Context(), viewerPtr(r), filter, page, perPage)
 		if err != nil {
 			log.Printf("reviews: list: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
-		resp := make([]shopReviewResponse, 0, len(list)) // nil ではない：[] として marshal される
+		resp := make([]reviewResponse, 0, len(list)) // nil ではない：[] として marshal される
 		for _, detail := range list {
 			resp = append(resp, newReviewResponse(detail))
 		}
+		setHasMore(w, hasMore)
 		writeJSON(w, http.StatusOK, resp)
 	}
 }
@@ -339,7 +351,7 @@ func handleGetReview(reviews *usecase.Reviews) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		detail, err := reviews.Get(r.Context(), id)
+		detail, err := reviews.Get(r.Context(), viewerPtr(r), id)
 		if err != nil {
 			writeReviewError(w, "get", err)
 			return

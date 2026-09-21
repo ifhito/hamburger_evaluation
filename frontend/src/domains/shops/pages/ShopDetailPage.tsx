@@ -10,10 +10,13 @@ import styles from "./shopDetail.module.css";
 export default function ShopDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
-  const { data: shop, isLoading, error } = useShopDetail(Number(id));
+  const { user, isLoading: authLoading } = useAuth();
+  // レビューを書けるか(canReview)は backend が返す。閲覧者ごとに違うので、認証状態が確定してから取得する
+  const { data: shop, isLoading, error } = useShopDetail(Number(id), user?.id ?? null, {
+    enabled: !authLoading,
+  });
 
-  if (isLoading) return <Layout><p className={styles.muted}>{t("shops.detail.loading")}</p></Layout>;
+  if (isLoading || authLoading) return <Layout><p className={styles.muted}>{t("shops.detail.loading")}</p></Layout>;
   if (error || !shop) return <Layout><p className={styles.muted}>{t("shops.detail.notFound")}</p></Layout>;
 
   return (
@@ -28,7 +31,7 @@ export default function ShopDetailPage() {
             {shop.moderationNote ? `: ${shop.moderationNote}` : ""}
           </p>
         )}
-        {user && shop.status !== "rejected" && (
+        {shop.canReview && (
           <div>
             <Link to={`/reviews/new?shop_id=${shop.id}`}>
               <Button type="button">{t("shops.detail.writeReview")}</Button>

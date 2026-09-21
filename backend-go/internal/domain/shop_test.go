@@ -188,3 +188,37 @@ func TestShopVisibilityFor(t *testing.T) {
 		t.Errorf("admin descriptor = %+v, want ViewAll", vis)
 	}
 }
+
+// TestShopCanBeReviewedByViewer は、API の can_review の元になる値を固定する。
+// 匿名（nil）は常に false で、それ以外は CanBeReviewedBy の規則に従う。
+func TestShopCanBeReviewedByViewer(t *testing.T) {
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	bob := domain.User{ID: uid.N(2), Username: "bob"}
+	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
+
+	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
+	pendingOwn := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
+	rejectedOwn := domain.Shop{ID: 13, Status: domain.ShopStatusRejected, CreatorID: ptr(alice.ID)}
+
+	tests := []struct {
+		name   string
+		viewer *domain.User
+		shop   domain.Shop
+		want   bool
+	}{
+		{name: "匿名は active な shop にも review できない", viewer: nil, shop: activeShop, want: false},
+		{name: "ログイン済みの一般ユーザーは active な shop に review できる", viewer: &bob, shop: activeShop, want: true},
+		{name: "creator は自分の pending な shop に review できる", viewer: &alice, shop: pendingOwn, want: true},
+		{name: "他のユーザーは pending な shop に review できない", viewer: &bob, shop: pendingOwn, want: false},
+		{name: "admin は pending な shop に review できる", viewer: &admin, shop: pendingOwn, want: true},
+		{name: "rejected な shop は creator でも review できない", viewer: &alice, shop: rejectedOwn, want: false},
+		{name: "rejected な shop は admin でも review できない", viewer: &admin, shop: rejectedOwn, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.shop.CanBeReviewedByViewer(tt.viewer); got != tt.want {
+				t.Errorf("CanBeReviewedByViewer(%+v) = %v, want %v", tt.viewer, got, tt.want)
+			}
+		})
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 type errorResponse struct {
@@ -36,6 +37,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
+}
+
+// hasMoreHeader は、一覧（GET /shops・GET /reviews）が次のページを持つかを返す
+// レスポンスヘッダーの名前である。配列のレスポンスの形（既存の契約）を変えないために、
+// 本文ではなくヘッダーで返す。値は "true" か "false"。
+const hasMoreHeader = "X-Has-More"
+
+// setHasMore は、本文を書く前に、次のページの有無をヘッダーに設定する。
+func setHasMore(w http.ResponseWriter, hasMore bool) {
+	w.Header().Set(hasMoreHeader, strconv.FormatBool(hasMore))
 }
 
 // writeError は単一エラーの JSON 形式 {"error":"..."} を書き込む。
