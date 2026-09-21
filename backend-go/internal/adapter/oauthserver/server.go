@@ -43,11 +43,24 @@ type Server struct {
 	cfg      Config
 	provider fosite.OAuth2Provider
 	store    *storage
+	grants   usecase.OAuthGrantQuery
+	users    usecase.UserQuery
 }
 
-// New は、認可サーバーを組み立てる。sessions と reads は、トークンの記録の書き込みと読み取りである。
-// fetcher は、アプリが公開している説明の文書の取得役である。
-func New(cfg Config, sessions *domain.OAuthTokenSessions, reads usecase.OAuthTokenSessionQuery, fetcher MetadataFetcher) (*Server, error) {
+// Deps は、認可サーバーが使う保存先と読み取りの窓口である。
+type Deps struct {
+	// Sessions は、発行したトークンの記録の保存先である。
+	Sessions usecase.OAuthTokenSessionStore
+	// Grants は、利用者が許可したアプリの記録の読み取りである(認可コードを発行するとき、許可の記録を確かめる)。
+	Grants usecase.OAuthGrantQuery
+	// Users は、トークンの持ち主が有効(退会していない)かを確かめるための読み取りである。
+	Users usecase.UserQuery
+	// Fetcher は、アプリが公開している説明の文書(CIMD)の取得役である。
+	Fetcher MetadataFetcher
+}
+
+// New は、認可サーバーを組み立てる。
+func New(cfg Config, deps Deps) (*Server, error) {
 	cfg.Issuer = strings.TrimRight(cfg.Issuer, "/")
 	for name, raw := range map[string]string{"issuer": cfg.Issuer, "resource": cfg.Resource, "consent URL": cfg.ConsentURL} {
 		if u, err := url.Parse(raw); err != nil || !u.IsAbs() || u.Host == "" || u.Fragment != "" {
@@ -57,11 +70,11 @@ func New(cfg Config, sessions *domain.OAuthTokenSessions, reads usecase.OAuthTok
 	if len(cfg.Secret) < minSecretBytes {
 		return nil, fmt.Errorf("oauth secret must be at least %d bytes", minSecretBytes)
 	}
-	clients, err := newClientResolver(cfg.StaticClients, fetcher, cfg.Resource, time.Now)
+	clients, err := newClientResolver(cfg.StaticClients, deps.Fetcher, cfg.Resource, time.Now)
 	if err != nil {
 		return nil, err
 	}
-	store := &storage{sessions: sessions, reads: reads, clients: clients}
+	store := &storage{sessions: deps.Sessions, clients: clients}
 	fcfg := &fosite.Config{
 		AccessTokenLifespan:            domain.OAuthAccessTokenTTL,
 		RefreshTokenLifespan:           domain.OAuthRefreshTokenTTL,
@@ -86,7 +99,7 @@ func New(cfg Config, sessions *domain.OAuthTokenSessions, reads usecase.OAuthTok
 		compose.OAuth2TokenRevocationFactory,
 		compose.OAuth2PKCEFactory,
 	)
-	return &Server{cfg: cfg, provider: provider, store: store}, nil
+	return &Server{cfg: cfg, provider: provider, store: store, grants: deps.Grants, users: deps.Users}, nil
 }
 
 // ---- 認可の要求 ----
@@ -95,8 +108,10 @@ func New(cfg Config, sessions *domain.OAuthTokenSessions, reads usecase.OAuthTok
 //   - 宛先(resource)を、ライブラリが扱う audience にする。指定がなければ、この認可サーバーの宛先を使う。
 //     指定が違うときは、宛先の誤りを返し(ライブラリには正しい宛先を渡して要求の解釈を続けさせる。
 //     アプリに戻せる形でエラーを返すため)、利用者が直接 audience を指定しても無視する。
-//   - 範囲(scope)がなければ、既定の範囲(読むだけ)にする。
-func (s *Server) normalizeParams(params url.Values) (url.Values, error) {
+//   - 範囲(scope)がなければ、既定の範囲(読むだけ)にする。ただし、これは認可の要求(authorize が true)だけで、
+//     トークンの要求(認可コードの交換・更新)には補わない。更新のとき scope を省くのは「元の許可の範囲を保つ」
+//     という意味なので、既定の範囲で置き換えてはならない。
+func (s *Server) normalizeParams(params url.Values, authorize bool) (url.Values, error) {
 	q := url.Values{}
 	for k, v := range params {
 		q[k] = append([]string(nil), v...)
@@ -108,7 +123,7 @@ func (s *Server) normalizeParams(params url.Values) (url.Values, error) {
 	}
 	q.Del("resource")
 	q.Set("audience", resource)
-	if len(strings.Fields(q.Get("scope"))) == 0 {
+	if authorize && len(strings.Fields(q.Get("scope"))) == 0 {
 		q.Set("scope", strings.Join(domain.DefaultOAuthScopes(), " "))
 	}
 	return q, err
@@ -125,7 +140,7 @@ var errInvalidTarget = &fosite.RFC6749Error{
 // 戻り先が登録と違う・PKCE がない・範囲や宛先の誤りなどは、エラーで返る。エラーのときも、アプリへ
 // 戻せる要求かどうかを判断するために、要求の値(nil でないことがある)を一緒に返す。
 func (s *Server) parseAuthorize(ctx context.Context, params url.Values) (fosite.AuthorizeRequester, error) {
-	q, targetErr := s.normalizeParams(params)
+	q, targetErr := s.normalizeParams(params, true)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("build authorize request: %w", err)
@@ -213,6 +228,12 @@ func (s *Server) IssueAuthorizationCode(ctx context.Context, params url.Values, 
 	if err != nil {
 		return s.errorRedirect(ctx, ar, err)
 	}
+	// 許可の記録が、この利用者・このアプリのもので、求められた範囲を許可済みであることを、保存先から確かめる。
+	// 確かめた範囲だけを付与する(呼び出し側が、別の許可の記録の id や、許可していない範囲を渡しても、
+	// 認可コードは発行しない)。
+	if err := s.checkGrant(ctx, ar, userID, grantID); err != nil {
+		return "", err
+	}
 	for _, sc := range ar.GetRequestedScopes() {
 		ar.GrantScope(sc)
 	}
@@ -231,6 +252,24 @@ func (s *Server) IssueAuthorizationCode(ctx context.Context, params url.Values, 
 		return "", errors.New("oauth: authorize response has no redirect location")
 	}
 	return s.withIssuer(loc), nil
+}
+
+// checkGrant は、grantID の許可の記録が、userID とアプリのもので、要求された範囲を含むことを確かめる。
+// 記録が別の利用者・別のアプリのもの、または存在しないなら(wrap された)domain.ErrOAuthGrantNotFound、
+// 許可済みの範囲を超えるなら(wrap された)domain.ErrOAuthInvalidScope を返す。
+func (s *Server) checkGrant(ctx context.Context, ar fosite.AuthorizeRequester, userID, grantID string) error {
+	clientID := ar.GetClient().GetID()
+	grant, err := s.grants.GetOAuthGrantByUserAndClient(ctx, userID, clientID)
+	if err != nil {
+		if errors.Is(err, domain.ErrOAuthGrantNotFound) {
+			return err
+		}
+		return fmt.Errorf("issue authorization code: load grant: %w", err)
+	}
+	if grant.ID != grantID {
+		return fmt.Errorf("%w: the grant is not the one for this user and app", domain.ErrOAuthGrantNotFound)
+	}
+	return grant.Permits(userID, clientID, ar.GetRequestedScopes())
 }
 
 // DenyAuthorization は、利用者が許可しなかった認可の要求に対して、アプリへ戻す URL(access_denied を付けたもの)を返す。
@@ -272,7 +311,7 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		s.provider.WriteAccessError(ctx, w, nil, fosite.ErrInvalidRequest.WithHint("Unable to parse the request body."))
 		return
 	}
-	q, targetErr := s.normalizeParams(r.PostForm)
+	q, targetErr := s.normalizeParams(r.PostForm, false)
 	if targetErr != nil {
 		s.provider.WriteAccessError(ctx, w, nil, targetErr)
 		return
@@ -281,6 +320,13 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	r.Form = q
 	ar, err := s.provider.NewAccessRequest(ctx, r, &fosite.DefaultSession{})
 	if err != nil {
+		s.logServerError(err)
+		s.provider.WriteAccessError(ctx, w, ar, err)
+		return
+	}
+	// 持ち主(認可コードを発行した利用者、更新トークンを発行された利用者)が、いまも有効(退会していない)かを、
+	// トークンを発行する前に確かめる。退会した利用者には、認可コードの交換でも更新でも、新しいトークンを出さない。
+	if err := s.ensureOwnerActive(ctx, ar); err != nil {
 		s.logServerError(err)
 		s.provider.WriteAccessError(ctx, w, ar, err)
 		return
@@ -300,6 +346,23 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.provider.WriteAccessResponse(ctx, w, ar, resp)
+}
+
+// ensureOwnerActive は、ar のトークンの持ち主が、いまも有効な利用者であることを確かめる。退会していれば
+// invalid_grant(認可コードや更新トークンが、もう使えない)を返す。確かめられなかった(保存先の障害)ときは、
+// サーバーの障害として返す。
+func (s *Server) ensureOwnerActive(ctx context.Context, ar fosite.AccessRequester) error {
+	subject := ar.GetSession().GetSubject()
+	if subject == "" {
+		return fosite.ErrInvalidGrant.WithHint("The grant has no resource owner.")
+	}
+	if _, err := s.users.GetActiveUserByID(ctx, subject); err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return fosite.ErrInvalidGrant.WithHint("The resource owner is no longer available.")
+		}
+		return fosite.ErrServerError.WithWrap(fmt.Errorf("%w: load resource owner: %w", errStorage, err)).WithDebug(err.Error())
+	}
+	return nil
 }
 
 // HandleRevoke は、取り消しの URL(POST /oauth/revoke。RFC 7009)の窓口である。更新トークンを取り消すと、

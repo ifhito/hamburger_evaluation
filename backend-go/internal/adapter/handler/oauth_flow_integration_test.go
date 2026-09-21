@@ -37,6 +37,7 @@ const (
 // oauthKit は、本物の PostgreSQL・認可サーバー・JWT のログインを通して、許可の画面の API から
 // トークンの検証までを確かめるための一式である。
 type oauthKit struct {
+	pool   *pgxpool.Pool
 	router http.Handler
 	tokens *usecase.OAuthAccessTokens
 	alice  string
@@ -69,7 +70,12 @@ func newOAuthKit(t *testing.T) *oauthKit {
 		StaticClients: []domain.OAuthClient{{
 			ID: oauthTestClient, Name: "Dev App", RedirectURIs: []string{oauthTestRedirect},
 		}},
-	}, domain.NewOAuthTokenSessions(repository.NewOAuthTokenSessionRepository(pool)), query.NewOAuthTokenSessionQuery(pool), oauthserver.NewHTTPMetadataFetcher())
+	}, oauthserver.Deps{
+		Sessions: uow.NewOAuthTokenSessionStore(pool),
+		Grants:   query.NewOAuthGrantQuery(pool),
+		Users:    userQuery,
+		Fetcher:  oauthserver.NewHTTPMetadataFetcher(),
+	})
 	if err != nil {
 		t.Fatalf("oauthserver.New: %v", err)
 	}
@@ -96,7 +102,7 @@ func newOAuthKit(t *testing.T) *oauthKit {
 		bearer[id] = "Bearer " + tok
 	}
 	return &oauthKit{
-		router: router, alice: alice, bob: bob, bearer: bearer,
+		pool: pool, router: router, alice: alice, bob: bob, bearer: bearer,
 		tokens: usecase.NewOAuthAccessTokens(server, userQuery, oauthTestResource),
 	}
 }
@@ -386,4 +392,90 @@ func TestOAuthConsentErrors(t *testing.T) {
 			t.Error("別の利用者の取り消しで、許可が消えた")
 		}
 	})
+}
+
+// 退会した利用者と、退会がもたらす許可の取り消しの、許可の画面の API・接続済みアプリの一覧・取り消しへの影響。
+func TestOAuthWithdrawnUsers(t *testing.T) {
+	_, challenge := pkce()
+
+	t.Run("退会した利用者は、退会前のログイン用の JWT でも、許可の画面の API・一覧・取り消しのどれも使えない", func(t *testing.T) {
+		k := newOAuthKit(t)
+		redirectTo(t, k.decide(k.alice, authQuery(challenge), true))
+		grantID := k.grants(t, k.alice)[0].ID
+		if _, err := k.pool.Exec(context.Background(), `UPDATE users SET discarded_at = now() WHERE id = $1`, k.alice); err != nil {
+			t.Fatal(err)
+		}
+		for _, tt := range []struct{ method, path, body string }{
+			{http.MethodGet, "/oauth/authorize/request?" + authQuery(challenge), ""},
+			{http.MethodPost, "/oauth/authorize/decision", `{"query":"` + authQuery(challenge) + `","approve":true}`},
+			{http.MethodGet, "/oauth/grants", ""},
+			{http.MethodDelete, "/oauth/grants/" + grantID, ""},
+		} {
+			if rec := do(k.router, tt.method, tt.path, tt.body, k.bearer[k.alice]); rec.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s = %d, want 401", tt.method, tt.path, rec.Code)
+			}
+		}
+	})
+
+	t.Run("退会(DELETE /users/{id})すると、その利用者の許可とトークンの記録が消え、発行済みのアクセストークンは使えなくなり、別の利用者の許可は残る", func(t *testing.T) {
+		k := newOAuthKit(t)
+		verifier, ch := pkce()
+		code := redirectTo(t, k.decide(k.alice, authQuery(ch), true)).Query().Get("code")
+		access, _ := k.exchange(t, code, verifier)["access_token"].(string)
+		redirectTo(t, k.decide(k.bob, authQuery(challenge), true))
+		if _, _, err := k.tokens.Authenticate(context.Background(), access, domain.OAuthScopeRead); err != nil {
+			t.Fatalf("退会前のアクセストークンが使えない: %v", err)
+		}
+
+		if rec := do(k.router, http.MethodDelete, "/users/"+k.alice, "", k.bearer[k.alice]); rec.Code != http.StatusNoContent {
+			t.Fatalf("DELETE /users/{id} = %d %s", rec.Code, rec.Body.String())
+		}
+
+		count := func(sql string, args ...any) int {
+			var n int
+			if err := k.pool.QueryRow(context.Background(), sql, args...).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
+		if n := count(`SELECT count(*) FROM oauth_grants WHERE user_id = $1`, k.alice); n != 0 {
+			t.Errorf("退会した利用者の許可が %d 件残っている", n)
+		}
+		if n := count(`SELECT count(*) FROM oauth_token_sessions WHERE user_id = $1`, k.alice); n != 0 {
+			t.Errorf("退会した利用者のトークンの記録が %d 件残っている", n)
+		}
+		if n := count(`SELECT count(*) FROM oauth_grants WHERE user_id = $1`, k.bob); n != 1 {
+			t.Errorf("別の利用者の許可 = %d 件, want 1", n)
+		}
+		if _, _, err := k.tokens.Authenticate(context.Background(), access, domain.OAuthScopeRead); !errors.Is(err, domain.ErrOAuthInvalidToken) {
+			t.Errorf("退会後のアクセストークン err = %v, want ErrOAuthInvalidToken", err)
+		}
+	})
+}
+
+// 許可の決定の API は、許可の記録を、要求された範囲だけで作る(利用者が求めていない範囲は、記録も、認可コードにも入らない)。
+// すでにある、広い範囲の許可を、狭い要求で縮めることも、そこから広げることもない。
+func TestOAuthDecisionRecordsOnlyTheRequestedScopes(t *testing.T) {
+	k := newOAuthKit(t)
+	verifier, challenge := pkce()
+
+	wide := authQuery(challenge, "scope", "hamburger:read hamburger:write")
+	redirectTo(t, k.decide(k.alice, wide, true))
+
+	// 狭い(読み取りだけの)要求で許可しても、記録された範囲は減らず、発行される認可コードは、要求した範囲だけになる。
+	code := redirectTo(t, k.decide(k.alice, authQuery(challenge), true)).Query().Get("code")
+	tokens := k.exchange(t, code, verifier)
+	if tokens["scope"] != domain.OAuthScopeRead {
+		t.Errorf("狭い要求のトークンの scope = %v, want %s だけ", tokens["scope"], domain.OAuthScopeRead)
+	}
+	grants := k.grants(t, k.alice)
+	if len(grants) != 1 || len(grants[0].Scopes) != 2 {
+		t.Errorf("記録された許可 = %+v, want 1 件で読み取りと書き込みの両方", grants)
+	}
+
+	// 初めての利用者が、読み取りだけの要求を許可すると、記録される範囲も、読み取りだけになる。
+	redirectTo(t, k.decide(k.bob, authQuery(challenge), true))
+	if bobs := k.grants(t, k.bob); len(bobs) != 1 || len(bobs[0].Scopes) != 1 || bobs[0].Scopes[0].Name != domain.OAuthScopeRead {
+		t.Errorf("bob の許可 = %+v, want 読み取りだけ", bobs)
+	}
 }

@@ -47,3 +47,12 @@ func (r *OAuthGrantRepository) DiscardOAuthGrant(ctx context.Context, userID, gr
 	}
 	return nil
 }
+
+// DiscardOAuthGrantsByUser は、userID のすべての許可を削除する。発行済みのトークンは、外部キーの連鎖削除で、
+// 同時に消える。
+func (r *OAuthGrantRepository) DiscardOAuthGrantsByUser(ctx context.Context, userID string) error {
+	if err := r.q.DeleteOAuthGrantsByUser(ctx, userID); err != nil {
+		return fmt.Errorf("discard oauth grants by user: %w", err)
+	}
+	return nil
+}

@@ -141,19 +141,24 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	// OAuth の認可サーバーは、OAUTH_ISSUER を設定したときだけ有効になる(設定がなければ、窓口は登録されない)。
 	var oauth *handler.OAuth
 	if cfg.OAuth.Enabled {
+		// 許可の記録の書き込みは、domain の書き込みオブジェクトを通し、読み取りは query を通す。
+		grantWrites := domain.NewOAuthGrants(repository.NewOAuthGrantRepository(pool))
+		grantQuery := query.NewOAuthGrantQuery(pool)
 		oauthServer, err := oauthserver.New(oauthserver.Config{
 			Issuer:        cfg.OAuth.Issuer,
 			Resource:      cfg.OAuth.Resource,
 			ConsentURL:    cfg.OAuth.ConsentURL,
 			Secret:        []byte(cfg.OAuth.Secret),
 			StaticClients: cfg.OAuth.StaticClients,
-		}, domain.NewOAuthTokenSessions(repository.NewOAuthTokenSessionRepository(pool)), query.NewOAuthTokenSessionQuery(pool), oauthserver.NewHTTPMetadataFetcher())
+		}, oauthserver.Deps{
+			Sessions: uow.NewOAuthTokenSessionStore(pool),
+			Grants:   grantQuery,
+			Users:    userQuery,
+			Fetcher:  oauthserver.NewHTTPMetadataFetcher(),
+		})
 		if err != nil {
 			return fmt.Errorf("oauth server: %w", err)
 		}
-		// 許可の記録の書き込みは、domain の書き込みオブジェクトを通し、読み取りは query を通す。
-		grantWrites := domain.NewOAuthGrants(repository.NewOAuthGrantRepository(pool))
-		grantQuery := query.NewOAuthGrantQuery(pool)
 		oauth = &handler.OAuth{
 			Endpoints: oauthServer,
 			Consents:  usecase.NewOAuthConsents(oauthServer, grantQuery, grantWrites),

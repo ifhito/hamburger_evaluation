@@ -12,6 +12,7 @@ import (
 	"github.com/ory/fosite"
 	"github.com/ory/fosite/handler/oauth2"
 	"github.com/ory/fosite/handler/pkce"
+	ftx "github.com/ory/fosite/storage"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
@@ -31,8 +32,7 @@ var errStorage = errors.New("oauth storage failure")
 // storage は、認可ライブラリが要求する保存の契約を、domain の書き込みオブジェクトと usecase の読み取りの窓口で
 // 実装する。トークンの文字列そのものは受け取らず、ライブラリが計算した署名(signature)だけを保存する。
 type storage struct {
-	sessions *domain.OAuthTokenSessions
-	reads    usecase.OAuthTokenSessionQuery
+	sessions usecase.OAuthTokenSessionStore
 	clients  *clientResolver
 }
 
@@ -41,7 +41,52 @@ var (
 	_ oauth2.CoreStorage            = (*storage)(nil)
 	_ oauth2.TokenRevocationStorage = (*storage)(nil)
 	_ pkce.PKCERequestStorage       = (*storage)(nil)
+	_ ftx.Transactional             = (*storage)(nil)
 )
+
+// txKey は、ライブラリが開始したトランザクション(usecase.OAuthTokenSessionTx)を、context に入れるキーである。
+type txKey struct{}
+
+// scope は、ctx がトランザクションを持っていればそれに結び付いた、持っていなければトランザクションの外の、
+// トークンの記録の書き込みと読み取りの組を返す。
+func (s *storage) scope(ctx context.Context) usecase.OAuthTokenSessionScope {
+	if tx, ok := ctx.Value(txKey{}).(usecase.OAuthTokenSessionTx); ok {
+		return tx.OAuthTokenSessionScope
+	}
+	return s.sessions.Scope()
+}
+
+// BeginTX、Commit、Rollback は、ライブラリが、認可コードを使用済みにしてから、トークンを保存するまで
+// (更新トークンの入れ替えから、新しいトークンを保存するまでも同じ)を、1 つのトランザクションにまとめるための口である。
+// まとめないと、認可コードの再利用を検知した別の要求が、系列を取り消したあとに、先の交換が、まだ保存していなかった
+// トークンを保存してしまい、取り消したはずのトークンが有効なまま残る。まとめれば、認可コードの行のロックで、
+// 後から来た要求は、先の交換が確定するまで待たされ、そのあとで取り消すので、保存されたトークンも取り消される。
+func (s *storage) BeginTX(ctx context.Context) (context.Context, error) {
+	tx, err := s.sessions.Begin(ctx)
+	if err != nil {
+		return ctx, fmt.Errorf("%w: begin transaction: %w", errStorage, err)
+	}
+	return context.WithValue(ctx, txKey{}, tx), nil
+}
+
+func (s *storage) Commit(ctx context.Context) error {
+	tx, ok := ctx.Value(txKey{}).(usecase.OAuthTokenSessionTx)
+	if !ok {
+		return fmt.Errorf("%w: commit without a transaction", errStorage)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("%w: commit: %w", errStorage, err)
+	}
+	return nil
+}
+
+func (s *storage) Rollback(ctx context.Context) error {
+	tx, ok := ctx.Value(txKey{}).(usecase.OAuthTokenSessionTx)
+	if !ok {
+		return nil
+	}
+	return tx.Rollback(ctx)
+}
 
 // storedRequest は、認可の内容を、ライブラリが復元できる形で保存するための JSON の形である。
 type storedRequest struct {
@@ -99,7 +144,7 @@ func (s *storage) save(ctx context.Context, kind domain.OAuthTokenKind, signatur
 	if expires.IsZero() {
 		expires = time.Now().Add(fallbackTTL)
 	}
-	if err := s.sessions.Save(ctx, domain.OAuthTokenSession{
+	if err := s.scope(ctx).Writes.Save(ctx, domain.OAuthTokenSession{
 		Kind:      kind,
 		Signature: signature,
 		RequestID: req.GetID(),
@@ -118,7 +163,7 @@ func (s *storage) save(ctx context.Context, kind domain.OAuthTokenKind, signatur
 // 復元するアプリは、識別子と、固定の使い方(newFositeClient)だけを持つ。戻り先などの登録情報は、
 // トークンの検証や交換には要らないので、取り直さない(アプリの説明の文書を取りに行かない)。
 func (s *storage) load(ctx context.Context, kind domain.OAuthTokenKind, signature string, session fosite.Session) (fosite.Requester, domain.OAuthTokenSession, error) {
-	rec, err := s.reads.GetOAuthTokenSession(ctx, kind, signature)
+	rec, err := s.scope(ctx).Reads.GetOAuthTokenSession(ctx, kind, signature)
 	if err != nil {
 		if errors.Is(err, domain.ErrOAuthTokenSessionNotFound) {
 			return nil, rec, fosite.ErrNotFound
@@ -155,7 +200,7 @@ func (s *storage) CreateAuthorizeCodeSession(ctx context.Context, signature stri
 	if err := s.save(ctx, domain.OAuthTokenAuthorizationCode, signature, req, fosite.AuthorizeCode, domain.OAuthAuthorizationCodeTTL); err != nil {
 		return err
 	}
-	if _, err := s.sessions.DiscardExpired(ctx, discardExpiredLimit); err != nil {
+	if _, err := s.scope(ctx).Writes.DiscardExpired(ctx, discardExpiredLimit); err != nil {
 		slog.Warn("oauth: discard expired token sessions failed", "error", err)
 	}
 	return nil
@@ -177,7 +222,7 @@ func (s *storage) GetAuthorizeCodeSession(ctx context.Context, signature string,
 // InvalidateAuthorizeCodeSession は、認可コードを使用済みにする。並行して 2 つの要求が同じコードを使おうと
 // しても、成功するのは 1 つだけである。
 func (s *storage) InvalidateAuthorizeCodeSession(ctx context.Context, signature string) error {
-	err := s.sessions.Use(ctx, domain.OAuthTokenAuthorizationCode, signature)
+	err := s.scope(ctx).Writes.Use(ctx, domain.OAuthTokenAuthorizationCode, signature)
 	switch {
 	case err == nil:
 		return nil
@@ -256,7 +301,7 @@ func (s *storage) DeleteRefreshTokenSession(ctx context.Context, signature strin
 // RotateRefreshToken は、更新トークンを入れ替え済みにし、同じ系列の古いアクセストークンを使えなくする。
 // 並行して同じ更新トークンを使おうとしても、成功するのは 1 つだけである。
 func (s *storage) RotateRefreshToken(ctx context.Context, requestID, signature string) error {
-	err := s.sessions.Rotate(ctx, requestID, signature)
+	err := s.scope(ctx).Writes.Rotate(ctx, requestID, signature)
 	switch {
 	case err == nil:
 		return nil
@@ -282,14 +327,14 @@ func (s *storage) RevokeAccessToken(ctx context.Context, requestID string) error
 }
 
 func (s *storage) revokeRequest(ctx context.Context, requestID string) error {
-	if err := s.sessions.RevokeRequest(ctx, requestID); err != nil {
+	if err := s.scope(ctx).Writes.RevokeRequest(ctx, requestID); err != nil {
 		return fmt.Errorf("%w: %w", errStorage, err)
 	}
 	return nil
 }
 
 func (s *storage) forget(ctx context.Context, kind domain.OAuthTokenKind, signature string) error {
-	if err := s.sessions.Forget(ctx, kind, signature); err != nil {
+	if err := s.scope(ctx).Writes.Forget(ctx, kind, signature); err != nil {
 		return fmt.Errorf("%w: %w", errStorage, err)
 	}
 	return nil

@@ -27,15 +27,20 @@ WITH rotated AS (
 )
 SELECT count(*)::bigint AS rotated_count FROM rotated;
 
--- name: DeactivateOAuthTokenSessionsByRequest :exec
-UPDATE oauth_token_sessions SET active = false
-WHERE request_id = @request_id AND kind = @kind AND active;
+-- name: RevokeOAuthRequest :exec
+-- 系列(同じ認可から発行されたトークン)を取り消す: アクセストークンを削除し、更新トークンを、再利用の検知のために
+-- 記録を残して無効にする。1 つの文(データを変更する CTE は、参照されなくても最後まで実行される)なので、
+-- どちらかが失敗すれば、どちらも反映されない。
+WITH dropped AS (
+    DELETE FROM oauth_token_sessions AS a
+    WHERE a.request_id = @request_id AND a.kind = 'access_token'
+    RETURNING a.id
+)
+UPDATE oauth_token_sessions AS r SET active = false
+WHERE r.request_id = @request_id AND r.kind = 'refresh_token' AND r.active;
 
 -- name: DeleteOAuthTokenSession :exec
 DELETE FROM oauth_token_sessions WHERE kind = @kind AND signature = @signature;
-
--- name: DeleteOAuthTokenSessionsByRequest :exec
-DELETE FROM oauth_token_sessions WHERE request_id = @request_id AND kind = @kind;
 
 -- name: DeleteExpiredOAuthTokenSessions :execrows
 -- 期限切れの記録を、上限つきで削除する。ほかの処理が掴んでいる行は待たずに飛ばす。

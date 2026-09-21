@@ -11,9 +11,10 @@ import (
 
 // fakeGrantRepository は、書き込みオブジェクトに渡された内容を記録する、テスト用の repository である。
 type fakeGrantRepository struct {
-	created []domain.CreateOAuthGrantParams
-	revoked [][2]string
-	err     error
+	created    []domain.CreateOAuthGrantParams
+	revoked    [][2]string
+	revokedAll []string
+	err        error
 }
 
 func (f *fakeGrantRepository) CreateOAuthGrant(_ context.Context, p domain.CreateOAuthGrantParams) (string, error) {
@@ -23,6 +24,11 @@ func (f *fakeGrantRepository) CreateOAuthGrant(_ context.Context, p domain.Creat
 
 func (f *fakeGrantRepository) DiscardOAuthGrant(_ context.Context, userID, grantID string) error {
 	f.revoked = append(f.revoked, [2]string{userID, grantID})
+	return f.err
+}
+
+func (f *fakeGrantRepository) DiscardOAuthGrantsByUser(_ context.Context, userID string) error {
+	f.revokedAll = append(f.revokedAll, userID)
 	return f.err
 }
 
@@ -74,5 +80,39 @@ func TestOAuthGrantsRevoke(t *testing.T) {
 	}
 	if len(repo.revoked) != 1 || repo.revoked[0] != [2]string{"u1", "g1"} {
 		t.Errorf("revoked = %v, want [[u1 g1]]", repo.revoked)
+	}
+}
+
+func TestOAuthGrantsRevokeAll(t *testing.T) {
+	repo := &fakeGrantRepository{}
+	if err := domain.NewOAuthGrants(repo).RevokeAll(context.Background(), "u1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.revokedAll) != 1 || repo.revokedAll[0] != "u1" {
+		t.Errorf("revokedAll = %v, want [u1]", repo.revokedAll)
+	}
+}
+
+func TestOAuthGrantPermits(t *testing.T) {
+	grant := domain.OAuthGrant{ID: "g1", UserID: "u1", ClientID: "app", Scopes: []string{domain.OAuthScopeRead}}
+	tests := []struct {
+		name             string
+		userID, clientID string
+		scopes           []string
+		wantErr          error
+	}{
+		{"許可の記録の持ち主が、許可済みのアプリに、許可済みの範囲を求めると、通る", "u1", "app", []string{domain.OAuthScopeRead}, nil},
+		{"許可済みの範囲の一部だけを求めても、通る", "u1", "app", []string{}, nil},
+		{"許可していない書き込みの範囲を含めて求めると、範囲の誤りとして断る", "u1", "app", []string{domain.OAuthScopeRead, domain.OAuthScopeWrite}, domain.ErrOAuthInvalidScope},
+		{"別の利用者が、この許可の記録を使おうとすると、見つからないものとして断る", "u2", "app", []string{domain.OAuthScopeRead}, domain.ErrOAuthGrantNotFound},
+		{"別のアプリのために、この許可の記録を使おうとすると、見つからないものとして断る", "u1", "other-app", []string{domain.OAuthScopeRead}, domain.ErrOAuthGrantNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := grant.Permits(tt.userID, tt.clientID, tt.scopes)
+			if tt.wantErr == nil && err != nil || tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Errorf("Permits = %v, want %v", err, tt.wantErr)
+			}
+		})
 	}
 }

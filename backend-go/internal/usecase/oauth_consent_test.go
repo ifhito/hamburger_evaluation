@@ -88,6 +88,10 @@ func (f *fakeGrantStore) DiscardOAuthGrant(_ context.Context, userID, grantID st
 	return f.revokeErr
 }
 
+func (f *fakeGrantStore) DiscardOAuthGrantsByUser(context.Context, string) error {
+	panic("unexpected DiscardOAuthGrantsByUser call")
+}
+
 func newConsents(a *fakeAuthorizer, s *fakeGrantStore) *usecase.OAuthConsents {
 	return usecase.NewOAuthConsents(a, s, domain.NewOAuthGrants(s))
 }

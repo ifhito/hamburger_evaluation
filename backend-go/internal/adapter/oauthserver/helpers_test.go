@@ -13,11 +13,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/oauthserver"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/uow"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 )
@@ -60,6 +62,7 @@ type rig struct {
 	t       *testing.T
 	ctx     context.Context
 	pool    *pgxpool.Pool
+	conn    *pgx.Conn
 	srv     *oauthserver.Server
 	fetcher *fakeFetcher
 	userID  string
@@ -89,12 +92,17 @@ func newRig(t *testing.T) *rig {
 		StaticClients: []domain.OAuthClient{{
 			ID: staticClientID, Name: "Dev App", RedirectURIs: []string{staticRedirect, httpsRedirect},
 		}},
-	}, domain.NewOAuthTokenSessions(repository.NewOAuthTokenSessionRepository(pool)), query.NewOAuthTokenSessionQuery(pool), fetcher)
+	}, oauthserver.Deps{
+		Sessions: uow.NewOAuthTokenSessionStore(pool),
+		Grants:   query.NewOAuthGrantQuery(pool),
+		Users:    query.NewUserQuery(pool),
+		Fetcher:  fetcher,
+	})
 	if err != nil {
 		t.Fatalf("oauthserver.New: %v", err)
 	}
 	return &rig{
-		t: t, ctx: ctx, pool: pool, srv: srv, fetcher: fetcher, userID: userID,
+		t: t, ctx: ctx, pool: pool, conn: conn, srv: srv, fetcher: fetcher, userID: userID,
 		grants: domain.NewOAuthGrants(repository.NewOAuthGrantRepository(pool)),
 	}
 }

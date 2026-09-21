@@ -54,12 +54,11 @@ type OAuthTokenSessionRepository interface {
 	// 同じ系列のアクセストークンを削除する。判定と更新は 1 つの文で行い、すでに無効・存在しないなら、
 	// UpdateOAuthTokenSessionInactive と同じエラーを返す。
 	UpdateOAuthRefreshRotated(ctx context.Context, requestID, signature string) error
-	// UpdateOAuthTokenSessionsInactiveByRequest は、requestID の系列の、kind の記録をすべて無効にする。
-	UpdateOAuthTokenSessionsInactiveByRequest(ctx context.Context, requestID string, kind OAuthTokenKind) error
+	// UpdateOAuthRequestRevoked は、requestID の系列を取り消す: アクセストークンを削除し、更新トークンを(再利用の
+	// 検知のために記録を残して)無効にする。1 つの操作で行うので、失敗したときに、片方だけが反映されることはない。
+	UpdateOAuthRequestRevoked(ctx context.Context, requestID string) error
 	// DiscardOAuthTokenSession は、kind と signature の記録を削除する。なくても、エラーにしない。
 	DiscardOAuthTokenSession(ctx context.Context, kind OAuthTokenKind, signature string) error
-	// DiscardOAuthTokenSessionsByRequest は、requestID の系列の、kind の記録をすべて削除する。
-	DiscardOAuthTokenSessionsByRequest(ctx context.Context, requestID string, kind OAuthTokenKind) error
 	// DiscardExpiredOAuthTokenSessions は、期限切れの記録を、最大 limit 件まで削除し、削除した件数を返す。
 	DiscardExpiredOAuthTokenSessions(ctx context.Context, limit int) (int64, error)
 }
@@ -101,13 +100,10 @@ func (s *OAuthTokenSessions) Forget(ctx context.Context, kind OAuthTokenKind, si
 }
 
 // RevokeRequest は、requestID の系列のトークンをすべて使えなくする。アクセストークンは削除し、
-// 更新トークンは(再利用の検知のために記録を残して)無効にする。認可コードの再利用や、入れ替え済みの
-// 更新トークンの再利用を検知したときに使う。
+// 更新トークンは(再利用の検知のために記録を残して)無効にする。この 2 つは、1 つの操作(すべて成功するか、
+// 何も変わらないか)で行う。認可コードの再利用や、入れ替え済みの更新トークンの再利用を検知したときに使う。
 func (s *OAuthTokenSessions) RevokeRequest(ctx context.Context, requestID string) error {
-	if err := s.repo.DiscardOAuthTokenSessionsByRequest(ctx, requestID, OAuthTokenAccess); err != nil {
-		return err
-	}
-	return s.repo.UpdateOAuthTokenSessionsInactiveByRequest(ctx, requestID, OAuthTokenRefresh)
+	return s.repo.UpdateOAuthRequestRevoked(ctx, requestID)
 }
 
 // DiscardExpired は、期限切れの記録を最大 limit 件まで削除する。

@@ -30,18 +30,13 @@ func (f *fakeTokenSessionRepository) UpdateOAuthRefreshRotated(context.Context, 
 	return nil
 }
 
-func (f *fakeTokenSessionRepository) UpdateOAuthTokenSessionsInactiveByRequest(_ context.Context, _ string, kind domain.OAuthTokenKind) error {
-	f.calls = append(f.calls, "inactive-by-request:"+string(kind))
+func (f *fakeTokenSessionRepository) UpdateOAuthRequestRevoked(context.Context, string) error {
+	f.calls = append(f.calls, "revoke-request")
 	return nil
 }
 
 func (f *fakeTokenSessionRepository) DiscardOAuthTokenSession(_ context.Context, kind domain.OAuthTokenKind, _ string) error {
 	f.calls = append(f.calls, "discard:"+string(kind))
-	return nil
-}
-
-func (f *fakeTokenSessionRepository) DiscardOAuthTokenSessionsByRequest(_ context.Context, _ string, kind domain.OAuthTokenKind) error {
-	f.calls = append(f.calls, "discard-by-request:"+string(kind))
 	return nil
 }
 
@@ -61,12 +56,12 @@ func TestOAuthTokenSessions(t *testing.T) {
 			t.Errorf("created = %+v, want one active session", repo.created)
 		}
 	})
-	t.Run("系列を取り消すと、アクセストークンは削除し、更新トークンは記録を残して無効にする", func(t *testing.T) {
+	t.Run("系列を取り消すときは、アクセストークンの削除と更新トークンの無効化を、1 つの操作(1 回の依頼)で行う", func(t *testing.T) {
 		repo := &fakeTokenSessionRepository{}
 		if err := domain.NewOAuthTokenSessions(repo).RevokeRequest(ctx, "req"); err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"discard-by-request:access_token", "inactive-by-request:refresh_token"}
+		want := []string{"revoke-request"}
 		if !reflect.DeepEqual(repo.calls, want) {
 			t.Errorf("calls = %v, want %v", repo.calls, want)
 		}

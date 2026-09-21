@@ -40,6 +40,7 @@ type Tx struct {
 	Stats               BurgerStatsQuery
 	SignupVerifications *domain.SignupVerifications
 	PendingSignups      SignupVerificationQuery
+	OAuthGrants         *domain.OAuthGrants
 }
 
 // UnitOfWork(作業のひとまとまり)は、「ここからここまでの書き込みと読み取りを、まとめて 1 つの

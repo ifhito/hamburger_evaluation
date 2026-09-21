@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -16,6 +17,19 @@ type OAuthGrant struct {
 	Scopes     []string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// Permits は、この許可の記録で、利用者 userID に、アプリ clientID への、範囲 scopes の認可コードを発行してよいかを
+// 判断する。記録が別の利用者・別のアプリのものなら(wrap された)ErrOAuthGrantNotFound、許可済みの範囲に
+// 収まらないなら(wrap された)ErrOAuthInvalidScope を返す。認可コードには、この判断を通した範囲だけを付与する。
+func (g OAuthGrant) Permits(userID, clientID string, scopes []string) error {
+	if g.UserID != userID || g.ClientID != clientID {
+		return fmt.Errorf("%w: the grant belongs to another user or app", ErrOAuthGrantNotFound)
+	}
+	if OAuthConsentRequired(g.Scopes, scopes) {
+		return fmt.Errorf("%w: the requested scope exceeds the granted scope", ErrOAuthInvalidScope)
+	}
+	return nil
 }
 
 // ---- repository の契約(実装は adapter/repository) ----
@@ -40,6 +54,9 @@ type OAuthGrantRepository interface {
 	// すべてのトークン(認可コード・アクセストークン・更新トークン)も、同時に使えなくなる。
 	// 記録がない、または別の利用者のものなら、(wrap された)ErrOAuthGrantNotFound を返す。
 	DiscardOAuthGrant(ctx context.Context, userID, grantID string) error
+	// DiscardOAuthGrantsByUser は、userID のすべての許可の記録を削除する(存在しなくてもエラーにしない)。
+	// 発行されたすべてのトークンも、同時に使えなくなる。ユーザーが退会するときに使う。
+	DiscardOAuthGrantsByUser(ctx context.Context, userID string) error
 }
 
 // ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
@@ -77,4 +94,10 @@ func (g *OAuthGrants) Approve(ctx context.Context, userID string, client OAuthCl
 // Revoke は、userID の grantID の許可を取り消す。そのアプリのトークンは、すべて使えなくなる。
 func (g *OAuthGrants) Revoke(ctx context.Context, userID, grantID string) error {
 	return g.repo.DiscardOAuthGrant(ctx, userID, grantID)
+}
+
+// RevokeAll は、userID のすべての許可を取り消す。そのユーザーに発行されたトークンは、すべて使えなくなる。
+// ユーザーが退会するときに、退会と同じトランザクションで呼ぶ。
+func (g *OAuthGrants) RevokeAll(ctx context.Context, userID string) error {
+	return g.repo.DiscardOAuthGrantsByUser(ctx, userID)
 }
