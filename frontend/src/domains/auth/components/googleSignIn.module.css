@@ -40,6 +40,8 @@
 
 .button:hover {
   background: var(--color-secondary-bg);
+  /* グローバルの a:hover(下線)より詳細度が高い .button の規則で、ホバーでも下線を出さない */
+  text-decoration: none;
 }
 
 .button:focus-visible {
