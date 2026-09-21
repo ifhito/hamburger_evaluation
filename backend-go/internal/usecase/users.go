@@ -91,7 +91,7 @@ func (in UpdateUserInput) validate(currentEmail string) []string {
 	return msgs
 }
 
-// Update は、issue #16 AC2 のチェック順序で対象ユーザーのプロフィールを
+// Update は、後述のチェック順序で、対象ユーザーのプロフィールを
 // 編集する（退役済みの Rails の controller とは意図的に異なる。その
 // controller は path の id を無視して current_user に対して動作していた）。
 // load（存在しないユーザーと discard 済みのユーザーはどちらも 404。所有者で

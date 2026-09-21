@@ -173,7 +173,7 @@ func TestReviewsListFailure(t *testing.T) {
 
 // TestReviewsGet は詳細の use case を扱う。見つかった review はそのまま通り、
 // 存在しない、または discard 済みの review は domain.ErrReviewNotFound を
-// 返す（usecase レベルでの issue #14 AC6）。
+// 返す。
 func TestReviewsGet(t *testing.T) {
 	detail := domain.ReviewDetail{
 		Review: domain.Review{ID: uid.N(9), Rating: 4, AuthorID: uid.N(1), BurgerID: uid.N(5), CreatedAt: time.Now()},
@@ -232,7 +232,7 @@ func TestReviewsCreate(t *testing.T) {
 		return domain.ShopReviewBurger{}, domain.ErrBurgerNotFound
 	}
 
-	t.Run("AC1 認証済みの投稿は active な shop に insert され payload が組み立てられる", func(t *testing.T) {
+	t.Run("認証済みのユーザーが承認済みのショップに投稿すると、レビューが保存され、保存する内容が正しく組み立てられる", func(t *testing.T) {
 		var inserted domain.Review
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		repo := &fakeReviewRepo{
@@ -268,7 +268,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 rejected な shop は burger の lookup より先に ErrForbidden を返す", func(t *testing.T) {
+	t.Run("却下済みのショップへの投稿は、バーガーを探す前に、誰であっても ErrForbidden になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop} // getShopBurger は未設定：lookup があれば panic する
 		for _, viewer := range []domain.User{alice, bob, admin} {
 			if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Create(ctx, viewer, rejectedShop.ID, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrForbidden) {
@@ -277,7 +277,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 pending な shop には creator と admin は投稿でき、それ以外は ErrForbidden になる", func(t *testing.T) {
+	t.Run("承認待ちのショップには、作成者と管理者だけが投稿でき、それ以外は ErrForbidden になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		repo := &fakeReviewRepo{
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
@@ -305,7 +305,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("AC4 不正な内容は insert せずに ValidationError を返す", func(t *testing.T) {
+	t.Run("不正な内容(評価が範囲外、コメントが空)の投稿は、保存せずに ValidationError になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		repo := &fakeReviewRepo{} // createReview は未設定
 		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, " ", nil)
@@ -418,7 +418,7 @@ func reviewDetailFor(authorID string) domain.ReviewDetail {
 	}
 }
 
-// TestReviewsUpdate は edit のフローを扱う。author のみ（AC3、admin でも
+// TestReviewsUpdate は編集のフローを扱う。投稿者のみ（管理者でも
 // 通らない）、書き込みの前の validation、カラム限定の書き込みそのもの
 // （discardReview は未設定のままなので、どの discard も panic する）、
 // そして 404 である。
@@ -435,7 +435,7 @@ func TestReviewsUpdate(t *testing.T) {
 		return domain.ReviewDetail{}, domain.ErrReviewNotFound
 	}
 
-	t.Run("AC3 author の edit は rating と comment だけを永続化する", func(t *testing.T) {
+	t.Run("投稿者による編集は、評価とコメントだけを保存する", func(t *testing.T) {
 		var gotID string
 		var gotRating int
 		var gotComment string
@@ -465,7 +465,7 @@ func TestReviewsUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 author 以外は書き込みせずに ErrForbidden を返す", func(t *testing.T) {
+	t.Run("投稿者以外(管理者を含む)の編集は、何も書き込まずに ErrForbidden になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{}                          // updateReviewContent は未設定
 		for _, viewer := range []domain.User{bob, admin} { // admin でも通さない
@@ -475,7 +475,7 @@ func TestReviewsUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("AC4 不正な内容は書き込みせずに ValidationError を返す", func(t *testing.T) {
+	t.Run("不正な内容での編集は、何も書き込まずに ValidationError になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
 		_, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 6, "ok", nil)
 		var vErr *domain.ValidationError
@@ -495,7 +495,7 @@ func TestReviewsUpdate(t *testing.T) {
 	})
 }
 
-// TestReviewsDelete は soft delete のフローを扱う。author のみ（AC3）、
+// TestReviewsDelete は論理削除（soft delete）のフローを扱う。投稿者のみ、
 // load した review そのものに対して discard が呼ばれること
 // （updateReviewContent は未設定のままなので、どの content の書き込みも
 // panic する）、そして 404 である。
@@ -512,7 +512,7 @@ func TestReviewsDelete(t *testing.T) {
 		return domain.ReviewDetail{}, domain.ErrReviewNotFound
 	}
 
-	t.Run("AC6 author の delete は review を discard する", func(t *testing.T) {
+	t.Run("投稿者による削除は、そのレビューを論理削除(discard)する", func(t *testing.T) {
 		var discarded string
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{
@@ -529,7 +529,7 @@ func TestReviewsDelete(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 author 以外は書き込みせずに ErrForbidden を返す", func(t *testing.T) {
+	t.Run("投稿者以外(管理者を含む)の削除は、何も書き込まずに ErrForbidden になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{}                          // discardReview は未設定
 		for _, viewer := range []domain.User{bob, admin} { // admin でも通さない
@@ -594,7 +594,7 @@ func (f *fakePhotoStorage) Delete(_ context.Context, key string) error {
 
 func (f *fakePhotoStorage) URL(key string) string { return "/photos/" + key }
 
-// TestReviewsCreatePhoto は Create の S10 の写真フローを扱う。blob は insert の
+// TestReviewsCreatePhoto は Create の写真の流れを扱う。写真の実体（blob）は insert の
 // 前にランダムな reviews/<hex><ext> の key で保存され、その key は review に
 // 永続化され、insert が失敗した場合はアップロードしたばかりの blob を
 // best-effort で削除するので、孤立ファイルは残らない。
@@ -664,7 +664,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 	})
 }
 
-// TestReviewsUpdatePhoto は Update の S10 の置き換えフローを扱う。新しい blob が
+// TestReviewsUpdatePhoto は Update の写真の置き換えの流れを扱う。新しい blob が
 // 先に保存され、次に content と photo_key が「1 つの」atomic な repository の
 // 書き込みで切り替わり、そのあとではじめて「古い」blob（load のスナップ
 // ショットのもの）が best-effort で削除される。upload がなければ content
@@ -762,7 +762,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 	})
 }
 
-// TestReviewsDeletePhoto は Delete の S10 の末尾部分を扱う。discard が成功
+// TestReviewsDeletePhoto は Delete の、写真を削除する部分を扱う。discard が成功
 // した後に、blob は best-effort で削除される。
 func TestReviewsDeletePhoto(t *testing.T) {
 	ctx := context.Background()

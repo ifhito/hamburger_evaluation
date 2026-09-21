@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// review から導出される burger の統計（issue #15、S7）。このファイルは
+// review から導出される burger の統計。このファイルは
 // backend/app/domain/reviews/{burger_score_calculator,
 // reviewer_trust_evaluator, reviewer_trust, burger_score}.rb と
 // backend/app/domain/burgers/burger_entity.rb にある Rails の domain
