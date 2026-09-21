@@ -17,6 +17,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uowtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -121,7 +122,10 @@ func newAuthKit() (*userStoreFake, *usecase.Auth, *infra.JWTCodec) {
 // 送り先も、その場で捨てる fake になっている。
 func unusedSignups() *usecase.Signups {
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	return usecase.NewSignups(newUserStoreFake(), domain.NewSignupVerifications(newSignupStoreFake(newUserStoreFake())),
+	users := newUserStoreFake()
+	store := newSignupStoreFake(users)
+	return usecase.NewSignups(users, domain.NewSignupVerifications(store),
+		&uowtest.UoW{Users: users, SignupVerifications: store, PendingSignups: store},
 		hasherFake{}, &mailRecorder{}, codec, testSignupConfig)
 }
 

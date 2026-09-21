@@ -38,29 +38,46 @@ func (q *Queries) DeleteSignupVerification(ctx context.Context, id string) error
 	return err
 }
 
-const lockSignupVerificationByTokenHash = `-- name: LockSignupVerificationByTokenHash :one
-SELECT id, email, username, password_digest, token_hash, expires_at, last_sent_at, generation, created_at FROM signup_verifications
+const getSignupVerificationByTokenHash = `-- name: GetSignupVerificationByTokenHash :one
+SELECT id, email, username, password_digest FROM signup_verifications
 WHERE token_hash = $1 AND expires_at > now()
-FOR UPDATE
 `
 
-// 期限内の確認待ちの行をロックして返す。確認の transaction の先頭で使うので、
-// 同じトークンでの並行する確認は直列になり、2 人目は行が消えているのを見る。
-func (q *Queries) LockSignupVerificationByTokenHash(ctx context.Context, tokenHash string) (SignupVerification, error) {
-	row := q.db.QueryRow(ctx, lockSignupVerificationByTokenHash, tokenHash)
-	var i SignupVerification
+type GetSignupVerificationByTokenHashRow struct {
+	ID             string
+	Email          string
+	Username       string
+	PasswordDigest string
+}
+
+// 期限内の確認待ちの、ユーザーを作るのに必要な内容を読む(ロックはしない。同じ transaction で
+// 先にロックしているので、ここで読んだ行は、確認が終わるまで変わらない)。
+func (q *Queries) GetSignupVerificationByTokenHash(ctx context.Context, tokenHash string) (GetSignupVerificationByTokenHashRow, error) {
+	row := q.db.QueryRow(ctx, getSignupVerificationByTokenHash, tokenHash)
+	var i GetSignupVerificationByTokenHashRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
 		&i.Username,
 		&i.PasswordDigest,
-		&i.TokenHash,
-		&i.ExpiresAt,
-		&i.LastSentAt,
-		&i.Generation,
-		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const lockSignupVerificationByTokenHash = `-- name: LockSignupVerificationByTokenHash :one
+SELECT id FROM signup_verifications
+WHERE token_hash = $1 AND expires_at > now()
+FOR UPDATE
+`
+
+// 期限内の確認待ちの行を排他ロックする(行の中身は返さず、ロックできたことだけを id で示す)。
+// 確認の transaction の先頭で使うので、同じトークンでの並行する確認は直列になり、
+// 2 人目は行が消えているのを見る。中身の読み取りは GetSignupVerificationByTokenHash が行う。
+func (q *Queries) LockSignupVerificationByTokenHash(ctx context.Context, tokenHash string) (string, error) {
+	row := q.db.QueryRow(ctx, lockSignupVerificationByTokenHash, tokenHash)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertSignupVerification = `-- name: UpsertSignupVerification :one
