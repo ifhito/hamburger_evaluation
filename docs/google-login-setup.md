@@ -103,7 +103,7 @@ cd frontend && docker compose up -d --build
 | `Error 400: redirect_uri_mismatch` | 手順 3 の「承認済みのリダイレクト URI」と、`GOOGLE_REDIRECT_URL` が、完全には一致していません。両方を見比べて、揃えます |
 | `Access blocked: … has not completed the Google verification process` / `Error 403: access_denied` | そのアカウントが「テストユーザー」に入っていません。手順 2 で追加します |
 | ボタンが出ない | `GET /meta` の `login_providers` が空です。API を起動したシェルで、`GOOGLE_CLIENT_ID` を設定してから、`docker compose up -d` し直します。ブラウザが、古い `GET /meta` の応答(最大 1 時間キャッシュされます)を持っているだけのこともあります(ハードリロード) |
-| 「The Google sign-in link is invalid or has expired」が毎回出る | `GOOGLE_REDIRECT_URL`(と、Google Cloud の「承認済みのリダイレクト URI」)が、画面の `/api` を通る形(`http://localhost:5173/api/auth/google/callback`)になっていません。API に直接(`:8080`)戻していないか、見直します |
+| 「The Google sign-in link is invalid or has expired」が毎回出る | `GOOGLE_REDIRECT_URL`(と、Google Cloud の「承認済みのリダイレクト URI」)が、画面の `/api` を通る形(`http://localhost:5173/api/auth/google/callback`)になっていません。API に直接(`:8080`)戻していないか、見直します。API の起動ログに、`config: warning: GOOGLE_REDIRECT_URL (…) は、APP_BASE_URL (…) と別のオリジンです` と出ていれば、これです(`docker compose logs api-go`) |
 | サインインが「失敗」になる(手続きの途中で戻される) | 画面を開いた場所と、API の場所を、**`localhost` で統一**します(`127.0.0.1` と混ぜると、手続きの cookie が届きません)。ブラウザの cookie を無効にしていないかも見ます |
 | 起動時に `GOOGLE_… is required` | 有効にしたのに、足りない変数があります(変数の名前だけが出ます) |
 
