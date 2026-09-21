@@ -8,9 +8,11 @@ import (
 
 // 以下のヘルパーは、テストの fake の repository を domain の書き込みオブジェクトで
 // 包んで usecase を組み立てる。usecase は repository に依存せず、書き込みは domain の
-// 書き込みオブジェクトを通すため、テストでも同じ形で組み立てる。トランザクションをまたぐ
-// 書き込み（review の書き込みと統計の再計算、退会）は、フェイクの UnitOfWork
-// （uowtest.UoW）が、渡された fake を書き込みオブジェクトで包んで Tx にする。
+// 書き込みオブジェクトを通すため、テストでも同じ形で組み立てる。レビューの書き込みと統計の
+// 再計算、ユーザーの退会と統計の再計算のように、1 つのトランザクションで行う書き込みは、
+// UnitOfWork(ここからここまでをまとめて 1 つのトランザクションにする範囲を、usecase が指定する
+// 仕組み)の代役(uowtest.UoW)が、渡した repository の代役を書き込みオブジェクトで包んで、
+// トランザクションの代わりをする。
 
 func newShops(query usecase.ShopQuery, repo domain.ShopRepository) *usecase.Shops {
 	return usecase.NewShops(query, domain.NewShops(repo))

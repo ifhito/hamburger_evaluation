@@ -96,9 +96,9 @@ type UserRepository interface {
 	// UpdateUserProfile が呼ばれ、その戻り値が応答になる（Users は
 	// 読み取りのメソッドを repository に持たない）。
 	UpdateUserProfile(ctx context.Context, id string, changes ProfileChanges) (User, error)
-	// DiscardUser はユーザーを soft delete する（hard DELETE は決して行わない）。
-	// このユーザーの review が付く burger の統計は、discard によって変わるので、
-	// トランザクションを持つ usecase が、同じトランザクションで再計算する。
+	// DiscardUser はユーザーを論理削除する(削除日時を記録するだけで、行は消さない)。このユーザーの
+	// レビューが付いているバーガーの統計は、退会で変わるので、トランザクションを持つ usecase が、
+	// 同じトランザクションの中で計算し直す。
 	DiscardUser(ctx context.Context, id string) error
 }
 

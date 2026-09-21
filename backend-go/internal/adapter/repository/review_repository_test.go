@@ -145,12 +145,13 @@ func TestReviewRepository(t *testing.T) {
 	})
 }
 
-// TestReviewRepositoryCreateShopBurger は、burger_name による find-or-create の投稿経路
-// （S6 P3-1）の burger の解決を検証する。名前の完全一致による shop 単位での再利用、未知の
-// 名前に対する burger と link の作成、shop ごとの名前のスコープ（別の shop の同じ名前は別の
-// burger 行になる）である。review の insert までを 1 つのトランザクションにする保証
-// （insert に失敗しても、孤立した burger や link が commit されない）と、統計の再計算は、
-// トランザクションを持つ usecase の UnitOfWork のテスト（adapter/uow）が扱う。
+// TestReviewRepositoryCreateShopBurger は、バーガー名を指定して投稿するときの、バーガーの解決
+// (名前で探し、なければ作る)を確かめる。同じショップに同名のバーガーがあれば再利用すること、
+// なければバーガーとショップとの結び付けを作ること、別のショップの同じ名前は別のバーガーに
+// なることを確かめる。
+//
+// レビューの登録まで含めた 1 つのトランザクション(登録に失敗したら、作ったバーガーも巻き戻る)と、
+// 統計の再計算は、トランザクションを持つ usecase を通して、adapter/uow のテストが確かめている。
 func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -197,7 +198,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 		return burger
 	}
 
-	t.Run("shop 内に同名の burger があれば再利用し、戻り値の burger は呼び出し前の stats を持つ", func(t *testing.T) {
+	t.Run("同じショップに同名のバーガーがあれば、新しく作らずにそれを返し、統計は呼び出し前の値のままである", func(t *testing.T) {
 		burger := mustShopBurger(t, shopA, "Cheese")
 		if burger.ID != cheese {
 			t.Fatalf("burger id = %s, want the existing Cheese %s", burger.ID, cheese)
@@ -211,7 +212,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 		}
 	})
 
-	t.Run("未知の名前は burger とその shops_burgers の link を作成する", func(t *testing.T) {
+	t.Run("そのショップにない名前を指定すると、バーガーを新しく作って、ショップと結び付け(shops_burgers)、統計は 0 で返す", func(t *testing.T) {
 		burger := mustShopBurger(t, shopA, "Veggie")
 		if burger.Name != "Veggie" || burger.ID == cheese {
 			t.Fatalf("burger = %+v, want a new Veggie row", burger)
@@ -228,7 +229,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 		}
 	})
 
-	t.Run("別の shop の同じ名前は別の burger 行になる", func(t *testing.T) {
+	t.Run("別のショップに同じ名前のバーガーがあっても、指定したショップ用に別のバーガーを作る", func(t *testing.T) {
 		burger := mustShopBurger(t, shopB, "Cheese")
 		if burger.ID == cheese {
 			t.Fatalf("burger id = %s, want a new row distinct from shop A's Cheese %s", burger.ID, cheese)
