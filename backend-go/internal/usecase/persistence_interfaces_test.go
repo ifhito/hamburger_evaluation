@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -224,7 +225,7 @@ func checkWriteObjectRules(sources map[string]string) (violations []string, writ
 			if !strings.HasSuffix(name, "s") {
 				violations = append(violations, fmt.Sprintf("%s は名前が複数形(s で終わる)ではない (repository を持つ型は書き込みオブジェクトで、名前は集約の複数形にする。エンティティ・値オブジェクトは repository を持たない)", name))
 			}
-			want := strings.TrimSuffix(name, "s") + "Repository"
+			want := repositoryNameFor(name)
 			if h.fields != 1 || len(h.repos) != 1 || h.repos[0] != want {
 				violations = append(violations, fmt.Sprintf("%s は %s だけをちょうど 1 つ持たなければならない (書き込みオブジェクトは自分の集約の repository だけを持つ。他の集約に触れる手順は Service に置く)", name, want))
 			}
@@ -234,6 +235,64 @@ func checkWriteObjectRules(sources map[string]string) (violations []string, writ
 		}
 	}
 	return violations, writeObjects, services, nil
+}
+
+// repositoryNameFor は、書き込みオブジェクトの名前（集約の複数形）から、持つべき repository の名前を返す。
+// Shops なら ShopRepository、MailDeliveries（ies で終わる複数形）なら MailDeliveryRepository である。
+func repositoryNameFor(writeObject string) string {
+	if base, ok := strings.CutSuffix(writeObject, "ies"); ok {
+		return base + "yRepository"
+	}
+	return strings.TrimSuffix(writeObject, "s") + "Repository"
+}
+
+// mailProviderImports は、メール送信のプロバイダー（SMTP など）の実装の詳細を表す import パスである。
+// メールの形式・プロトコルを知るのは、腐敗防止層である adapter/infra だけで、usecase と domain は
+// これらを import しない。
+var mailProviderImports = []string{"net/smtp", "net/textproto", "mime", "crypto/tls"}
+
+// mailProviderTerm は、プロバイダーの実装の用語（識別子に含まれると、usecase・domain が実装の詳細を
+// 知っている印になる）である。"Resend" は、確認メールの「再送の間隔」という業務の言葉と重なるので含めない。
+var mailProviderTerm = regexp.MustCompile(`(?i)smtp|mime|starttls|textproto|mailpit`)
+
+// checkNoMailProviderDetail は、Go のソースが、メール送信のプロバイダーの実装の詳細を知らないことを
+// 確かめ、違反の説明を返す。次の 3 つを検査する（コメントは対象外）。
+//   - プロバイダーの実装の import（mailProviderImports）がない
+//   - 識別子（型・関数・フィールド・変数の名前）に、プロバイダーの用語（mailProviderTerm）がない
+//   - メールの件名を表すフィールド（Subject）を持つ型がない（メールの文面・書式は、送信側が決める）
+func checkNoMailProviderDetail(src string) ([]string, error) {
+	f, err := parser.ParseFile(token.NewFileSet(), "src.go", src, 0)
+	if err != nil {
+		return nil, err
+	}
+	var violations []string
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		for _, bad := range mailProviderImports {
+			if path == bad || strings.HasPrefix(path, bad+"/") {
+				violations = append(violations, path+" を import している (メールの形式・プロトコルを知るのは adapter/infra だけ)")
+			}
+		}
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.Ident:
+			if mailProviderTerm.MatchString(x.Name) {
+				violations = append(violations, x.Name+" はメール送信のプロバイダーの実装の用語を含む (実装の詳細は adapter/infra に閉じる)")
+			}
+		case *ast.StructType:
+			for _, field := range x.Fields.List {
+				for _, name := range field.Names {
+					if name.Name == "Subject" {
+						violations = append(violations, "Subject フィールドがある (メールの件名・本文を組み立てるのは adapter/infra で、usecase・domain は意図を表す値だけを渡す)")
+					}
+				}
+			}
+		}
+		return true
+	})
+	slices.Sort(violations)
+	return slices.Compact(violations), nil
 }
 
 // usedIdents は n の中で参照されている識別子の名前を返す。フィールド名・セレクタの右辺
@@ -492,9 +551,10 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 			}
 			repositories += found["Repository"]
 		}
-		// 空振りで通らないよう、Shop / Review / User の 3 つの Repository が見つかることも確かめる。
-		if repositories < 3 {
-			t.Errorf("Repository は %d 個しか見つからない (3 個以上を期待)", repositories)
+		// 空振りで通らないよう、Shop / Review / User / SignupVerification / MailDelivery の
+		// 5 つの Repository が見つかることも確かめる。
+		if repositories < 5 {
+			t.Errorf("Repository は %d 個しか見つからない (5 個以上を期待)", repositories)
 		}
 	})
 
@@ -530,6 +590,20 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 			}
 			for _, msg := range v {
 				t.Errorf("%s: %s", name, msg)
+			}
+		}
+	})
+
+	t.Run("実際の usecase と domain はメール送信のプロバイダーの実装の詳細を知らない", func(t *testing.T) {
+		for _, dir := range []string{".", "../domain"} {
+			for name, src := range productionSources(t, dir) {
+				v, err := checkNoMailProviderDetail(src)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				for _, msg := range v {
+					t.Errorf("%s: %s", name, msg)
+				}
 			}
 		}
 	})
@@ -572,10 +646,11 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		for _, msg := range v {
 			t.Error(msg)
 		}
-		// 空振りで通らないよう、Shop / Review / User の 3 つの書き込みオブジェクトが見つかることも確かめる。
+		// 空振りで通らないよう、Shop / Review / User / SignupVerification / MailDelivery の
+		// 5 つの書き込みオブジェクトが見つかることも確かめる（MailDeliveries は ies で終わる複数形）。
 		// Service は、複数の集約を跨ぐ更新が domain に入るまで 0 個でよい。
-		if writeObjects < 3 {
-			t.Errorf("書き込みオブジェクトは %d 個しか見つからない (3 個以上を期待)", writeObjects)
+		if writeObjects < 5 {
+			t.Errorf("書き込みオブジェクトは %d 個しか見つからない (5 個以上を期待)", writeObjects)
 		}
 	})
 
@@ -593,12 +668,14 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 			"ShopRepository", "ReviewRepository", "UserRepository",
 			"Shops", "Reviews", "Users", "NewShops", "NewReviews", "NewUsers",
 			"CreateUserParams", "ProfileChanges",
+			"SignupVerificationRepository", "SignupVerifications", "SignupVerificationReceipt", "CreateSignupVerificationParams",
+			"MailDeliveryRepository", "MailDeliveries", "NewMailDeliveries", "CreateMailDeliveryParams",
 		} {
 			if !slices.Contains(persistence, want) {
 				t.Errorf("永続化の識別子に %s が見つからない (見つかったもの: %v)", want, persistence)
 			}
 		}
-		for _, entity := range []string{"User", "Shop", "Review", "ShopReviewBurger"} {
+		for _, entity := range []string{"User", "Shop", "Review", "ShopReviewBurger", "SignupToken", "MailKind", "MailFailure"} {
 			if slices.Contains(persistence, entity) {
 				t.Errorf("エンティティ %s が永続化の側に数えられている", entity)
 			}
@@ -650,6 +727,33 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		})
 	}
 
+	mailProviderCases := []struct {
+		name, src, want string
+	}{
+		{"意図を表す値だけなら違反なし", "package p\ntype SignupConfirmation struct{ To, ConfirmURL string }\ntype Mailer interface{ SendSignupConfirmation(SignupConfirmation) }", ""},
+		{"業務の言葉の Resend(再送の間隔)は違反にしない", "package p\nconst SignupResendInterval = 60", ""},
+		{"net/smtp の import を検出する", "package p\nimport \"net/smtp\"", "net/smtp を import している"},
+		{"mime/multipart の import を検出する", "package p\nimport \"mime/multipart\"", "mime/multipart を import している"},
+		{"crypto/tls の import を検出する", "package p\nimport \"crypto/tls\"", "crypto/tls を import している"},
+		{"net/textproto の import を検出する", "package p\nimport \"net/textproto\"", "net/textproto を import している"},
+		{"件名(Subject)のフィールドを持つ型を検出する", "package p\ntype Mail struct{ To, Subject, Body string }", "Subject フィールドがある"},
+		{"SMTP の用語を含む識別子を検出する", "package p\ntype SMTPMailer struct{}", "SMTPMailer はメール送信のプロバイダーの実装の用語を含む"},
+		{"STARTTLS の用語を含む識別子を検出する", "package p\nfunc useStartTLS() {}", "useStartTLS はメール送信のプロバイダーの実装の用語を含む"},
+		{"MIME の用語を含む識別子を検出する", "package p\nvar mimeVersion = \"1.0\"", "mimeVersion はメール送信のプロバイダーの実装の用語を含む"},
+		{"コメントの中の用語は対象外", "package p\n// SMTP で送るのは infra の責務である。\nconst X = 1", ""},
+	}
+	for _, tc := range mailProviderCases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := checkNoMailProviderDetail(tc.src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(v, "\n"); (tc.want == "") != (got == "") || !strings.Contains(got, tc.want) {
+				t.Errorf("違反 = %q, 期待 = %q", got, tc.want)
+			}
+		})
+	}
+
 	writeObjectSrc := func(methods int) string {
 		s := "package p\ntype Xs struct{ repo XRepository }\n"
 		for i := 0; i < methods; i++ {
@@ -673,6 +777,8 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		{"Service が repository 以外を持てば検出する", "package p\ntype XYService struct {\n\tx XRepository\n\ty YRepository\n\tn int\n}", "repository 以外のフィールド"},
 		{"repository を持たない通常の struct は対象外", "package p\ntype Shop struct{ Name string }", ""},
 		{"エンティティ(単数形の名前)が repository を持てば検出する", "package p\ntype X struct{ repo XRepository }", "名前が複数形"},
+		{"ies で終わる複数形は y の repository に対応づける(MailDeliveries は MailDeliveryRepository)", "package p\ntype MailDeliveries struct{ repo MailDeliveryRepository }", ""},
+		{"ies で終わる複数形が、単純に s を除いた名前の repository を持てば検出する", "package p\ntype MailDeliveries struct{ repo MailDeliverieRepository }", "MailDeliveryRepository だけをちょうど 1 つ"},
 	}
 	for _, tc := range writeObjectCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -817,7 +923,8 @@ func checkForbiddenSelectors(src string, forbidden []string) ([]string, error) {
 // TestRecalculationLivesInUsecase は、統計の再計算の手順が usecase にあることを固定する（S17 AC1・AC5）。
 //   - adapter（repository・query・uow・handler）は、domain の統計の計算を呼ばない。adapter が持つのは、
 //     SQL の読み書きとトランザクションの管理だけである
-//   - usecase は、現在時刻を Clock から得て、time.Now を直接呼ばない（テストで時刻を固定できる）
+//   - 再計算に関わる usecase（unit_of_work.go・reviews.go・users.go）は、現在時刻を Clock から得て、
+//     time.Now を直接呼ばない（テストで時刻を固定できる）
 func TestRecalculationLivesInUsecase(t *testing.T) {
 	calcs := []string{"domain.CalculateBurgerScore", "domain.CalculateBurgerStat", "domain.AverageRating", "domain.ReviewerTrustScore"}
 	t.Run("実際の adapter は domain の統計の計算を呼ばない", func(t *testing.T) {
@@ -840,8 +947,16 @@ func TestRecalculationLivesInUsecase(t *testing.T) {
 		}
 	})
 
-	t.Run("実際の usecase は time.Now を直接呼ばない", func(t *testing.T) {
+	// 再計算に関わる usecase(再計算の手順と、それを呼ぶ review・user の use case)だけを対象にする。
+	// signup の冪等キーの時間の窓(signup.go)は、別の時計(SignupConfig.Now)を持つ。
+	t.Run("再計算に関わる usecase は time.Now を直接呼ばない", func(t *testing.T) {
+		recalcFiles := map[string]bool{"unit_of_work.go": true, "reviews.go": true, "users.go": true}
+		checked := 0
 		for name, src := range productionSources(t, ".") {
+			if !recalcFiles[filepath.Base(name)] {
+				continue
+			}
+			checked++
 			v, err := checkForbiddenSelectors(src, []string{"time.Now"})
 			if err != nil {
 				t.Fatalf("%s: %v", name, err)
@@ -849,6 +964,9 @@ func TestRecalculationLivesInUsecase(t *testing.T) {
 			for _, msg := range v {
 				t.Errorf("%s: %s (現在時刻は usecase の Clock から得る)", name, msg)
 			}
+		}
+		if checked != len(recalcFiles) {
+			t.Errorf("検査したファイルは %d 個 (%d 個を期待)", checked, len(recalcFiles))
 		}
 	})
 

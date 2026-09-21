@@ -33,6 +33,10 @@ var (
 	// ないことを表す（未知の burger と別の shop の burger は意図的に同一で
 	// ある）。
 	ErrBurgerNotFound = errors.New("burger not found")
+	// ErrSignupTokenInvalid は、signup の確認トークンが、期限切れ・存在しない・改ざん・
+	// 使用済みのいずれかであることを表す。これらは意図的に同一であり、呼び出し側は
+	// どれなのかを区別できない。
+	ErrSignupTokenInvalid = errors.New("signup confirmation token is invalid or has expired")
 	// ErrForbidden は、viewer は認証済みだがその操作を行う権限がないことを
 	// 表す（例：admin でないユーザーが moderation の use case を呼び出す
 	// 場合）。

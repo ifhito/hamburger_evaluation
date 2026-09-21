@@ -78,7 +78,7 @@ func newUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(string) st
 	repo, auth, codec := newAuthKit()
 	reviewRepo := newReviewStoreFake()
 	shopRepo := &shopStoreFake{}
-	router := handler.NewRouter(okPinger, auth, usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
+	router := handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
 		reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
 		usersUsecase(repo, hasherFake{}), nil)
 	token := func(id string) string {
@@ -626,24 +626,42 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	userRepo := repository.NewUserRepository(conn)
 	hasher := infra.BcryptPasswordHasher{}
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	auth := usecase.NewAuth(userQuery, domain.NewUsers(userRepo), hasher, codec, codec)
+	auth := usecase.NewAuth(userQuery, hasher, codec, codec)
+	mailer := &mailRecorder{}
+	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)),
+		hasher, mailer, codec, testSignupConfig)
 	unitOfWork := uow.New(conn)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
-	router := handler.NewRouter(conn, auth,
+	router := handler.NewRouter(conn, auth, signups,
 		usecase.NewShops(query.NewShopQuery(conn), domain.NewShops(repository.NewShopRepository(conn))),
 		usecase.NewReviews(query.NewReviewQuery(conn), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), unitOfWork, recalc, hasher), nil)
-	return conn, router
+	return conn, &mailedRouter{Handler: router, mailer: mailer}
 }
 
-// signupUser は POST /signup を通じてユーザーを登録し、その id と Bearer
-// ヘッダーを返す。
+// mailedRouter は、router に、signup で送られたメールの記録を添える。signupUser が、確認メールの
+// リンクからトークンを取り出すために使う。
+type mailedRouter struct {
+	http.Handler
+	mailer *mailRecorder
+}
+
+// signupUser は、signup → 確認メールのリンクのトークンで確認、の順でユーザーを登録し、その id と
+// Bearer ヘッダーを返す。router は newUsersIntegrationKit のものでなければならない。
 func signupUser(t *testing.T, router http.Handler, username, email, password string) (string, string) {
 	t.Helper()
+	kit, ok := router.(*mailedRouter)
+	if !ok {
+		t.Fatalf("router は newUsersIntegrationKit のものでなければならない: %T", router)
+	}
 	body := fmt.Sprintf(`{"username":%q,"email":%q,"password":%q}`, username, email, password)
 	rec := do(router, http.MethodPost, "/signup", body, "")
-	if rec.Code != http.StatusCreated {
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("signup %s: status = %d (body %s)", username, rec.Code, rec.Body)
+	}
+	rec = do(router, http.MethodPost, "/signup/confirm", confirmBody(kit.mailer.lastToken(t)), "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("confirm %s: status = %d (body %s)", username, rec.Code, rec.Body)
 	}
 	user := decodeAuthUser(t, rec.Body.Bytes())
 	return user.ID, "Bearer " + user.Token

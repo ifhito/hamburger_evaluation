@@ -7,7 +7,8 @@
 // 依存せず、書き込みをこの package のオブジェクトに任せる。実装は
 // adapter/repository が担う。
 //
-// ファイルは集約ごとに 1 つにまとめる（user.go、review.go、shop.go）。1 ファイルの中は
+// ファイルは集約ごとに 1 つにまとめる（user.go、review.go、shop.go、signup_verification.go、
+// mail_delivery.go）。1 ファイルの中は
 // 「エンティティ・値オブジェクト・規則 → repository の interface（と、その引数だけに使う
 // パラメータ型）→ 書き込みオブジェクト」の順に並べる。エンティティ・値オブジェクト・規則は、
 // repository の interface と書き込みオブジェクトを参照しない。この境界はファイルにも
@@ -15,7 +16,7 @@
 //
 // 書き込みの置き場所は、更新が何個の集約に触れるかで決まる:
 //   - 1 つの集約だけを更新する書き込み: 集約ごとの書き込みオブジェクト（Shops、
-//     Reviews、Users）に置く。Service は作らない。
+//     Reviews、Users、SignupVerifications、MailDeliveries）に置く。Service は作らない。
 //   - 複数の集約を跨ぐ更新: 手順の途中で読み取り（usecase の *Query）を挟むかどうかで、置き場所が
 //     分かれる。読み取りを挟まない、書き込みだけの手順は、domain の Service（*Service）に置く。
 //     読み取りを挟む手順（例: review の書き込み → 統計の元になる facts の読み取り → 統計の保存。

@@ -97,6 +97,7 @@ pnpm run storybook
 
 - `GET /up`
 - `POST /signup`
+- `POST /signup/confirm`
 - `POST /login`
 - `POST /logout`
 - `GET /shops`
