@@ -282,7 +282,7 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 **写真**
 - レビューに付ける写真(`POST /reviews`・`PUT /reviews/:id` の `photo` パート)は、**JPEG・PNG・WebP** だけを受け付ける。形式は、ファイルの中身で判別する(申告された Content-Type は見ない)。保存は、JPEG は JPEG、PNG は PNG、WebP は JPEG で、長辺を 1,600 px 以下に縮小して再エンコードする(拡大はしない)。向きは、保存する画素が正立するように直す
 - **HEIC / HEIF は受け付けない**(422)。iPhone の既定の形式だが、対応しないことにした。理由: サーバーで変換するには、デコーダ(WASM の libheif。LGPL)の依存が要り、メモリを大きく使う(1,600 万画素で約 490 MiB)うえ、iPhone 15 以降の標準の写真(約 2,447 万画素)は、コンテナの上限(1 GiB)に収まらない。PC の Chrome は HEIC を読めないので、救うにはブラウザ側にもデコーダが要る。**iPhone の Safari は、選択欄(`accept`)が JPEG・PNG・WebP だけのとき、写真を JPEG に変換して渡す**ので、iPhone からの投稿は通る。frontend の `accept` に HEIC / HEIF を加えないこと(加えると、iPhone が HEIC のまま渡す)。検出は、ファイルの先頭の `ftyp` ボックスの主なブランド(`heic`・`heix`・`mif1`・`heif` など)だけを見る(`photo.looksLikeHEIF`)
-- 上限(すべて backend で判定する): ファイルは 5 MiB、寸法は 1 辺 10,000 px かつ 2,400 万画素。寸法は、デコードの前に、ヘッダーから読んで確かめる。frontend は、送る前に、長辺が `GET /meta` の `photo.max_edge` を超える(またはファイルが `photo.max_bytes` を超える)写真を縮小する
+- 上限(すべて backend で判定する): ファイルは 5 MiB、寸法は 1 辺 10,000 px かつ 2,400 万画素。寸法は、デコードの前に、ヘッダーから読んで確かめる(ファイルの 5 MiB と保存する長辺 1,600 px は、`GET /meta` で frontend にも伝えるので `domain/photo.go` が持つ。寸法の上限は、メモリの保護のための実装上の値なので `internal/photo` が持つ)。frontend は、送る前に、長辺が `GET /meta` の `photo.max_edge` を超える(またはファイルが `photo.max_bytes` を超える)写真を縮小する
 - 422 のメッセージは原因ごとに分かれる: `Photo must be a JPEG, PNG, or WebP image`(対応しない形式・壊れている)、`Photo must be a JPEG, PNG, or WebP image (HEIC/HEIF is not supported)`(HEIC / HEIF。対応しない理由が分かる)、`Photo dimensions are too large (max 10000px per side and 24 megapixels)`(寸法)、`Photo is too large (max 5MB)`(ファイルの大きさ)
 - `GET /photos/*` — ディスクに保存されたレビュー写真を配信 (認証不要。末尾が `/` のディレクトリ path は一覧せず 404、末尾 `/` なしは 301 で `/` 付きへ転送されてから 404)。`PHOTO_STORAGE` が `disk` (既定) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 

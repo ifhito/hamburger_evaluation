@@ -10,7 +10,7 @@
 // ファイルは集約ごとに 1 つにまとめる（user.go、review.go、shop.go、signup_verification.go、
 // mail_delivery.go、oauth_grant.go、oauth_token_session.go）。
 // 集約に属さない業務の規則は、規則ごとのファイルに置く（page.go: 一覧の 1 ページの件数の既定値・上限、
-// photo.go: 受け付ける写真の大きさの上限、credentials.go・password.go・email.go など: 入力の検証）。
+// photo.go: 写真のファイルの大きさと保存する長辺の上限（API・frontend と共有する値）、credentials.go・password.go・email.go など: 入力の検証）。
 // この package が持つのは、業務の規則（サービスとして、何を許し何を求めると決めているか）だけである。
 // 入力の形の解釈（HTTP の文字列を数値に読む、形のエラーの文言）は handler が、規則を実現する手段
 // （続きを知るために 1 件多く取り出して切り詰める、DB の型への変換）は usecase・adapter が持ち、
