@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>空・読み込み・見つからない(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="reviews">
+<main class="wrap page">
+  <p class="note" data-en="When there are no reviews yet">レビューが 1 件もないとき</p>
+  <section class="panel">
+    <span class="burger lg" data-score="0" data-decor></span>
+    <h2 class="state-title" data-en="Nobody's eaten here yet">まだ誰も食べていません</h2>
+    <p class="state-sub" data-en="Why not write the first review?">最初のレビューを書いてみませんか?</p>
+    <button class="btn primary" data-en="Write a review">レビューを書く</button>
+  </section>
+
+  <p class="note" data-en="While loading">読み込み中</p>
+  <section class="panel">
+    <span class="burger lg" data-score="3" data-decor></span>
+    <h2 class="state-title" data-en="Grilling…">焼いています…</h2>
+    <p class="state-sub" data-en="Just a moment">少しだけお待ちください</p>
+    <div class="skels"><div class="skel" style="width:100%"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:85%"></div></div>
+  </section>
+
+  <p class="note" data-en="When the page is not found (404)">ページが見つからないとき(404)</p>
+  <section class="panel">
+    <span class="code">404</span>
+    <h2 class="state-title" data-en="Sold out">売り切れです</h2>
+    <p class="state-sub" data-en="Page not found">ページが見つかりません</p>
+    <button class="btn ghost" data-en="Back to shops">ショップ一覧へ戻る</button>
+  </section>
+</main>
+<script src="mock.js"></script>
+</body>
+</html>

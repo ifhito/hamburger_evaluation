@@ -20,7 +20,7 @@ WEIGHTS = (400, 500, 700)
 BASELINE = 1.0
 WEIGHT_NAME = {"400": "標準", "500": "中", "700": "太字"}
 # (キー, 画面の名前)。PC とモバイルの両方に、この順で並べる
-SCREENS = [("shops", "ショップ一覧"), ("reviews", "レビュー一覧"), ("review-detail", "レビュー詳細"), ("shops-en", "ショップ一覧(English)")]
+SCREENS = [("shops", "ショップ一覧"), ("reviews", "レビュー一覧"), ("review-detail", "レビュー詳細"), ("shops-en", "ショップ一覧(English)"), ("states", "空・読み込み・404"), ("states-en", "空・読み込み・404(English)")]
 
 
 def main() -> None:

@@ -16,26 +16,40 @@
   .swatch p { margin-top: 8px; font-size: 14px; line-height: 1.5; }
   .swatch b { font-weight: 700; }
   .row { display: flex; gap: 16px; margin-bottom: 8px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
-  .row .label { width: 560px; }
+  .row .label { width: 640px; }
   .row .ratio { width: 100px; font-weight: 700; }
   .row .need { width: 160px; color: var(--text-muted); }
-  .row .ok { width: 60px; font-weight: 700; color: var(--accent); }
+  .row .ok { width: 120px; font-weight: 700; }
   .type-row { display: flex; align-items: baseline; gap: 24px; margin-bottom: 16px; }
   .type-row .spec { width: 140px; font-size: 14px; color: var(--text-muted); }
   .samples { display: flex; gap: 48px; align-items: center; }
-  .focus-ring { padding: 2px; border: 2px solid var(--accent); border-radius: 10px; }
+  .focus-ring { padding: 2px; border: 2px solid var(--text); border-radius: 10px; }
   .tap { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--control-border); border-radius: 8px; font-size: 12px; }
+  .burgers { display: flex; gap: 40px; align-items: flex-end; }
+  .burgers .rate { flex-direction: column; align-items: center; gap: 8px; }
 </style>
 </head>
-<body>
+<body data-no-header>
 <h1>デザインの値(リデザインのラフ)</h1>
-<p class="muted" style="margin-top:8px">黒基調・マスタード黄 1 色・現代的なゴシック(Noto Sans JP)。値は案で、確認して調整する。</p>
+<p class="muted" style="margin-top:8px">白い背景・黒い文字・マスタード黄は「塗り」だけ・現代的なゴシック(Noto Sans JP)。値は案で、確認して調整する。</p>
 
 <h2>色</h2>
 <div class="swatches" id="swatches"></div>
 
 <h2>文字と背景のコントラスト(WCAG AA。実測)</h2>
 <div id="contrast"></div>
+
+<h2>評価のバーガー(下から、バンズ・パティ・チーズ・野菜・上のバンズ。半分は、その段の左半分だけ塗る。数字は必ずそばに書く)</h2>
+<div class="burgers">
+  <span class="rate"><span class="burger lg" data-score="0"></span><b>0</b></span>
+  <span class="rate"><span class="burger lg" data-score="1"></span><b>1</b></span>
+  <span class="rate"><span class="burger lg" data-score="2"></span><b>2</b></span>
+  <span class="rate"><span class="burger lg" data-score="3"></span><b>3</b></span>
+  <span class="rate"><span class="burger lg" data-score="4"></span><b>4</b></span>
+  <span class="rate"><span class="burger lg" data-score="4.5"></span><b>4.5</b></span>
+  <span class="rate"><span class="burger lg" data-score="5"></span><b>5</b></span>
+  <span class="rate"><span class="burger" data-score="4.5"></span><b>4.5</b></span>
+</div>
 
 <h2>文字のスタイル(Noto Sans JP)</h2>
 <div id="types"></div>
@@ -44,7 +58,7 @@
 <div class="samples">
   <div class="focus-ring"><button class="btn ghost">選ばれているボタン</button></div>
   <div class="tap">44</div>
-  <p class="muted" style="font-size:14px">黄色の 2px の枠(内側との間 2px)。押せる部分は 44px 以上。</p>
+  <p class="muted" style="font-size:14px">黒の 2px の枠(内側との間 2px)。押せる部分は 44px 以上。</p>
 </div>
 
 <script>
@@ -54,53 +68,48 @@ const chan = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 
 const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lum = (h) => { const [r, g, b] = rgb(h).map(chan); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-const hex2 = (n) => Math.round(n).toString(16).padStart(2, '0');
-// 写真が真っ白でも、暗い帯(不透明度 alpha の黒)を重ねたときの色 = 最悪ケースの背景
-const overWhite = (alpha) => '#' + hex2(255 * (1 - alpha)).repeat(3);
 
 const TOKENS = [
-  ['background', '--bg', 'ページの背景'],
-  ['surface', '--surface', 'カード・入力欄の背景'],
-  ['surface-2', '--surface-2', '選択中のカード・言語切替の選択中'],
+  ['background', '--bg', 'ページの背景・カードの背景・入力欄の背景'],
+  ['surface-2', '--surface-2', '選択中のカード・写真なしの場所・読み込み中の灰色の棒'],
   ['border', '--border', '区切り線・カードの枠(飾り)'],
   ['control-border', '--control-border', '入力欄・ボタンの枠(部品の境界)'],
-  ['text', '--text', '本文・見出し'],
+  ['text', '--text', '本文・見出し・リンク・選択中の下線と枠・バーガーの輪郭とパティ'],
   ['text-muted', '--text-muted', '補足の文字(日付・件数)'],
-  ['text-on-photo-muted', '--text-on-photo-muted', '写真の上の補足の文字'],
-  ['accent', '--accent', '差し色(マスタード黄)。星・押せるボタン・リンク'],
-  ['on-accent', '--on-accent', '黄色い面の上の文字'],
-  ['star-empty', '--star-empty', '空の星'],
+  ['accent', '--accent', '差し色(マスタード黄)。塗りだけ: 押せるボタンの面・札の面・ロゴの面・バーガーのチーズ'],
+  ['on-accent', '--on-accent', '黄色い面の上の文字(黒)'],
+  ['burger-bun', '--burger-bun', 'バーガーのバンズの面'],
+  ['burger-veggie', '--burger-veggie', 'バーガーの野菜の面'],
+  ['burger-empty', '--burger-empty', 'バーガーの空の段の輪郭'],
 ];
 const tokens = TOKENS.map(([name, cssVar, usage]) => ({ name, cssVar, value: v(cssVar), usage }));
 document.getElementById('swatches').innerHTML = tokens.map((t) =>
   `<div class="swatch"><div class="swatch-box" style="background:${t.value}"></div><p><b>${t.name}</b> ${t.value}</p><p class="muted">${t.usage}</p></div>`).join('');
 
-const SHADE = overWhite(0.8), CHIP = overWhite(0.72);
+// 写真の仮の場所の、暗い側の色(文字は黒)。実際の写真が入ると、この行は意味がなくなる
+const PHOTO_DARKEST = '#a5714a';
+// [ラベル, 前景, 背景, 基準, 使うか]。使わない組み合わせ(false)は、なぜ使わないかを示す参考の行
 const PAIRS = [
-  ['本文の文字 / ページの背景', '--text', v('--bg'), 4.5],
-  ['本文の文字 / カードの背景', '--text', v('--surface'), 4.5],
-  ['補足の文字 / ページの背景', '--text-muted', v('--bg'), 4.5],
-  ['補足の文字 / カードの背景', '--text-muted', v('--surface'), 4.5],
-  ['補足の文字 / 選択中のカードの背景', '--text-muted', v('--surface-2'), 4.5],
-  ['黄色の文字・リンク / ページの背景', '--accent', v('--bg'), 4.5],
-  ['黄色の文字・リンク / カードの背景', '--accent', v('--surface'), 4.5],
-  ['黄色の文字・リンク / 選択中のカードの背景', '--accent', v('--surface-2'), 4.5],
-  ['ボタンの文字(黒) / 黄色の面', '--on-accent', v('--accent'), 4.5],
-  ['星(黄) / ページの背景(図形は 3:1)', '--accent', v('--bg'), 3],
-  ['星(空) / ページの背景(図形は 3:1)', '--star-empty', v('--bg'), 3],
-  ['入力欄・ボタンの枠 / ページの背景(図形は 3:1)', '--control-border', v('--bg'), 3],
-  [`写真の上: 白い文字 / 暗い帯(最悪ケース ${SHADE})`, '--text', SHADE, 4.5],
-  [`写真の上: 補足の文字 / 暗い帯(最悪ケース ${SHADE})`, '--text-on-photo-muted', SHADE, 4.5],
-  [`写真の上: 黄色の星 / 暗い帯(最悪ケース ${SHADE})`, '--accent', SHADE, 4.5],
-  [`写真の上: 「審査待ち」の札の文字 / 札(最悪ケース ${CHIP})`, '--text', CHIP, 4.5],
+  ['本文・リンクの文字(黒) / ページの背景', v('--text'), v('--bg'), 4.5, true],
+  ['本文の文字(黒) / 選択中のカードの背景', v('--text'), v('--surface-2'), 4.5, true],
+  ['補足の文字 / ページの背景', v('--text-muted'), v('--bg'), 4.5, true],
+  ['補足の文字 / 選択中のカード・写真なしの場所の背景', v('--text-muted'), v('--surface-2'), 4.5, true],
+  ['ボタン・札・ロゴの文字(黒) / 黄色の面', v('--on-accent'), v('--accent'), 4.5, true],
+  ['言語切替の選んだ側の文字(白) / 黒の面', v('--bg'), v('--text'), 4.5, true],
+  [`写真の仮の場所の文字(黒) / 暗い側の色 ${PHOTO_DARKEST}`, v('--text'), PHOTO_DARKEST, 4.5, true],
+  ['入力欄・ボタンの枠 / ページの背景(部品の境界は 3:1)', v('--control-border'), v('--bg'), 3, true],
+  ['バーガー・キーボードで選んだ枠・選択中の枠(黒) / ページの背景(図形は 3:1)', v('--text'), v('--bg'), 3, true],
+  ['選択中のカードの枠(黒) / カードの背景(図形は 3:1)', v('--text'), v('--surface-2'), 3, true],
+  ['バーガーの空の段の輪郭 / ページの背景(図形は 3:1)', v('--burger-empty'), v('--bg'), 3, true],
+  ['黄色の文字 / ページの背景', v('--accent'), v('--bg'), 4.5, false],
+  ['黄色の線・枠 / ページの背景', v('--accent'), v('--bg'), 3, false],
 ];
-const contrast = PAIRS.map(([label, fgVar, bg, need]) => {
-  const fg = v(fgVar);
+const contrast = PAIRS.map(([label, fg, bg, need, used]) => {
   const r = ratio(fg, bg);
-  return { label, fg, bg, ratio: Math.round(r * 100) / 100, need, pass: r >= need };
+  return { label, fg, bg, ratio: Math.round(r * 100) / 100, need, used, pass: used ? r >= need : null };
 });
 document.getElementById('contrast').innerHTML = contrast.map((c) =>
-  `<div class="row"><span class="label">${c.label}</span><span class="ratio">${c.ratio.toFixed(2)}:1</span><span class="need">${c.need} 以上</span><span class="ok">${c.pass ? '○' : '×'}</span></div>`).join('');
+  `<div class="row"><span class="label">${c.label}</span><span class="ratio">${c.ratio.toFixed(2)}:1</span><span class="need">${c.need} 以上</span><span class="ok">${c.used ? (c.pass ? '○' : '×') : '使わない'}</span></div>`).join('');
 
 const TYPES = [
   ['32px / 700', 32, 700, 'ショップ  Shops'], ['28px / 700(モバイルの見出し)', 28, 700, 'ショップ  Shops'],
@@ -114,5 +123,6 @@ document.getElementById('types').innerHTML = TYPES.map(([spec, size, weight, sam
 window.__tokens = tokens;
 window.__contrast = contrast;
 </script>
+<script src="mock.js"></script>
 </body>
 </html>

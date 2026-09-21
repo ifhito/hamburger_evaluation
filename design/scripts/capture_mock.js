@@ -13,6 +13,8 @@ const SCREENS = [
   { key: 'reviews', title: 'レビュー一覧', file: 'reviews.html', lang: 'ja' },
   { key: 'review-detail', title: 'レビュー詳細', file: 'review-detail.html', lang: 'ja' },
   { key: 'shops-en', title: 'ショップ一覧(English)', file: 'shops.html', lang: 'en' },
+  { key: 'states', title: '空・読み込み・404', file: 'states.html', lang: 'ja' },
+  { key: 'states-en', title: '空・読み込み・404(English)', file: 'states.html', lang: 'en' },
 ];
 const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }];
 
@@ -49,5 +51,5 @@ const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }
   await page.screenshot({ path: `${OUT}/tokens.png`, fullPage: true });
   await browser.close();
   console.log(JSON.stringify(result));
-  console.log(JSON.stringify(tokens.contrast.map((c) => `${c.pass ? 'OK ' : 'NG '}${c.ratio}:1 ${c.label}`), null, 1));
+  console.log(JSON.stringify(tokens.contrast.map((c) => `${c.used === false ? '不使用' : c.pass ? 'OK ' : 'NG '}${c.ratio}:1 ${c.label}`), null, 1));
 })();
