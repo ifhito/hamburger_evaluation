@@ -23,3 +23,7 @@ backend/.env.*
 
 # Dev-mode review photos written into the bind-mounted repo tree (S10 disk storage)
 backend-go/storage/
+
+# MCP サーバー(mcp-server/)のビルド成果物。.mcp.json は各自の設定で、トークンの参照を含みうるので commit しない(雛形は .mcp.json.example)
+mcp-server/bin/
+.mcp.json

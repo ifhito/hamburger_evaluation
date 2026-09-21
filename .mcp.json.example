@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "hamburger": {
+      "command": "/絶対パス/hamburger_evaluation/mcp-server/bin/hamburger-mcp",
+      "args": [],
+      "env": {
+        "HAMBURGER_API_URL": "${HAMBURGER_API_URL:-http://localhost:8080}",
+        "HAMBURGER_API_TOKEN": "${HAMBURGER_API_TOKEN:-}",
+        "HAMBURGER_MCP_ALLOW_WRITE": "${HAMBURGER_MCP_ALLOW_WRITE:-false}"
+      }
+    }
+  }
+}

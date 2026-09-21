@@ -21,6 +21,7 @@ hamburger_evaluation/
 ├── backend-go/ # Go API (net/http + sqlc + PostgreSQL 16)
 ├── frontend/   # React 19 + TypeScript + Vite
 ├── design/     # デザインツール Penpot のローカル環境と、書き出したデザイン(.penpot)
+├── mcp-server/ # MCP サーバー(Go)。AI クライアントから、このアプリの API を使うための薄い窓
 ├── memory/     # プロジェクトメモ
 ├── plan/       # 計画ドキュメント
 └── plans/      # エージェントが生成した計画
@@ -361,6 +362,23 @@ docker compose -p hamburger-penpot -f design/docker-compose.yml --env-file desig
 - いまの画面を再現したデザインは `design/files/hamburger-evaluation.penpot`(画面・部品・色と文字のスタイル)。画面を変えたら、`design/scripts/` で作り直す(手順は `design/README.md` の「いまの画面から作り直す」)。
 - ポートは 9001(既存の 8080・5173・5433 と重ならない)。Penpot は複数のコンテナで数 GiB のメモリを使うので、使わないときは `down` する。
 - `design/.env` は秘密(Penpot の鍵)を含む。エージェントは読まない(`.claude/settings.json` の deny 対象)。
+
+## MCP サーバー (`mcp-server/`)
+
+AI クライアント(Claude など)が、このアプリのショップ・レビュー・ユーザーを使うための MCP サーバーです。`backend-go/` の HTTP API を呼ぶだけの薄い窓で、独立した Go モジュールです(Go 1.25。`backend-go/` の Go 1.22 とは別で、ホストの Go は古いので Docker で実行する)。tool の一覧・設定・Claude Code への登録の例は `mcp-server/README.md` を参照してください。
+
+```bash
+cd mcp-server
+# 単体テスト(偽の API と SDK の in-memory クライアント)
+docker run --rm -v "$PWD":/src -w /src golang:1.25 go test -race -count=1 ./...
+# 結合テスト(実 API + 実 DB を、隔離した Docker の環境で。プロジェクト名 he-s38・API は専用のポート 8112・ホストにポートを公開しない。終わったら片付ける)
+./scripts/integration.sh
+```
+
+- **ルールを持たない**: 入力の検証・権限の判断・状態の遷移・計算を、このモジュールに書かない(ルールは `backend-go/` の domain だけ)。API のエラーメッセージ(401・403・404・422)は、そのまま tool のエラーにする。
+- **書き込みの tool(`create_review` など)は既定で無効**。`HAMBURGER_MCP_ALLOW_WRITE=true` のときだけ公開する。ログイン・アカウント・管理者・写真の tool は作らない。
+- **トークン**(`HAMBURGER_API_TOKEN`)は環境変数でだけ受け取り、ログ・エラー・tool の出力に出さない(出力では `[REDACTED]` に置き換える。テストで確かめている)。コミットしない。`.mcp.json` は gitignore 済みで、雛形は `.mcp.json.example`。
+- API のエンドポイントや応答の形を変えたときは、`mcp-server/tools.go` と結合テストも見直す。
 
 ## API と認証
 
