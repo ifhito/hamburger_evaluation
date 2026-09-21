@@ -241,11 +241,11 @@ describe("Google の手続きが失敗したあとの、元の画面への戻り
   });
 });
 
-describe("サインイン画面の「Sign in with Google」(ログインが必要な画面から来たとき、戻り先を開始の URL に載せる)", () => {
+describe("サインイン画面の「Continue with Google」(ログインが必要な画面から来たとき、戻り先を開始の URL に載せる)", () => {
   const CONSENT = "/oauth/authorize?client_id=app-1&state=xyz";
   const linkHref = async (entry: string | { pathname: string; state: unknown }) => {
     const page = await showAt(entry);
-    return byText(page, "a", "Sign in with Google")?.getAttribute("href");
+    return byText(page, "a", "Continue with Google")?.getAttribute("href");
   };
 
   it("許可の画面などから送られてきたとき(state の from)は、その画面を return_to として載せる", async () => {
@@ -433,5 +433,35 @@ describe("失敗の案内の文言", () => {
     const page = await showAt("/auth/google/complete");
 
     await eventually(() => expect(page.textContent).toContain("This sign-in link is no longer available. Please start again."));
+  });
+});
+
+describe("Google の結果の画面の見出し・読み上げ", () => {
+  it("コードを交換している間は、見出しと「少しお待ちください」を、読み上げの対象(role=status)として出す", async () => {
+    exchangeGoogleCode.mockReturnValue(new Promise(() => {}));
+    const page = await showAt("/auth/google/complete?code=one-time-code");
+
+    const status = need(page.querySelector("[role=status]"), "status");
+    expect(status.querySelector("h1")?.textContent).toBe("Signing you in with Google…");
+    expect(status.textContent).toContain("Just a moment");
+  });
+
+  it("サインインの手続きの失敗は、見出し「Could not sign in with Google」と、API の文言だけ(画面側の小見出しは付けない)の赤いエラーで出す", async () => {
+    exchangeGoogleCode.mockRejectedValue(new ApiError([CONFLICT], 409));
+    const page = await showAt("/auth/google/complete?code=one-time-code");
+
+    await eventually(() => expect(page.querySelector("[role=alert]")).not.toBeNull());
+    expect(page.querySelector("h1")?.textContent).toBe("Could not sign in with Google");
+    expect(page.querySelector("[role=alert]")?.textContent).toBe(`!${CONFLICT}`);
+    expect(page.querySelector("[role=status]")).toBeNull();
+  });
+
+  it("ログイン中の利用者の手続き(連携)の失敗は、見出しを「Could not connect Google」にする", async () => {
+    localStorage.setItem("token", "jwt-existing");
+    me.mockResolvedValue({ id: "7", username: "carol", email: "carol@gmail.example", canModerate: false });
+    exchangeGoogleCode.mockRejectedValue(new ApiError(["This Google account is already connected to another user."], 409));
+    const page = await showAt("/auth/google/complete?code=one-time-code");
+
+    await eventually(() => expect(page.querySelector("h1")?.textContent).toBe("Could not connect Google"));
   });
 });

@@ -5,9 +5,10 @@ import { useAuth } from "../AuthProvider";
 import { GoogleExchangeError, authApi } from "../api/authApiClient";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { appPathOrNull } from "../../../app/router/returnTo";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
+import { Alert } from "../../../components/ui/Alert";
+import { Button } from "../../../components/ui/Button";
+import { AuthLoading } from "../components/AuthLoading";
 import { isGoogleSignIn } from "../googleFlow";
 import styles from "./auth.module.css";
 
@@ -94,29 +95,33 @@ export default function GoogleCompletePage() {
   // 失敗の画面の導線は、ログインの状態の復元(GET /me)が済んでから決める(復元の前は、ログイン中でも、user がまだない)。
 
   return (
-    <Layout title={t("auth.google.complete.title")}>
+    <Layout>
       {shown ? (
-        <div className={styles.form}>
-          <ErrorMessage message={shown.messages} />
-          {shown.retryable && (
-            <Button type="button" variant="secondary" onClick={retry}>
-              {t("auth.google.complete.retry")}
-            </Button>
-          )}
-          {!restoringAuth && (
-            <p className={styles.hint}>
-              {user ? (
-                <Link to={`/users/${user.id}`}>{t("auth.google.complete.backToProfile")}</Link>
+        <div className={styles.status}>
+          <h1 className={styles.title}>{t(user ? "auth.google.complete.linkFailedTitle" : "auth.google.complete.failedTitle")}</h1>
+          <div className={styles.alertBox}>
+            <Alert message={shown.messages} />
+          </div>
+          <div className={styles.actions}>
+            {shown.retryable && (
+              <Button type="button" variant="secondary" onClick={retry}>
+                {t("auth.google.complete.retry")}
+              </Button>
+            )}
+            {!restoringAuth &&
+              (user ? (
+                <Link to={`/users/${user.id}`} className={styles.textlink}>
+                  {t("auth.google.complete.backToProfile")}
+                </Link>
               ) : (
-                <Link to="/signin" state={shown.returnTo ? { from: shown.returnTo } : undefined}>
+                <Link to="/signin" state={shown.returnTo ? { from: shown.returnTo } : undefined} className={styles.textlink}>
                   {t("auth.google.complete.backToSignin")}
                 </Link>
-              )}
-            </p>
-          )}
+              ))}
+          </div>
         </div>
       ) : (
-        <p className={styles.muted}>{t("auth.google.complete.loading")}</p>
+        <AuthLoading title={t("auth.google.complete.loading")} />
       )}
     </Layout>
   );

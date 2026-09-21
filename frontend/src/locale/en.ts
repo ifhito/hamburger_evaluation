@@ -28,35 +28,42 @@ const en = {
     // パスワードの規則の判定は backend(domain.ValidatePassword)だけが持つ。これは規則を利用者に伝える説明文で、
     // 数値(最小・最大のバイト数)は GET /meta が返す値を {{min}} / {{max}} に入れて作る(ここに数字を書かない)。
     passwordHint: "{{min}}\u2013{{max}} bytes (1 byte per ASCII character, 3 per Japanese character), with at least one half-width letter, number and symbol.",
+    // 見出し・説明・エラーの見出しは、画面側の言葉(デザインの英語版のとおり)。エラーの本文は API が返した文言をそのまま出す。
+    emailPlaceholder: "you@example.com",
     signin: {
-      title: "Sign In",
+      title: "Sign in",
+      lead: "Sign in to write and edit your reviews.",
       email: "Email",
       password: "Password",
       submit: "Sign in",
       noAccount: "Don't have an account?",
       signUpLink: "Sign up",
+      errorTitle: "Could not sign in",
       error: "Invalid email or password",
     },
     signup: {
-      title: "Sign Up",
+      title: "Sign up",
+      lead: "Create an account. We will email you a link to confirm your address.",
       username: "Username",
       email: "Email",
       password: "Password",
-      confirmPassword: "Confirm Password",
+      confirmPassword: "Confirm password",
       submit: "Create account",
       hasAccount: "Already have an account?",
       signInLink: "Sign in",
+      errorTitle: "Could not create your account",
       error: "Failed to create account",
       sent: {
         title: "Check your email",
-        message: "We sent a confirmation email to {{email}}. Open the link in it to finish creating your account.",
+        message: "We sent a confirmation email to <email>{{email}}</email>. Open the link in it to finish creating your account.",
         hint: "If you don't see it, check your spam folder. To change your details, sign up again.",
         back: "Sign up again",
       },
     },
     confirm: {
-      title: "Confirming your email",
       loading: "Confirming your email address\u2026",
+      failedTitle: "Could not confirm your email address",
+      errorTitle: "Confirmation failed",
       error: "Failed to confirm your email address",
       signUpAgain: "Sign up again",
     },
@@ -68,12 +75,14 @@ const en = {
     // 受け取れなかったときの予備の文言だけを置く。
     google: {
       or: "or",
-      signIn: "Sign in with Google",
-      signUp: "Sign up with Google",
+      // ボタンの文言は、サインインでも新規登録でも同じ(初回は登録、2 回目以降はサインインになるため)。
+      continue: "Continue with Google",
+      busy: "Going to Google\u2026",
       error: "Google sign-in failed. Please try again.",
       complete: {
-        title: "Signing in with Google",
-        loading: "Signing you in\u2026",
+        loading: "Signing you in with Google\u2026",
+        failedTitle: "Could not sign in with Google",
+        linkFailedTitle: "Could not connect Google",
         backToSignin: "Back to sign in",
         backToProfile: "Back to your profile",
         retry: "Try again",

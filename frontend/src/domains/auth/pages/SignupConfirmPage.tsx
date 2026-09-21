@@ -3,8 +3,9 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { ApiError } from "../../../api/client/buildApiClient";
-import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
+import { Alert } from "../../../components/ui/Alert";
+import { AuthLoading } from "../components/AuthLoading";
 import styles from "./auth.module.css";
 
 // 確認メールのリンク(/signup/confirm?token=…)の受け皿。トークンの有効・無効の判断は backend だけが持ち、
@@ -30,16 +31,19 @@ export default function SignupConfirmPage() {
   }, [confirmSignup, navigate, params, t]);
 
   return (
-    <Layout title={t("auth.confirm.title")}>
+    <Layout>
       {error ? (
-        <div className={styles.form}>
-          <ErrorMessage message={error} />
-          <p className={styles.hint}>
-            <Link to="/signup">{t("auth.confirm.signUpAgain")}</Link>
-          </p>
+        <div className={styles.status}>
+          <h1 className={styles.title}>{t("auth.confirm.failedTitle")}</h1>
+          <div className={styles.alertBox}>
+            <Alert title={t("auth.confirm.errorTitle")} message={error} />
+          </div>
+          <Link to="/signup" className={styles.textlink}>
+            {t("auth.confirm.signUpAgain")}
+          </Link>
         </div>
       ) : (
-        <p className={styles.muted}>{t("auth.confirm.loading")}</p>
+        <AuthLoading title={t("auth.confirm.loading")} />
       )}
     </Layout>
   );
