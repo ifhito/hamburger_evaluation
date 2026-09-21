@@ -150,7 +150,8 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 
 	type endpoint struct {
 		path string
-		// label は、テスト名に使う表示名である。path に生成された id が入るときに、名前を安定させる。
+		// label は、テスト名に使う表示である。path に実行のたびに変わる id が入るとき、テスト名を一定にする
+		// （X のショップは 1、Y のショップは 2 と表す）。
 		label string
 		// byViewer は viewer の名前をキーにした期待値で、キーがない viewer には
 		// defaults を使う。
@@ -183,13 +184,13 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 		{
 			// active な shop：creator と 2 件の review の author。
 			path:     fmt.Sprintf("/shops/%s", xShop),
-			label:    "/shops/{X の shop}",
+			label:    "/shops/1",
 			defaults: auditWant{status: http.StatusOK, items: -1, refs: []string{"xavier", "xavier", "yuki"}},
 		},
 		{
 			// pending な shop は creator と admin にだけ見える。見えない viewer は 404。
 			path:     fmt.Sprintf("/shops/%s", yShop),
-			label:    "/shops/{Y の shop}",
+			label:    "/shops/2",
 			defaults: auditWant{status: http.StatusNotFound, items: -1},
 			byViewer: map[string]auditWant{
 				"投稿者 X (admin)": {status: http.StatusOK, items: -1, refs: []string{"yuki"}},

@@ -291,9 +291,9 @@ func TestGetShopVisibility(t *testing.T) {
 		{name: "AC4 admin が pending な shop を開くと 200 になる", path: "/shops/" + uid.N(2), authHeader: adminAuth, wantStatus: http.StatusOK},
 		{name: "creator 以外が rejected な shop を開くと 404 になる", path: "/shops/" + uid.N(3), authHeader: aliceAuth, wantStatus: http.StatusNotFound},
 		{name: "AC6 未知の id は 404 になる", path: "/shops/" + uid.N(999), wantStatus: http.StatusNotFound},
-		{name: "AC6 整数の id は存在しない shop と同じ 404 になる", path: "/shops/1", wantStatus: http.StatusNotFound},
-		{name: "AC6 UUID でない文字列の id は 404 になる", path: "/shops/abc", wantStatus: http.StatusNotFound},
-		{name: "AC6 大文字の UUID は正規形でないので 404 になる", path: "/shops/" + upperUUID, wantStatus: http.StatusNotFound},
+		{name: "整数の id(1)でショップを開くと、存在しないショップと同じ 404 になる", path: "/shops/1", wantStatus: http.StatusNotFound},
+		{name: "UUID ではない文字列の id(abc)でショップを開くと 404 になる", path: "/shops/abc", wantStatus: http.StatusNotFound},
+		{name: "大文字の UUID の id でショップを開くと、正規形(小文字)ではないので 404 になる", path: "/shops/" + upperUUID, wantStatus: http.StatusNotFound},
 		{name: "非数値の id は同じ 404 になる", path: "/shops/abc", wantStatus: http.StatusNotFound},
 	}
 	for _, tt := range tests {

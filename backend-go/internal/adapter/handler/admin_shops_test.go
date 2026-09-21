@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -168,7 +169,9 @@ func TestAdminShopsForbidden(t *testing.T) {
 	}
 	router, aliceAuth, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
 	for _, ep := range endpoints {
-		t.Run(ep.method+" "+ep.path+" は非 admin だと 403 になる", func(t *testing.T) {
+		// テスト名は、id の値が変わっても一定になるよう、id を 1 に置き換えた表示にする。
+		shown := ep.method + " " + strings.ReplaceAll(ep.path, uid.N(1), "1")
+		t.Run(shown+" は非 admin だと 403 になる", func(t *testing.T) {
 			rec := do(router, ep.method, ep.path, ep.body, aliceAuth)
 			if rec.Code != http.StatusForbidden {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusForbidden, rec.Body)
@@ -177,7 +180,7 @@ func TestAdminShopsForbidden(t *testing.T) {
 				t.Errorf("body = %q, want the Forbidden JSON", got)
 			}
 		})
-		t.Run(ep.method+" "+ep.path+" は未認証だと 401 になる", func(t *testing.T) {
+		t.Run(shown+" は未認証だと 401 になる", func(t *testing.T) {
 			rec := do(router, ep.method, ep.path, "", "")
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnauthorized, rec.Body)
@@ -332,7 +335,7 @@ func TestAdminApproveShop(t *testing.T) {
 		}
 	})
 
-	t.Run("UUID の正規形でない id は存在しない shop と同じ 404 を返す", func(t *testing.T) {
+	t.Run("UUID の正規形でない id で承認しようとすると、存在しないショップと同じ 404 になる", func(t *testing.T) {
 		for _, id := range []string{"1", "abc", upperUUID} {
 			rec := do(router, http.MethodPost, "/admin/shops/"+id+"/approve", "", adminAuth)
 			if rec.Code != http.StatusNotFound || rec.Body.String() != `{"error":"Shop not found"}` {

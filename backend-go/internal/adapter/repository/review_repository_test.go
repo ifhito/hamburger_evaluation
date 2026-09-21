@@ -687,7 +687,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		}
 	})
 
-	t.Run("shop 内に同名の burger が複数あれば、作成が最も古いものが選ばれ、同時刻なら id の小さいものが選ばれる", func(t *testing.T) {
+	t.Run("ショップの中に同じ名前のバーガーが複数あるとき、作成が最も古いものが選ばれ、作成が同時刻なら id の小さいものが選ばれる", func(t *testing.T) {
 		// id は UUID なので、id の大小は作成の順序を表さない。作成の新しい方を先に insert して、
 		// id の生成の順序に選び方が依存していないことを確かめる。
 		shopC := insertUUIDRow(ctx, t, conn, insertShop, "Shop C", 1, nil, nil)

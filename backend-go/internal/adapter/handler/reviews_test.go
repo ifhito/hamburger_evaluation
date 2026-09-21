@@ -440,7 +440,7 @@ func TestCreateReview(t *testing.T) {
 		}
 	})
 
-	t.Run("指定された burger_id は burger_name より優先される", func(t *testing.T) {
+	t.Run("バーガーの id(burger_id)が指定されていれば、バーガー名(burger_name)より優先される", func(t *testing.T) {
 		repo := seedReviewWorld(uid.N(1))
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"Both","shop_id":%q,"burger_id":%q,"burger_name":"Veggie"}}`,
@@ -462,9 +462,9 @@ func TestCreateReview(t *testing.T) {
 	t.Run("burger_id も使える burger_name も無い場合は 422 を返す", func(t *testing.T) {
 		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		bodies := map[string]string{
-			"burger_id も burger_name も無い":  fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q}}`, activeShopID),
-			"空白のみの burger_name":            fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q,"burger_name":"  "}}`, activeShopID),
-			"burger_id が空で burger_name が空": fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q,"burger_id":"","burger_name":""}}`, activeShopID),
+			"burger_id も burger_name も無い": fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q}}`, activeShopID),
+			"空白のみの burger_name":           fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q,"burger_name":"  "}}`, activeShopID),
+			"バーガーの id(burger_id)もバーガー名(burger_name)も空のときは 422 になる": fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q,"burger_id":"","burger_name":""}}`, activeShopID),
 		}
 		for name, body := range bodies {
 			t.Run(name, func(t *testing.T) {
@@ -958,10 +958,12 @@ func TestReviewsRequireAuth(t *testing.T) {
 	}
 }
 
-// TestCreateReviewTargetIDFormat は POST /reviews の shop_id・burger_id の形式の扱いを固定する
-// （S29）。空は従来どおりで、shop_id がなければ存在しない shop として 404、burger_id がなければ
-// burger_name の経路になる。空でなく UUID の正規形でない値（整数、大文字、ハイフンなど）は、
-// usecase を呼ばずに 422 になる。JSON と multipart の両方の経路で同じ。
+// TestCreateReviewTargetIDFormat は、レビュー投稿（POST /reviews）で、ショップの id（shop_id）と
+// バーガーの id（burger_id）の形式が正しく扱われることを確かめる。空は「指定なし」で、
+// ショップの id がなければ存在しないショップとして 404、バーガーの id がなければバーガー名
+// （burger_name）で探す経路になる。空でなく UUID の正規形（小文字・ハイフン区切り）でない値は、
+// 整数・大文字・ハイフンなしのいずれも、ユースケースを呼ばずに 422 になる。JSON と multipart の
+// どちらで送っても同じ結果になる。
 func TestCreateReviewTargetIDFormat(t *testing.T) {
 	shop := activeShopID
 	tests := []struct {
@@ -970,19 +972,19 @@ func TestCreateReviewTargetIDFormat(t *testing.T) {
 		wantCode int
 		wantBody string
 	}{
-		{"shop_id が指定されていなければ 404", map[string]string{"burger_name": "Cheese"}, http.StatusNotFound, `{"error":"Shop not found"}`},
-		{"shop_id が整数なら 422", map[string]string{"shop_id": "1", "burger_id": cheeseBurgerID}, http.StatusUnprocessableEntity, `{"errors":["Shop id must be a valid UUID"]}`},
-		{"shop_id が大文字の UUID なら 422", map[string]string{"shop_id": upperUUID, "burger_id": cheeseBurgerID}, http.StatusUnprocessableEntity, `{"errors":["Shop id must be a valid UUID"]}`},
-		{"shop_id がハイフンなしなら 422", map[string]string{"shop_id": strings.ReplaceAll(shop, "-", ""), "burger_id": cheeseBurgerID}, http.StatusUnprocessableEntity, `{"errors":["Shop id must be a valid UUID"]}`},
-		{"burger_id が整数なら 422", map[string]string{"shop_id": shop, "burger_id": "5"}, http.StatusUnprocessableEntity, `{"errors":["Burger id must be a valid UUID"]}`},
-		{"burger_id が UUID でない文字列なら 422", map[string]string{"shop_id": shop, "burger_id": "abc"}, http.StatusUnprocessableEntity, `{"errors":["Burger id must be a valid UUID"]}`},
+		{"ショップの id(shop_id)を指定しないと、存在しないショップとして 404 になる", map[string]string{"burger_name": "Cheese"}, http.StatusNotFound, `{"error":"Shop not found"}`},
+		{"ショップの id(shop_id)が整数(1)だと、UUID の形式ではないので 422 になる", map[string]string{"shop_id": "1", "burger_id": cheeseBurgerID}, http.StatusUnprocessableEntity, `{"errors":["Shop id must be a valid UUID"]}`},
+		{"ショップの id(shop_id)が大文字の UUID だと、正規形(小文字)ではないので 422 になる", map[string]string{"shop_id": upperUUID, "burger_id": cheeseBurgerID}, http.StatusUnprocessableEntity, `{"errors":["Shop id must be a valid UUID"]}`},
+		{"ショップの id(shop_id)がハイフンなしだと、正規形ではないので 422 になる", map[string]string{"shop_id": strings.ReplaceAll(shop, "-", ""), "burger_id": cheeseBurgerID}, http.StatusUnprocessableEntity, `{"errors":["Shop id must be a valid UUID"]}`},
+		{"バーガーの id(burger_id)が整数(5)だと、UUID の形式ではないので 422 になる", map[string]string{"shop_id": shop, "burger_id": "5"}, http.StatusUnprocessableEntity, `{"errors":["Burger id must be a valid UUID"]}`},
+		{"バーガーの id(burger_id)が UUID ではない文字列だと 422 になる", map[string]string{"shop_id": shop, "burger_id": "abc"}, http.StatusUnprocessableEntity, `{"errors":["Burger id must be a valid UUID"]}`},
 	}
 	for _, tt := range tests {
 		fields := map[string]string{"rating": "4", "comment": "ok"}
 		for k, v := range tt.fields {
 			fields[k] = v
 		}
-		t.Run("JSON: "+tt.name, func(t *testing.T) {
+		t.Run("JSON の本文で、"+tt.name, func(t *testing.T) {
 			router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 			body := `{"review":{"rating":4,"comment":"ok"`
 			for k, v := range tt.fields {
@@ -994,7 +996,7 @@ func TestCreateReviewTargetIDFormat(t *testing.T) {
 				t.Errorf("status/body = %d %s, want %d %s", rec.Code, rec.Body, tt.wantCode, tt.wantBody)
 			}
 		})
-		t.Run("multipart: "+tt.name, func(t *testing.T) {
+		t.Run("multipart の本文で、"+tt.name, func(t *testing.T) {
 			router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 			form, ct := multipartBody(t, fields)
 			rec := doMultipart(router, http.MethodPost, "/reviews", form, ct, aliceAuth)

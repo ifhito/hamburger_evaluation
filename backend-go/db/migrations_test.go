@@ -85,19 +85,19 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23503", "reviews_user_id_fkey")
 	})
 
-	// S29：shops.id・burgers.id は DB が uuid（v4）を生成し、それを参照する
-	// shops_burgers・reviews・burger_stats の外部キーが uuid で効く。
-	t.Run("S29 shops・burgers の id は uuid で生成され、外部キーが uuid で効く", func(t *testing.T) {
+	// shops と burgers の id は DB が UUID（v4）で自動生成する。それを参照する外部キー
+	// （shops_burgers・reviews・burger_stats）は、存在しない UUID を拒否する。
+	t.Run("ショップとバーガーの id は UUID で自動生成され、存在しない id を参照する行は外部キーで拒否される", func(t *testing.T) {
 		v4 := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 		var userID, shopID, burgerID string
 		if err := conn.QueryRow(ctx,
-			"INSERT INTO users (email, username, password_digest) VALUES ('s29@example.com', 's29', 'digest') RETURNING id::text").Scan(&userID); err != nil {
+			"INSERT INTO users (email, username, password_digest) VALUES ('fk-check@example.com', 'fk-check', 'digest') RETURNING id::text").Scan(&userID); err != nil {
 			t.Fatalf("insert user: %v", err)
 		}
-		if err := conn.QueryRow(ctx, "INSERT INTO shops (name, status) VALUES ('S29 Shop', 1) RETURNING id::text").Scan(&shopID); err != nil {
+		if err := conn.QueryRow(ctx, "INSERT INTO shops (name, status) VALUES ('外部キーの確認用ショップ', 1) RETURNING id::text").Scan(&shopID); err != nil {
 			t.Fatalf("insert shop: %v", err)
 		}
-		if err := conn.QueryRow(ctx, "INSERT INTO burgers (name) VALUES ('S29 Burger') RETURNING id::text").Scan(&burgerID); err != nil {
+		if err := conn.QueryRow(ctx, "INSERT INTO burgers (name) VALUES ('外部キーの確認用バーガー') RETURNING id::text").Scan(&burgerID); err != nil {
 			t.Fatalf("insert burger: %v", err)
 		}
 		for name, id := range map[string]string{"shops.id": shopID, "burgers.id": burgerID} {
@@ -115,14 +115,15 @@ func TestMigrationsAcceptance(t *testing.T) {
 			args       []any
 			constraint string
 		}{
-			{"存在しない shop への link", "INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)", []any{missing, burgerID}, "shops_burgers_shop_id_fkey"},
-			{"存在しない burger への link", "INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)", []any{shopID, missing}, "shops_burgers_burger_id_fkey"},
-			{"存在しない burger への review", "INSERT INTO reviews (rating, user_id, burger_id) VALUES (3, $1, $2)", []any{userID, missing}, "reviews_burger_id_fkey"},
-			{"存在しない burger の stats", "INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at) VALUES ($1, 0, 0, 0, 0, now())", []any{missing}, "burger_stats_burger_id_fkey"},
+			{"存在しないショップにバーガーを紐づけようとすると外部キー違反になる", "INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)", []any{missing, burgerID}, "shops_burgers_shop_id_fkey"},
+			{"存在しないバーガーをショップに紐づけようとすると外部キー違反になる", "INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)", []any{shopID, missing}, "shops_burgers_burger_id_fkey"},
+			{"存在しないバーガーへのレビューを作ろうとすると外部キー違反になる", "INSERT INTO reviews (rating, user_id, burger_id) VALUES (3, $1, $2)", []any{userID, missing}, "reviews_burger_id_fkey"},
+			{"存在しないバーガーの統計を作ろうとすると外部キー違反になる", "INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at) VALUES ($1, 0, 0, 0, 0, now())", []any{missing}, "burger_stats_burger_id_fkey"},
 		} {
-			_, err := conn.Exec(ctx, tt.sql, tt.args...)
-			assertPgError(t, err, "23503", tt.constraint)
-			_ = tt.name
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := conn.Exec(ctx, tt.sql, tt.args...)
+				assertPgError(t, err, "23503", tt.constraint)
+			})
 		}
 	})
 
