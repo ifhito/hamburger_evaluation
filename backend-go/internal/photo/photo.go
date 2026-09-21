@@ -1,9 +1,10 @@
 // Package photo は、アップロードされたレビュー写真を検証して正規化する。
 // 実際の画像フォーマットを magic bytes から判別し（クライアントが申告した
 // content type は無視する）、decompression bomb を防ぎ、長辺が maxEdge に収まる
-// ように縮小し、再エンコードする。依存するのは標準ライブラリと
-// golang.org/x/image だけなので、内向きの依存ルールに違反することなく
-// usecase から import してよい。
+// ように縮小し、再エンコードする。HEIC(iPhone の既定の形式)は、標準ライブラリにデコーダが
+// ないので、WASM で動く純 Go のデコーダ(github.com/gen2brain/heic)を使う。依存するのは標準
+// ライブラリと golang.org/x/image と、そのデコーダだけで、adapter・DB・HTTP には依存しないので、
+// 内向きの依存ルールに違反することなく usecase から import してよい。
 package photo
 
 import (
@@ -23,14 +24,18 @@ import (
 	_ "golang.org/x/image/webp" // image.Decode に webp を登録する（pure-Go で decode のみ）
 )
 
-// ErrUnsupportedImage は、サイズ上限内で decode できる jpeg/png/webp では
+// ErrUnsupportedImage は、サイズ上限内で decode できる jpeg/png/webp/heic では
 // ないアップロードを表す。handler はこれを 422 にマップする。
 var ErrUnsupportedImage = errors.New("unsupported image")
+
+// MaxEdge は、保存する写真の長辺の上限(ピクセル)である。frontend が縮小の目安として使えるように、
+// GET /meta で返す。
+const MaxEdge = 1600
 
 const (
 	// maxEdge は出力の最長辺である。これより大きい画像は縮小され、小さい
 	// 画像は決して拡大されない。
-	maxEdge = 1600
+	maxEdge = MaxEdge
 	// maxDimension と maxPixels は、画像ヘッダで宣言されたサイズの上限で
 	// あり、完全な decode の前にチェックされる（decompression bomb のガード）。
 	// 24MP は実際のカメラ出力をカバーする。いずれにせよ長辺は 1600px に
@@ -98,14 +103,18 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 		return Processed{}, fmt.Errorf("%w: empty or unreadable payload", ErrUnsupportedImage)
 	}
 	ct := http.DetectContentType(head)
-	switch ct {
-	case "image/jpeg", "image/png", "image/webp":
+	heif := looksLikeHEIF(head)
+	switch {
+	case heif, ct == "image/jpeg", ct == "image/png", ct == "image/webp":
 	default:
 		return Processed{}, fmt.Errorf("%w: detected %s", ErrUnsupportedImage, ct)
 	}
 	data, err := io.ReadAll(br)
 	if err != nil {
 		return Processed{}, fmt.Errorf("read image: %w", err)
+	}
+	if heif {
+		return processHEIF(ctx, data)
 	}
 	// EXIF Orientation は元のアップロードのバイト列から取得しなければならない。
 	// 下の再エンコードで metadata はすべて失われるため、保存されるピクセル
@@ -131,10 +140,10 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 		return Processed{}, fmt.Errorf("%w: %v", ErrUnsupportedImage, err)
 	}
 	if cfg.Width > maxDimension || cfg.Height > maxDimension || cfg.Width*cfg.Height > maxPixels {
-		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the size limit", ErrUnsupportedImage, cfg.Width, cfg.Height)
+		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the size limit", ErrDimensionsTooLarge, cfg.Width, cfg.Height)
 	}
 	if int64(cfg.Width)*int64(cfg.Height)*bytesPerPixel(cfg.ColorModel) > maxDecodedBytes {
-		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the decode memory limit", ErrUnsupportedImage, cfg.Width, cfg.Height)
+		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the decode memory limit", ErrDimensionsTooLarge, cfg.Width, cfg.Height)
 	}
 	img, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -143,13 +152,19 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	// shrink の後に orient する。そうすればこの変換が触るピクセルが少なくなり、
 	// 長辺は回転しても変わらないので、shrink を先に行っても正しい。
 	img = orient(shrink(img), orientation)
-	var out bytes.Buffer
 	if format == "png" {
+		var out bytes.Buffer
 		if err := png.Encode(&out, img); err != nil {
 			return Processed{}, fmt.Errorf("encode png: %w", err)
 		}
 		return Processed{Data: out.Bytes(), ContentType: "image/png", Ext: ".png"}, nil
 	}
+	return encodeJPEG(img)
+}
+
+// encodeJPEG は img を JPEG に再エンコードする(向き・大きさは、呼び出し側で整えたあと)。
+func encodeJPEG(img image.Image) (Processed, error) {
+	var out bytes.Buffer
 	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
 		return Processed{}, fmt.Errorf("encode jpeg: %w", err)
 	}

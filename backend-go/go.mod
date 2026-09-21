@@ -1,11 +1,13 @@
 module github.com/ifhito/hamburger_evaluation/backend-go
 
-go 1.22
+go 1.22.0
+
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.2
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.16
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.0
+	github.com/gen2brain/heic v0.4.3
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/jackc/pgx/v5 v5.7.4
 	golang.org/x/crypto v0.31.0
@@ -22,9 +24,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.9 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.7 // indirect
 	github.com/aws/smithy-go v1.23.0 // indirect
+	github.com/ebitengine/purego v0.8.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/tetratelabs/wazero v1.9.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 )
