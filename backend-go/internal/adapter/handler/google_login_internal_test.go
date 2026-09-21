@@ -113,10 +113,12 @@ func cookieOf(rec *httptest.ResponseRecorder) *http.Cookie {
 	return nil
 }
 
-func requestWith(c *http.Cookie) *http.Request {
+func requestWith(cookies ...*http.Cookie) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback", nil)
-	if c != nil {
-		req.AddCookie(c)
+	for _, c := range cookies {
+		if c != nil {
+			req.AddCookie(c)
+		}
 	}
 	return req
 }
@@ -186,6 +188,31 @@ func TestFlowCookieHoldsSeveralFlows(t *testing.T) {
 		entries := c.open(jar.Value, now)
 		if len(entries) != googleFlowMaxFlows || entries[0].State != "state-c" || entries[len(entries)-1].State != "state-g" {
 			t.Fatalf("残った手続き = %d 件(先頭 %q・末尾 %q), want 上限の %d 件で、古い a・b が捨てられている", len(entries), entries[0].State, entries[len(entries)-1].State, googleFlowMaxFlows)
+		}
+	})
+
+	t.Run("同じ名前の cookie が複数送られてきても(Path が違う古い cookie が残っているとき。ブラウザは、Path が長いものを先に送る)、すべての手続きを合わせて読み、state で取り出せる", func(t *testing.T) {
+		oldRec := httptest.NewRecorder()
+		_ = c.add(oldRec, requestWith(), flowOf("old"), now.Add(-time.Minute)) // 古い Path の cookie に残っていた手続き
+		newRec := httptest.NewRecorder()
+		_ = c.add(newRec, requestWith(), flowOf("new"), now)
+		stale, fresh := cookieOf(oldRec), cookieOf(newRec)
+
+		// 古い cookie が先に来ても、新しい手続きを取り出せる。
+		out := httptest.NewRecorder()
+		got, ok := c.take(out, requestWith(stale, fresh), "state-new", now)
+		if !ok || got.ReturnTo != "/new" {
+			t.Fatalf("新しい手続き = %+v, %v", got, ok)
+		}
+		// 取り出さなかった、古い方の手続きは、書き戻す cookie に残る。
+		rest := c.open(cookieOf(out).Value, now)
+		if len(rest) != 1 || rest[0].State != "state-old" {
+			t.Fatalf("残った手続き = %+v", rest)
+		}
+		// 同じ手続きが、2 つの cookie の両方にあっても、重複しない。
+		dup := c.read(requestWith(fresh, fresh), now)
+		if len(dup) != 1 {
+			t.Fatalf("重複した手続き = %d 件, want 1", len(dup))
 		}
 	})
 

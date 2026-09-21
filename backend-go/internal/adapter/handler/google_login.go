@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -204,13 +205,26 @@ func (c flowCookie) open(value string, now time.Time) []flowEntry {
 	return live
 }
 
-// read は、リクエストの cookie から、進行中の手続き(期限内)を返す。
+// read は、リクエストの cookie から、進行中の手続き(期限内)を、始めた順に返す。**同じ名前の cookie が複数
+// 送られてきたときは、すべてを合わせて読む**(重複は state で除く)。ブラウザは、Path が違う同名の cookie
+// (たとえば、cookie の Path を変えたデプロイの直後に、古い Path のまま残っているもの)を、Path が長いものを先に
+// 並べて、すべて送る。先頭の 1 つだけを読むと、新しい cookie の手続きが見つからず、手続きが失敗してしまう。
 func (c flowCookie) read(r *http.Request, now time.Time) []flowEntry {
-	cookie, err := r.Cookie(googleFlowCookieName)
-	if err != nil {
-		return nil
+	var entries []flowEntry
+	seen := map[string]bool{}
+	for _, cookie := range r.Cookies() {
+		if cookie.Name != googleFlowCookieName {
+			continue
+		}
+		for _, e := range c.open(cookie.Value, now) {
+			if !seen[e.State] {
+				seen[e.State] = true
+				entries = append(entries, e)
+			}
+		}
 	}
-	return c.open(cookie.Value, now)
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].ExpiresAt < entries[j].ExpiresAt })
+	return entries
 }
 
 // write は、entries を cookie として応答に設定する。件数が googleFlowMaxFlows を超えるとき、または封じた値が
