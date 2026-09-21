@@ -58,7 +58,16 @@ const (
 
 const photoTooLargeMessage = "Photo is too large (max 5MB)"
 
+// photoUnsupportedMessage は、形式が対応外の写真と、壊れていてデコードできない写真に返す。
 const photoUnsupportedMessage = "Photo must be a JPEG, PNG, or WebP image"
+
+// photoHEIFMessage は、HEIC / HEIF の写真に返す。形式の違いのうち、利用者が心当たりのある(iPhone の
+// 既定の形式)ものなので、対応しないことを、はっきり書く。
+const photoHEIFMessage = "Photo must be a JPEG, PNG, or WebP image (HEIC/HEIF is not supported)"
+
+// photoDimensionsMessage は、写真の寸法(横・縦・画素数)が上限を超えるときに返す。形式の違いとは
+// 直し方が違う(画像を小さくする)ので、別のメッセージにしている。
+const photoDimensionsMessage = "Photo dimensions are too large (max 10000px per side and 24 megapixels)"
 
 // multipartReviewForm は multipart/form-data の review 投稿（写真つきの投稿の
 // 通信の取り決め）のフラットなフィールドを保持する：reviewParamsRequest と同じ値に
@@ -181,6 +190,15 @@ func readPhotoPart(ctx context.Context, w http.ResponseWriter, part *multipart.P
 		return nil, false
 	}
 	if err != nil {
+		// 寸法超過と HEIC / HEIF は、ErrUnsupportedImage の一種でもあるので、先に調べる。
+		if errors.Is(err, photo.ErrDimensionsTooLarge) {
+			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoDimensionsMessage}})
+			return nil, false
+		}
+		if errors.Is(err, photo.ErrHEIFNotSupported) {
+			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoHEIFMessage}})
+			return nil, false
+		}
 		if errors.Is(err, photo.ErrUnsupportedImage) {
 			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoUnsupportedMessage}})
 			return nil, false

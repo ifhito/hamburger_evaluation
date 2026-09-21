@@ -9,6 +9,7 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
 
 // TestMe は GET /me を扱う：有効なトークンは現在のユーザー(can_moderate つき)を 200 で返し、
@@ -60,15 +61,16 @@ func TestMe(t *testing.T) {
 	}
 }
 
-// TestMeta は GET /meta を扱う：認証なしで、domain の rating の範囲を返し、キャッシュしてよい
-// ことを示す(frontend は範囲の定数を複製しない)。
+// TestMeta は GET /meta を扱う：認証なしで、domain の rating の範囲と、写真の上限(長辺・バイト数)を返し、
+// キャッシュしてよいことを示す(frontend はこれらの値を複製しない)。
 func TestMeta(t *testing.T) {
 	_, auth, _ := newAuthKit()
 	rec := do(newTestRouterWith(t, okPinger, auth), http.MethodGet, "/meta", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body)
 	}
-	want := `{"rating":{"min":` + strconv.Itoa(domain.MinRating) + `,"max":` + strconv.Itoa(domain.MaxRating) + `}}`
+	want := `{"rating":{"min":` + strconv.Itoa(domain.MinRating) + `,"max":` + strconv.Itoa(domain.MaxRating) + `},` +
+		`"photo":{"max_edge":` + strconv.Itoa(photo.MaxEdge) + `,"max_bytes":5242880}}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

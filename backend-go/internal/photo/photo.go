@@ -27,10 +27,24 @@ import (
 // ないアップロードを表す。handler はこれを 422 にマップする。
 var ErrUnsupportedImage = errors.New("unsupported image")
 
+// ErrDimensionsTooLarge は、寸法(横・縦・画素数)が上限を超える写真を表す。ErrUnsupportedImage の
+// 一種でもある(errors.Is でどちらにも一致する)。直し方が形式の違いとは違う(画像を小さくする)ので、
+// handler が別のメッセージにできるように、区別している。
+var ErrDimensionsTooLarge = fmt.Errorf("%w: dimensions exceed the limit", ErrUnsupportedImage)
+
+// ErrHEIFNotSupported は、HEIC / HEIF(iPhone の既定の形式)の写真を表す。対応しない形式の一種でも
+// ある(ErrUnsupportedImage でもある)。デコーダの依存とメモリの負担が、得られる価値に見合わないので、
+// 受け付けない。handler は、対応しない理由が分かる別のメッセージにする。
+var ErrHEIFNotSupported = fmt.Errorf("%w: HEIC/HEIF is not supported", ErrUnsupportedImage)
+
+// MaxEdge は、保存する写真の長辺の上限(ピクセル)である。frontend が送る前に縮小する目安として
+// 使えるように、GET /meta で返す。
+const MaxEdge = 1600
+
 const (
 	// maxEdge は出力の最長辺である。これより大きい画像は縮小され、小さい
 	// 画像は決して拡大されない。
-	maxEdge = 1600
+	maxEdge = MaxEdge
 	// maxDimension と maxPixels は、画像ヘッダで宣言されたサイズの上限で
 	// あり、完全な decode の前にチェックされる（decompression bomb のガード）。
 	// 24MP は実際のカメラ出力をカバーする。いずれにせよ長辺は 1600px に
@@ -101,6 +115,9 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	switch ct {
 	case "image/jpeg", "image/png", "image/webp":
 	default:
+		if looksLikeHEIF(head) {
+			return Processed{}, ErrHEIFNotSupported
+		}
 		return Processed{}, fmt.Errorf("%w: detected %s", ErrUnsupportedImage, ct)
 	}
 	data, err := io.ReadAll(br)
@@ -131,10 +148,10 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 		return Processed{}, fmt.Errorf("%w: %v", ErrUnsupportedImage, err)
 	}
 	if cfg.Width > maxDimension || cfg.Height > maxDimension || cfg.Width*cfg.Height > maxPixels {
-		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the size limit", ErrUnsupportedImage, cfg.Width, cfg.Height)
+		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the size limit", ErrDimensionsTooLarge, cfg.Width, cfg.Height)
 	}
 	if int64(cfg.Width)*int64(cfg.Height)*bytesPerPixel(cfg.ColorModel) > maxDecodedBytes {
-		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the decode memory limit", ErrUnsupportedImage, cfg.Width, cfg.Height)
+		return Processed{}, fmt.Errorf("%w: %dx%d exceeds the decode memory limit", ErrDimensionsTooLarge, cfg.Width, cfg.Height)
 	}
 	img, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -173,4 +190,17 @@ func shrink(img image.Image) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, dw, dh))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
 	return dst
+}
+
+// heifBrands は、HEIC / HEIF の写真が、ファイルの先頭の ftyp ボックスに書く「主なブランド」である。
+var heifBrands = map[string]bool{
+	"heic": true, "heix": true, "hevc": true, "hevx": true, "heim": true, "heis": true,
+	"hevm": true, "hevs": true, "mif1": true, "msf1": true, "heif": true,
+}
+
+// looksLikeHEIF は、先頭のバイト列が HEIC / HEIF の写真かどうかを、ftyp ボックスの主なブランドだけで
+// 判断する(4 バイトの大きさ、"ftyp"、4 バイトの主なブランド)。AVIF は主なブランドが "avif" なので、
+// 一致しない。中身の検査ではなく、断るときのメッセージを変えるためだけの判断である。
+func looksLikeHEIF(head []byte) bool {
+	return len(head) >= 12 && string(head[4:8]) == "ftyp" && heifBrands[string(head[8:12])]
 }
