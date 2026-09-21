@@ -16,7 +16,7 @@ function UserUpdateForm({ id }: { id: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user: authUser, logout, refreshUser } = useAuth();
-  const { update } = useUpdateUser(Number(id));
+  const { update } = useUpdateUser(id);
   const { destroy } = useDeleteUser();
 
   const [username, setUsername] = useState(authUser?.username ?? "");
@@ -63,7 +63,7 @@ function UserUpdateForm({ id }: { id: string }) {
     if (!confirm(t("users.update.deleteConfirm"))) return;
     setIsDeleting(true);
     try {
-      await destroy(Number(id));
+      await destroy(id);
       await logout();
       void navigate("/reviews");
     } catch (e) {
@@ -141,7 +141,7 @@ export default function UserUpdatePage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { user: authUser, isLoading: authLoading } = useAuth();
-  const { data: profile, error, isLoading } = useUser(Number(id), authUser?.id ?? null, {
+  const { data: profile, error, isLoading } = useUser(id, authUser?.id ?? null, {
     enabled: !authLoading,
   });
 
@@ -167,5 +167,5 @@ export default function UserUpdatePage() {
       </Layout>
     );
   }
-  return <UserUpdateForm id={String(id)} />;
+  return <UserUpdateForm id={profile.id} />;
 }

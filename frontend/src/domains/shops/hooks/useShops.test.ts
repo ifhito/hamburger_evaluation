@@ -30,21 +30,24 @@ describe("getKey", () => {
   });
 });
 
+const viewer3 = "00000000-0000-4000-8000-000000000003";
+const viewer4 = "00000000-0000-4000-8000-000000000004";
+
 describe("shopDetailKey", () => {
   it("id と viewerId を含む配列キーを返す", () => {
-    expect(shopDetailKey(2, 3)).toEqual(["/shops", 2, 3]);
+    expect(shopDetailKey(2, viewer3)).toEqual(["/shops", 2, viewer3]);
     expect(shopDetailKey(2, null)).toEqual(["/shops", 2, null]);
   });
 
   it("閲覧者が違えば(未ログイン含む)別のキーになる", () => {
-    expect(shopDetailKey(2, 3)).not.toEqual(shopDetailKey(2, null));
-    expect(shopDetailKey(2, 3)).not.toEqual(shopDetailKey(2, 4));
+    expect(shopDetailKey(2, viewer3)).not.toEqual(shopDetailKey(2, null));
+    expect(shopDetailKey(2, viewer3)).not.toEqual(shopDetailKey(2, viewer4));
   });
 
   it("enabled が false、または id が空なら null を返す", () => {
-    expect(shopDetailKey(2, 3, false)).toBeNull();
-    expect(shopDetailKey(undefined, 3)).toBeNull();
-    expect(shopDetailKey(0, 3)).toBeNull();
-    expect(shopDetailKey(NaN, 3)).toBeNull();
+    expect(shopDetailKey(2, viewer3, false)).toBeNull();
+    expect(shopDetailKey(undefined, viewer3)).toBeNull();
+    expect(shopDetailKey(0, viewer3)).toBeNull();
+    expect(shopDetailKey(NaN, viewer3)).toBeNull();
   });
 });

@@ -9,7 +9,7 @@ export interface Shop {
 }
 
 export interface ShopCreator {
-  id: number;
+  id: string;
   username: string;
 }
 

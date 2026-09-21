@@ -22,7 +22,7 @@ type Shop struct {
 	Name           string
 	Status         ShopStatus
 	ModerationNote *string
-	CreatorID      *int64
+	CreatorID      *string
 }
 
 // ValidateShopName は、shop 名に対して Rails の presence validation を強制
@@ -38,7 +38,7 @@ func ValidateShopName(name string) error {
 // NewShopSubmission は、ユーザーが投稿した shop を組み立てる。名前は validate
 // され、status は pending で始まり（Rails ShopStatus.initial）、moderation
 // note はまだなく、投稿したユーザーが creator として記録される。
-func NewShopSubmission(name string, creatorID int64) (Shop, error) {
+func NewShopSubmission(name string, creatorID string) (Shop, error) {
 	if err := ValidateShopName(name); err != nil {
 		return Shop{}, err
 	}
@@ -97,7 +97,7 @@ type ShopVisibility struct {
 	ViewAll bool
 	// ViewerID は、nil でない場合、このユーザーが作成した shop も status に
 	// 関わらず追加で見えるようにする。
-	ViewerID *int64
+	ViewerID *string
 }
 
 // ShopVisibilityFor は viewer に対する可視性の記述子を導出する。nil は匿名
@@ -124,7 +124,7 @@ func (v ShopVisibility) CanView(shop Shop) bool {
 // UserRef は、shop 詳細と review の payload に埋め込まれる {id, username} の
 // projection である。
 type UserRef struct {
-	ID       int64
+	ID       string
 	Username string
 }
 

@@ -6,7 +6,8 @@ import "context"
 // 認証情報が entity 上を流れることは決してなく、persistence/usecase の境界の
 // 内側にとどまる。
 type User struct {
-	ID       int64
+	// ID は UUID の正規形（小文字・ハイフン区切り）である。DB が生成し、形式の判定は IsUUID が持つ。
+	ID       string
 	Username string
 	Email    string
 	Admin    bool
@@ -15,7 +16,7 @@ type User struct {
 // Manages は、ユーザーが指定された id の account を管理（編集または削除）
 // してよいかどうかを返す。自分自身の管理のみ可能で、admin にも例外はない
 // （issue #16 R2/R3）。
-func (u User) Manages(id int64) bool { return u.ID == id }
+func (u User) Manages(id string) bool { return u.ID == id }
 
 // UserProfile は、viewer から見えるユーザーのビューである。ID と Username は
 // 誰にでも公開され、Email と Admin は本人にだけ入る（それ以外は nil）。
@@ -23,7 +24,7 @@ func (u User) Manages(id int64) bool { return u.ID == id }
 // （または {id, username} だけの UserRef）から組み立てる。こうして email と
 // admin が誤って漏れる経路を作らない。
 type UserProfile struct {
-	ID       int64
+	ID       string
 	Username string
 	Email    *string
 	Admin    *bool
@@ -85,10 +86,10 @@ type UserRepository interface {
 	// lookup は repository の実装の内部で行われる。変更が空でも
 	// UpdateUserProfile が呼ばれ、その戻り値が応答になる（Users は
 	// 読み取りのメソッドを repository に持たない）。
-	UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (User, error)
+	UpdateUserProfile(ctx context.Context, id string, changes ProfileChanges) (User, error)
 	// DiscardUser はユーザーを soft delete し（hard DELETE は決して行わない）、
 	// 導出された burger の stats の整合性を保つ。
-	DiscardUser(ctx context.Context, id int64) error
+	DiscardUser(ctx context.Context, id string) error
 }
 
 // ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
@@ -116,11 +117,11 @@ func (s *Users) Create(ctx context.Context, params CreateUserParams) (User, erro
 
 // UpdateProfile は、id の、まだ kept なユーザーに changes の存在するフィールドを
 // atomic に適用し、保存されたユーザーを返す。
-func (s *Users) UpdateProfile(ctx context.Context, id int64, changes ProfileChanges) (User, error) {
+func (s *Users) UpdateProfile(ctx context.Context, id string, changes ProfileChanges) (User, error) {
 	return s.repo.UpdateUserProfile(ctx, id, changes)
 }
 
 // Discard はユーザーを soft delete する。
-func (s *Users) Discard(ctx context.Context, id int64) error {
+func (s *Users) Discard(ctx context.Context, id string) error {
 	return s.repo.DiscardUser(ctx, id)
 }

@@ -4,7 +4,7 @@ export interface Review {
   comment: string | null;
   photoUrl: string | null;
   createdAt: string;
-  user: { id: number; username: string } | null;
+  user: { id: string; username: string } | null;
   burger: {
     id: number;
     name: string;
@@ -37,5 +37,5 @@ export interface ReviewUpdateInput {
 export interface ReviewSearchParams {
   rating?: number;
   keyword?: string;
-  userId?: number;
+  userId?: string;
 }

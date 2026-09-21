@@ -85,9 +85,9 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 	_, yAuth := signupUser(t, router, "yuki", yEmail, "Password123!")
 	_, zAuth := signupUser(t, router, "zoe", zEmail, "Password123!")
 	rootID, rootAuth := signupUser(t, router, "root", rootEmail, "Password123!")
-	for _, id := range []int64{xID, rootID} {
+	for _, id := range []string{xID, rootID} {
 		if _, err := conn.Exec(ctx, `UPDATE users SET admin = true WHERE id = $1`, id); err != nil {
-			t.Fatalf("promote user %d: %v", id, err)
+			t.Fatalf("promote user %s: %v", id, err)
 		}
 	}
 

@@ -16,7 +16,7 @@ type Review struct {
 	// usecase が photo storage を介して組み立てる。domain 自身が組み立てる
 	// ことは決してない。
 	PhotoKey  *string
-	AuthorID  int64
+	AuthorID  string
 	BurgerID  int64
 	CreatedAt time.Time
 }
@@ -55,7 +55,7 @@ func ValidateBurgerName(name string) error {
 // review を組み立てる。comment は渡された値のまま保存され（存在のみが
 // validate される）、ユーザーのテキストを決して trim しない Rails に合わせて
 // いる。
-func NewReview(rating int, comment string, authorID, burgerID int64) (Review, error) {
+func NewReview(rating int, comment string, authorID string, burgerID int64) (Review, error) {
 	if err := ValidateReviewContent(rating, comment); err != nil {
 		return Review{}, err
 	}

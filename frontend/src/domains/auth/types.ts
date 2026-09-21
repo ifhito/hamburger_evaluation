@@ -1,5 +1,5 @@
 export interface AuthUser {
-  id: number;
+  id: string;
   username: string;
   email: string;
   admin: boolean;
@@ -13,7 +13,7 @@ export interface SignupRequest {
 }
 
 export interface SignupResponse {
-  id: number;
+  id: string;
   username: string;
   email: string;
   admin: boolean;

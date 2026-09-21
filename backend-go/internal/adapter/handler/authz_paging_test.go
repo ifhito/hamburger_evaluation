@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // decodeJSONObject は body を単一の JSON オブジェクトとして読む。
@@ -32,9 +33,9 @@ func decodeJSONArray(t *testing.T, body []byte) []map[string]any {
 // TestGetShopCanReview は GET /shops/{id} の can_review が、domain の reviewable ルール
 // （匿名は false）どおりに返ることを固定する（S24 AC3）。
 func TestGetShopCanReview(t *testing.T) {
-	repo := seedShops(1) // alice(1) は pending な shop 2 の creator。admin は id 2
+	repo := seedShops(uid.N(1)) // alice(1) は pending な shop 2 の creator。admin は id 2
 	repo.shops = append(repo.shops, domain.ShopDetail{
-		Shop: domain.Shop{ID: 5, Name: "Alice Rejected", Status: domain.ShopStatusRejected, CreatorID: shopPtr(int64(1))},
+		Shop: domain.Shop{ID: 5, Name: "Alice Rejected", Status: domain.ShopStatusRejected, CreatorID: shopPtr(uid.N(1))},
 	})
 	router, aliceAuth, adminAuth, _ := newShopsRouter(t, repo)
 
@@ -68,7 +69,7 @@ func TestGetShopCanReview(t *testing.T) {
 // admin にも例外なし。匿名は false）どおりに、詳細・一覧・作成・更新のレスポンスに
 // 返ることを固定する（S24 AC1）。
 func TestReviewCanEdit(t *testing.T) {
-	repo := seedReviewWorld(1)
+	repo := seedReviewWorld(uid.N(1))
 	router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, repo)
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth) // alice の review が feed に 1 件ある
 
@@ -130,8 +131,8 @@ func TestReviewCanEdit(t *testing.T) {
 
 	t.Run("shop 詳細に埋め込まれる review には can_edit を含めない", func(t *testing.T) {
 		// shop 詳細の review は閲覧者ごとの値を持たない（別の型）。frontend が誤って使えないようにする。
-		shopRepo := seedShops(1)
-		shopRepo.reviews[1] = []domain.ShopReview{{ID: 9, Rating: 4, User: &domain.UserRef{ID: 3, Username: "bob"}}}
+		shopRepo := seedShops(uid.N(1))
+		shopRepo.reviews[1] = []domain.ShopReview{{ID: 9, Rating: 4, User: &domain.UserRef{ID: uid.N(3), Username: "bob"}}}
 		shopRouter, _, _, _ := newShopsRouter(t, shopRepo)
 		rec := do(shopRouter, http.MethodGet, "/shops/1", "", "")
 		reviews, ok := decodeJSONObject(t, rec.Body.Bytes())["reviews"].([]any)
@@ -171,7 +172,7 @@ var hasMoreCases = []hasMoreCase{
 func TestListShopsHasMore(t *testing.T) {
 	for _, tt := range hasMoreCases {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := seedShops(1)
+			repo := seedShops(uid.N(1))
 			repo.shops = nil
 			for i := 1; i <= tt.total; i++ {
 				repo.shops = append(repo.shops, domain.ShopDetail{Shop: domain.Shop{
@@ -199,11 +200,11 @@ func TestListShopsHasMore(t *testing.T) {
 func TestListReviewsHasMore(t *testing.T) {
 	for _, tt := range hasMoreCases {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := seedReviewWorld(1)
+			repo := seedReviewWorld(uid.N(1))
 			for i := 1; i <= tt.total; i++ {
 				id := int64(i)
 				repo.reviews[id] = &fakeStoredReview{review: domain.Review{
-					ID: id, Rating: 3, AuthorID: 1, BurgerID: cheeseBurgerID,
+					ID: id, Rating: 3, AuthorID: uid.N(1), BurgerID: cheeseBurgerID,
 					CreatedAt: reviewBaseTime.Add(0),
 				}}
 			}
@@ -226,8 +227,8 @@ func TestListReviewsHasMore(t *testing.T) {
 // TestListHasMoreNotSetOnError は、page / per_page が不正で 422 になる場合は、
 // X-Has-More を付けないことを固定する（本文の契約にない値を返さない）。
 func TestListHasMoreNotSetOnError(t *testing.T) {
-	shopRouter, _, _, _ := newShopsRouter(t, seedShops(1))
-	reviewRouter, _, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+	shopRouter, _, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
+	reviewRouter, _, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	for name, router := range map[string]http.Handler{"/shops": shopRouter, "/reviews": reviewRouter} {
 		t.Run(name, func(t *testing.T) {
 			rec := do(router, http.MethodGet, name+"?page=abc", "", "")

@@ -21,7 +21,7 @@ type CreateShopParams struct {
 	Name           string
 	Status         int16
 	ModerationNote pgtype.Text
-	CreatorID      pgtype.Int8
+	CreatorID      *string
 }
 
 func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, error) {
@@ -87,7 +87,7 @@ type GetShopWithCreatorRow struct {
 	Name            string
 	Status          int16
 	ModerationNote  pgtype.Text
-	CreatorID       pgtype.Int8
+	CreatorID       *string
 	CreatorUsername pgtype.Text
 }
 
@@ -124,7 +124,7 @@ type ListShopReviewsRow struct {
 	Rating        int16
 	Comment       pgtype.Text
 	CreatedAt     pgtype.Timestamptz
-	UserID        int64
+	UserID        string
 	UserUsername  string
 	BurgerID      int64
 	BurgerName    string
@@ -174,7 +174,7 @@ const listShops = `-- name: ListShops :many
 SELECT id, name, status, moderation_note, creator_id FROM shops
 WHERE ($1::boolean
        OR status = 1
-       OR creator_id = $2::bigint)
+       OR creator_id = $2::uuid)
   AND ($3::text IS NULL OR name ILIKE $3::text)
 ORDER BY name, id
 LIMIT $5 OFFSET $4
@@ -182,7 +182,7 @@ LIMIT $5 OFFSET $4
 
 type ListShopsParams struct {
 	ViewAll     bool
-	ViewerID    pgtype.Int8
+	ViewerID    *string
 	NamePattern pgtype.Text
 	PageOffset  int32
 	PageLimit   int32
@@ -193,7 +193,7 @@ type ListShopsRow struct {
 	Name           string
 	Status         int16
 	ModerationNote pgtype.Text
-	CreatorID      pgtype.Int8
+	CreatorID      *string
 }
 
 // 以下の WHERE 句は domain.ShopVisibility
@@ -249,7 +249,7 @@ type ListShopsForModerationRow struct {
 	Name            string
 	Status          int16
 	ModerationNote  pgtype.Text
-	CreatorID       pgtype.Int8
+	CreatorID       *string
 	CreatorUsername pgtype.Text
 }
 

@@ -10,13 +10,18 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 const testSecret = "test-only-secret"
 
+// testUserID は、トークンに入れるユーザーの id(UUID の正規形)である。
+var testUserID = uid.N(42)
+
 func TestJWTCodecRoundTrip(t *testing.T) {
 	codec := NewJWTCodec(testSecret, time.Hour)
-	const userID = int64(42)
+	userID := testUserID
 
 	token, err := codec.Issue(userID)
 	if err != nil {
@@ -27,11 +32,10 @@ func TestJWTCodecRoundTrip(t *testing.T) {
 		t.Fatalf("Verify returned error: %v", err)
 	}
 	if got != userID {
-		t.Fatalf("Verify = %d, want %d", got, userID)
+		t.Fatalf("Verify = %s, want %s", got, userID)
 	}
 
-	// 旧 Rails の発行形式との互換：payload はちょうど
-	// {"user_id": <number>, "exp": <unix>} でなければならない
+	// payload はちょうど {"user_id": "<uuid>", "exp": <unix>} でなければならない
 	// （frontend が読むのは exp だけ）。
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -41,24 +45,24 @@ func TestJWTCodecRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	var claims map[string]json.Number
+	var claims map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if len(claims) != 2 {
 		t.Fatalf("payload has claims %v, want exactly user_id and exp", claims)
 	}
-	if claims["user_id"].String() != "42" {
-		t.Fatalf("user_id claim = %q, want 42", claims["user_id"])
+	if want := `"` + userID + `"`; string(claims["user_id"]) != want {
+		t.Fatalf("user_id claim = %s, want %s", claims["user_id"], want)
 	}
-	if _, err := claims["exp"].Int64(); err != nil {
-		t.Fatalf("exp claim %q is not an integer: %v", claims["exp"], err)
+	if _, err := json.Number(claims["exp"]).Int64(); err != nil {
+		t.Fatalf("exp claim %s is not an integer: %v", claims["exp"], err)
 	}
 }
 
 func TestJWTCodecVerifyRejects(t *testing.T) {
 	codec := NewJWTCodec(testSecret, time.Hour)
-	claims := jwt.MapClaims{"user_id": int64(42), "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"user_id": testUserID, "exp": time.Now().Add(time.Hour).Unix()}
 
 	tests := []struct {
 		name  string
@@ -68,7 +72,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			name: "期限切れの token は拒否される",
 			token: func(t *testing.T) string {
 				expired := NewJWTCodec(testSecret, -time.Minute)
-				token, err := expired.Issue(42)
+				token, err := expired.Issue(testUserID)
 				if err != nil {
 					t.Fatalf("Issue returned error: %v", err)
 				}
@@ -78,7 +82,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 		{
 			name: "署名が改ざんされた token は拒否される",
 			token: func(t *testing.T) string {
-				token, err := codec.Issue(42)
+				token, err := codec.Issue(testUserID)
 				if err != nil {
 					t.Fatalf("Issue returned error: %v", err)
 				}
@@ -99,7 +103,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			name: "別の secret で署名された token は拒否される",
 			token: func(t *testing.T) string {
 				other := NewJWTCodec("another-secret", time.Hour)
-				token, err := other.Issue(42)
+				token, err := other.Issue(testUserID)
 				if err != nil {
 					t.Fatalf("Issue returned error: %v", err)
 				}
@@ -134,7 +138,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 		{
 			name: "exp がない token は拒否される",
 			token: func(t *testing.T) string {
-				token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user_id": int64(42)}).
+				token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"user_id": testUserID}).
 					SignedString([]byte(testSecret))
 				if err != nil {
 					t.Fatalf("sign token without exp: %v", err)
@@ -155,6 +159,30 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 			},
 		},
 		{
+			name: "数値の user_id を持つ旧形式の token は拒否される",
+			token: func(t *testing.T) string {
+				token, err := jwt.NewWithClaims(jwt.SigningMethodHS256,
+					jwt.MapClaims{"user_id": 42, "exp": time.Now().Add(time.Hour).Unix()}).
+					SignedString([]byte(testSecret))
+				if err != nil {
+					t.Fatalf("sign token with numeric user_id: %v", err)
+				}
+				return token
+			},
+		},
+		{
+			name: "UUID の正規形でない user_id を持つ token は拒否される",
+			token: func(t *testing.T) string {
+				token, err := jwt.NewWithClaims(jwt.SigningMethodHS256,
+					jwt.MapClaims{"user_id": "42", "exp": time.Now().Add(time.Hour).Unix()}).
+					SignedString([]byte(testSecret))
+				if err != nil {
+					t.Fatalf("sign token with a non-uuid user_id: %v", err)
+				}
+				return token
+			},
+		},
+		{
 			name:  "でたらめな token は拒否される",
 			token: func(*testing.T) string { return "not.a.jwt" },
 		},
@@ -162,7 +190,7 @@ func TestJWTCodecVerifyRejects(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if userID, err := codec.Verify(tt.token(t)); err == nil {
-				t.Fatalf("Verify = %d with nil error, want error", userID)
+				t.Fatalf("Verify = %s with nil error, want error", userID)
 			}
 		})
 	}

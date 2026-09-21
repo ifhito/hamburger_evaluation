@@ -51,7 +51,7 @@ WHERE r.discarded_at IS NULL
       JOIN shops fs ON fs.id = fsb.shop_id AND fs.status = 1
       WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = sqlc.narg(filter_shop_id)::bigint
   ))
-  AND (sqlc.narg(filter_user_id)::bigint IS NULL OR r.user_id = sqlc.narg(filter_user_id)::bigint)
+  AND (sqlc.narg(filter_user_id)::uuid IS NULL OR r.user_id = sqlc.narg(filter_user_id)::uuid)
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 

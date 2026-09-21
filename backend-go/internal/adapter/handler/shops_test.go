@@ -13,6 +13,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -87,7 +88,7 @@ func (f *shopStoreFake) ListShopReviews(_ context.Context, shopID int64) ([]doma
 
 // newShopsRouter は、auth kit と与えられた shop の fake で router を配線し、
 // 通常のユーザーと admin 用に発行した Bearer ヘッダーを返す。
-func newShopsRouter(t *testing.T, repo *shopStoreFake) (router http.Handler, aliceAuth, adminAuth string, aliceID int64) {
+func newShopsRouter(t *testing.T, repo *shopStoreFake) (router http.Handler, aliceAuth, adminAuth string, aliceID string) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
 	alice := users.seed("alice", "alice@example.com", "Password123!")
@@ -112,7 +113,7 @@ func shopPtr[T any](v T) *T { return &v }
 
 // seedShops は、active な shop 1 件、（creatorID が作成した）pending な shop
 // 1 件、rejected な shop 1 件を持つ fake を返す。
-func seedShops(creatorID int64) *shopStoreFake {
+func seedShops(creatorID string) *shopStoreFake {
 	return &shopStoreFake{
 		shops: []domain.ShopDetail{
 			{Shop: domain.Shop{ID: 1, Name: "Active Diner", Status: domain.ShopStatusActive}},
@@ -120,7 +121,7 @@ func seedShops(creatorID int64) *shopStoreFake {
 				Shop:    domain.Shop{ID: 2, Name: "Alice Pending", Status: domain.ShopStatusPending, CreatorID: shopPtr(creatorID)},
 				Creator: &domain.UserRef{ID: creatorID, Username: "alice"},
 			},
-			{Shop: domain.Shop{ID: 3, Name: "Rejected Grill", Status: domain.ShopStatusRejected, CreatorID: shopPtr(creatorID + 100)}},
+			{Shop: domain.Shop{ID: 3, Name: "Rejected Grill", Status: domain.ShopStatusRejected, CreatorID: shopPtr(uid.N(99))}},
 		},
 		reviews: map[int64][]domain.ShopReview{},
 	}
@@ -129,7 +130,7 @@ func seedShops(creatorID int64) *shopStoreFake {
 // TestListShops は HTTP レベルで AC1–AC3 を扱う：見える集合は OptionalAuth の
 // viewer に依存し、body はトップレベルの snake_case の配列で name 順に並ぶ。
 func TestListShops(t *testing.T) {
-	repo := seedShops(1)
+	repo := seedShops(uid.N(1))
 	router, aliceAuth, adminAuth, _ := newShopsRouter(t, repo)
 
 	tests := []struct {
@@ -169,7 +170,7 @@ func TestListShops(t *testing.T) {
 // fallback を扱う：範囲外の整数はエラーにならずデフォルト値に fallback し、
 // 範囲外の page は空配列を返す（整数でない値の 422 は pagination_test.go が扱う）。
 func TestListShopsParams(t *testing.T) {
-	repo := seedShops(1)
+	repo := seedShops(uid.N(1))
 	router, _, adminAuth, _ := newShopsRouter(t, repo)
 
 	tests := []struct {
@@ -235,14 +236,14 @@ func TestListShopsRepoFailure(t *testing.T) {
 // burger、統計を inline で含む review（comment のない review は null、統計の
 // ない burger はゼロ）。
 func TestGetShopDetail(t *testing.T) {
-	repo := seedShops(1)
+	repo := seedShops(uid.N(1))
 	repo.reviews[1] = []domain.ShopReview{
 		{
 			ID:        9,
 			Rating:    4,
 			Comment:   shopPtr("Tasty"),
 			CreatedAt: time.Date(2024, 5, 1, 12, 0, 0, 0, time.UTC),
-			User:      &domain.UserRef{ID: 3, Username: "bob"},
+			User:      &domain.UserRef{ID: uid.N(3), Username: "bob"},
 			Burger: &domain.ShopReviewBurger{
 				ID: 5, Name: "Cheese", AverageRating: 4.5, ReviewCount: 2, WeightedScore: 4.1, Confidence: 0.8,
 			},
@@ -251,7 +252,7 @@ func TestGetShopDetail(t *testing.T) {
 			ID:        8,
 			Rating:    2,
 			CreatedAt: time.Date(2024, 4, 1, 12, 0, 0, 0, time.UTC),
-			User:      &domain.UserRef{ID: 3, Username: "bob"},
+			User:      &domain.UserRef{ID: uid.N(3), Username: "bob"},
 			Burger:    &domain.ShopReviewBurger{ID: 6, Name: "Plain"},
 		},
 	}
@@ -262,9 +263,9 @@ func TestGetShopDetail(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
 	want := `{"id":1,"name":"Active Diner","status":"active","moderation_note":null,"creator":null,"reviews":[` +
-		`{"id":9,"rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":3,"username":"bob"},` +
+		`{"id":9,"rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
 		`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
-		`{"id":8,"rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":3,"username":"bob"},` +
+		`{"id":8,"rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
 		`"burger":{"id":6,"name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}],"can_review":false}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
@@ -275,7 +276,7 @@ func TestGetShopDetail(t *testing.T) {
 // viewer には 404 だが creator と admin には開かれており、未知の id と
 // 数値でない id は同一の body で 404 になり、失敗は 500 になる。
 func TestGetShopVisibility(t *testing.T) {
-	repo := seedShops(1)
+	repo := seedShops(uid.N(1))
 	router, aliceAuth, adminAuth, _ := newShopsRouter(t, repo)
 	const notFoundBody = `{"error":"Shop not found"}`
 

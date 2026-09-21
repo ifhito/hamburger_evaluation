@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
-import { isValidUserId, useUser } from "../hooks/useUser";
+import { useUser } from "../hooks/useUser";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { formatDate } from "../../../lib/date";
 import { formatRating } from "../../../lib/rating";
@@ -15,17 +15,14 @@ export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user: authUser, isLoading: authLoading } = useAuth();
 
-  const userId = Number(id);
-  // /users/abc(NaN)や 0 以下・安全でない整数など不正な id では、user も reviews も取得しない
-  const isValidId = isValidUserId(userId);
   // 認証状態の復元前は authUser が null でも token は localStorage にあり得る。閲覧者が確定してから取得する
   const {
     data: user,
     isLoading: userLoading,
     error: userError,
-  } = useUser(userId, authUser?.id ?? null, { enabled: !authLoading });
-  // 不正な id のまま呼ぶと user_id=NaN が 422 になり、レビューの読み込みエラーが余計に出る。
-  // かといって user_id を外して呼ぶと全件のフィードが他人のレビューとして出てしまうため、不正な id では取得自体を止める
+  } = useUser(id, authUser?.id ?? null, { enabled: !authLoading });
+  // id の形式の判定は持たない(不正な id は API の 404 でエラー表示になる)。
+  // user_id を外して呼ぶと全件のフィードが他人のレビューとして出てしまうため、ユーザーが取得できてから呼ぶ
   const {
     data: userReviews,
     isLoading: reviewsLoading,
@@ -33,14 +30,14 @@ export default function UserDetailPage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useReviews({ userId }, { enabled: isValidId });
+  } = useReviews({ userId: id }, { enabled: id !== undefined && user !== undefined });
 
   return (
     <Layout title={user ? t("users.detail.namedProfile", { name: user.username }) : t("users.detail.profileTitle")}>
       {(userLoading || reviewsLoading) && (
         <p className={styles.muted}>{t("users.detail.loading")}</p>
       )}
-      {(!isValidId || userError) && <ErrorMessage message={t("users.detail.loadError")} />}
+      {userError && <ErrorMessage message={t("users.detail.loadError")} />}
 
       {user && (
         <div className={styles.profile}>
@@ -50,7 +47,7 @@ export default function UserDetailPage() {
             {user.email && <p className={styles.email}>{user.email}</p>}
           </div>
           {user.canEdit && (
-            <Link to={`/users/${userId}/edit`} className={styles.editLink}>
+            <Link to={`/users/${user.id}/edit`} className={styles.editLink}>
               {t("users.detail.editProfile")}
             </Link>
           )}

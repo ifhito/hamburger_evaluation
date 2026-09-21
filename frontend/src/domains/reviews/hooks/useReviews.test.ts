@@ -21,6 +21,8 @@ function page(hasMore: boolean, count = 1): Page<ReviewView> {
   return { items: Array.from({ length: count }, (_, i) => review(i + 1)), hasMore };
 }
 
+const userId = "0b0e3a5c-8d54-4c1a-9f33-2a9d6f1c7e10";
+
 describe("getKey", () => {
   it("前ページに続きがある(hasMore が true)なら次ページのキーを返す", () => {
     expect(getKey(undefined)(1, page(true))).toBe("/reviews?page=2");
@@ -41,11 +43,11 @@ describe("getKey", () => {
 
   it("per_page は送らない(1 ページの件数は backend が決める)", () => {
     expect(getKey(undefined)(0, null)).not.toContain("per_page");
-    expect(getKey({ userId: 2, keyword: "a", rating: 3 })(1, page(true))).not.toContain("per_page");
+    expect(getKey({ userId, keyword: "a", rating: 3 })(1, page(true))).not.toContain("per_page");
   });
 
   it("userId は snake_case の user_id としてキーに入る", () => {
-    expect(getKey({ userId: 2 })(0, null)).toBe("/reviews?user_id=2&page=1");
+    expect(getKey({ userId })(0, null)).toBe(`/reviews?user_id=${userId}&page=1`);
   });
 
   it("空の keyword はキーに含まれない", () => {
@@ -59,14 +61,14 @@ describe("getKey", () => {
   });
 
   it("enabled が false のときは、先頭ページも次ページも null を返して取得を止める", () => {
-    const disabled = getKey({ userId: 2 }, false);
+    const disabled = getKey({ userId }, false);
 
     expect(disabled(0, null)).toBeNull();
     expect(disabled(1, page(true))).toBeNull();
   });
 
   it("enabled を省略した場合と true の場合は、これまでどおりキーを返す", () => {
-    expect(getKey({ userId: 2 })(0, null)).toBe("/reviews?user_id=2&page=1");
-    expect(getKey({ userId: 2 }, true)(0, null)).toBe("/reviews?user_id=2&page=1");
+    expect(getKey({ userId })(0, null)).toBe(`/reviews?user_id=${userId}&page=1`);
+    expect(getKey({ userId }, true)(0, null)).toBe(`/reviews?user_id=${userId}&page=1`);
   });
 });

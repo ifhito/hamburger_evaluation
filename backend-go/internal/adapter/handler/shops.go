@@ -40,7 +40,7 @@ type shopDetailResponse struct {
 }
 
 type userRefResponse struct {
-	ID       int64  `json:"id"`
+	ID       string `json:"id"`
 	Username string `json:"username"`
 }
 
