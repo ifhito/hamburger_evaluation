@@ -50,8 +50,8 @@ func TestShopVisibility(t *testing.T) {
 	}
 }
 
-// TestShopCanBeReviewedBy は reviewable ルールをその唯一の置き場で固定する
-// （issue #14 AC2）。rejected の shop は決して reviewable ではなく、active な
+// TestShopCanBeReviewedBy は、レビューを投稿できるか(reviewable)のルールを、その唯一の
+// 置き場で固定する。rejected(却下済み)の shop は決して reviewable ではなく、active な
 // shop は認証済みの誰でも reviewable であり、pending な shop はその creator か
 // admin のみが reviewable である。
 func TestShopCanBeReviewedBy(t *testing.T) {
@@ -224,7 +224,7 @@ func TestShopCanBeReviewedByViewer(t *testing.T) {
 }
 
 // TestShopModerationCapabilities は、承認・却下の操作を画面が提示してよいか(状態が変わる遷移か)を、
-// status ごとに固定する。frontend は status の比較でこれを再現しない(S32)。
+// status ごとに固定する。frontend は status の比較でこれを再現しない。
 func TestShopModerationCapabilities(t *testing.T) {
 	tests := []struct {
 		status      domain.ShopStatus

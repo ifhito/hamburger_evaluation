@@ -16,8 +16,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 )
 
-// TestMigrationsAcceptance は、実際の PostgreSQL に対して story S2 の
-// AC1-AC4 をカバーする。TEST_DATABASE_URL が、database を作成・drop できる
+// TestMigrationsAcceptance は、実際の PostgreSQL に対して、マイグレーションの適用・
+// 制約・取り消し(down)が期待どおりに動くことを確かめる。TEST_DATABASE_URL が、database を作成・drop できる
 // ユーザーの maintenance database
 // （例：postgres://postgres:password@localhost:5433/postgres）を指している
 // 必要がある。設定されていない場合、テストは skip される（dbtest.NewEmpty
@@ -30,15 +30,15 @@ func TestMigrationsAcceptance(t *testing.T) {
 	conn, _ := dbtest.NewEmpty(t)
 	ups, downs := dbtest.LoadMigrations(t)
 
-	// AC1：空の DB から、すべての migration を up すると table、制約、
+	// 空の DB から、すべての migration を up すると table、制約、
 	// index が得られる。
 	dbtest.Apply(ctx, t, conn, ups)
-	t.Run("AC1 up すると schema が作られる", func(t *testing.T) {
+	t.Run("空の DB にすべてのマイグレーションを up すると、表・制約・インデックスが作られる", func(t *testing.T) {
 		assertSchemaPresent(ctx, t, conn)
 	})
 
-	// AC3：1..5 の範囲外の rating は CHECK 制約によって拒否される。
-	t.Run("AC3 範囲外の rating は CHECK 制約違反になる", func(t *testing.T) {
+	// 1..5 の範囲外の rating は CHECK 制約によって拒否される。
+	t.Run("評価が 1〜5 の範囲外(6)のレビューを入れると、CHECK 制約違反になる", func(t *testing.T) {
 		var userID string
 		var burgerID string
 		if err := conn.QueryRow(ctx,
@@ -47,7 +47,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 			t.Fatalf("insert user: %v", err)
 		}
 		if err := conn.QueryRow(ctx,
-			"INSERT INTO burgers (name) VALUES ($1) RETURNING id", "AC3 Burger").Scan(&burgerID); err != nil {
+			"INSERT INTO burgers (name) VALUES ($1) RETURNING id", "Rating Check Burger").Scan(&burgerID); err != nil {
 			t.Fatalf("insert burger: %v", err)
 		}
 		_, err := conn.Exec(ctx,
@@ -55,9 +55,9 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23514", "reviews_rating_check")
 	})
 
-	// S27：users.id は DB が uuid（v4）を生成し、それを参照する reviews.user_id・
+	// users.id は DB が uuid（v4）を生成し、それを参照する reviews.user_id・
 	// shops.creator_id の外部キーが uuid で効く。
-	t.Run("S27 users の id は uuid で生成され、外部キーが uuid で効く", func(t *testing.T) {
+	t.Run("ユーザーの id は uuid で生成され、存在しないユーザーの uuid を指す外部キーは拒否される", func(t *testing.T) {
 		var userID string
 		if err := conn.QueryRow(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3) RETURNING id::text",
@@ -68,16 +68,16 @@ func TestMigrationsAcceptance(t *testing.T) {
 			t.Fatalf("users.id = %q, want a lowercase v4 uuid", userID)
 		}
 		if _, err := conn.Exec(ctx,
-			"INSERT INTO shops (name, status, creator_id) VALUES ('S27 Shop', 0, $1)", userID); err != nil {
+			"INSERT INTO shops (name, status, creator_id) VALUES ('FK Check Shop', 0, $1)", userID); err != nil {
 			t.Fatalf("insert shop with an existing creator: %v", err)
 		}
 		const missing = "00000000-0000-4000-8000-000000000000"
 		_, err := conn.Exec(ctx,
-			"INSERT INTO shops (name, status, creator_id) VALUES ('S27 Orphan', 0, $1)", missing)
+			"INSERT INTO shops (name, status, creator_id) VALUES ('FK Orphan Shop', 0, $1)", missing)
 		assertPgError(t, err, "23503", "shops_creator_id_fkey")
 		var burgerID string
 		if err := conn.QueryRow(ctx,
-			"INSERT INTO burgers (name) VALUES ('S27 Burger') RETURNING id").Scan(&burgerID); err != nil {
+			"INSERT INTO burgers (name) VALUES ('FK Check Burger') RETURNING id").Scan(&burgerID); err != nil {
 			t.Fatalf("insert burger: %v", err)
 		}
 		_, err = conn.Exec(ctx,
@@ -167,9 +167,9 @@ func TestMigrationsAcceptance(t *testing.T) {
 		}
 	})
 
-	// AC4：同じ email を持つ 2 人目のユーザーは UNIQUE 制約によって
+	// 同じ email を持つ 2 人目のユーザーは UNIQUE 制約によって
 	// 拒否される。
-	t.Run("AC4 同じ email は UNIQUE 制約違反になる", func(t *testing.T) {
+	t.Run("同じメールアドレスの 2 人目のユーザーを入れると、UNIQUE 制約違反になる", func(t *testing.T) {
 		const email = "ac4@example.com"
 		if _, err := conn.Exec(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3)",
@@ -182,9 +182,9 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23505", "users_email_key")
 	})
 
-	// S16（AC14）：確認待ちの signup の制約。トークンのハッシュは一意、email は大文字小文字を
+	// メール確認待ちの登録(signup_verifications)の制約。トークンのハッシュは一意、email は大文字小文字を
 	// 区別せず一意で、必須の列は NOT NULL である。users のスキーマは変わらない。
-	t.Run("S16 signup_verifications の制約", func(t *testing.T) {
+	t.Run("メール確認待ちの登録は、トークンのハッシュとメールアドレス(大文字小文字を区別しない)が一意で、必須の列は NOT NULL である", func(t *testing.T) {
 		const insert = "INSERT INTO signup_verifications (email, username, password_digest, token_hash, expires_at) VALUES ($1, 'u', 'digest', $2, now() + interval '1 day')"
 		if _, err := conn.Exec(ctx, insert, "Pending@example.com", "hash-1"); err != nil {
 			t.Fatalf("insert first verification: %v", err)
@@ -198,14 +198,14 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23502", "")
 	})
 
-	// S21 AC7：上限ちょうどは入り、1 文字超えると CHECK 制約違反になる。
+	// 上限ちょうどは入り、1 文字超えると CHECK 制約違反になる。
 	// 数え方はコードポイント数（日本語・絵文字も 1 文字）。
-	t.Run("S21 AC7 文字数の上限を超える値は CHECK 制約違反になる", func(t *testing.T) {
+	t.Run("文字数の上限ちょうどは入り、1 文字超えると CHECK 制約違反になる", func(t *testing.T) {
 		assertTextLimits(ctx, t, conn)
 	})
 
-	// S21 AC9：DB の CHECK の上限の値が、domain の定数と食い違っていない。
-	t.Run("S21 AC9 CHECK の上限が domain の定数と一致する", func(t *testing.T) {
+	// DB の CHECK の上限の値が、domain の定数と食い違っていない。
+	t.Run("DB の CHECK 制約の上限が、domain の定数と一致する", func(t *testing.T) {
 		got := checkLimits(ctx, t, conn)
 		want := map[string]int{
 			"reviews_comment_max_length":       domain.MaxCommentChars,
@@ -221,9 +221,9 @@ func TestMigrationsAcceptance(t *testing.T) {
 		}
 	})
 
-	// AC2：すべての migration を down すると空の database に戻る。
+	// すべての migration を down すると空の database に戻る。
 	dbtest.Apply(ctx, t, conn, downs)
-	t.Run("AC2 down すると空の schema に戻る", func(t *testing.T) {
+	t.Run("すべてのマイグレーションを down すると、空のスキーマに戻る", func(t *testing.T) {
 		var count int
 		if err := conn.QueryRow(ctx,
 			"SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'i', 'S', 'v', 'm')").Scan(&count); err != nil {
