@@ -22,7 +22,6 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/uow"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -54,9 +53,6 @@ func main() {
 // accept を開始した時点で、bind されたアドレスを渡して呼び出される（テストでは
 // ephemeral port を得るために PORT=0 とともに使う）。
 func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
-	// HEIC のデコーダ(WASM の読み込みとコンパイル。約 0.3 秒)を、最初の投稿を待たずに、起動と並行して
-	// 済ませる(サーバーの起動は待たない)。
-	go photo.WarmUp()
 	pool, err := infra.NewPool(ctx, cfg)
 	if err != nil {
 		return err

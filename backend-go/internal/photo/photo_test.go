@@ -388,3 +388,45 @@ func TestProcessRejections(t *testing.T) {
 		})
 	}
 }
+
+// TestProcessRejectionCauses は、断る理由を、呼び出し側が見分けられることを確かめる:
+// 寸法が大きすぎる写真と、HEIC / HEIF の写真は、それぞれ専用のエラーになる(どちらも、対応しない画像の
+// 一種でもある)。それ以外の対応しないファイル(AVIF や写真でないもの)は、どちらでもない。
+func TestProcessRejectionCauses(t *testing.T) {
+	brand := func(b string) []byte {
+		return append([]byte("\x00\x00\x00\x18ftyp"+b+"\x00\x00\x00\x00mif1"+b), bytes.Repeat([]byte{0x5A}, 600)...)
+	}
+	tests := []struct {
+		name           string
+		input          []byte
+		wantDimensions bool
+		wantHEIF       bool
+	}{
+		{"1 辺が上限を超える PNG は、寸法が大きすぎる", pngHeader(t, 10001, 1, 8), true, false},
+		{"画素数が上限を超える PNG は、寸法が大きすぎる", pngHeader(t, 5000, 5000, 8), true, false},
+		{"decode メモリの上限を超える 16-bit の PNG も、寸法が大きすぎる", pngHeader(t, 4500, 4500, 16), true, false},
+		{"主なブランドが heic の写真は、HEIC / HEIF", brand("heic"), false, true},
+		{"主なブランドが heix の写真も、HEIC / HEIF", brand("heix"), false, true},
+		{"主なブランドが mif1 の写真も、HEIC / HEIF", brand("mif1"), false, true},
+		{"主なブランドが heif の写真も、HEIC / HEIF", brand("heif"), false, true},
+		{"主なブランドが avif の写真は、HEIC / HEIF ではない", brand("avif"), false, false},
+		{"主なブランドが mp41(動画)のファイルは、HEIC / HEIF ではない", brand("mp41"), false, false},
+		{"ftyp の位置が違うものは、HEIC / HEIF ではない", append([]byte("xxxxxxxxheicxxxx"), make([]byte, 600)...), false, false},
+		{"ブランドを読めない短さのものは、HEIC / HEIF ではない", []byte("\x00\x00\x00\x18ftyphe"), false, false},
+		{"プレーンテキストは、どちらでもない", []byte("just some text, definitely not an image"), false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := photo.Process(context.Background(), bytes.NewReader(tt.input))
+			if !errors.Is(err, photo.ErrUnsupportedImage) {
+				t.Fatalf("Process error = %v, want ErrUnsupportedImage", err)
+			}
+			if got := errors.Is(err, photo.ErrDimensionsTooLarge); got != tt.wantDimensions {
+				t.Errorf("寸法が大きすぎるエラーか = %v, want %v (err %v)", got, tt.wantDimensions, err)
+			}
+			if got := errors.Is(err, photo.ErrHEIFNotSupported); got != tt.wantHEIF {
+				t.Errorf("HEIC / HEIF のエラーか = %v, want %v (err %v)", got, tt.wantHEIF, err)
+			}
+		})
+	}
+}

@@ -198,7 +198,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
 		}
-		if got, want := rec.Body.String(), `{"errors":["Photo must be a JPEG, PNG, WebP, or HEIC image"]}`; got != want {
+		if got, want := rec.Body.String(), `{"errors":["Photo must be a JPEG, PNG, or WebP image"]}`; got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
 	})
