@@ -21,6 +21,8 @@ interface ViewProps {
   actionError: string[] | null;
   // 解除に成功したことの知らせ。
   disconnected: boolean;
+  // 取得を取り直している間(失敗の表示の Retry を、処理中にする)。
+  retrying: boolean;
   busy: "connect" | "disconnect" | null;
   onConnect: () => void;
   onDisconnect: () => void;
@@ -28,23 +30,22 @@ interface ViewProps {
 }
 
 // プロフィールの Google の連携の見た目。何が押せるかは、backend が返す canUnlink に従う(解除してよいかの判断は持たない)。
-function GoogleConnectionView({ state, actionError, disconnected, busy, onConnect, onDisconnect, onRetry }: ViewProps) {
+function GoogleConnectionView({ state, actionError, disconnected, retrying, busy, onConnect, onDisconnect, onRetry }: ViewProps) {
   const { t } = useTranslation();
   const identity = state.kind === "loaded" ? state.identity : null;
   return (
     <section className={section.section}>
       <h2 className={section.heading}>{t("auth.google.profile.heading")}</h2>
       {actionError && <ErrorMessage message={actionError} />}
-      {disconnected && (
-        <p role="status" className={styles.muted}>
-          {t("auth.google.profile.disconnected")}
-        </p>
-      )}
+      {/* 知らせの領域は、知らせが出る前から画面に置く(あとから中身ごと挿入すると、スクリーンリーダーが読み上げないことがある) */}
+      <p role="status" className={styles.muted}>
+        {disconnected ? t("auth.google.profile.disconnected") : ""}
+      </p>
       {state.kind === "loading" && <p className={styles.muted}>{t("common.loading")}</p>}
       {state.kind === "failed" && (
         <div className={styles.row}>
           <ErrorMessage message={t("auth.google.profile.loadError")} />
-          <Button type="button" variant="secondary" onClick={onRetry}>
+          <Button type="button" variant="secondary" isLoading={retrying} onClick={onRetry}>
             {t("auth.google.profile.retry")}
           </Button>
         </div>
@@ -88,7 +89,7 @@ export function GoogleConnection({
 }) {
   const { t } = useTranslation();
   const enabled = googleEnabled(useMeta().data);
-  const { identities, error, isLoading, refresh, removeProvider } = useIdentities(viewerId, enabled);
+  const { identities, error, isValidating, refresh, removeProvider } = useIdentities(viewerId, enabled);
   const [busy, setBusy] = useState<"connect" | "disconnect" | null>(null);
   const [actionError, setActionError] = useState<string[] | null>(null);
   const [disconnected, setDisconnected] = useState(false);
@@ -107,8 +108,8 @@ export function GoogleConnection({
   // 一覧を取得できたときだけ、連携の有無を決める(取得できていないのに、「未連携」にしない)。
   const state: ConnectionState = identities
     ? { kind: "loaded", identity: identities.find((i) => i.provider === GOOGLE_PROVIDER) ?? null }
-    : error && !isLoading
-      ? { kind: "failed" }
+    : error
+      ? { kind: "failed" } // 取り直している間も、失敗の表示のまま(「読み込み中」に切り替えて、Retry を消さない)
       : { kind: "loading" };
 
   const onConnect = async () => {
@@ -162,6 +163,7 @@ export function GoogleConnection({
       state={state}
       actionError={actionError}
       disconnected={disconnected}
+      retrying={isValidating}
       busy={busy}
       onConnect={() => void onConnect()}
       onDisconnect={() => void onDisconnect()}

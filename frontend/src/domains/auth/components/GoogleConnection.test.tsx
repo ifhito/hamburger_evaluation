@@ -325,4 +325,30 @@ describe("GoogleConnection(プロフィールの Google の連携。一覧の取
     await eventually(() => expect(page.textContent).toContain("Failed to disconnect Google."));
     expect(page.textContent).not.toContain("Google disconnected.");
   });
+
+  it("取得に失敗していて、Retry で取り直している間も、失敗の表示と Retry(処理中)を出し続ける(「読み込み中」に切り替えて、Retry を消さない)", async () => {
+    listIdentities.mockRejectedValueOnce(new ApiError(["boom"], 500)).mockReturnValue(new Promise(() => undefined));
+    const page = await show();
+    await eventually(() => expect(byText(page, "button", "Retry")).toBeDefined());
+
+    await click(need(byText(page, "button", "Retry"), "Retry"));
+
+    expect(page.textContent).toContain("Failed to load your Google connection.");
+    expect(need(page.querySelector("button"), "button").textContent).toContain("Loading");
+    expect(need(page.querySelector("button"), "button").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("解除の知らせの領域(role=status)は、知らせが出る前から、画面にある(あとから中身ごと挿入すると、読み上げられないため)", async () => {
+    listIdentities.mockResolvedValue(connected);
+    unlinkGoogle.mockResolvedValue(undefined);
+    const page = await show();
+    await eventually(() => expect(page.textContent).toContain("Connected as carol@gmail.example"));
+    const region = need(page.querySelector('[role="status"]'), "status region");
+    expect(region.textContent).toBe("");
+
+    await click(need(byText(page, "button", "Disconnect"), "Disconnect"));
+
+    await eventually(() => expect(region.textContent).toContain("Google disconnected."));
+    expect(page.querySelector('[role="status"]')).toBe(region);
+  });
 });
