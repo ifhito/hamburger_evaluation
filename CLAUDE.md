@@ -92,11 +92,13 @@ backend-go/
 
 `POST /signup` は、入力を検証したあと、**登録の有無にかかわらず同じ応答(202)**を返す。応答の違いから、第三者が「この email は登録済みか」を判別できないようにするためである。
 
-- **未登録の email**: 確認待ちを `signup_verifications` に保存し(同じ email の確認待ちは最新の入力で置き換える)、確認リンクつきのメールを送る。リンクは `<APP_BASE_URL>/signup/confirm?token=<平文のトークン>`。トークンは 32 バイトの暗号乱数(base64url)で、DB には SHA-256 だけを保存する。有効期間は 24 時間(`SIGNUP_TOKEN_TTL`)で、単回使用。パスワードは bcrypt で保存し、平文は保存しない。
+- **未登録の email**: 確認待ちを `signup_verifications` に保存し(同じ email の確認待ちは最新の入力で置き換える)、確認リンクつきのメールを送る。リンクは `<APP_BASE_URL>/signup/confirm?token=<平文のトークン>`。トークンは 32 バイトの暗号乱数(base64url)で、DB には SHA-256 だけを保存する。有効期間は 24 時間(`domain.SignupTokenTTL`。業務のルールで、環境変数では変えない)で、単回使用。パスワードは bcrypt で保存し、平文は保存しない。
 - **登録済みの email**: 状態を変えず、「すでに登録済み」の通知メールを送る(確認リンク・トークンは含めない。ログイン画面へのリンクだけ)。
-- どの分岐でも bcrypt のハッシュ計算を行ってから分岐し、メール送信は非同期(有界のキュー+少数の worker)なので、応答時間から登録の有無を推測されない。送信の失敗・遅延・キューの満杯は signup の応答に影響しない(失敗はログに出す)。同じ email への確認メールは 60 秒に 1 通までで、間隔内の再 signup は 202 を返すが、確認待ちを変えず、メールも送らない。
+- どの分岐でも bcrypt のハッシュ計算を行ってから分岐し、メール送信は非同期(有界のキュー+少数の worker)なので、応答時間から登録の有無を推測されない。送信の失敗・遅延・キューの満杯・記録の失敗は signup の応答に影響しない(失敗はログに出す)。同じ email への確認メールは 60 秒に 1 通までで、間隔内の再 signup は 202 を返すが、確認待ちを変えず、メールも送らない。
 - 確認(`POST /signup/confirm`)は、1 つの transaction で「確認待ちをロック → users を作成 → 確認待ちを削除」を行う。同じトークンでの並行する確認は、1 件だけが成功する。期限切れの確認待ちは、signup のたびに上限つきで日和見的に削除する。
 - メール本文はプレーンテキスト・英語で、利用者が入力した値(username など)を入れない。
+- **送信の記録と冪等**: 送るメールは `mail_deliveries` に記録する(送信の履歴と冪等キーだけ。本文・確認トークン・パスワードは保存しない)。worker が、送る前に冪等キーで `pending` の行を作り(`INSERT … ON CONFLICT DO NOTHING`。作れたときだけ送る)、結果を `sent` / `failed`(試行の回数、失敗の種類 `temporary` / `permanent`、200 文字に切った理由)で更新する。冪等キーは、確認メールなら「確認待ちの id + 送信の世代(再 signup で置き換えるたびに増える)」、登録済みへの通知なら「email(小文字)+ 60 秒の窓」で、同じ要求は何度来てもメールが 1 通だけ出る。窓は固定なので、窓をまたぐ 2 つの要求は続けて 2 通出ることがある(どの 60 秒の間でも最大 2 通)。60 秒の制限は DB の判定で、複数のインスタンスで共有される。再送(リトライ)はしない。記録できなかったときは、冪等を守るために送らない。
+- **腐敗防止層**: usecase は、ドメインの意図(`usecase.Mailer` の `SendSignupConfirmation` / `SendAlreadyRegistered`。宛先・リンクの URL・有効期間・冪等キー)だけを渡す。件名・本文・書式は `internal/adapter/infra` が組み立て、SMTP のプロトコル・MIME・応答コードも `infra` が受け止めて、domain の言葉(一時的な失敗・恒久的な失敗)に翻訳して記録する。usecase と domain が `net/smtp` などを import・参照しないことは、構造検査で固定している。
 
 **環境変数**(必須が欠けている・不正なときは起動時に落ちる。値はログ・エラーに出さない)
 
@@ -107,7 +109,6 @@ backend-go/
 | `SMTP_USER` / `SMTP_PASSWORD` | 任意 | 認証(2 つ揃えて設定。暗号化した接続でしか送らない)。**秘密。ログ・コード・PR に書かない** |
 | `MAIL_FROM` | 必須 | 送信元(本番は検証済みのドメインのアドレス) |
 | `APP_BASE_URL` | 必須 | 確認リンクの生成元(frontend の URL。例: `http://localhost:5173`) |
-| `SIGNUP_TOKEN_TTL` | 任意 | 確認トークンの有効期間(既定 `24h`) |
 
 **開発**: `docker compose up` で Mailpit が起動する。確認メールは http://localhost:8025 で読める(SMTP は compose のネットワーク内の `mailpit:1025` で、ホストには公開しない)。
 
@@ -128,7 +129,7 @@ APP_BASE_URL=https://<frontend の URL>
 **既知の残課題・残リスク**
 - `PUT /users/:id` で email を変更するときは、確認メールを挟まず、使用済みの email に 422 `Email has already been taken` を返し続ける。**認証済みのユーザーからは、email の登録有無を判別できる**(メール変更の確認は後続の story)。
 - **pre-hijacking**: 攻撃者が被害者の email で先に signup し、被害者が身に覚えのない確認メールのリンクを開くと、攻撃者のパスワードのアカウントができる。緩和として、確認メールに「心当たりがなければ無視」と明記し、同じ email への signup は最新の入力で置き換え、有効期間は 24 時間、間隔内の再 signup では確認待ちを変えない。根本対策(リンク先でパスワードを設定する方式)は、UI の変更が大きいため採用していない。
-- メールの大量送信の悪用は、同じ宛先・同じ件名を 60 秒に 1 通に絞って緩和している(確認メールは DB の判定、通知メールはプロセスごとのメモリの記録。複数のインスタンスでは共有しない)。IP 単位の制限はない。`alice+1@…` のような別名は別の宛先として数えるので、同じ受信箱への送信は抑えられない。
+- メールの大量送信の悪用は、同じ宛先・同じ種類を 60 秒の窓ごとに 1 通に絞って緩和している(確認メールは確認待ちの間隔、通知メールは `mail_deliveries` の冪等キー。どちらも DB の判定で、複数のインスタンスで共有される。窓は固定なので、窓をまたぐと続けて 2 通出ることがある)。IP 単位の制限はない。`alice+1@…` のような別名は別の宛先として数えるので、同じ受信箱への送信は抑えられない。
 - 応答時間: メール送信は非同期で、bcrypt は全分岐で行う。DB 操作の差(ミリ秒)は残る。
 - 退会(soft delete)したユーザーの email は、`users.email` の一意制約が残るため、再登録できない(signup は 202 になるが、確認で 400 になる)。
 - email の大文字小文字: 確認待ちは大文字小文字を区別せず一意だが、`users.email` は入力どおり保存され、登録済みの判定(`GetActiveUserByEmail`)と login は完全一致である(従来どおり)。
@@ -212,7 +213,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 ### データベーススキーマ
 
-`backend-go/db/migrations/` のマイグレーションで定義された 7 つのテーブル:
+`backend-go/db/migrations/` のマイグレーションで定義された 8 つのテーブル:
 
 - **users** — id (uuid), email, username, password_digest, admin フラグ, 論理削除 (discarded_at)
 - **shops** — name, モデレーション状態 (pending / active / rejected), moderation_note, 申請者への FK
@@ -220,7 +221,8 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - **shops_burgers** *(中間テーブル)* — shop_id (FK), burger_id (FK)
 - **reviews** — rating, comment, user への FK, burger への FK, photo_key (写真の保存キー。任意), 論理削除 (discarded_at)
 - **burger_stats** — バーガーごとの、レビュー由来の集計値
-- **signup_verifications** — メール確認を待っている signup(uuid の主キー。email は入力どおり保存し、大文字小文字を区別せず一意。username、bcrypt 済みの password_digest、確認トークンの SHA-256(token_hash)、expires_at、last_sent_at)。users とは独立で、外部キーを持たない
+- **signup_verifications** — メール確認を待っている signup(uuid の主キー。email は入力どおり保存し、大文字小文字を区別せず一意。username、bcrypt 済みの password_digest、確認トークンの SHA-256(token_hash)、expires_at、last_sent_at、generation(確認メールを出した回数。冪等キーに使う))。users とは独立で、外部キーを持たない
+- **mail_deliveries** — メール送信の記録(uuid の主キー。kind、recipient、idempotency_key(一意)、status(pending / sent / failed)、failure_kind、attempts、last_error、sent_at)。本文・確認トークン・パスワードは保存しない
 
 ```text
 users    1 ──0..* reviews
