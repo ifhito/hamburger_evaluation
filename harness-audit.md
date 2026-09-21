@@ -112,7 +112,7 @@ Backend の境界:
 
 ```text
 backend-go/cmd/api                        composition root: 設定、DB プール、配線、サーバ
-backend-go/internal/domain                エンティティ / 値オブジェクト / ドメインエラー / 書き込みの *Repository の interface と、それを呼ぶ *Service。標準ライブラリのみ
+backend-go/internal/domain                エンティティ / 値オブジェクト / ドメインエラー / 書き込みの *Repository の interface と、それを持つ書き込みオブジェクト(複数の集約を跨ぐ更新だけ *Service)。標準ライブラリのみ
 backend-go/internal/usecase               ユースケースと読み取りの *Query(利用側で宣言)。repository には依存しない
 backend-go/internal/adapter/handler       net/http のハンドラ、DTO、ルーティング、middleware
 backend-go/internal/adapter/query         usecase の *Query(読み取り)を sqlc で実装
@@ -172,7 +172,7 @@ pnpm run build
 `.claude/hooks/stop-sensors.py`(`Stop` フックで実行される)の sensor:
 
 - 常に確認するもの: `git status`、秘密情報らしいパスが作業ツリーにないこと、対象外のパス(`plans/`、`memory/`、`plan/`、`SETUP.md`)が stage されていないこと(`AGENT_ALLOW_OUT_OF_SCOPE_STAGED=1` で解除できる)、`git diff --check`。
-- `backend-go/` に変更があるとき: `domain` と `usecase` から `net/http`・`database/sql`・`pgx`・`adapter` への import がないこと、usecase が repository を宣言・保持しておらず、`domain.*Repository` を参照していないこと、usecase の `*Query` が `Get*` / `List*` だけ、domain の `*Repository` が `Create*` / `Update*` / `Discard*` だけであること、`gofmt` / `go vet` / `go build` / `go test`。
+- `backend-go/` に変更があるとき: `domain` と `usecase` から `net/http`・`database/sql`・`pgx`・`adapter` への import がないこと、usecase が repository を宣言・保持しておらず、`domain.*Repository` を参照していないこと、usecase の `*Query` が `Get*` / `List*` だけ、domain の `*Repository` が `Create*` / `Update*` / `Discard*` と排他ロックの `Lock*` だけであること、`gofmt` / `go vet` / `go build` / `go test`。
 - `frontend/` のソースや設定に変更があるとき: `type-check` / `lint` / `test` / `build`。
 
 ## 9. セキュリティ関連ファイル

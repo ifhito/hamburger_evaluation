@@ -1,6 +1,7 @@
 package query_test
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -17,8 +18,8 @@ import (
 )
 
 // reviewIDs は review の id を順序を保ったまま取り出す。
-func reviewIDs(reviews []domain.ReviewDetail) []int64 {
-	ids := make([]int64, 0, len(reviews))
+func reviewIDs(reviews []domain.ReviewDetail) []string {
+	ids := make([]string, 0, len(reviews))
 	for _, r := range reviews {
 		ids = append(ids, r.ID)
 	}
@@ -77,12 +78,17 @@ func TestReviewQuery(t *testing.T) {
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 	t1 := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
 	t2 := time.Date(2024, 5, 2, 10, 0, 0, 0, time.UTC)
-	rOld := dbtest.InsertRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
-	rTie1 := dbtest.InsertRow(ctx, t, conn, insertReview, 3, nil, carol, cheese, nil, t2)
-	rTie2 := dbtest.InsertRow(ctx, t, conn, insertReview, 4, nil, alice, plain, nil, t2) // 同一時刻：id desc で同順位を解消する
-	rDiscarded := dbtest.InsertRow(ctx, t, conn, insertReview, 1, "gone", alice, cheese, time.Now(), t2)
-	dbtest.InsertRow(ctx, t, conn, insertReview, 2, "pending only", alice, hidden, nil, t2)
-	dbtest.InsertRow(ctx, t, conn, insertReview, 2, "rejected only", alice, outcast, nil, t2)
+	rOld := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
+	rTie1 := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 3, nil, carol, cheese, nil, t2)
+	rTie2 := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, nil, alice, plain, nil, t2) // 同一時刻：id desc で同順位を解消する
+	// rTie1 と rTie2 は created_at が同じなので、id の降順（UUID は文字列としての降順）で並ぶ。
+	tieHi, tieLo := rTie1, rTie2
+	if rTie2 > rTie1 {
+		tieHi, tieLo = rTie2, rTie1
+	}
+	rDiscarded := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 1, "gone", alice, cheese, time.Now(), t2)
+	dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 2, "pending only", alice, hidden, nil, t2)
+	dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 2, "rejected only", alice, outcast, nil, t2)
 
 	t.Run("ListReviews は active な shop の burger に絞り込み、重複なしで新しい順に返す", func(t *testing.T) {
 		reviews, _, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
@@ -93,7 +99,7 @@ func TestReviewQuery(t *testing.T) {
 		// いても、ちょうど 1 回だけ現れなければならない（行を増殖させる JOIN
 		// ではなく EXISTS）。pending だけ・rejected だけの burger の review と、
 		// discard 済みの review は現れない（SQL レベルでの AC5/AC6）。
-		if got, want := reviewIDs(reviews), []int64{rTie2, rTie1, rOld}; !reflect.DeepEqual(got, want) {
+		if got, want := reviewIDs(reviews), []string{tieHi, tieLo, rOld}; !reflect.DeepEqual(got, want) {
 			t.Fatalf("ids = %v, want %v", got, want)
 		}
 
@@ -112,8 +118,13 @@ func TestReviewQuery(t *testing.T) {
 			t.Errorf("review = %+v, want %+v", got, wantOld)
 		}
 		// stats のない burger はゼロになる。
-		if want := (&domain.ShopReviewBurger{ID: plain, Name: "Plain"}); !reflect.DeepEqual(reviews[0].Burger, want) {
-			t.Errorf("stats-less burger = %+v, want %+v", reviews[0].Burger, want)
+		// 同時刻の 2 件の並びは id で決まるので、位置ではなく id で取り出す。
+		byID := map[string]domain.ReviewDetail{}
+		for _, r := range reviews {
+			byID[r.ID] = r
+		}
+		if want := (&domain.ShopReviewBurger{ID: plain, Name: "Plain"}); !reflect.DeepEqual(byID[rTie2].Burger, want) {
+			t.Errorf("stats-less burger = %+v, want %+v", byID[rTie2].Burger, want)
 		}
 	})
 
@@ -122,14 +133,14 @@ func TestReviewQuery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
-		if got, want := reviewIDs(page1), []int64{rTie2, rTie1}; !reflect.DeepEqual(got, want) {
+		if got, want := reviewIDs(page1), []string{tieHi, tieLo}; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 1 = %v, want %v", got, want)
 		}
 		page2, more2, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 2)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
-		if got, want := reviewIDs(page2), []int64{rOld}; !reflect.DeepEqual(got, want) {
+		if got, want := reviewIDs(page2), []string{rOld}; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 2 = %v, want %v", got, want)
 		}
 		far, moreFar, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 100)
@@ -164,29 +175,29 @@ func TestReviewQuery(t *testing.T) {
 		tests := []struct {
 			name   string
 			filter usecase.ReviewListFilter
-			want   []int64
+			want   []string
 		}{
-			{name: "rating の完全一致 (by_rating)", filter: usecase.ReviewListFilter{Rating: intp(4)}, want: []int64{rTie2}},
+			{name: "rating の完全一致 (by_rating)", filter: usecase.ReviewListFilter{Rating: intp(4)}, want: []string{rTie2}},
 			// rating 2 の review は pending だけ・rejected だけの burger にしか
 			// 存在しない：active な shop のフィードのルールが引き続き適用される。
-			{name: "rating が非表示の review にしか一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(2)}, want: []int64{}},
-			{name: "keyword は大文字小文字を区別しない (keyword_search ILIKE)", filter: usecase.ReviewListFilter{Keyword: "tAsT"}, want: []int64{rOld}},
+			{name: "rating が非表示の review にしか一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(2)}, want: []string{}},
+			{name: "keyword は大文字小文字を区別しない (keyword_search ILIKE)", filter: usecase.ReviewListFilter{Keyword: "tAsT"}, want: []string{rOld}},
 			// NULL の comment は決して一致しない。Rails の comment ILIKE と
 			// 同様である。
-			{name: "keyword は NULL の comment を対象にしない", filter: usecase.ReviewListFilter{Keyword: "a"}, want: []int64{rOld}},
+			{name: "keyword は NULL の comment を対象にしない", filter: usecase.ReviewListFilter{Keyword: "a"}, want: []string{rOld}},
 			// エスケープしなければ、"%" は NULL でないすべての comment に
 			// ILIKE で一致してしまう。
-			{name: "keyword の LIKE メタ文字はリテラルとして一致する", filter: usecase.ReviewListFilter{Keyword: "%"}, want: []int64{}},
-			{name: "keyword が非表示の review にしか一致しない場合は空になる", filter: usecase.ReviewListFilter{Keyword: "only"}, want: []int64{}},
-			{name: "shop_id は shops_burgers の link をたどる", filter: usecase.ReviewListFilter{ShopID: strp(active2)}, want: []int64{rTie1, rOld}},
-			{name: "shop_id で絞り込んでも、その shop の burger の review はすべて残る", filter: usecase.ReviewListFilter{ShopID: strp(active1)}, want: []int64{rTie2, rTie1, rOld}},
-			{name: "存在しない shop_id は空になる", filter: usecase.ReviewListFilter{ShopID: strp(uid.N(99999))}, want: []int64{}},
-			{name: "filter は AND で組み合わされる", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: strp(active2)}, want: []int64{rOld}},
-			{name: "AND の組み合わせが一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []int64{}},
+			{name: "keyword の LIKE メタ文字はリテラルとして一致する", filter: usecase.ReviewListFilter{Keyword: "%"}, want: []string{}},
+			{name: "keyword が非表示の review にしか一致しない場合は空になる", filter: usecase.ReviewListFilter{Keyword: "only"}, want: []string{}},
+			{name: "shop_id は shops_burgers の link をたどる", filter: usecase.ReviewListFilter{ShopID: strp(active2)}, want: []string{rTie1, rOld}},
+			{name: "shop_id で絞り込んでも、その shop の burger の review はすべて残る", filter: usecase.ReviewListFilter{ShopID: strp(active1)}, want: []string{tieHi, tieLo, rOld}},
+			{name: "存在しない shop_id は空になる", filter: usecase.ReviewListFilter{ShopID: strp(uid.N(99999))}, want: []string{}},
+			{name: "filter は AND で組み合わされる", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: strp(active2)}, want: []string{rOld}},
+			{name: "AND の組み合わせが一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []string{}},
 			// 範囲外の rating は比較結果が false にならなければならず、
 			// smallint カラムをオーバーフローさせて SQL エラーに
 			// なってはならない。
-			{name: "smallint を超える rating は空になり、エラーにならない", filter: usecase.ReviewListFilter{Rating: intp(1 << 40)}, want: []int64{}},
+			{name: "smallint を超える rating は空になり、エラーにならない", filter: usecase.ReviewListFilter{Rating: intp(1 << 40)}, want: []string{}},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -211,7 +222,7 @@ func TestReviewQuery(t *testing.T) {
 		mixed := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Mixed")
 		mustLink(mixedActive, mixed)
 		mustLink(pending, mixed)
-		rMixed := dbtest.InsertRow(ctx, t, conn, insertReview, 4, "mixed", alice, mixed, nil, t2)
+		rMixed := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, "mixed", alice, mixed, nil, t2)
 		t.Cleanup(func() {
 			for _, del := range []struct {
 				sql string
@@ -240,7 +251,7 @@ func TestReviewQuery(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
-		if want := []int64{rMixed}; !reflect.DeepEqual(reviewIDs(got), want) {
+		if want := []string{rMixed}; !reflect.DeepEqual(reviewIDs(got), want) {
 			t.Errorf("active shop filter = %v, want %v", reviewIDs(got), want)
 		}
 	})
@@ -265,7 +276,7 @@ func TestReviewQuery(t *testing.T) {
 	})
 
 	t.Run("AC6 discard 済みの review と存在しない review は ErrReviewNotFound になる", func(t *testing.T) {
-		for name, id := range map[string]int64{"discarded": rDiscarded, "unknown": 99999} {
+		for name, id := range map[string]string{"discarded": rDiscarded, "unknown": uid.N(99999)} {
 			if _, err := reviewQuery.GetReview(ctx, id); !errors.Is(err, domain.ErrReviewNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrReviewNotFound)
 			}
@@ -352,24 +363,33 @@ func TestReviewQueryListByUser(t *testing.T) {
 	// alice の公開 review 25 件と、bob の公開 review 30 件。時刻は重なっており、
 	// 一部は同一時刻（id desc で同順位を解消する）なので、フィルタがなければ
 	// 2 人の review は混ざる。
-	var aliceIDs, aliceRating5IDs []int64
+	var aliceIDs, aliceRating5IDs []string
+	aliceAt := map[string]time.Time{}
 	for i := 0; i < 25; i++ {
 		rating := 1 + i%5
-		id := dbtest.InsertRow(ctx, t, conn, insertReview, rating, fmt.Sprintf("alice %d", i), alice, cheese, nil, base.Add(time.Duration(i/2)*time.Minute))
+		at := base.Add(time.Duration(i/2) * time.Minute)
+		id := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, rating, fmt.Sprintf("alice %d", i), alice, cheese, nil, at)
+		aliceAt[id] = at
 		aliceIDs = append(aliceIDs, id)
 		if rating == 5 {
 			aliceRating5IDs = append(aliceRating5IDs, id)
 		}
 	}
 	for i := 0; i < 30; i++ {
-		dbtest.InsertRow(ctx, t, conn, insertReview, 1+i%5, fmt.Sprintf("bob %d", i), bob, cheese, nil, base.Add(time.Duration(i/3)*time.Minute))
+		dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 1+i%5, fmt.Sprintf("bob %d", i), bob, cheese, nil, base.Add(time.Duration(i/3)*time.Minute))
 	}
-	// created_at は挿入順に単調非減少で id は単調増加なので、新しい順
-	// （created_at desc、id desc）は挿入順の逆になる。
-	slices.Reverse(aliceIDs)
-	slices.Reverse(aliceRating5IDs)
+	// 新しい順は created_at の降順で、同時刻は id の降順である。id は UUID なので、
+	// 挿入順の逆にはならない。期待値を、時刻と id で並べ直して作る。
+	newestFirst := func(a, b string) int {
+		if c := aliceAt[b].Compare(aliceAt[a]); c != 0 {
+			return c
+		}
+		return cmp.Compare(b, a)
+	}
+	slices.SortFunc(aliceIDs, newestFirst)
+	slices.SortFunc(aliceRating5IDs, newestFirst)
 
-	list := func(t *testing.T, filter usecase.ReviewListFilter, limit, offset int32) []int64 {
+	list := func(t *testing.T, filter usecase.ReviewListFilter, limit, offset int32) []string {
 		t.Helper()
 		reviews, _, err := reviewQuery.ListReviews(ctx, filter, limit, offset)
 		if err != nil {
@@ -411,42 +431,42 @@ func TestReviewQueryListByUser(t *testing.T) {
 	})
 
 	t.Run("AC4 discard 済みの user と存在しない user の id は空になる", func(t *testing.T) {
-		carolReview := dbtest.InsertRow(ctx, t, conn, insertReview, 4, "carol was here", carol, cheese, nil, base)
+		carolReview := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, "carol was here", carol, cheese, nil, base)
 		// discard する前は、carol の review は見える（このテストが空を検証する
 		// 意味を持つための前提）。
-		if got, want := list(t, byUser(carol), 100, 0), []int64{carolReview}; !reflect.DeepEqual(got, want) {
+		if got, want := list(t, byUser(carol), 100, 0), []string{carolReview}; !reflect.DeepEqual(got, want) {
 			t.Fatalf("active carol = %v, want %v", got, want)
 		}
 		if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = now() WHERE id = $1`, carol); err != nil {
 			t.Fatalf("discard carol: %v", err)
 		}
-		if got := list(t, byUser(carol), 100, 0); !reflect.DeepEqual(got, []int64{}) {
+		if got := list(t, byUser(carol), 100, 0); !reflect.DeepEqual(got, []string{}) {
 			t.Errorf("discarded carol = %v, want empty", got)
 		}
-		if got := list(t, byUser(uid.N(999999)), 100, 0); !reflect.DeepEqual(got, []int64{}) {
+		if got := list(t, byUser(uid.N(999999)), 100, 0); !reflect.DeepEqual(got, []string{}) {
 			t.Errorf("unknown user = %v, want empty", got)
 		}
 	})
 
 	t.Run("AC5 pending な shop の burger だけの review しかない user は空になり、公開ルールを迂回しない", func(t *testing.T) {
-		daveA := dbtest.InsertRow(ctx, t, conn, insertReview, 5, "dave secret 1", dave, secret, nil, base)
-		daveB := dbtest.InsertRow(ctx, t, conn, insertReview, 4, "dave secret 2", dave, secret, nil, base.Add(time.Minute))
+		daveA := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "dave secret 1", dave, secret, nil, base)
+		daveB := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, "dave secret 2", dave, secret, nil, base.Add(time.Minute))
 		// UserID なしのフィードにも現れない（公開ルールの前提）。
 		for _, id := range list(t, usecase.ReviewListFilter{}, 100, 0) {
 			if id == daveA || id == daveB {
-				t.Fatalf("review %d on a pending-only burger leaked into the public feed", id)
+				t.Fatalf("review %s on a pending-only burger leaked into the public feed", id)
 			}
 		}
-		if got := list(t, byUser(dave), 100, 0); !reflect.DeepEqual(got, []int64{}) {
+		if got := list(t, byUser(dave), 100, 0); !reflect.DeepEqual(got, []string{}) {
 			t.Errorf("dave (pending only) = %v, want empty", got)
 		}
 	})
 
 	t.Run("AC5 UserID を指定しても discard 済みの review と非公開の burger の review は除外される", func(t *testing.T) {
-		kept := dbtest.InsertRow(ctx, t, conn, insertReview, 4, "erin kept", erin, cheese, nil, base)
-		dbtest.InsertRow(ctx, t, conn, insertReview, 1, "erin discarded", erin, cheese, time.Now(), base.Add(time.Minute))
-		dbtest.InsertRow(ctx, t, conn, insertReview, 5, "erin on pending", erin, secret, nil, base.Add(2*time.Minute))
-		if got, want := list(t, byUser(erin), 100, 0), []int64{kept}; !reflect.DeepEqual(got, want) {
+		kept := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, "erin kept", erin, cheese, nil, base)
+		dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 1, "erin discarded", erin, cheese, time.Now(), base.Add(time.Minute))
+		dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "erin on pending", erin, secret, nil, base.Add(2*time.Minute))
+		if got, want := list(t, byUser(erin), 100, 0), []string{kept}; !reflect.DeepEqual(got, want) {
 			t.Errorf("erin = %v, want only the kept review on the active shop %v", got, want)
 		}
 	})
@@ -472,7 +492,7 @@ func TestReviewQueryPhotoKey(t *testing.T) {
 	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shop, burger); err != nil {
 		t.Fatalf("link shop and burger: %v", err)
 	}
-	reviewID := dbtest.InsertRow(ctx, t, conn,
+	reviewID := dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO reviews (rating, comment, user_id, burger_id, photo_key) VALUES (4, 'Tasty', $1, $2, 'reviews/abc.jpg') RETURNING id`,
 		alice, burger)
 
@@ -529,9 +549,9 @@ func TestReviewQueryDiscardedUser(t *testing.T) {
 		}
 	}
 	insertReview := `INSERT INTO reviews (rating, comment, user_id, burger_id) VALUES ($1, $2, $3, $4) RETURNING id`
-	victimShared := dbtest.InsertRow(ctx, t, conn, insertReview, 2, "meh", victim, shared)
-	aliceShared := dbtest.InsertRow(ctx, t, conn, insertReview, 4, "good", alice, shared)
-	victimSolo := dbtest.InsertRow(ctx, t, conn, insertReview, 5, "only mine", victim, solo)
+	victimShared := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 2, "meh", victim, shared)
+	aliceShared := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, "good", alice, shared)
+	victimSolo := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "only mine", victim, solo)
 	if _, err := conn.Exec(ctx,
 		`INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at)
 		 VALUES ($1, 1, 4.0, 3.9, 0.7, now())`, shared); err != nil {
@@ -545,7 +565,7 @@ func TestReviewQueryDiscardedUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
-		if got, want := reviewIDs(feed), []int64{aliceShared}; !reflect.DeepEqual(got, want) {
+		if got, want := reviewIDs(feed), []string{aliceShared}; !reflect.DeepEqual(got, want) {
 			t.Fatalf("feed ids = %v, want %v (victim's reviews hidden)", got, want)
 		}
 		var storedCount int64
@@ -572,12 +592,56 @@ func TestReviewQueryDiscardedUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListShopReviews returned error: %v", err)
 		}
-		ids := make([]int64, 0, len(shopReviews))
+		ids := make([]string, 0, len(shopReviews))
 		for _, r := range shopReviews {
 			ids = append(ids, r.ID)
 		}
-		if want := []int64{aliceShared}; !reflect.DeepEqual(ids, want) {
+		if want := []string{aliceShared}; !reflect.DeepEqual(ids, want) {
 			t.Errorf("shop review ids = %v, want %v (victim's review hidden)", ids, want)
 		}
 	})
+}
+
+// TestReviewQueryPaginationWithSameTimestamp は、作成日時が同じレビューが多数あっても、一覧を
+// ページに分けて読むと、重複も欠落もなく全件が読めることを確かめる。並びは作成日時の降順で、
+// 同時刻のレビューは id の降順である（id は UUID なので、挿入した順にはならない）。
+func TestReviewQueryPaginationWithSameTimestamp(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed query test in short mode")
+	}
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	reviewQuery := query.NewReviewQuery(conn)
+
+	alice := dbtest.InsertUserRow(ctx, t, conn,
+		`INSERT INTO users (email, username, password_digest) VALUES ('same@example.com', 'same', 'x') RETURNING id`)
+	shop := dbtest.InsertUUIDRow(ctx, t, conn, `INSERT INTO shops (name, status) VALUES ('同時刻の確認用ショップ', 1) RETURNING id`)
+	burger := dbtest.InsertUUIDRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ('同時刻の確認用バーガー') RETURNING id`)
+	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shop, burger); err != nil {
+		t.Fatalf("link shop and burger: %v", err)
+	}
+	const total = 45
+	same := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
+	want := make([]string, 0, total)
+	for i := 0; i < total; i++ {
+		want = append(want, dbtest.InsertUUIDRow(ctx, t, conn,
+			`INSERT INTO reviews (rating, comment, user_id, burger_id, created_at) VALUES (3, $1, $2, $3, $4) RETURNING id`,
+			fmt.Sprintf("same time %d", i), alice, burger, same))
+	}
+	slices.SortFunc(want, func(a, b string) int { return cmp.Compare(b, a) })
+
+	var got []string
+	for offset := int32(0); ; offset += 20 {
+		page, more, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 20, offset)
+		if err != nil {
+			t.Fatalf("ListReviews(offset %d) returned error: %v", offset, err)
+		}
+		got = append(got, reviewIDs(page)...)
+		if !more {
+			break
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ページをまたいだ id = %v, want %v（重複・欠落なし、id の降順）", got, want)
+	}
 }

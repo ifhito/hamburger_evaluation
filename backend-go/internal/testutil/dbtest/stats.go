@@ -11,10 +11,11 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// このファイルは、burger_stats の DB を使うテスト（adapter/uow など）に共通の、統計の読み戻しと、
-// 保存された行と domain の計算の一致の確認を提供する。
+// このファイルは、バーガーの統計(burger_stats テーブル)を実データベースで確かめるテストが共通で
+// 使う道具である。保存された統計の行を読み戻す関数と、その行が「保存されているレビューから、
+// domain の計算で求め直した値」とちょうど一致するかを確かめる関数を提供する。
 
-// StoredBurgerStats は、テストで読み戻した burger_stats の行である。
+// StoredBurgerStats は、テストで読み戻した burger_stats の 1 行である。
 type StoredBurgerStats struct {
 	ReviewCount   int64
 	AverageRating float64
@@ -23,8 +24,8 @@ type StoredBurgerStats struct {
 	CalculatedAt  time.Time
 }
 
-// FetchBurgerStats は burger_stats の行を直接読み取る。行が存在しない場合、
-// ok は false になる。
+// FetchBurgerStats は、burger_stats の行を SQL で直接読み取る。行がなければ、2 つ目の戻り値が
+// false になる。
 func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) (StoredBurgerStats, bool) {
 	t.Helper()
 	var s StoredBurgerStats
@@ -74,10 +75,11 @@ func CountRecalcRequests(ctx context.Context, t *testing.T, conn *pgx.Conn, burg
 	return 0
 }
 
-// keptReviewFacts は、burger の kept な review のうち kept な user のものを
-// （repository が使うのと同じルールで）domain の fact として読み込み、
-// 各 fact の author の、すべての burger にわたる kept な rating を
-// reviewer の履歴として付ける。
+// keptReviewFacts は、バーガーの統計の元になるレビュー(削除されていないレビューのうち、削除
+// されていないユーザーが書いたもの)を、本番の読み取りと同じ条件で SQL から読み、計算用の値
+// (domain.ReviewFact)にして返す。各値には、そのレビューの投稿者が、すべてのバーガーに付けた
+// 有効な評価を、投稿者の信頼度の計算に使う履歴として添える。本番の読み取りの実装を使わずに
+// 期待値を作ることで、実装の取り違えを検算で見つけられるようにしている。
 func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) []domain.ReviewFact {
 	t.Helper()
 	rows, err := conn.Query(ctx,
@@ -115,8 +117,8 @@ func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID
 	return facts
 }
 
-// KeptRatingsOf は、user の、すべての burger にわたる kept な rating を id の
-// 昇順で返す（reviewer-trust の履歴）。
+// KeptRatingsOf は、ユーザーがすべてのバーガーに付けた、削除されていない評価を、レビューの ID の
+// 昇順で返す(投稿者の信頼度の計算に使う履歴)。
 func KeptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID string) []float64 {
 	t.Helper()
 	rows, err := conn.Query(ctx,
@@ -138,17 +140,16 @@ func KeptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID str
 	return ratings
 }
 
-// RequireConsistentStats は、保存された burger_stats の行が存在し、保存された
-// review の行と保存された calculated_at から domain の関数で再計算した結果と
-// 完全に一致することをアサートし（repository が "now" を timestamptz の精度に
-// 切り詰めるのは、まさにこれが往復しても一致するようにするためである）、その
-// 行を返す。float は厳密に比較する：同じ入力を同じ純粋関数に通せば、同一の値に
-// ならなければならない。
+// RequireConsistentStats は、バーガーの統計の行が保存されていて、その値が「いま保存されている
+// レビューと、行に保存された計算時刻(calculated_at)から、domain の関数で求め直した値」と
+// ちょうど一致することを確かめ、その行を返す。行がなかったり、値が違っていたりすると、テストを
+// 失敗させる。小数も厳密に比較する。同じ入力を同じ計算に通せば、まったく同じ値になるはずで、
+// 再計算の時刻を保存の精度(マイクロ秒)に切り詰めているのも、この検算が一致するようにするため。
 func RequireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) StoredBurgerStats {
 	t.Helper()
 	got, ok := FetchBurgerStats(ctx, t, conn, burgerID)
 	if !ok {
-		t.Fatalf("burger %s has no burger_stats row, want one", burgerID)
+		t.Fatalf("バーガー %s の統計の行(burger_stats)がない", burgerID)
 	}
 	facts := keptReviewFacts(ctx, t, conn, burgerID)
 	score := domain.CalculateBurgerScore(facts, got.CalculatedAt)
@@ -160,7 +161,7 @@ func RequireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, b
 		CalculatedAt:  got.CalculatedAt,
 	}
 	if got != want {
-		t.Fatalf("stored stats = %+v, want recomputed %+v", got, want)
+		t.Fatalf("保存された統計 = %+v, want 保存されているレビューから求め直した値 %+v", got, want)
 	}
 	return got
 }

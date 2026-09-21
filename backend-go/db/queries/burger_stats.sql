@@ -37,7 +37,7 @@ JOIN users u ON u.id = r.user_id
 WHERE r.burger_id = $1
   AND r.discarded_at IS NULL
   AND u.discarded_at IS NULL
-ORDER BY r.id;
+ORDER BY r.created_at, r.id;
 
 -- name: ListReviewerRatings :many
 -- reviewer trust の履歴：各 reviewer が「すべての」burger にわたってつけた
@@ -46,7 +46,7 @@ SELECT r.user_id, r.rating
 FROM reviews r
 WHERE r.user_id = ANY(sqlc.arg(user_ids)::uuid[])
   AND r.discarded_at IS NULL
-ORDER BY r.id;
+ORDER BY r.created_at, r.id;
 
 -- name: GetBurgerStats :one
 SELECT * FROM burger_stats

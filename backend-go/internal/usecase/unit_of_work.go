@@ -9,17 +9,19 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// BurgerStatsQuery は、burger の統計の再計算に必要な、読み取り専用の契約である。
-// UnitOfWork の中では、トランザクションに束縛された実装が渡されるので、同じ
-// トランザクションの未コミットの書き込みが見える。読み取り専用で、書き込みの
-// メソッドは置かない（書き込みは domain.BurgerStats を通す）。
+// BurgerStatsQuery は、バーガーの統計を計算し直すために必要な、読み取り専用の窓口である。
+// UnitOfWork(まとめて 1 つのトランザクションにする範囲)の中では、そのトランザクションに結び付いた
+// 実装が渡されるので、同じトランザクションの、まだ確定していない書き込みも読み取れる(統計の
+// 元データに、直前に登録・削除したレビューを反映させるために必要)。書き込みのメソッドは置かない
+// (書き込みは domain.BurgerStats を通す)。
 type BurgerStatsQuery interface {
-	// ListBurgerReviewFacts は、burger の統計の元になる kept な review を facts として返す。
-	// discard 済みの review と、discard 済みの user の review は除外する。各 fact には、その
-	// review の author が、すべての burger にわたってつけた kept な rating（reviewer の履歴）が付く。
+	// ListBurgerReviewFacts は、バーガーの統計の元になるレビューを、計算用の値(domain.ReviewFact)
+	// にして返す。削除済みのレビューと、削除済みのユーザーが書いたレビューは含めない。それぞれの
+	// 値には、そのレビューの投稿者が、すべてのバーガーに付けた有効な評価(投稿者の信頼度の計算に使う)
+	// を添える。
 	ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]domain.ReviewFact, error)
-	// ListReviewedBurgerIDsByUser は、user の kept な review が付く burger の id を、重複なしで
-	// burger_id の昇順に返す（ユーザーの退会で統計を再計算する対象）。
+	// ListReviewedBurgerIDsByUser は、ユーザーの有効なレビューが付いているバーガーの ID を、重複なしで
+	// 昇順に返す。ユーザーが退会したとき、統計を計算し直す対象を知るために使う。
 	ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]string, error)
 	// ListDueRecalcRequests は、再計算の時期が来ている依頼を、上限 batch 件まで返す。
 	// 次の再試行の時刻が now 以前(または未設定)で、失敗の回数が maxAttempts に達していないものが
@@ -27,9 +29,10 @@ type BurgerStatsQuery interface {
 	ListDueRecalcRequests(ctx context.Context, now time.Time, maxAttempts, batch int) ([]domain.RecalcRequest, error)
 }
 
-// Tx は UnitOfWork.Do の中で使う、トランザクションに束縛された書き込みと読み取りである。
-// 書き込みは domain の書き込みオブジェクト（自分の集約の repository だけを持つ）を通し、
-// usecase は repository に依存しない。読み取りも、同じトランザクションで行う。
+// Tx は、UnitOfWork.Do の中で使う、同じトランザクションに結び付いた書き込みと読み取りの組である
+// (名前は Transaction の略)。
+// 書き込みは domain の書き込みオブジェクト(自分の集約の repository だけを持つ)を通し、usecase は
+// repository を直接扱わない。読み取りも同じトランザクションで行うので、書き込みの結果が見える。
 type Tx struct {
 	Reviews     *domain.Reviews
 	Users       *domain.Users
@@ -37,22 +40,26 @@ type Tx struct {
 	Stats       BurgerStatsQuery
 }
 
-// UnitOfWork は、トランザクションの境界を usecase が宣言するための契約である。
-// Do は、トランザクションを開始して fn を実行し、fn がエラーを返したら全体を rollback し、
-// 成功したら commit する。fn の中の書き込みと読み取りは、すべて同じトランザクションで行われる。
-// 複数の集約を更新する手順（例: review の書き込みと burger の統計の再計算）は、usecase が
-// この中で組み立てる。実装は adapter が担う。
+// UnitOfWork(作業のひとまとまり)は、「ここからここまでの書き込みと読み取りを、まとめて 1 つの
+// トランザクションにする」範囲を、usecase が指定するための仕組みである。
+//
+// トランザクションとは、全部成功したときだけ確定し、途中で失敗したら全部なかったことにできる、
+// データベース操作のひとまとまりのこと。Do は、それを開始して fn を実行し、fn がエラーを返したら
+// 全体を取り消し(rollback)、成功したら確定する(commit)。fn の中の書き込みと読み取りは、すべて
+// 同じトランザクションで行われる。したがって、レビューの保存と統計の再計算のように、複数の
+// 集約を更新する手順を fn の中に書けば、片方だけが反映されることがない。実装は adapter が持つ。
 type UnitOfWork interface {
 	Do(ctx context.Context, fn func(ctx context.Context, tx Tx) error) error
 }
 
-// Clock は現在時刻の取得元である。統計の再計算に使う時刻を、usecase が固定できるようにする
-// （テストで固定の時刻を渡す）。
+// Clock は現在時刻の取得元である。再計算に使う時刻を差し替えられるようにして、テストで時刻を
+// 固定できるようにする(time.Now を直接呼ぶと、保存された統計を後から再現できない)。
 type Clock interface {
 	Now() time.Time
 }
 
-// BurgerStatsRecalculator は、burger の統計の再計算に関する手順をまとめる。
+// BurgerStatsRecalculator(「バーガーの統計を再計算する役」の意味)は、バーガーの統計の再計算に関する
+// 手順をまとめる。
 //
 // 再計算は、書き込み(レビューの投稿・編集・削除、退会)の中では行わない。書き込みは、同じ
 // トランザクションで「再計算の依頼」を登録するだけ(RequestRecalculation)で、統計の計算は、
@@ -96,11 +103,18 @@ func (r *BurgerStatsRecalculator) RequestRecalculationReviewedBy(ctx context.Con
 	return nil
 }
 
-// Recalculate は burger の統計を再計算して保存する(ワーカーが使う)。tx は UnitOfWork.Do が渡した
-// ものでなければならない。手順は「burger の行をロックする → kept な review の facts を読む →
-// domain の CalculateBurgerStat で計算 → 保存」である。最初に burger の行をロックするのは、並行する
-// 再計算(複数のインスタンスのワーカー)が、相手のコミット前の review が欠けた facts で上書きしないため
-// である。対象の review がゼロ件でも、ゼロの統計を保存する（Rails BurgerScore.empty）。
+// Recalculate はバーガーの統計を計算し直して保存する(ワーカーが使う)。tx は UnitOfWork.Do が
+// 渡したものでなければならない。手順は「バーガーの行をロックする → 統計の元データを読む → domain の
+// 計算(CalculateBurgerStat)で統計を求める → 保存する」である。
+//
+// 最初にバーガーの行をロックするのは、同じバーガーの統計を同時に計算し直す 2 つの処理(複数の
+// インスタンスのワーカーなど)が、互いの追加分を知らないまま「読んでから上書き」して、片方の更新を
+// 取りこぼすのを防ぐため。同じトランザクションがすでに持っているロックを取り直しても待たされない。
+//
+// 1 つのトランザクションで複数のバーガーを計算し直すときは、バーガー ID の昇順に呼ぶこと。
+// 別々の処理が同じバーガーを逆の順序でロックすると、互いに相手のロックを待ち合って止まる
+// (デッドロック)ため。対象のレビューが 0 件でも、件数 0 の統計を保存する(統計の行が
+// なくなると、画面に出す値が決まらなくなる)。
 func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burgerID string) error {
 	if err := tx.BurgerStats.Lock(ctx, burgerID); err != nil {
 		return fmt.Errorf("recalculate burger stats: lock burger: %w", err)
@@ -109,8 +123,9 @@ func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burger
 	if err != nil {
 		return fmt.Errorf("recalculate burger stats: list facts: %w", err)
 	}
-	// マイクロ秒に切り詰める（timestamptz の精度）。保存される calculated_at が、スコアの
-	// 計算に使った時刻そのものになり、テストは保存された行と、この時刻からスコアを再計算できる。
+	// データベースの時刻型(timestamptz)はマイクロ秒までしか持てない。ここで切り詰めておくと、
+	// 保存された計算時刻が、スコアの計算に使った時刻とちょうど一致し、保存された値から統計を
+	// 検算できる。
 	now := r.clock.Now().Truncate(time.Microsecond)
 	if err := tx.BurgerStats.Save(ctx, domain.CalculateBurgerStat(burgerID, facts, now)); err != nil {
 		return fmt.Errorf("recalculate burger stats: save: %w", err)

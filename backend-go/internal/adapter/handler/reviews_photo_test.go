@@ -91,10 +91,10 @@ func doMultipart(router http.Handler, method, path string, body *bytes.Buffer, c
 }
 
 // decodePhotoURL は review の response body から id と photo_url を取り出す。
-func decodePhotoURL(t *testing.T, body []byte) (id int64, photoURL *string) {
+func decodePhotoURL(t *testing.T, body []byte) (id string, photoURL *string) {
 	t.Helper()
 	var resp struct {
-		ID       int64   `json:"id"`
+		ID       string  `json:"id"`
 		PhotoURL *string `json:"photo_url"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -115,7 +115,7 @@ func photoPath(t *testing.T, photoDir, photoURL string) string {
 
 // createPhotoReview は、与えられた photo を付けた multipart の review を
 // 投稿し、その id と photo_url を返す。
-func createPhotoReview(t *testing.T, router http.Handler, auth string, photo []byte) (int64, string) {
+func createPhotoReview(t *testing.T, router http.Handler, auth string, photo []byte) (string, string) {
 	t.Helper()
 	fields := map[string]string{
 		"rating":    "4",
@@ -150,7 +150,7 @@ func TestCreateReviewWithPhoto(t *testing.T) {
 		t.Errorf("stored photo file: %v", err)
 	}
 
-	detail := do(router, http.MethodGet, fmt.Sprintf("/reviews/%d", id), "", "")
+	detail := do(router, http.MethodGet, fmt.Sprintf("/reviews/%s", id), "", "")
 	if detail.Code != http.StatusOK {
 		t.Fatalf("detail status = %d (body %s)", detail.Code, detail.Body)
 	}
@@ -254,7 +254,7 @@ func TestDeleteReviewWithPhoto(t *testing.T) {
 		t.Fatalf("photo file before delete: %v", err)
 	}
 
-	rec := do(router, http.MethodDelete, fmt.Sprintf("/reviews/%d", id), "", aliceAuth)
+	rec := do(router, http.MethodDelete, fmt.Sprintf("/reviews/%s", id), "", aliceAuth)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want %d (body %s)", rec.Code, http.StatusNoContent, rec.Body)
 	}
@@ -274,7 +274,7 @@ func TestUpdateReviewPhoto(t *testing.T) {
 		oldPath := photoPath(t, photoDir, oldURL)
 
 		body, contentType := multipartBody(t, map[string]string{"rating": "5", "comment": "Better"}, pngBytes(t))
-		rec := doMultipart(router, http.MethodPut, fmt.Sprintf("/reviews/%d", id), body, contentType, aliceAuth)
+		rec := doMultipart(router, http.MethodPut, fmt.Sprintf("/reviews/%s", id), body, contentType, aliceAuth)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("update status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
@@ -300,7 +300,7 @@ func TestUpdateReviewPhoto(t *testing.T) {
 		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		id, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 
-		rec := do(router, http.MethodPut, fmt.Sprintf("/reviews/%d", id),
+		rec := do(router, http.MethodPut, fmt.Sprintf("/reviews/%s", id),
 			`{"review":{"rating":5,"comment":"Still tasty"}}`, aliceAuth)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("update status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
@@ -308,7 +308,7 @@ func TestUpdateReviewPhoto(t *testing.T) {
 		if _, got := decodePhotoURL(t, rec.Body.Bytes()); got == nil || *got != photoURL {
 			t.Errorf("photo_url after plain update = %v, want %q", got, photoURL)
 		}
-		detail := do(router, http.MethodGet, fmt.Sprintf("/reviews/%d", id), "", "")
+		detail := do(router, http.MethodGet, fmt.Sprintf("/reviews/%s", id), "", "")
 		if _, got := decodePhotoURL(t, detail.Body.Bytes()); got == nil || *got != photoURL {
 			t.Errorf("detail photo_url after plain update = %v, want %q", got, photoURL)
 		}
@@ -387,11 +387,11 @@ func TestReviewBodyLimit(t *testing.T) {
 		wantCode    int
 	}{
 		{name: "POST /reviews は multipart なら 2MiB でも上限を通過する", method: http.MethodPost, path: "/reviews", contentType: multipartCT, body: twoMiB, wantCode: http.StatusUnauthorized},
-		{name: "PUT /reviews/1 は multipart なら 2MiB でも上限を通過する", method: http.MethodPut, path: "/reviews/1", contentType: multipartCT, body: twoMiB, wantCode: http.StatusUnauthorized},
+		{name: "PUT /reviews/1 は multipart なら 2MiB でも上限を通過する", method: http.MethodPut, path: "/reviews/" + uid.N(1), contentType: multipartCT, body: twoMiB, wantCode: http.StatusUnauthorized},
 		{name: "POST /reviews は multipart でも 7MiB だと 413 になる", method: http.MethodPost, path: "/reviews", contentType: multipartCT, body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "PUT /reviews/1 は multipart でも 7MiB だと 413 になる", method: http.MethodPut, path: "/reviews/1", contentType: multipartCT, body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
+		{name: "PUT /reviews/1 は multipart でも 7MiB だと 413 になる", method: http.MethodPut, path: "/reviews/" + uid.N(1), contentType: multipartCT, body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
 		{name: "POST /reviews は JSON だと 1MiB を超えると 413 になる", method: http.MethodPost, path: "/reviews", contentType: jsonCT, body: oneMiBPlus, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "PUT /reviews/1 は JSON だと 2MiB で 413 になる", method: http.MethodPut, path: "/reviews/1", contentType: jsonCT, body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
+		{name: "PUT /reviews/1 は JSON だと 2MiB で 413 になる", method: http.MethodPut, path: "/reviews/" + uid.N(1), contentType: jsonCT, body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
 		{name: "POST /reviews は Content-Type がなければ JSON と同じ 1MiB になる", method: http.MethodPost, path: "/reviews", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
 		{name: "POST /shops は multipart を名乗っても 1MiB の上限を保つ", method: http.MethodPost, path: "/shops", contentType: multipartCT, body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
 		{name: "POST /shops は 1MiB の上限を保つ", method: http.MethodPost, path: "/shops", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},

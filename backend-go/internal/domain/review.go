@@ -9,7 +9,8 @@ import (
 
 // Review は burger review の行を表す domain 上の表現である。
 type Review struct {
-	ID      int64
+	// ID は UUID の正規形（小文字・ハイフン区切り）である。DB が生成し、形式の判定は IsUUID が持つ。
+	ID      string
 	Rating  int
 	Comment *string
 	// PhotoKey は review の写真の storage key であり、写真が添付されて
@@ -123,41 +124,35 @@ type ReviewDetail struct {
 
 // ---- repository の契約(実装は adapter/repository) ----
 
-// ReviewRepository は review の書き込みの契約である。domain が宣言し、呼び出すのは
-// domain のコード（書き込みオブジェクトの Reviews）だけで、usecase は呼ばない
-// （読み取りは usecase の ReviewQuery）。実装は書き込みの SQL の詳細（カラム限定の書き込み）を
-// 自分の内部に留め、一致する行がないときは（wrap された）ErrReviewNotFound を返す。書き込み専用で、
-// 読み取りのメソッドは置かない。burger_stats の再計算はここでは行わない（トランザクションを持つ
-// usecase が、BurgerStatRepository と組み合わせて行う）。
+// ReviewRepository は、レビューの書き込みの契約である。domain が宣言し、呼び出すのは domain のコード
+// (書き込みオブジェクトの Reviews)だけで、usecase は直接呼ばない(読み取りは usecase の ReviewQuery)。
+// 実装は、書き込みの SQL の詳細(更新する列を絞った書き込みなど)を自分の内部に留め、対象の行がない
+// ときは、包んだ ErrReviewNotFound を返す。書き込み専用で、読み取りのメソッドは置かない。
+//
+// バーガーの統計の再計算は、ここでは行わない。レビューの書き込みと同じトランザクションで、
+// トランザクションを持つ usecase が、BurgerStatRepository と組み合わせて行う。
 type ReviewRepository interface {
-	// CreateReview は、新しい（validate 済みの）review を永続化し、生成された
-	// id と created_at つきで返す。
+	// CreateReview は、検証済みの新しいレビューを保存し、採番された ID と作成日時を持つレビューを返す。
 	CreateReview(ctx context.Context, review Review) (Review, error)
-	// CreateShopBurger は、shop の burger のうち指定された名前と完全一致するものを返す。
-	// shop にその名前の burger がなければ、burger とその shops_burgers のリンクを
-	// 作成する（Rails の find_or_create_burger、S6 P3-1）。返される burger は、
-	// 呼び出しの前に保存されていた stats を持つ。これは burger_id の経路で usecase の
-	// ReviewQuery.GetShopBurger が返すものとまったく同じである。まったく新しい burger の
-	// stats はゼロである。burger とリンクの作成は、呼び出し側のトランザクションに
-	// 入る（review の insert が失敗しても、孤立した burger やリンクを残さないため、
-	// 呼び出し側は同じトランザクションで CreateReview まで行う）。
+	// CreateShopBurger は、ショップのバーガーのうち、名前が指定と完全に一致するものを返す。そのショップに
+	// 同名のバーガーがなければ、バーガーを作成して、ショップと結び付ける(shops_burgers)。
+	// 返すバーガーの統計は、この呼び出しの前の値である(まったく新しいバーガーなら 0)。バーガー ID を
+	// 指定した投稿で、usecase の ReviewQuery.GetShopBurger が返す値と同じ意味になる。
+	// バーガーと結び付けの作成は、呼び出し側のトランザクションに含まれる。レビューの登録に失敗したとき、
+	// 作りかけのバーガーが残らないよう、呼び出し側は同じトランザクションでレビューの登録まで行う。
 	CreateShopBurger(ctx context.Context, shopID string, burgerName string) (ShopReviewBurger, error)
-	// UpdateReviewContent は、id の、まだ kept な review の rating と comment
-	// だけを永続化し、保存された行を返す。存在しないか discard 済みのときは
-	// （wrap された）ErrReviewNotFound を返す。カラム限定の書き込み
-	// なので、discarded_at が書き込まれることは決してない。
-	UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (Review, error)
-	// UpdateReviewContentAndPhotoKey は、id の、まだ kept な review の
-	// rating、comment、「および」photo_key を atomic に永続化する。カラム限定の
-	// 2 つの書き込みは「1 つの」transaction を共有するので、写真つきの編集が
-	// content だけを key なしで commit してしまうことは決してない（S10 の review fix）。
-	// 保存された行を返すか、review が存在しないか discard 済みのときは
-	// （wrap された）ErrReviewNotFound を返す（その場合は何も commit されない）。
-	UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (Review, error)
-	// DiscardReview は review を soft delete する（discarded_at を記録し、
-	// hard DELETE は決して行わない）。存在しないか、すでに discard 済みの
-	// ときは（wrap された）ErrReviewNotFound を返す。
-	DiscardReview(ctx context.Context, id int64) error
+	// UpdateReviewContent は、削除されていないレビューの評価とコメントだけを更新し、更新後のレビューを
+	// 返す。レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す。
+	// 更新する列を評価とコメントに絞っているので、削除の目印(discarded_at)を書き換えることはない。
+	UpdateReviewContent(ctx context.Context, id string, rating int, comment string) (Review, error)
+	// UpdateReviewContentAndPhotoKey は、削除されていないレビューの評価・コメント・写真のキーを
+	// まとめて更新し、更新後のレビューを返す。評価とコメントの更新と、写真のキーの更新は 1 つの
+	// トランザクションで行うので、写真のキーが付かないままコメントだけが確定することはない。
+	// レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す(何も確定しない)。
+	UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (Review, error)
+	// DiscardReview はレビューを論理削除する(削除日時を記録するだけで、行は消さない)。レビューが
+	// 存在しない、またはすでに論理削除済みなら、包んだ ErrReviewNotFound を返す。
+	DiscardReview(ctx context.Context, id string) error
 }
 
 // ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
@@ -166,9 +161,11 @@ type ReviewRepository interface {
 // この型だけで、usecase は repository に依存せず、review の書き込みをここに任せる。
 // review だけを更新する書き込みは、Service ではなくこの型に置く（Service は複数の
 // 集約を跨ぐ更新だけに使う。domain/doc.go を参照）。現時点では repository の
-// 書き込みを 1 対 1 で包んでいる。burger_stats の再計算は、review の書き込みと、
-// 読み取り（facts）を挟む手順なので、ここでは行わず、トランザクションを持つ usecase が
-// UnitOfWork の中で組み立てる。review に関する domain の手順が増えたときは、usecase ではここへ置く。
+// 書き込みを 1 対 1 で包んでいる。バーガーの統計の再計算は、レビューの書き込みと、統計の元データの
+// 読み取りが交互に出てくる手順なので、ここでは行わない。トランザクションを持つ usecase が、
+// 書き込みと読み取りをまとめて 1 つのトランザクションにする仕組み(UnitOfWork。途中でエラーに
+// なれば全体を取り消す)の中で組み立てる。
+// レビューに関する業務の手順が増えたときは、usecase ではなく、ここへ置く。
 type Reviews struct {
 	repo ReviewRepository
 }
@@ -184,26 +181,25 @@ func (s *Reviews) Create(ctx context.Context, review Review) (Review, error) {
 	return s.repo.CreateReview(ctx, review)
 }
 
-// CreateShopBurger は、shop の burger のうち指定された名前と完全一致するものを返す
-// （なければ burger とリンクを作る）。返される burger は、呼び出しの前に保存されていた
-// stats を持つ。
+// CreateShopBurger は、ショップのバーガーのうち、名前が指定とちょうど一致するものを返す(なければ、
+// バーガーを作ってショップと結び付ける)。返すバーガーの統計は、この呼び出しの前の値である。
 func (s *Reviews) CreateShopBurger(ctx context.Context, shopID string, burgerName string) (ShopReviewBurger, error) {
 	return s.repo.CreateShopBurger(ctx, shopID, burgerName)
 }
 
 // UpdateContent は、id の、まだ kept な review の rating と comment だけを永続化し、
 // 保存された行を返す。
-func (s *Reviews) UpdateContent(ctx context.Context, id int64, rating int, comment string) (Review, error) {
+func (s *Reviews) UpdateContent(ctx context.Context, id string, rating int, comment string) (Review, error) {
 	return s.repo.UpdateReviewContent(ctx, id, rating, comment)
 }
 
 // UpdateContentAndPhotoKey は、id の、まだ kept な review の rating、comment、
 // および photo_key を atomic に永続化し、保存された行を返す。
-func (s *Reviews) UpdateContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (Review, error) {
+func (s *Reviews) UpdateContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (Review, error) {
 	return s.repo.UpdateReviewContentAndPhotoKey(ctx, id, rating, comment, photoKey)
 }
 
 // Discard は review を soft delete する。
-func (s *Reviews) Discard(ctx context.Context, id int64) error {
+func (s *Reviews) Discard(ctx context.Context, id string) error {
 	return s.repo.DiscardReview(ctx, id)
 }

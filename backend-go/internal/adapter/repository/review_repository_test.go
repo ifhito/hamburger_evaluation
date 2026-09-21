@@ -12,6 +12,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // reviewRow は、reviews の保存された行である（DB のカラムの値のまま）。
@@ -26,13 +27,13 @@ type reviewRow struct {
 }
 
 // readReviewRow は reviews の行を直接読み取る（discard 済みの行も読める）。
-func readReviewRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id int64) reviewRow {
+func readReviewRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id string) reviewRow {
 	t.Helper()
 	var r reviewRow
 	if err := conn.QueryRow(ctx,
 		`SELECT rating, comment, user_id, burger_id, created_at, discarded_at, photo_key FROM reviews WHERE id = $1`, id,
 	).Scan(&r.Rating, &r.Comment, &r.UserID, &r.BurgerID, &r.CreatedAt, &r.DiscardedAt, &r.PhotoKey); err != nil {
-		t.Fatalf("select review %d: %v", id, err)
+		t.Fatalf("select review %s: %v", id, err)
 	}
 	return r
 }
@@ -59,8 +60,8 @@ func TestReviewRepository(t *testing.T) {
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 	t1 := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
 	t2 := time.Date(2024, 5, 2, 10, 0, 0, 0, time.UTC)
-	rOld := dbtest.InsertRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
-	rDiscarded := dbtest.InsertRow(ctx, t, conn, insertReview, 1, "gone", alice, cheese, time.Now(), t2)
+	rOld := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
+	rDiscarded := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 1, "gone", alice, cheese, time.Now(), t2)
 
 	t.Run("CreateReview は insert して保存された行を返す", func(t *testing.T) {
 		review, err := domain.NewReview(4, "Fresh", carol, cheese)
@@ -71,7 +72,7 @@ func TestReviewRepository(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateReview returned error: %v", err)
 		}
-		if created.ID == 0 || created.Rating != 4 || created.AuthorID != carol || created.BurgerID != cheese {
+		if created.ID == "" || created.Rating != 4 || created.AuthorID != carol || created.BurgerID != cheese {
 			t.Errorf("created = %+v, want generated id with the given fields", created)
 		}
 		if created.Comment == nil || *created.Comment != "Fresh" {
@@ -111,7 +112,7 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("UpdateReviewContent に discard 済みまたは存在しない review を渡すと ErrReviewNotFound になる", func(t *testing.T) {
-		for name, id := range map[string]int64{"discarded": rDiscarded, "unknown": 99999} {
+		for name, id := range map[string]string{"discarded": rDiscarded, "unknown": uid.N(99999)} {
 			if _, err := repo.UpdateReviewContent(ctx, id, 3, "x"); !errors.Is(err, domain.ErrReviewNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrReviewNotFound)
 			}
@@ -119,7 +120,7 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("DiscardReview は soft delete をちょうど 1 回だけ行い、hard delete はしない", func(t *testing.T) {
-		victim := dbtest.InsertRow(ctx, t, conn, insertReview, 3, "bye", carol, cheese, nil, t2)
+		victim := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 3, "bye", carol, cheese, nil, t2)
 		if err := repo.DiscardReview(ctx, victim); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}
@@ -138,18 +139,19 @@ func TestReviewRepository(t *testing.T) {
 		if err := repo.DiscardReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("second discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if err := repo.DiscardReview(ctx, 99999); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := repo.DiscardReview(ctx, uid.N(99999)); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
 }
 
-// TestReviewRepositoryCreateShopBurger は、burger_name による find-or-create の投稿経路
-// （S6 P3-1）の burger の解決を検証する。名前の完全一致による shop 単位での再利用、未知の
-// 名前に対する burger と link の作成、shop ごとの名前のスコープ（別の shop の同じ名前は別の
-// burger 行になる）である。review の insert までを 1 つのトランザクションにする保証
-// （insert に失敗しても、孤立した burger や link が commit されない）と、統計の再計算は、
-// トランザクションを持つ usecase の UnitOfWork のテスト（adapter/uow）が扱う。
+// TestReviewRepositoryCreateShopBurger は、バーガー名を指定して投稿するときの、バーガーの解決
+// (名前で探し、なければ作る)を確かめる。同じショップに同名のバーガーがあれば再利用すること、
+// なければバーガーとショップとの結び付けを作ること、別のショップの同じ名前は別のバーガーに
+// なることを確かめる。
+//
+// レビューの登録まで含めた 1 つのトランザクション(登録に失敗したら、作ったバーガーも巻き戻る)と、
+// 統計の再計算は、トランザクションを持つ usecase を通して、adapter/uow のテストが確かめている。
 func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")
@@ -196,7 +198,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 		return burger
 	}
 
-	t.Run("shop 内に同名の burger があれば再利用し、戻り値の burger は呼び出し前の stats を持つ", func(t *testing.T) {
+	t.Run("同じショップに同名のバーガーがあれば、新しく作らずにそれを返し、統計は呼び出し前の値のままである", func(t *testing.T) {
 		burger := mustShopBurger(t, shopA, "Cheese")
 		if burger.ID != cheese {
 			t.Fatalf("burger id = %s, want the existing Cheese %s", burger.ID, cheese)
@@ -210,7 +212,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 		}
 	})
 
-	t.Run("未知の名前は burger とその shops_burgers の link を作成する", func(t *testing.T) {
+	t.Run("そのショップにない名前を指定すると、バーガーを新しく作って、ショップと結び付け(shops_burgers)、統計は 0 で返す", func(t *testing.T) {
 		burger := mustShopBurger(t, shopA, "Veggie")
 		if burger.Name != "Veggie" || burger.ID == cheese {
 			t.Fatalf("burger = %+v, want a new Veggie row", burger)
@@ -227,7 +229,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 		}
 	})
 
-	t.Run("別の shop の同じ名前は別の burger 行になる", func(t *testing.T) {
+	t.Run("別のショップに同じ名前のバーガーがあっても、指定したショップ用に別のバーガーを作る", func(t *testing.T) {
 		burger := mustShopBurger(t, shopB, "Cheese")
 		if burger.ID == cheese {
 			t.Fatalf("burger id = %s, want a new row distinct from shop A's Cheese %s", burger.ID, cheese)

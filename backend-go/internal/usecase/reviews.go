@@ -31,7 +31,7 @@ type ReviewQuery interface {
 	// review を 1 件返すか、（wrap された）domain.ErrReviewNotFound を返す。
 	// 存在しない review、discard 済みの review、author が discard 済みの
 	// user である review は区別できない。
-	GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error)
+	GetReview(ctx context.Context, id string) (domain.ReviewDetail, error)
 	// GetShop は素の shop の行（creator なし、review なし）を返すか、
 	// （wrap された）domain.ErrShopNotFound を返す。
 	GetShop(ctx context.Context, id string) (domain.Shop, error)
@@ -69,10 +69,13 @@ type ReviewListFilter struct {
 
 // Reviews は review の use case を実装する。公開フィードと詳細、および
 // author に限定された create/edit/delete であり、review ごとに任意で 1 枚の
-// 写真を photos 経由で保存する（S10）。読み取りは query、書き込みは UnitOfWork の中で
-// domain の書き込みオブジェクトを通し、repository には依存しない。review の書き込みと
-// burger の統計の再計算の依頼は、1 つの UnitOfWork.Do（同一トランザクション）の中で登録する。
-// 統計そのものは、あとからバックグラウンドのワーカーが計算する（書き込みは計算を待たない）。
+// 写真を photos 経由で保存する。読み取りは query、書き込みは domain の書き込みオブジェクトを通し、
+// repository には依存しない。
+//
+// レビューの書き込みと、バーガーの統計の再計算の依頼の登録は、UnitOfWork(ここからここまでの書き込みと
+// 読み取りを、まとめて 1 つのトランザクションにする範囲を、usecase が指定する仕組み)の中で行う。途中で
+// エラーになれば全体を取り消すので、レビューだけ、または依頼だけが反映されることがない。統計そのものは、
+// あとからバックグラウンドのワーカーが計算する(書き込みは統計の計算を待たない)。
 type Reviews struct {
 	query  ReviewQuery
 	uow    UnitOfWork
@@ -112,7 +115,7 @@ func (s *Reviews) List(ctx context.Context, viewer *domain.User, filter ReviewLi
 // discard 済みの review、author が discard 済みの user である review は、
 // いずれも domain.ErrReviewNotFound を返す。viewer（nil = 匿名）は CanEdit の
 // 設定だけに使う。
-func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id int64) (domain.ReviewDetail, error) {
+func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (domain.ReviewDetail, error) {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("get review: %w", err)
@@ -131,9 +134,9 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id int64) (domai
 // いない名前で shop の burger を find-or-create する（Rails parity、
 // S6 P3-1）。どちらでもない場合は validation の失敗（422）であり、黙って
 // デフォルトを使うことは決してない。レスポンスの detail は、viewer と、
-// 存在確認のために解決した burger から組み立てる。再取得はしない。書き込み（名前の burger の
-// find-or-create を含む）と burger の統計の再計算の依頼の登録は、1 つの UnitOfWork.Do の中で行うので、
-// どの段階で失敗しても、孤立した burger やリンクが commit されることはない。nil でない
+// 存在確認のために解決した burger から組み立てる。再取得はしない。バーガー名の経路でのバーガーの
+// 作成、レビューの登録、統計の再計算の依頼の登録は、1 つの UnitOfWork(まとめて 1 つのトランザクションにする範囲)の
+// 中で行うので、どの段階で失敗しても、レビューのない作りかけのバーガーが残ることはない。nil でない
 // upload（handler で validate 済み/正規化済み、S10）は、insert の前に新しい
 // ランダムな key で保存される。その後 insert が失敗した場合は、アップロード
 // したばかりの blob を best-effort で削除するので、リクエストより長く残る
@@ -166,8 +169,8 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	var created domain.Review
 	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		if burgerID == "" {
-			// 名前の経路: burger をこのトランザクションの中で find-or-create する。
-			// 返る burger は、insert 前に保存されていた stats を持つ。
+			// バーガー名で投稿する場合は、このトランザクションの中で、名前のバーガーを探し、
+			// なければ作る。返るバーガーの統計は、この投稿より前の値である。
 			var err error
 			if burger, err = tx.Reviews.CreateShopBurger(ctx, shopID, burgerName); err != nil {
 				return err
@@ -208,7 +211,7 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 // 後にはじめて古い blob を best-effort で削除する。
 // nil の upload は content だけの書き込みを行い、photo_key には触れない
 // （写真を削除する経路はない）。
-func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
+func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
@@ -258,7 +261,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 // （403、Update と同様に author のみ）、そしてカラム限定の discard の順で
 // 行い、hard DELETE は決して行わない。写真の blob があれば、discard が
 // 成功した後に best-effort で削除される（S10）。
-func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) error {
+func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id string) error {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete review: %w", err)

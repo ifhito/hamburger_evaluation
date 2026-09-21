@@ -127,6 +127,46 @@ func TestMigrationsAcceptance(t *testing.T) {
 		}
 	})
 
+	// レビューの id も DB が UUID（v4）で自動生成する。これで、すべての表の主キーと、
+	// 名前が `_id` で終わる参照の列が UUID になり、連番の id は残っていない。
+	t.Run("レビューの id は UUID で自動生成され、すべての表の id と参照の列が UUID になっている", func(t *testing.T) {
+		var userID, burgerID, reviewID string
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ('review-id@example.com', 'review-id', 'digest') RETURNING id::text").Scan(&userID); err != nil {
+			t.Fatalf("insert user: %v", err)
+		}
+		if err := conn.QueryRow(ctx, "INSERT INTO burgers (name) VALUES ('レビューの id の確認用バーガー') RETURNING id::text").Scan(&burgerID); err != nil {
+			t.Fatalf("insert burger: %v", err)
+		}
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO reviews (rating, user_id, burger_id) VALUES (3, $1, $2) RETURNING id::text", userID, burgerID).Scan(&reviewID); err != nil {
+			t.Fatalf("insert review: %v", err)
+		}
+		if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(reviewID) {
+			t.Errorf("reviews.id = %q, want a lowercase v4 uuid", reviewID)
+		}
+		rows, err := conn.Query(ctx, `SELECT table_name || '.' || column_name || ':' || data_type
+			FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name <> 'schema_migrations'
+			  AND (column_name = 'id' OR column_name LIKE '%\_id') AND data_type <> 'uuid'
+			ORDER BY 1`)
+		if err != nil {
+			t.Fatalf("query id columns: %v", err)
+		}
+		defer rows.Close()
+		var notUUID []string
+		for rows.Next() {
+			var c string
+			if err := rows.Scan(&c); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			notUUID = append(notUUID, c)
+		}
+		if len(notUUID) != 0 {
+			t.Errorf("UUID ではない id の列がある: %v", notUUID)
+		}
+	})
+
 	// AC4：同じ email を持つ 2 人目のユーザーは UNIQUE 制約によって
 	// 拒否される。
 	t.Run("AC4 同じ email は UNIQUE 制約違反になる", func(t *testing.T) {
@@ -235,7 +275,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"mail_deliveries/last_error/text/YES",
 		"mail_deliveries/created_at/timestamp with time zone/NO",
 		"mail_deliveries/sent_at/timestamp with time zone/YES",
-		"reviews/id/bigint/NO",
+		"reviews/id/uuid/NO",
 		"reviews/rating/smallint/NO",
 		"reviews/comment/text/YES",
 		"reviews/user_id/uuid/NO",

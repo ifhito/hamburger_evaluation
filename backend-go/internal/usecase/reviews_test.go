@@ -21,7 +21,7 @@ import (
 // fail-loud する。
 type fakeReviewQuery struct {
 	listReviews   func(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error)
-	getReview     func(ctx context.Context, id int64) (domain.ReviewDetail, error)
+	getReview     func(ctx context.Context, id string) (domain.ReviewDetail, error)
 	getShop       func(ctx context.Context, id string) (domain.Shop, error)
 	getShopBurger func(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error)
 }
@@ -33,7 +33,7 @@ func (f *fakeReviewQuery) ListReviews(ctx context.Context, filter usecase.Review
 	return f.listReviews(ctx, filter, limit, offset)
 }
 
-func (f *fakeReviewQuery) GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error) {
+func (f *fakeReviewQuery) GetReview(ctx context.Context, id string) (domain.ReviewDetail, error) {
 	if f.getReview == nil {
 		panic("unexpected GetReview call")
 	}
@@ -60,9 +60,9 @@ func (f *fakeReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID st
 type fakeReviewRepo struct {
 	createReview              func(ctx context.Context, review domain.Review) (domain.Review, error)
 	createShopBurger          func(ctx context.Context, shopID string, burgerName string) (domain.ShopReviewBurger, error)
-	updateReviewContent       func(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
-	updateReviewContentAndKey func(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error)
-	discardReview             func(ctx context.Context, id int64) error
+	updateReviewContent       func(ctx context.Context, id string, rating int, comment string) (domain.Review, error)
+	updateReviewContentAndKey func(ctx context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error)
+	discardReview             func(ctx context.Context, id string) error
 }
 
 func (f *fakeReviewRepo) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
@@ -79,21 +79,21 @@ func (f *fakeReviewRepo) CreateShopBurger(ctx context.Context, shopID string, bu
 	return f.createShopBurger(ctx, shopID, burgerName)
 }
 
-func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error) {
+func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id string, rating int, comment string) (domain.Review, error) {
 	if f.updateReviewContent == nil {
 		panic("unexpected UpdateReviewContent call")
 	}
 	return f.updateReviewContent(ctx, id, rating, comment)
 }
 
-func (f *fakeReviewRepo) UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+func (f *fakeReviewRepo) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error) {
 	if f.updateReviewContentAndKey == nil {
 		panic("unexpected UpdateReviewContentAndPhotoKey call")
 	}
 	return f.updateReviewContentAndKey(ctx, id, rating, comment, photoKey)
 }
 
-func (f *fakeReviewRepo) DiscardReview(ctx context.Context, id int64) error {
+func (f *fakeReviewRepo) DiscardReview(ctx context.Context, id string) error {
 	if f.discardReview == nil {
 		panic("unexpected DiscardReview call")
 	}
@@ -176,12 +176,12 @@ func TestReviewsListFailure(t *testing.T) {
 // 返す（usecase レベルでの issue #14 AC6）。
 func TestReviewsGet(t *testing.T) {
 	detail := domain.ReviewDetail{
-		Review: domain.Review{ID: 9, Rating: 4, AuthorID: uid.N(1), BurgerID: uid.N(5), CreatedAt: time.Now()},
+		Review: domain.Review{ID: uid.N(9), Rating: 4, AuthorID: uid.N(1), BurgerID: uid.N(5), CreatedAt: time.Now()},
 		User:   &domain.UserRef{ID: uid.N(1), Username: "alice"},
 		Burger: &domain.ShopReviewBurger{ID: uid.N(5), Name: "Cheese"},
 	}
 	query := &fakeReviewQuery{
-		getReview: func(_ context.Context, id int64) (domain.ReviewDetail, error) {
+		getReview: func(_ context.Context, id string) (domain.ReviewDetail, error) {
 			if id == detail.ID {
 				return detail, nil
 			}
@@ -198,7 +198,7 @@ func TestReviewsGet(t *testing.T) {
 		t.Errorf("Get = %+v, want %+v", got, detail)
 	}
 
-	if _, err := reviews.Get(context.Background(), nil, 999); !errors.Is(err, domain.ErrReviewNotFound) {
+	if _, err := reviews.Get(context.Background(), nil, uid.N(999)); !errors.Is(err, domain.ErrReviewNotFound) {
 		t.Fatalf("Get error = %v, want %v", err, domain.ErrReviewNotFound)
 	}
 }
@@ -238,7 +238,7 @@ func TestReviewsCreate(t *testing.T) {
 		repo := &fakeReviewRepo{
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 				inserted = review
-				review.ID = 42
+				review.ID = uid.N(42)
 				review.CreatedAt = time.Date(2024, 5, 1, 12, 0, 0, 0, time.UTC)
 				return review, nil
 			},
@@ -250,7 +250,7 @@ func TestReviewsCreate(t *testing.T) {
 		if inserted.AuthorID != bob.ID || inserted.BurgerID != cheese.ID || inserted.Rating != 4 {
 			t.Errorf("inserted = %+v, want author %s, burger %s, rating 4", inserted, bob.ID, cheese.ID)
 		}
-		if got.ID != 42 || got.Rating != 4 || got.Comment == nil || *got.Comment != "Tasty" {
+		if got.ID != uid.N(42) || got.Rating != 4 || got.Comment == nil || *got.Comment != "Tasty" {
 			t.Errorf("detail review = %+v, want id 42, rating 4, comment Tasty", got.Review)
 		}
 		if !reflect.DeepEqual(got.User, &domain.UserRef{ID: bob.ID, Username: "bob"}) {
@@ -281,7 +281,7 @@ func TestReviewsCreate(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		repo := &fakeReviewRepo{
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
-				review.ID = 43
+				review.ID = uid.N(43)
 				return review, nil
 			},
 		}
@@ -319,7 +319,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("burger_name 経由では repository 越しに find-or-create し payload を組み立てる", func(t *testing.T) {
+	t.Run("バーガー名を指定して投稿すると、名前のバーガーを探して(なければ作って)からレビューを登録し、応答の内容を組み立てる", func(t *testing.T) {
 		smash := domain.ShopReviewBurger{ID: uid.N(7), Name: " Smash "}
 		var gotShopID string
 		var gotName string
@@ -332,12 +332,11 @@ func TestReviewsCreate(t *testing.T) {
 			},
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 				gotReview = review
-				review.ID = 44
+				review.ID = uid.N(44)
 				return review, nil
 			},
 		}
-		// name は trim されないまま repository に届く（Rails は決して
-		// trim しない）。
+		// バーガー名は、前後の空白を取り除かれないまま、そのまま書き込み側に渡る。
 		got, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", " Smash ", 4, "Juicy", nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
@@ -346,9 +345,9 @@ func TestReviewsCreate(t *testing.T) {
 			t.Errorf("repo got shop %s name %q, want %s %q", gotShopID, gotName, activeShop.ID, " Smash ")
 		}
 		if gotReview.AuthorID != bob.ID || gotReview.Rating != 4 || gotReview.BurgerID != smash.ID {
-			t.Errorf("repo got review %+v, want author %s rating 4 for the resolved burger %s", gotReview, bob.ID, smash.ID)
+			t.Errorf("登録されたレビュー = %+v, want 投稿者 %s・評価 4・解決したバーガー %s", gotReview, bob.ID, smash.ID)
 		}
-		if got.ID != 44 || got.BurgerID != smash.ID {
+		if got.ID != uid.N(44) || got.BurgerID != smash.ID {
 			t.Errorf("detail review = %+v, want id 44 for burger %s", got.Review, smash.ID)
 		}
 		if !reflect.DeepEqual(got.Burger, &smash) {
@@ -358,10 +357,11 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("バーガーの id(burger_id)が指定されていれば、バーガー名(burger_name)より優先される", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
-		// createShopBurger は未設定：呼び出しは panic する
+		// バーガー名の解決(createShopBurger)は代役に設定していない。ID の指定が優先されるので、
+		// 呼ばれると panic してテストが失敗する。
 		repo := &fakeReviewRepo{
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
-				review.ID = 45
+				review.ID = uid.N(45)
 				return review, nil
 			},
 		}
@@ -393,7 +393,7 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("burger_name 経由では書き込みの前に内容を validate する", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop}
-		repo := &fakeReviewRepo{} // createShopBurger は未設定：呼び出しは panic する
+		repo := &fakeReviewRepo{} // バーガー名の解決(createShopBurger)は代役に設定していない。書き込みの前に検証で失敗するので、呼ばれない
 		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", "Smash", 0, " ", nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
@@ -411,7 +411,7 @@ func TestReviewsCreate(t *testing.T) {
 func reviewDetailFor(authorID string) domain.ReviewDetail {
 	comment := "Old"
 	return domain.ReviewDetail{
-		Review: domain.Review{ID: 9, Rating: 2, Comment: &comment, AuthorID: authorID, BurgerID: uid.N(5),
+		Review: domain.Review{ID: uid.N(9), Rating: 2, Comment: &comment, AuthorID: authorID, BurgerID: uid.N(5),
 			CreatedAt: time.Date(2024, 4, 1, 12, 0, 0, 0, time.UTC)},
 		User:   &domain.UserRef{ID: authorID, Username: "alice"},
 		Burger: &domain.ShopReviewBurger{ID: uid.N(5), Name: "Cheese", AverageRating: 4.5, ReviewCount: 2},
@@ -428,7 +428,7 @@ func TestReviewsUpdate(t *testing.T) {
 	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
 	ctx := context.Background()
 	stored := reviewDetailFor(alice.ID)
-	getReview := func(_ context.Context, id int64) (domain.ReviewDetail, error) {
+	getReview := func(_ context.Context, id string) (domain.ReviewDetail, error) {
 		if id == stored.ID {
 			return stored, nil
 		}
@@ -436,12 +436,12 @@ func TestReviewsUpdate(t *testing.T) {
 	}
 
 	t.Run("AC3 author の edit は rating と comment だけを永続化する", func(t *testing.T) {
-		var gotID int64
+		var gotID string
 		var gotRating int
 		var gotComment string
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{
-			updateReviewContent: func(_ context.Context, id int64, rating int, comment string) (domain.Review, error) {
+			updateReviewContent: func(_ context.Context, id string, rating int, comment string) (domain.Review, error) {
 				gotID, gotRating, gotComment = id, rating, comment
 				updated := stored.Review
 				updated.Rating = rating
@@ -455,7 +455,7 @@ func TestReviewsUpdate(t *testing.T) {
 			t.Fatalf("Update returned error: %v", err)
 		}
 		if gotID != stored.ID || gotRating != 5 || gotComment != "Better" {
-			t.Errorf("write = (%d, %d, %q), want (%d, 5, Better)", gotID, gotRating, gotComment, stored.ID)
+			t.Errorf("write = (%s, %d, %q), want (%s, 5, Better)", gotID, gotRating, gotComment, stored.ID)
 		}
 		if got.Rating != 5 || got.Comment == nil || *got.Comment != "Better" {
 			t.Errorf("detail = %+v, want rating 5, comment Better", got.Review)
@@ -489,7 +489,7 @@ func TestReviewsUpdate(t *testing.T) {
 
 	t.Run("未知の id は ErrReviewNotFound を返す", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
-		if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Update(ctx, alice, 999, 5, "x", nil); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Update(ctx, alice, uid.N(999), 5, "x", nil); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Update error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
@@ -505,7 +505,7 @@ func TestReviewsDelete(t *testing.T) {
 	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
 	ctx := context.Background()
 	stored := reviewDetailFor(alice.ID)
-	getReview := func(_ context.Context, id int64) (domain.ReviewDetail, error) {
+	getReview := func(_ context.Context, id string) (domain.ReviewDetail, error) {
 		if id == stored.ID {
 			return stored, nil
 		}
@@ -513,10 +513,10 @@ func TestReviewsDelete(t *testing.T) {
 	}
 
 	t.Run("AC6 author の delete は review を discard する", func(t *testing.T) {
-		var discarded int64
+		var discarded string
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{
-			discardReview: func(_ context.Context, id int64) error {
+			discardReview: func(_ context.Context, id string) error {
 				discarded = id
 				return nil
 			},
@@ -525,7 +525,7 @@ func TestReviewsDelete(t *testing.T) {
 			t.Fatalf("Delete returned error: %v", err)
 		}
 		if discarded != stored.ID {
-			t.Errorf("discarded id = %d, want %d", discarded, stored.ID)
+			t.Errorf("discarded id = %s, want %s", discarded, stored.ID)
 		}
 	})
 
@@ -541,7 +541,7 @@ func TestReviewsDelete(t *testing.T) {
 
 	t.Run("未知の id は ErrReviewNotFound を返す", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
-		if err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Delete(ctx, alice, 999); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Delete(ctx, alice, uid.N(999)); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Delete error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
@@ -549,7 +549,7 @@ func TestReviewsDelete(t *testing.T) {
 	t.Run("discard の競合が起きたときは repository の ErrReviewNotFound が返る", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{
-			discardReview: func(_ context.Context, _ int64) error {
+			discardReview: func(_ context.Context, _ string) error {
 				return domain.ErrReviewNotFound // load から書き込みまでの間に discard された
 			},
 		}
@@ -614,7 +614,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 		repo := &fakeReviewRepo{
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 				inserted = review
-				review.ID = 42
+				review.ID = uid.N(42)
 				return review, nil
 			},
 		}
@@ -674,11 +674,11 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 	alice := domain.User{ID: uid.N(1), Username: "alice"}
 	oldKey := "reviews/old.jpg"
 	stored := domain.ReviewDetail{
-		Review: domain.Review{ID: 9, Rating: 4, AuthorID: alice.ID, BurgerID: uid.N(5), PhotoKey: &oldKey},
+		Review: domain.Review{ID: uid.N(9), Rating: 4, AuthorID: alice.ID, BurgerID: uid.N(5), PhotoKey: &oldKey},
 		User:   &domain.UserRef{ID: alice.ID, Username: "alice"},
 		Burger: &domain.ShopReviewBurger{ID: uid.N(5), Name: "Cheese"},
 	}
-	getReview := func(_ context.Context, id int64) (domain.ReviewDetail, error) { return stored, nil }
+	getReview := func(_ context.Context, id string) (domain.ReviewDetail, error) { return stored, nil }
 	upload := &photo.Processed{Data: []byte("img"), ContentType: "image/png", Ext: ".png"}
 
 	t.Run("content と key を atomic に置き換え、DB 成功後に古い blob を削除する", func(t *testing.T) {
@@ -690,7 +690,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 			// updateReviewContent は未設定のままである。写真の経路で
 			// content だけの別の文を実行すれば panic する（書き込みは
 			// 単一の atomic な repository の呼び出しでなければならない）。
-			updateReviewContentAndKey: func(_ context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+			updateReviewContentAndKey: func(_ context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error) {
 				gotRating, gotComment = rating, comment
 				review := stored.Review
 				review.Rating = rating
@@ -726,7 +726,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 			// 失敗したということは content の文が「一切」実行されていない
 			// ので、あとから content の変更が見えることはありえない。
 			// 紛れ込んだ content だけの呼び出しは panic する。
-			updateReviewContentAndKey: func(_ context.Context, _ int64, _ int, _ string, _ *string) (domain.Review, error) {
+			updateReviewContentAndKey: func(_ context.Context, _ string, _ int, _ string, _ *string) (domain.Review, error) {
 				return domain.Review{}, domain.ErrReviewNotFound // load から書き込みまでの間に discard された
 			},
 		}
@@ -745,7 +745,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 		repo := &fakeReviewRepo{
 			// updateReviewContentAndKey は未設定：photo_key のどんな書き込みも
 			// panic する。
-			updateReviewContent: func(_ context.Context, _ int64, _ int, _ string) (domain.Review, error) {
+			updateReviewContent: func(_ context.Context, _ string, _ int, _ string) (domain.Review, error) {
 				return stored.Review, nil
 			},
 		}
@@ -770,14 +770,14 @@ func TestReviewsDeletePhoto(t *testing.T) {
 	key := "reviews/gone.jpg"
 	photos := &fakePhotoStorage{}
 	query := &fakeReviewQuery{
-		getReview: func(_ context.Context, id int64) (domain.ReviewDetail, error) {
+		getReview: func(_ context.Context, id string) (domain.ReviewDetail, error) {
 			return domain.ReviewDetail{Review: domain.Review{ID: id, AuthorID: alice.ID, PhotoKey: &key}}, nil
 		},
 	}
 	repo := &fakeReviewRepo{
-		discardReview: func(_ context.Context, _ int64) error { return nil },
+		discardReview: func(_ context.Context, _ string) error { return nil },
 	}
-	if err := newReviews(query, repo, photos).Delete(ctx, alice, 9); err != nil {
+	if err := newReviews(query, repo, photos).Delete(ctx, alice, uid.N(9)); err != nil {
 		t.Fatalf("Delete returned error: %v", err)
 	}
 	if !reflect.DeepEqual(photos.deletes, []string{key}) {
@@ -791,9 +791,9 @@ func TestReviewsGetCanEdit(t *testing.T) {
 	author := domain.User{ID: uid.N(1), Username: "alice"}
 	other := domain.User{ID: uid.N(2), Username: "bob"}
 	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
-	detail := domain.ReviewDetail{Review: domain.Review{ID: 9, Rating: 4, AuthorID: author.ID, BurgerID: uid.N(5)}}
+	detail := domain.ReviewDetail{Review: domain.Review{ID: uid.N(9), Rating: 4, AuthorID: author.ID, BurgerID: uid.N(5)}}
 	query := &fakeReviewQuery{
-		getReview: func(context.Context, int64) (domain.ReviewDetail, error) { return detail, nil },
+		getReview: func(context.Context, string) (domain.ReviewDetail, error) { return detail, nil },
 	}
 	reviews := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{})
 
@@ -826,8 +826,8 @@ func TestReviewsGetCanEdit(t *testing.T) {
 func TestReviewsListCanEditAndHasMore(t *testing.T) {
 	author := domain.User{ID: uid.N(1), Username: "alice"}
 	feed := []domain.ReviewDetail{
-		{Review: domain.Review{ID: 3, AuthorID: uid.N(2)}},
-		{Review: domain.Review{ID: 2, AuthorID: author.ID}},
+		{Review: domain.Review{ID: uid.N(3), AuthorID: uid.N(2)}},
+		{Review: domain.Review{ID: uid.N(2), AuthorID: author.ID}},
 	}
 	for _, hasMore := range []bool{true, false} {
 		query := &fakeReviewQuery{
