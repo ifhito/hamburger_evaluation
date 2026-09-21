@@ -45,16 +45,29 @@ func newAuthUserResponse(user domain.User, token string) authUserResponse {
 	}
 }
 
-// handleSignup は POST /signup を処理する：user と新しい token を伴う 201、
-// 422 {"errors":[...]}（validation の失敗時。email が既に使われている
-// 場合を含む）。
-func handleSignup(auth *usecase.Auth) http.HandlerFunc {
+// signupAcceptedMessage は、POST /signup の 202 の本文の message である。登録済みの email でも
+// 未登録の email でも、同じ値を返す（応答から登録の有無を判別できないようにするため）。
+const signupAcceptedMessage = "Confirmation email sent"
+
+// signupTokenInvalidMessage は、確認トークンが期限切れ・存在しない・改ざん・使用済みの
+// いずれかのときの 400 のメッセージである（どれなのかは区別できない）。
+const signupTokenInvalidMessage = "Confirmation token is invalid or has expired"
+
+type signupConfirmRequest struct {
+	Token string `json:"token"`
+}
+
+// handleSignup は POST /signup を処理する：入力が有効なら、登録の有無にかかわらず、同じ
+// ステータス・本文の 202 {"message":"Confirmation email sent"}（アカウントは確認メールの
+// リンクを開いて初めて作られる）、validation の失敗時は 422 {"errors":[...]}。「登録済み」を
+// 示すエラーは返さない。
+func handleSignup(signups *usecase.Signups) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req signupRequest
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		user, token, err := auth.Signup(r.Context(), usecase.SignupInput{
+		err := signups.Request(r.Context(), usecase.SignupInput{
 			Username:             req.Username,
 			Email:                req.Email,
 			Password:             req.Password,
@@ -68,6 +81,30 @@ func handleSignup(auth *usecase.Auth) http.HandlerFunc {
 			}
 			// wrap された usecase のエラーには password は含まれない。
 			log.Printf("signup: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		writeJSON(w, http.StatusAccepted, messageResponse{Message: signupAcceptedMessage})
+	}
+}
+
+// handleSignupConfirm は POST /signup/confirm を処理する：確認トークンが有効なら、従来の
+// signup の成功と同じ 201 の本文（user と新しい token）、期限切れ・存在しない・改ざん・
+// 使用済みのトークンは、いずれも同じ 400。
+func handleSignupConfirm(signups *usecase.Signups) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req signupConfirmRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		user, token, err := signups.Confirm(r.Context(), req.Token)
+		if err != nil {
+			if errors.Is(err, domain.ErrSignupTokenInvalid) {
+				writeError(w, http.StatusBadRequest, signupTokenInvalidMessage)
+				return
+			}
+			// ログにはトークンの値を含めない（wrap された usecase のエラーにも含まれない）。
+			log.Printf("signup confirm: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}

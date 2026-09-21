@@ -46,78 +46,18 @@ type TokenVerifier interface {
 	Verify(token string) (int64, error)
 }
 
-// Auth は signup、login、トークン認証の use case を実装する。
-// 認証に関する判断は HTTP handler ではなく、ここにある。読み取りは query、
-// 書き込みは domain の書き込みオブジェクト（domain.Users）だけを通し、repository には
-// 依存しない。
+// Auth は login とトークン認証の use case を実装する（signup は Signups）。
+// 認証に関する判断は HTTP handler ではなく、ここにある。読み取りは query だけを通し、
+// repository には依存しない。
 type Auth struct {
 	query    UserQuery
-	users    *domain.Users
 	hasher   PasswordHasher
 	issuer   TokenIssuer
 	verifier TokenVerifier
 }
 
-func NewAuth(query UserQuery, users *domain.Users, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
-	return &Auth{query: query, users: users, hasher: hasher, issuer: issuer, verifier: verifier}
-}
-
-// SignupInput は signup use case の入力である。PasswordConfirmation は
-// 任意であり（リクエストにそのフィールドがなかった場合は nil）、存在する
-// ときは、Rails の has_secure_password に合わせて Password と等しくなければ
-// ならない。
-type SignupInput struct {
-	Username             string
-	Email                string
-	Password             string
-	PasswordConfirmation *string
-}
-
-// validate は Rails parity の full message を返す。valid なら空である。
-// メッセージは username、認証情報（domain.ValidateCredentials。email、password の順）、
-// confirmation の順に並ぶ。
-func (in SignupInput) validate() []string {
-	var msgs []string
-	if in.Username == "" {
-		msgs = append(msgs, "Username can't be blank")
-	}
-	msgs = append(msgs, domain.ValidateCredentials(in.Email, in.Password)...)
-	if in.PasswordConfirmation != nil && *in.PasswordConfirmation != in.Password {
-		msgs = append(msgs, "Password confirmation doesn't match Password")
-	}
-	return msgs
-}
-
-// Signup は入力を validate し、新しいユーザーを保存し（常に admin=false）、
-// 新しい認証トークンとともにそのユーザーを返す。validation の失敗と email の
-// 重複は *domain.ValidationError として返される。
-func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, string, error) {
-	if msgs := input.validate(); len(msgs) > 0 {
-		return domain.User{}, "", &domain.ValidationError{Messages: msgs}
-	}
-	digest, err := a.hasher.Hash(input.Password)
-	if err != nil {
-		return domain.User{}, "", fmt.Errorf("hash password: %w", err)
-	}
-	user, err := a.users.Create(ctx, domain.CreateUserParams{
-		Username:       input.Username,
-		Email:          input.Email,
-		PasswordDigest: digest,
-		// 新しいユーザーは決して admin にならない。
-		// 昇格は signup の範囲外である。
-		Admin: false,
-	})
-	if err != nil {
-		if errors.Is(err, domain.ErrEmailTaken) {
-			return domain.User{}, "", &domain.ValidationError{Messages: []string{"Email has already been taken"}}
-		}
-		return domain.User{}, "", fmt.Errorf("create user: %w", err)
-	}
-	token, err := a.issuer.Issue(user.ID)
-	if err != nil {
-		return domain.User{}, "", fmt.Errorf("issue token: %w", err)
-	}
-	return user, token, nil
+func NewAuth(query UserQuery, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
+	return &Auth{query: query, hasher: hasher, issuer: issuer, verifier: verifier}
 }
 
 // dummyPasswordDigest は、固定の有効な bcrypt の digest（任意の使い捨て文字列の
