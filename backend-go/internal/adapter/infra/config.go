@@ -109,7 +109,32 @@ type Config struct {
 	// OAuth は、OAuth の認可サーバー(AI アプリがログインと許可だけでつなぐための仕組み)の設定である。
 	// OAUTH_ISSUER を設定したときだけ有効になり、設定しなければ、認可サーバーの窓口は登録されない。
 	OAuth OAuthConfig
+	// Google は、Google のアカウントでのサインインの設定である。GOOGLE_CLIENT_ID を設定したときだけ有効になり、
+	// 設定しなければ、/auth/google/* は登録されない(404)。
+	Google GoogleConfig
 }
+
+// GoogleConfig は、Google のアカウントでのサインインの設定である。
+type GoogleConfig struct {
+	// Enabled は、Google でのサインインを有効にするかである。GOOGLE_CLIENT_ID が設定されているときに true になる。
+	Enabled bool
+	// ClientID は、Google Cloud Console で作った OAuth クライアントの ID である。GOOGLE_CLIENT_ID。
+	ClientID string
+	// ClientSecret は、そのクライアントの秘密の鍵である。GOOGLE_CLIENT_SECRET、有効なときは必須。その値は
+	// 決してハードコードしてはならず、ログ・エラーの文言にも出力してはならない。
+	ClientSecret string
+	// RedirectURL は、Google が認可のあとに利用者を戻す URL(この API の /auth/google/callback の公開 URL)である。
+	// GOOGLE_REDIRECT_URL、有効なときは必須。Google Cloud Console に登録した「承認済みのリダイレクト URI」と
+	// 完全に一致しなければならない。
+	RedirectURL string
+	// Issuer は、OpenID Connect の提供元の URL である。GOOGLE_OIDC_ISSUER、既定は https://accounts.google.com。
+	// テストや隔離した確認で、代役の提供元に向けるためにだけある。https か、ループバック(localhost・127.0.0.1・[::1])の
+	// http だけを許す。本番では設定しない。
+	Issuer string
+}
+
+// defaultGoogleIssuer は、Google の OpenID Connect の提供元の URL である。
+const defaultGoogleIssuer = "https://accounts.google.com"
 
 // OAuthConfig は、OAuth の認可サーバーの設定である。
 type OAuthConfig struct {
@@ -222,6 +247,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	}
 	loadStatsWorkerConfig(getenv, &cfg)
 	if err := loadOAuthConfig(getenv, &cfg); err != nil {
+		return Config{}, err
+	}
+	if err := loadGoogleConfig(getenv, &cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -416,4 +444,68 @@ func loadMailConfig(getenv func(string) string, cfg *Config) error {
 	}
 	cfg.AppBaseURL = strings.TrimRight(cfg.AppBaseURL, "/")
 	return nil
+}
+
+// googleRedirectPathSuffix は、GOOGLE_REDIRECT_URL の path の末尾である(この API の /auth/google/callback。公開の
+// path には、前に接頭辞が付いてもよい)。handler が、cookie の Path を、ここから決める。
+const googleRedirectPathSuffix = "/auth/google/callback"
+
+// loadGoogleConfig は、Google のアカウントでのサインインの設定を読み込んで検証する。GOOGLE_CLIENT_ID がなければ
+// 無効で、ほかの GOOGLE_* は読まない。有効なのに設定が足りない・不正なときは fail-loud する。エラーメッセージには
+// 変数名だけを含め、その値(特に GOOGLE_CLIENT_SECRET)は決して含めない。
+func loadGoogleConfig(getenv func(string) string, cfg *Config) error {
+	clientID := strings.TrimSpace(getenv("GOOGLE_CLIENT_ID"))
+	if clientID == "" {
+		return nil
+	}
+	gc := GoogleConfig{
+		Enabled:      true,
+		ClientID:     clientID,
+		ClientSecret: getenv("GOOGLE_CLIENT_SECRET"),
+		RedirectURL:  getenv("GOOGLE_REDIRECT_URL"),
+		Issuer:       strings.TrimRight(getenv("GOOGLE_OIDC_ISSUER"), "/"),
+	}
+	if gc.ClientSecret == "" {
+		return fmt.Errorf("GOOGLE_CLIENT_SECRET is required when GOOGLE_CLIENT_ID is set")
+	}
+	if gc.RedirectURL == "" {
+		return fmt.Errorf("GOOGLE_REDIRECT_URL is required when GOOGLE_CLIENT_ID is set")
+	}
+	// 認可コード・state・手続きの cookie が流れる戻り先と、1 回限りのコード(JWT に交換できる)が流れる
+	// アプリの URL は、https か、開発用のループバックの http だけを許す(外部への平文の通信を防ぐ)。
+	if err := requireHTTPSOrLoopback("GOOGLE_REDIRECT_URL", gc.RedirectURL); err != nil {
+		return err
+	}
+	// 手続きの cookie の Path と、結果との交換の cookie の Path は、戻り先の path から決まる。末尾が違うと、cookie が
+	// 届かず、手続きが失敗するのに、気づけないので、起動のときに断る(値はエラーに含めない)。
+	if u, _ := url.Parse(gc.RedirectURL); !strings.HasSuffix(u.Path, googleRedirectPathSuffix) {
+		return fmt.Errorf("GOOGLE_REDIRECT_URL path must end with %s (a public prefix such as /api may come before it)", googleRedirectPathSuffix)
+	}
+	if err := requireHTTPSOrLoopback("APP_BASE_URL", cfg.AppBaseURL); err != nil {
+		return fmt.Errorf("%w (required when GOOGLE_CLIENT_ID is set)", err)
+	}
+	if gc.Issuer == "" {
+		gc.Issuer = defaultGoogleIssuer
+	} else if err := requireHTTPSOrLoopback("GOOGLE_OIDC_ISSUER", gc.Issuer); err != nil {
+		return err
+	}
+	cfg.Google = gc
+	return nil
+}
+
+// requireHTTPSOrLoopback は、name の値 raw が、https の URL か、ループバック(localhost・127.0.0.1・[::1])の
+// http の URL であることを確かめる。平文の http で、外部の提供元に、認可コードやトークンを送らないため。
+func requireHTTPSOrLoopback(name, raw string) error {
+	if err := requireHTTPURL(name, raw); err != nil {
+		return err
+	}
+	u, _ := url.Parse(raw)
+	if u.Scheme == "https" {
+		return nil
+	}
+	switch u.Hostname() {
+	case "localhost", "127.0.0.1", "::1":
+		return nil
+	}
+	return fmt.Errorf("%s must be an https URL (http is allowed only for localhost, 127.0.0.1 or [::1])", name)
 }

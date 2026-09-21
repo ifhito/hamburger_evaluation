@@ -66,6 +66,13 @@ func (u *UnitOfWork) Do(ctx context.Context, fn func(ctx context.Context, tx use
 		PendingSignups:      query.NewSignupVerificationQuery(pgxTx),
 		// OAuth の許可: 退会のとき、ユーザーの論理削除と同じトランザクションで、許可(と、発行済みのトークン)を取り消す。
 		OAuthGrants: domain.NewOAuthGrants(repository.NewOAuthGrantRepository(pgxTx)),
+		// 外部のサービスのアカウントとの結び付き: 外部のサービスでの新規登録で、ユーザーの作成と同じトランザクションで記録する。
+		UserIdentities: domain.NewUserIdentities(repository.NewUserIdentityRepository(pgxTx)),
+		// 画面へ渡すコード: 使う手順(ロック → 読み取り → 後続の処理 → 削除)を 1 つのトランザクションにする。
+		LoginHandoffs:  domain.NewLoginHandoffs(repository.NewLoginHandoffRepository(pgxTx)),
+		PendingHandoff: query.NewLoginHandoffQuery(pgxTx),
+		// トランザクションの中でユーザーを読むときは、このトランザクションの接続を使う(プールから、もう 1 つ接続を取らない)。
+		UserReads: query.NewUserQuery(pgxTx),
 	}
 	if err := fn(ctx, tx); err != nil {
 		return err

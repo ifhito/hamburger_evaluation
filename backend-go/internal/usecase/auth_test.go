@@ -16,8 +16,10 @@ import (
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeUserQuery struct {
-	getByEmail func(ctx context.Context, email string) (usecase.UserCredentials, error)
-	getByID    func(ctx context.Context, id string) (domain.User, error)
+	getByEmail           func(ctx context.Context, email string) (usecase.UserCredentials, error)
+	getByEmailIgnoreCase func(ctx context.Context, email string) (domain.User, error)
+	getByID              func(ctx context.Context, id string) (domain.User, error)
+	hasPassword          func(ctx context.Context, id string) (bool, error)
 }
 
 func (f *fakeUserQuery) GetActiveUserByEmail(ctx context.Context, email string) (usecase.UserCredentials, error) {
@@ -25,6 +27,20 @@ func (f *fakeUserQuery) GetActiveUserByEmail(ctx context.Context, email string) 
 		panic("unexpected GetActiveUserByEmail call")
 	}
 	return f.getByEmail(ctx, email)
+}
+
+func (f *fakeUserQuery) GetActiveUserByEmailIgnoreCase(ctx context.Context, email string) (domain.User, error) {
+	if f.getByEmailIgnoreCase == nil {
+		panic("unexpected GetActiveUserByEmailIgnoreCase call")
+	}
+	return f.getByEmailIgnoreCase(ctx, email)
+}
+
+func (f *fakeUserQuery) GetActiveUserHasPassword(ctx context.Context, id string) (bool, error) {
+	if f.hasPassword == nil {
+		panic("unexpected GetActiveUserHasPassword call")
+	}
+	return f.hasPassword(ctx, id)
 }
 
 func (f *fakeUserQuery) GetActiveUserByID(ctx context.Context, id string) (domain.User, error) {
@@ -309,4 +325,38 @@ func TestAuthAuthenticateToken(t *testing.T) {
 			t.Fatalf("AuthenticateToken error = %v, want wrapped %v", err, repoErr)
 		}
 	})
+}
+
+// digestRecordingHasher は、Compare に渡された digest を、呼ばれた順に記録する。
+type digestRecordingHasher struct{ compared []string }
+
+func (h *digestRecordingHasher) Hash(password string) (string, error) {
+	return "digest(" + password + ")", nil
+}
+func (h *digestRecordingHasher) Compare(digest, password string) error {
+	h.compared = append(h.compared, digest)
+	if digest != "digest("+password+")" {
+		return errors.New("password mismatch")
+	}
+	return nil
+}
+
+// パスワードでサインインする方法を持たないアカウント(外部のサービスだけで作ったもの)は、パスワードでの
+// サインインで、知らない email と同じ失敗になり、hash の比較も 1 回分消費する(応答の時間から、アカウントに
+// パスワードがないことを推測させない)。
+func TestAuthLoginForAccountWithoutPassword(t *testing.T) {
+	user := domain.User{ID: uid.N(1), Username: "carol", Email: "carol@example.com"}
+	query := &fakeUserQuery{getByEmail: func(_ context.Context, _ string) (usecase.UserCredentials, error) {
+		return usecase.UserCredentials{User: user, PasswordDigest: ""}, nil
+	}}
+	hasher := &digestRecordingHasher{}
+	auth := newAuth(query, hasher, fakeIssuer{}, fakeVerifier{})
+
+	got, token, err := auth.Login(context.Background(), "carol@example.com", "Password123!")
+	if !errors.Is(err, domain.ErrInvalidCredentials) || token != "" || got != (domain.User{}) {
+		t.Fatalf("Login = (%+v, %q, %v), want ErrInvalidCredentials", got, token, err)
+	}
+	if len(hasher.compared) != 1 || hasher.compared[0] == "" {
+		t.Fatalf("hash の比較 = %q, want 空でない digest との比較が 1 回(時間の差を出さない)", hasher.compared)
+	}
 }

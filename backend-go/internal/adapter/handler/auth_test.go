@@ -86,6 +86,28 @@ func (f *userStoreFake) GetActiveUserByEmail(_ context.Context, email string) (u
 	return usecase.UserCredentials{}, domain.ErrUserNotFound
 }
 
+func (f *userStoreFake) GetActiveUserByEmailIgnoreCase(_ context.Context, email string) (domain.User, error) {
+	if f.err != nil {
+		return domain.User{}, f.err
+	}
+	for _, rec := range f.users {
+		if strings.EqualFold(rec.user.Email, email) && !rec.discarded {
+			return rec.user, nil
+		}
+	}
+	return domain.User{}, domain.ErrUserNotFound
+}
+
+func (f *userStoreFake) GetActiveUserHasPassword(_ context.Context, id string) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	if rec, ok := f.users[id]; ok && !rec.discarded {
+		return rec.digest != "", nil
+	}
+	return false, domain.ErrUserNotFound
+}
+
 func (f *userStoreFake) GetActiveUserByID(_ context.Context, id string) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err

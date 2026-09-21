@@ -20,3 +20,12 @@ func exceedsChars(s string, max int) bool {
 func tooLongMessage(label string, max int) string {
 	return fmt.Sprintf("%s is too long (maximum is %d characters)", label, max)
 }
+
+// truncateChars は s を、先頭から max 文字(コードポイント)までに切り詰める。文字の途中では切らない。
+func truncateChars(s string, max int) string {
+	if !exceedsChars(s, max) {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:max])
+}
