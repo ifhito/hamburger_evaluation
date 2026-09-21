@@ -817,7 +817,7 @@ Penpot のページは、グループ × PC / モバイルで分けています�
 ### ヘッダーの差し替えと、画像・`.penpot` の更新
 
 - 全画面のヘッダーの「Hamburger [Evaluation]」を、新しいロゴ(記号 + 「BurgerStack」。記号の高さ 32px、モバイルは 28px)に差し替えました(`redesign/mock.js` と `mock.css`。共有のヘッダーです)。`redesign/mock.css` と `redesign/tokens.html` に、`--logo-on-light` と `--logo-on-dark` を足し、**値のページ(`values.jpg`)のコントラストの表**に、ロゴの 3 行を足しました(3.01:1・10.20:1・8.70:1。基準は、図形の 3:1)。
-- 画像は、**全 156 枚を撮り直し**(全画面のヘッダーが変わるため。1 枚 約 15〜300 KB)、`values.jpg`(約 378 KB)も更新しました。`design/files/hamburger-evaluation-redesign.penpot` は、**1 回だけ**更新しました(**15,669,190 バイト**。前回は 15,310,425 バイト)。ロゴの記号は、Penpot のパス 1 つ(丸い端つき。`build_penpot.py` が、丸い端を扱うようにしました)です。
+- 画像は、**全 156 枚を撮り直し**(全画面のヘッダーが変わるため。1 枚 約 14〜254 KB)、`values.jpg`(約 378 KB)も更新しました。`design/files/hamburger-evaluation-redesign.penpot` は、**1 回だけ**更新しました(**15,669,190 バイト**。前回は 15,310,425 バイト)。ロゴの記号は、Penpot のパス 1 つ(丸い端つき。`build_penpot.py` が、丸い端を扱うようにしました)です。
 - 作り方は、上の「作り方(作り直す手順)」のとおりです。Penpot の鍵(`PENPOT_SECRET_KEY`)は、`design/.env` ではなく、環境変数で渡して起動できます(起動のたびに新しい鍵でよい。データは、ボリュームに残っているものを使います)。
 - **動く見本**: `redesign/logo-motion.html`(最終の記号が、ペンで描かれる動き。`prefers-reduced-motion` のときは、描き終えた形)。**実装で使うかどうかは、未決**です。
 
