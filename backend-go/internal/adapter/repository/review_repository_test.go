@@ -103,7 +103,7 @@ func TestReviewRepository(t *testing.T) {
 	insertRow(ctx, t, conn, insertReview, 2, "rejected only", alice, outcast, nil, t2)
 
 	t.Run("ListReviews は active な shop の burger に絞り込み、重複なしで新しい順に返す", func(t *testing.T) {
-		reviews, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
+		reviews, _, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -136,26 +136,43 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("ListReviews は順序付きフィードを pagination する", func(t *testing.T) {
-		page1, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 0)
+		page1, more1, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if got, want := reviewIDs(page1), []int64{rTie2, rTie1}; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 1 = %v, want %v", got, want)
 		}
-		page2, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 2)
+		page2, more2, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 2)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if got, want := reviewIDs(page2), []int64{rOld}; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 2 = %v, want %v", got, want)
 		}
-		far, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 100)
+		far, moreFar, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 100)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if len(far) != 0 {
 			t.Errorf("far page = %v, want empty", far)
+		}
+		// has_more: 3 件を 2 件ずつ読むと、1 ページ目だけ続きがある。範囲外は空で false。
+		if !more1 || more2 || moreFar {
+			t.Errorf("hasMore = (page1 %v, page2 %v, far %v), want (true, false, false)", more1, more2, moreFar)
+		}
+	})
+
+	t.Run("ListReviews の has_more は、件数ちょうどの limit では false になる（空のページを取りに行かせない）", func(t *testing.T) {
+		// フィードは 3 件。limit=3 は件数ちょうど、limit=100 は件数より大きい。
+		for _, limit := range []int32{3, 100} {
+			all, hasMore, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, limit, 0)
+			if err != nil {
+				t.Fatalf("ListReviews(limit %d) returned error: %v", limit, err)
+			}
+			if len(all) != 3 || hasMore {
+				t.Errorf("limit %d: len = %d, hasMore = %v, want 3, false", limit, len(all), hasMore)
+			}
 		}
 	})
 
@@ -191,7 +208,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				reviews, err := reviewQuery.ListReviews(ctx, tt.filter, 100, 0)
+				reviews, _, err := reviewQuery.ListReviews(ctx, tt.filter, 100, 0)
 				if err != nil {
 					t.Fatalf("ListReviews returned error: %v", err)
 				}
@@ -230,14 +247,14 @@ func TestReviewRepository(t *testing.T) {
 		})
 
 		byShop := func(id int64) usecase.ReviewListFilter { return usecase.ReviewListFilter{ShopID: &id} }
-		got, err := reviewQuery.ListReviews(ctx, byShop(pending), 100, 0)
+		got, _, err := reviewQuery.ListReviews(ctx, byShop(pending), 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if len(got) != 0 {
 			t.Errorf("pending shop filter = %v, want empty", reviewIDs(got))
 		}
-		got, err = reviewQuery.ListReviews(ctx, byShop(mixedActive), 100, 0)
+		got, _, err = reviewQuery.ListReviews(ctx, byShop(mixedActive), 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -380,7 +397,7 @@ func TestReviewRepository(t *testing.T) {
 		if _, err := reviewQuery.GetReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("GetReview after discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		reviews, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
+		reviews, _, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -476,7 +493,7 @@ func TestReviewRepositoryListByUser(t *testing.T) {
 
 	list := func(t *testing.T, filter usecase.ReviewListFilter, limit, offset int32) []int64 {
 		t.Helper()
-		reviews, err := reviewQuery.ListReviews(ctx, filter, limit, offset)
+		reviews, _, err := reviewQuery.ListReviews(ctx, filter, limit, offset)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -1060,7 +1077,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		if detail.PhotoKey == nil || *detail.PhotoKey != "reviews/abc.jpg" {
 			t.Errorf("detail PhotoKey = %v, want reviews/abc.jpg", detail.PhotoKey)
 		}
-		list, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 10, 0)
+		list, _, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 10, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}

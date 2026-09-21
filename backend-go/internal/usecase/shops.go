@@ -16,8 +16,9 @@ import (
 type ShopQuery interface {
 	// ListShops は、keyword に一致する見える shop を、name、次に id の順で
 	// 返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別
-	// しない。空ならすべてに一致する）。
-	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error)
+	// しない。空ならすべてに一致する）。2 つ目の戻り値は、offset+limit 件より
+	// 後ろにも見える shop があるか（has_more）で、実装は limit+1 件を取得して判定する。
+	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error)
 	// GetShopWithCreator は shop とその creator を返す。Reviews は空の
 	// ままである。
 	GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error)
@@ -46,19 +47,20 @@ func NewShops(query ShopQuery, shops *domain.Shops) *Shops {
 // List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
 // ものを、ページネーションして返す。範囲外の page/perPage は、エラーにせず
 // clampPage の規則で補正される（page < 1 は 1、perPage < 1 は 20、perPage の
-// 上限は 100）。
-func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.Shop, error) {
+// 上限は 100）。2 つ目の戻り値は、次のページがあるか（has_more）である。
+func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.Shop, bool, error) {
 	limit, offset := clampPage(page, perPage)
-	shops, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
+	shops, hasMore, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("list shops: %w", err)
+		return nil, false, fmt.Errorf("list shops: %w", err)
 	}
-	return shops, nil
+	return shops, hasMore, nil
 }
 
 // Get は、viewer が見てよいときに shop の詳細（creator と review を含む）を
 // 返す。存在しない shop と隠された shop は、どちらも domain.ErrShopNotFound を
-// 返すので、存在の有無は漏れない。
+// 返すので、存在の有無は漏れない。CanReview には、viewer（nil = 匿名）が
+// この shop に review を投稿できるか（domain の reviewable ルール）を設定する。
 func (s *Shops) Get(ctx context.Context, viewer *domain.User, id int64) (domain.ShopDetail, error) {
 	detail, err := s.query.GetShopWithCreator(ctx, id)
 	if err != nil {
@@ -72,6 +74,7 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id int64) (domain.
 		return domain.ShopDetail{}, fmt.Errorf("list shop reviews: %w", err)
 	}
 	detail.Reviews = reviews
+	detail.CanReview = detail.CanBeReviewedByViewer(viewer)
 	return detail, nil
 }
 
@@ -157,9 +160,13 @@ func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (doma
 
 // Reject は、任意の moderation note つきで shop を reject し、公開の一覧から
 // 隠す。admin でない viewer には、lookup の前に domain.ErrForbidden を返す。
+// note が上限を超えるときは、lookup の前に *domain.ValidationError（422）を返す。
 func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *string) (domain.ShopDetail, error) {
 	if !viewer.Admin {
 		return domain.ShopDetail{}, domain.ErrForbidden
+	}
+	if err := domain.ValidateModerationNote(note); err != nil {
+		return domain.ShopDetail{}, err
 	}
 	return s.moderate(ctx, id, func(shop domain.Shop) domain.Shop {
 		return shop.Reject(note)

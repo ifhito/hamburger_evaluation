@@ -15,13 +15,13 @@ export default function ReviewDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { data: review, isLoading, error } = useReview(Number(id));
+  const { user, isLoading: authLoading } = useAuth();
+  // 編集・削除できるか(canEdit)は backend が返す。閲覧者ごとに違うので、認証状態が確定してから取得する
+  const { data: review, isLoading, error } = useReview(Number(id), user?.id ?? null, {
+    enabled: !authLoading,
+  });
   const { destroy } = useDeleteReview();
   const [isDeleting, setIsDeleting] = useState(false);
-
-  const isOwner =
-    user !== null && review?.user !== null && user.id === review?.user?.id;
 
   const handleDelete = async () => {
     if (!confirm(t("reviews.detail.deleteConfirm"))) return;
@@ -36,7 +36,7 @@ export default function ReviewDetailPage() {
 
   return (
     <Layout title={t("reviews.detail.title")}>
-      {isLoading && <p className={styles.muted}>{t("reviews.detail.loading")}</p>}
+      {(isLoading || authLoading) && <p className={styles.muted}>{t("reviews.detail.loading")}</p>}
       {error && <ErrorMessage message={t("reviews.detail.loadError")} />}
 
       {review && (
@@ -66,7 +66,7 @@ export default function ReviewDetailPage() {
               <Link to={`/users/${review.user.id}`}>{review.user.username}</Link>
             </p>
           )}
-          {isOwner && (
+          {review.canEdit && (
             <div className={styles.actions}>
               <Link to={`/reviews/${review.id}/edit`} className={styles.editLink}>
                 {t("reviews.detail.edit")}

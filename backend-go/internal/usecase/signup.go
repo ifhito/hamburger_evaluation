@@ -74,10 +74,7 @@ type SignupInput struct {
 // confirmation の順に並ぶ。登録の有無には依存しない検証だけを行う（「登録済み」を
 // 示すエラーは返さない）。
 func (in SignupInput) validate() []string {
-	var msgs []string
-	if in.Username == "" {
-		msgs = append(msgs, "Username can't be blank")
-	}
+	msgs := domain.ValidateUsername(in.Username)
 	msgs = append(msgs, domain.ValidateCredentials(in.Email, in.Password)...)
 	if in.PasswordConfirmation != nil && *in.PasswordConfirmation != in.Password {
 		msgs = append(msgs, "Password confirmation doesn't match Password")

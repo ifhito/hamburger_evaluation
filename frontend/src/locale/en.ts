@@ -129,6 +129,8 @@ const en = {
       deleteConfirm: "Delete your account? This cannot be undone.",
       updateError: "Update failed",
       deleteError: "Failed to delete account",
+      forbidden: "You can't edit this profile.",
+      backToProfile: "\u2190 Back to profile",
     },
   },
   shops: {
@@ -138,6 +140,8 @@ const en = {
       searchPlaceholder: "e.g. Shake Shack",
       loading: "Loading\u2026",
       noShops: "No shops found.",
+      loadError: "Failed to load shops.",
+      loadMore: "Load more",
       addShop: "Add a shop",
       moderate: "Moderate shops",
     },
@@ -183,6 +187,7 @@ const en = {
       editTitle: "Edit shop",
       save: "Save",
       editError: "Failed to update the shop.",
+      rejectError: "Failed to reject the shop.",
       filter: {
         all: "All",
         pending: "Pending",

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useShops } from "../hooks/useShops";
 import { useAuth } from "../../auth/AuthProvider";
 import { Button } from "../../../components/Button";
+import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
 import styles from "./shopList.module.css";
@@ -12,7 +13,14 @@ export default function ShopListPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const [keyword, setKeyword] = useState("");
-  const { data: shops, isLoading } = useShops(keyword ? { keyword } : undefined);
+  const {
+    data: shops,
+    isLoading,
+    error,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useShops(keyword ? { keyword } : undefined);
 
   return (
     <Layout title={t("shops.list.title")}>
@@ -39,6 +47,7 @@ export default function ShopListPage() {
           onChange={(e) => setKeyword(e.target.value)}
           placeholder={t("shops.list.searchPlaceholder")}
         />
+        {error && <ErrorMessage message={t("shops.list.loadError")} />}
         {isLoading && <p className={styles.muted}>{t("shops.list.loading")}</p>}
         {shops && shops.length === 0 && (
           <p className={styles.muted}>{t("shops.list.noShops")}</p>
@@ -57,6 +66,13 @@ export default function ShopListPage() {
             </li>
           ))}
         </ul>
+        {hasNextPage && (
+          <div className={styles.loadMore}>
+            <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
+              {t("shops.list.loadMore")}
+            </Button>
+          </div>
+        )}
       </div>
     </Layout>
   );

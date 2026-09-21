@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useUpdateUser, useDeleteUser } from "../hooks/useUserMutations";
+import { useUser } from "../hooks/useUser";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
@@ -10,9 +11,9 @@ import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
 import styles from "./userUpdate.module.css";
 
-export default function UserUpdatePage() {
+// 編集フォーム本体。編集してよい(backend の canEdit が true の)ときだけ、UserUpdatePage が表示する。
+function UserUpdateForm({ id }: { id: string }) {
   const { t } = useTranslation();
-  const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user: authUser, logout, refreshUser } = useAuth();
   const { update } = useUpdateUser(id);
@@ -133,4 +134,38 @@ export default function UserUpdatePage() {
       </div>
     </Layout>
   );
+}
+
+// 編集できるかは backend が返す(canEdit)。他人の id のときは、自分の値を表示せず、編集できない旨を表示する。
+export default function UserUpdatePage() {
+  const { t } = useTranslation();
+  const { id } = useParams<{ id: string }>();
+  const { user: authUser, isLoading: authLoading } = useAuth();
+  const { data: profile, error, isLoading } = useUser(id, authUser?.id ?? null, {
+    enabled: !authLoading,
+  });
+
+  if (authLoading || isLoading) {
+    return (
+      <Layout title={t("users.update.title")}>
+        <p className={styles.muted}>{t("users.detail.loading")}</p>
+      </Layout>
+    );
+  }
+  if (error || !profile) {
+    return (
+      <Layout title={t("users.update.title")}>
+        <ErrorMessage message={t("users.detail.loadError")} />
+      </Layout>
+    );
+  }
+  if (!profile.canEdit) {
+    return (
+      <Layout title={t("users.update.title")}>
+        <ErrorMessage message={t("users.update.forbidden")} />
+        <Link to={`/users/${id}`}>{t("users.update.backToProfile")}</Link>
+      </Layout>
+    );
+  }
+  return <UserUpdateForm id={profile.id} />;
 }

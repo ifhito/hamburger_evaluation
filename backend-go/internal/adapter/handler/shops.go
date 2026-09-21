@@ -26,7 +26,9 @@ type shopResponse struct {
 }
 
 // shopDetailResponse は GET /shops/{id} の body である
-// （frontend の ShopDetail）。
+// （frontend の ShopDetail）。CanReview は、viewer がこの shop に review を投稿できるか
+// （domain の reviewable ルール）で、匿名は false。frontend は、この値で「レビューを書く」
+// ボタンを出し分ける。
 type shopDetailResponse struct {
 	ID             int64                `json:"id"`
 	Name           string               `json:"name"`
@@ -34,6 +36,7 @@ type shopDetailResponse struct {
 	ModerationNote *string              `json:"moderation_note"`
 	Creator        *userRefResponse     `json:"creator"`
 	Reviews        []shopReviewResponse `json:"reviews"`
+	CanReview      bool                 `json:"can_review"`
 }
 
 type userRefResponse struct {
@@ -111,13 +114,14 @@ func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok b
 // handleListShops は GET /shops を処理する：（存在する場合の）viewer から
 // 見える shop のトップレベルの JSON 配列で、keyword で絞り込まれ、
 // ページネーションされる。page / per_page が整数でなければ 422 である。
+// 次のページの有無は、レスポンスヘッダー X-Has-More（true / false）で返す。
 func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		page, perPage, ok := pageParams(w, r)
 		if !ok {
 			return
 		}
-		list, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"), page, perPage)
+		list, hasMore, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"), page, perPage)
 		if err != nil {
 			log.Printf("shops: list: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal server error")
@@ -127,6 +131,7 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 		for _, shop := range list {
 			resp = append(resp, shopResponse{ID: shop.ID, Name: shop.Name, Status: string(shop.Status)})
 		}
+		setHasMore(w, hasMore)
 		writeJSON(w, http.StatusOK, resp)
 	}
 }
@@ -162,6 +167,7 @@ func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 		ModerationNote: detail.ModerationNote,
 		Creator:        newUserRefResponse(detail.Creator),
 		Reviews:        make([]shopReviewResponse, 0, len(detail.Reviews)),
+		CanReview:      detail.CanReview,
 	}
 	for _, review := range detail.Reviews {
 		item := shopReviewResponse{

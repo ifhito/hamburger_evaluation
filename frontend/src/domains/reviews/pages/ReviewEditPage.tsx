@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
 import { useUpdateReview } from "../hooks/useReviewMutations";
 import { useUpdateReviewForm } from "../hooks/useReviewForm";
@@ -16,7 +17,11 @@ export default function ReviewEditPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: review, isLoading } = useReview(Number(id));
+  const { user, isLoading: authLoading } = useAuth();
+  const { data: review, isLoading: reviewLoading } = useReview(Number(id), user?.id ?? null, {
+    enabled: !authLoading,
+  });
+  const isLoading = reviewLoading || authLoading;
   const { update } = useUpdateReview(Number(id));
 
   const { register, handleSubmit, setValue, watch, reset } = useUpdateReviewForm();

@@ -25,12 +25,36 @@ type Shop struct {
 	CreatorID      *string
 }
 
+// MaxShopNameChars はショップ名の文字数の上限（Unicode のコードポイント数）である。
+// DB の CHECK 制約 shops_name_max_length（000002_create_shops）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
+const MaxShopNameChars = 100
+
 // ValidateShopName は、shop 名に対して Rails の presence validation を強制
 // する。空またはホワイトスペースのみの名前は、Rails の full message そのまま
-// を *ValidationError に入れて返す。
+// を *ValidationError に入れて返す。名前が MaxShopNameChars 文字を超えるときも拒否される。
 func ValidateShopName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return &ValidationError{Messages: []string{"Name can't be blank"}}
+	}
+	if exceedsChars(name, MaxShopNameChars) {
+		return &ValidationError{Messages: []string{tooLongMessage("Name", MaxShopNameChars)}}
+	}
+	return nil
+}
+
+// MaxModerationNoteChars は管理者の却下メモの文字数の上限（Unicode のコードポイント数）である。
+// DB の CHECK 制約 shops_moderation_note_max_length（000002_create_shops）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
+const MaxModerationNoteChars = 500
+
+// ValidateModerationNote は、reject 時の任意の moderation note の上限を検証する。
+// nil（note なし）は有効で、MaxModerationNoteChars 文字を超えるときは *ValidationError を返す。
+func ValidateModerationNote(note *string) error {
+	if note != nil && exceedsChars(*note, MaxModerationNoteChars) {
+		return &ValidationError{Messages: []string{tooLongMessage("Moderation note", MaxModerationNoteChars)}}
 	}
 	return nil
 }
@@ -80,6 +104,13 @@ func (s Shop) CanBeReviewedBy(viewer User) bool {
 	}
 }
 
+// CanBeReviewedByViewer は、匿名（nil）を含む viewer が shop の burger の review を
+// 投稿できるかを返す。匿名は常に false で、それ以外は CanBeReviewedBy に従う。API が
+// 返す can_review の元になる値で、frontend はこの判断を再計算しない。
+func (s Shop) CanBeReviewedByViewer(viewer *User) bool {
+	return viewer != nil && s.CanBeReviewedBy(*viewer)
+}
+
 // ShopVisibility は viewer から導出されるフィルタ記述子である。shop が見える
 // のは、ViewAll が設定されている、shop が active である、creator が ViewerID
 // である、のいずれかであるとき、かつそのときに限る。この型は shop の可視性
@@ -126,6 +157,9 @@ type ShopDetail struct {
 	Shop
 	Creator *UserRef // shop に creator がいない場合は nil
 	Reviews []ShopReview
+	// CanReview は、viewer がこの shop に review を投稿できるかである。viewer ごとに
+	// 決まる値なので、詳細を返す usecase が CanBeReviewedByViewer で設定する。
+	CanReview bool
 }
 
 // ShopReview は shop 詳細に表示される review 1 件であり、その author と、

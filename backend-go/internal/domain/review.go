@@ -21,6 +21,12 @@ type Review struct {
 	CreatedAt time.Time
 }
 
+// MaxCommentChars はレビューのコメントの文字数の上限（Unicode のコードポイント数）である。
+// DB の CHECK 制約 reviews_comment_max_length（000005_create_reviews）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
+const MaxCommentChars = 2000
+
 // ValidateReviewContent は、書き込み可能な review の属性に対して Rails の
 // validation を強制する。rating は 1..5 の整数でなければならず、comment は
 // 存在しなければならない。失敗した場合は、Rails の full message そのままを
@@ -32,6 +38,8 @@ func ValidateReviewContent(rating int, comment string) error {
 	}
 	if strings.TrimSpace(comment) == "" {
 		messages = append(messages, "Comment can't be blank")
+	} else if exceedsChars(comment, MaxCommentChars) {
+		messages = append(messages, tooLongMessage("Comment", MaxCommentChars))
 	}
 	if len(messages) > 0 {
 		return &ValidationError{Messages: messages}
@@ -39,14 +47,23 @@ func ValidateReviewContent(rating int, comment string) error {
 	return nil
 }
 
+// MaxBurgerNameChars はバーガー名の文字数の上限（Unicode のコードポイント数）である。
+// DB の CHECK 制約 burgers_name_max_length（000003_create_burgers）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
+const MaxBurgerNameChars = 100
+
 // ValidateBurgerName は、burger_name による review 投稿の経路に対して Rails の
 // Burger name の presence ルールを強制する。空またはホワイトスペースのみの
 // 名前は拒否される。（Rails は空の名前に対して rescue されない RecordInvalid
 // で応答するが、ここでは適切な validation failure とする。fail loud で 422
-// を返す。）
+// を返す。）名前が MaxBurgerNameChars 文字を超えるときも拒否される。
 func ValidateBurgerName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return &ValidationError{Messages: []string{"Burger name can't be blank"}}
+	}
+	if exceedsChars(name, MaxBurgerNameChars) {
+		return &ValidationError{Messages: []string{tooLongMessage("Burger name", MaxBurgerNameChars)}}
 	}
 	return nil
 }
@@ -71,6 +88,13 @@ func (r Review) CanBeModifiedBy(viewer User) bool {
 	return r.AuthorID == viewer.ID
 }
 
+// CanBeModifiedByViewer は、匿名（nil）を含む viewer が review を編集・削除できるかを
+// 返す。匿名は常に false で、それ以外は CanBeModifiedBy に従う。API が返す can_edit の
+// 元になる値で、frontend はこの判断を再計算しない。
+func (r Review) CanBeModifiedByViewer(viewer *User) bool {
+	return viewer != nil && r.CanBeModifiedBy(*viewer)
+}
+
 // ReviewDetail は、author と、review 由来の統計を含む対象 burger を持つ
 // review であり、review endpoint の payload である。統計は、まだ計算されて
 // いない場合はゼロである。
@@ -82,6 +106,9 @@ type ReviewDetail struct {
 	// である。PhotoKey から usecase が（photo storage を介して）導出する。
 	// domain 自身は決して URL を組み立てない。
 	PhotoURL *string
+	// CanEdit は、viewer がこの review を編集・削除できるかである。viewer ごとに
+	// 決まる値なので、usecase が CanBeModifiedByViewer で設定する（読み取ったままでは false）。
+	CanEdit bool
 }
 
 // ---- repository の契約(実装は adapter/repository) ----
