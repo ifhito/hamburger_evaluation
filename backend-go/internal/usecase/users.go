@@ -11,15 +11,18 @@ import (
 // Users は、ユーザー管理の use case を実装する。viewer から見えるビューでの
 // 詳細、および本人のみが行えるプロフィールの更新とアカウントの削除である。
 // 読み取りは query、書き込みは domain の書き込みオブジェクト（domain.Users）だけを
-// 通し、repository には依存しない。
+// 通し、repository には依存しない。アカウントの削除と、そのユーザーの review が付く
+// burger の統計の再計算は、1 つの UnitOfWork.Do（同一トランザクション）の中で組み立てる。
 type Users struct {
 	query  UserQuery
 	users  *domain.Users
+	uow    UnitOfWork
+	recalc *BurgerStatsRecalculator
 	hasher PasswordHasher
 }
 
-func NewUsers(query UserQuery, users *domain.Users, hasher PasswordHasher) *Users {
-	return &Users{query: query, users: users, hasher: hasher}
+func NewUsers(query UserQuery, users *domain.Users, uow UnitOfWork, recalc *BurgerStatsRecalculator, hasher PasswordHasher) *Users {
+	return &Users{query: query, users: users, uow: uow, recalc: recalc, hasher: hasher}
 }
 
 // Get は、discard されていないユーザー 1 人を、viewer（nil = 匿名）から見える
@@ -120,7 +123,11 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 
 // Delete は対象ユーザーのアカウントを soft delete する。load（404。所有者で
 // なくても同じ）、domain の本人管理ルール（403）、そして discard の順で
-// 行い、hard DELETE は決して行わない。
+// 行い、hard DELETE は決して行わない。discard と、そのユーザーの kept な review が付く
+// すべての burger の統計の再計算（burger_id の昇順）は、1 つのトランザクションで行う。
+// ユーザーの review 自体は kept のままで（reviews.discarded_at は書き込まれない。Rails parity。
+// 非表示化は読み取り側の u.discarded_at フィルタで行う）、再計算が、discard 済みの
+// ユーザーの review を統計から外す。
 func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string) error {
 	target, err := s.query.GetActiveUserByID(ctx, targetID)
 	if err != nil {
@@ -129,7 +136,13 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 	if !viewer.Manages(target.ID) {
 		return domain.ErrForbidden
 	}
-	if err := s.users.Discard(ctx, targetID); err != nil {
+	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
+		if err := tx.Users.Discard(ctx, targetID); err != nil {
+			return err
+		}
+		return s.recalc.RecalculateReviewedBy(ctx, tx, targetID)
+	})
+	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}
 	return nil

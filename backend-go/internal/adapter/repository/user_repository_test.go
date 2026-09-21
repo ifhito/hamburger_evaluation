@@ -3,7 +3,6 @@ package repository_test
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 // strPtr は、domain.ProfileChanges のフィールド用に、s へのポインタを返す。
@@ -122,8 +120,6 @@ func TestUserRepositoryManagement(t *testing.T) {
 	repo := repository.NewUserRepository(conn)
 	userQuery := query.NewUserQuery(conn)
 	reviewRepo := repository.NewReviewRepository(conn)
-	reviewQuery := query.NewReviewQuery(conn)
-	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, $3, $4) RETURNING id`
 	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", "digest-alice", false)
@@ -135,9 +131,9 @@ func TestUserRepositoryManagement(t *testing.T) {
 	}
 
 	// active な shop 1 つが 2 つの burger を提供している："shared" は victim と
-	// alice の両方が review し、"solo" は victim だけが review した。victim の
-	// discard 後、shared は alice の review だけに減り、solo は stats がゼロの
-	// 行にならなければならない。
+	// alice の両方が review し、"solo" は victim だけが review した。discard 後の
+	// stats の再計算と、読み取り経路の見え方は、トランザクションを持つ usecase の
+	// UnitOfWork のテスト（adapter/uow）が扱う。
 	shop := insertRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
@@ -149,9 +145,9 @@ func TestUserRepositoryManagement(t *testing.T) {
 			t.Fatalf("link shop %d burger %d: %v", shop, burgerID, err)
 		}
 	}
-	victimShared := mustCreateReview(ctx, t, reviewRepo, 2, "meh", victim, shared)
-	aliceShared := mustCreateReview(ctx, t, reviewRepo, 4, "good", alice, shared)
-	victimSolo := mustCreateReview(ctx, t, reviewRepo, 5, "only mine", victim, solo)
+	mustCreateReview(ctx, t, reviewRepo, 2, "meh", victim, shared)
+	mustCreateReview(ctx, t, reviewRepo, 4, "good", alice, shared)
+	mustCreateReview(ctx, t, reviewRepo, 5, "only mine", victim, solo)
 
 	t.Run("UpdateUserProfile は指定されたフィールドだけを更新する", func(t *testing.T) {
 		updated, err := repo.UpdateUserProfile(ctx, bob, domain.ProfileChanges{Username: strPtr("bobby")})
@@ -230,10 +226,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("DiscardUser は user に discard 時刻を刻み、その user が review した burger の stats を再計算する", func(t *testing.T) {
-		if got := requireConsistentStats(ctx, t, conn, shared); got.ReviewCount != 2 {
-			t.Fatalf("shared stats before discard = %+v, want count 2", got)
-		}
+	t.Run("DiscardUser は user に discard 時刻を刻み、review には触れない", func(t *testing.T) {
 		if err := repo.DiscardUser(ctx, victim); err != nil {
 			t.Fatalf("DiscardUser returned error: %v", err)
 		}
@@ -257,18 +250,6 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if keptReviews != 2 {
 			t.Errorf("victim kept reviews = %d, want 2 (reviews must not be discarded)", keptReviews)
 		}
-		// shared は alice の review だけに減る。alice の review は
-		// 影響を受けない。
-		sharedStats := requireConsistentStats(ctx, t, conn, shared)
-		if sharedStats.ReviewCount != 1 || sharedStats.AverageRating != 4.0 {
-			t.Errorf("shared stats after discard = %+v, want only alice's rating 4", sharedStats)
-		}
-		// solo は、victim だけが review したので、ゼロの行になる。
-		soloStats := requireConsistentStats(ctx, t, conn, solo)
-		want := storedBurgerStats{ReviewCount: 0, AverageRating: 0.0, WeightedScore: 0.0, Confidence: 0.0, CalculatedAt: soloStats.CalculatedAt}
-		if soloStats != want {
-			t.Errorf("solo stats after discard = %+v, want the zero row", soloStats)
-		}
 	})
 
 	t.Run("2 回目の discard と存在しない id の discard は ErrUserNotFound になる", func(t *testing.T) {
@@ -277,46 +258,6 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 		if err := repo.DiscardUser(ctx, uid.N(99999)); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrUserNotFound)
-		}
-	})
-
-	t.Run("読み取り経路は discard 済みの user の kept な review を隠す", func(t *testing.T) {
-		// フィード：alice の review だけが残り、表示される stats は再計算された
-		// burger_stats の行（count 1）と一致する。
-		feed, _, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
-		if err != nil {
-			t.Fatalf("ListReviews returned error: %v", err)
-		}
-		if got, want := reviewIDs(feed), []int64{aliceShared.ID}; !reflect.DeepEqual(got, want) {
-			t.Fatalf("feed ids = %v, want %v (victim's reviews hidden)", got, want)
-		}
-		sharedStats := requireConsistentStats(ctx, t, conn, shared)
-		if feed[0].Burger.ReviewCount != sharedStats.ReviewCount || feed[0].Burger.ReviewCount != int64(len(feed)) {
-			t.Errorf("displayed review count = %d, want burger_stats %d = %d displayed reviews",
-				feed[0].Burger.ReviewCount, sharedStats.ReviewCount, len(feed))
-		}
-		// 詳細：discard 済みの author の review は、存在しない review と
-		// 区別がつかない。alice の review には引き続き到達できる。
-		if _, err := reviewQuery.GetReview(ctx, victimShared.ID); !errors.Is(err, domain.ErrReviewNotFound) {
-			t.Errorf("GetReview(victim shared) = %v, want %v", err, domain.ErrReviewNotFound)
-		}
-		if _, err := reviewQuery.GetReview(ctx, victimSolo.ID); !errors.Is(err, domain.ErrReviewNotFound) {
-			t.Errorf("GetReview(victim solo) = %v, want %v", err, domain.ErrReviewNotFound)
-		}
-		if _, err := reviewQuery.GetReview(ctx, aliceShared.ID); err != nil {
-			t.Errorf("GetReview(alice) returned error: %v", err)
-		}
-		// shop の review：alice の review だけが一覧に載る。
-		shopReviews, err := shopQuery.ListShopReviews(ctx, shop)
-		if err != nil {
-			t.Fatalf("ListShopReviews returned error: %v", err)
-		}
-		ids := make([]int64, 0, len(shopReviews))
-		for _, r := range shopReviews {
-			ids = append(ids, r.ID)
-		}
-		if want := []int64{aliceShared.ID}; !reflect.DeepEqual(ids, want) {
-			t.Errorf("shop review ids = %v, want %v (victim's review hidden)", ids, want)
 		}
 	})
 }

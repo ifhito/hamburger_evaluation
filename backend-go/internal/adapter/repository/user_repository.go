@@ -94,36 +94,20 @@ func (r *UserRepository) UpdateUserProfile(ctx context.Context, id string, chang
 	return rowmap.User(row), nil
 }
 
-// DiscardUser は user を soft delete し（users.discarded_at に時刻を刻み、
-// hard DELETE は決して行わない）、その user の kept な review が触れている
-// すべての burger の burger_stats を再計算する。すべて 1 つの
-// トランザクションで行う。存在しない user や、すでに discard 済みの user は
-// どの行にも一致せず、domain.ErrUserNotFound を返す。user の review 自体は
-// kept のままである（reviews.discarded_at は決して書き込まれない。
-// Rails parity。非表示化は読み取り側の u.discarded_at フィルタで行う）。
-// ただし、ListBurgerReviewFacts が discard 済みの user の review を除外する
-// ので、再計算によって、それらの review は stats から外れる。
+// DiscardUser は user を soft delete する（users.discarded_at に時刻を刻み、
+// hard DELETE は決して行わない）。存在しない user や、すでに discard 済みの user は
+// どの行にも一致せず、domain.ErrUserNotFound を返す。user の review 自体は kept のままである
+// （reviews.discarded_at は決して書き込まれない。Rails parity。非表示化は読み取り側の
+// u.discarded_at フィルタで行う）。その review が付く burger の統計は、トランザクションを
+// 持つ usecase が、同じトランザクションで再計算する。
 func (r *UserRepository) DiscardUser(ctx context.Context, id string) error {
-	return withTx(ctx, r.db, "discard user", func(q *sqlcgen.Queries) error {
-		if _, err := q.DiscardUser(ctx, id); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("discard user: %w", domain.ErrUserNotFound)
-			}
-			return fmt.Errorf("discard user: %w", err)
+	if _, err := r.q.DiscardUser(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("discard user: %w", domain.ErrUserNotFound)
 		}
-		burgerIDs, err := q.ListUserKeptReviewBurgerIDs(ctx, id)
-		if err != nil {
-			return fmt.Errorf("discard user: list review burgers: %w", err)
-		}
-		// クエリは id を昇順で返す。これは recalculateBurgerStats の、複数
-		// burger にわたるロック順序のルールである（デッドロックの回避）。
-		for _, burgerID := range burgerIDs {
-			if err := recalculateBurgerStats(ctx, q, burgerID); err != nil {
-				return fmt.Errorf("discard user: %w", err)
-			}
-		}
-		return nil
-	})
+		return fmt.Errorf("discard user: %w", err)
+	}
+	return nil
 }
 
 // mapUserWriteError は、user の書き込みで生じたストレージのエラーを domain の
