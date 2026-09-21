@@ -234,3 +234,19 @@ func TestFlowCookieHoldsSeveralFlows(t *testing.T) {
 		}
 	})
 }
+
+func TestGoogleFlowCookiePath(t *testing.T) {
+	cases := map[string]string{
+		"/api/auth/google/callback":      "/api",
+		"/auth/google/callback":          "/",
+		"/v1/api/auth/google/callback":   "/v1/api",
+		"":                               "/",
+		"/custom/callback":               "/custom/callback", // 想定外の設定: 戻り先の path のまま(手続きは 1 つだけ)
+		"/api/auth/google/callback/more": "/api/auth/google/callback/more",
+	}
+	for in, want := range cases {
+		if got := googleFlowCookiePath(in); got != want {
+			t.Errorf("googleFlowCookiePath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
