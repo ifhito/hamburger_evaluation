@@ -104,7 +104,7 @@ func TestOAuthConsentsDescribe(t *testing.T) {
 		}
 		want := usecase.ConsentView{
 			ClientID: "app", ClientName: "アプリ", ConsentRequired: true,
-			Scopes: []domain.OAuthScope{{Name: domain.OAuthScopeRead, Description: "ショップ・レビュー・プロフィールを読む"}},
+			Scopes: []domain.OAuthScope{{Name: domain.OAuthScopeRead, Description: "View shops, reviews and profiles"}},
 		}
 		if !reflect.DeepEqual(view, want) {
 			t.Errorf("view = %+v, want %+v", view, want)
