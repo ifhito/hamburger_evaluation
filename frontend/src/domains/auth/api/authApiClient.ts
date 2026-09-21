@@ -21,7 +21,7 @@ export class GoogleExchangeError extends ApiError {
   constructor(cause: ApiError) {
     super(cause.messages, cause.status, cause.body);
     this.name = "GoogleExchangeError";
-    const returnTo = (cause.body as { return_to?: unknown } | null | undefined)?.return_to;
+    const returnTo = (cause.body as { returnTo?: unknown } | null | undefined)?.returnTo;
     this.returnTo = typeof returnTo === "string" ? returnTo : "";
   }
 }

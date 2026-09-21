@@ -65,7 +65,9 @@ export function buildApiClient(getToken?: () => string | null) {
         const data = error.response.data as { error?: string; errors?: string[] };
         const messages =
           data.errors ?? (data.error ? [data.error] : ["An error occurred"]);
-        return Promise.reject(new ApiError(messages, error.response.status, data));
+        // 本文の項目(errors・error 以外)も、成功の応答と同じく、camelCase にして持つ(読む側が、snake_case を知らなくて済む)。
+        const body = camelcaseKeys(data as Record<string, unknown>, { deep: true });
+        return Promise.reject(new ApiError(messages, error.response.status, body));
       }
       return Promise.reject(error);
     }

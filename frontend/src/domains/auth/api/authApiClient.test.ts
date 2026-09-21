@@ -3,32 +3,32 @@ import type { InternalAxiosRequestConfig } from "axios";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { GoogleExchangeError, authApi, authApiClient } from "./authApiClient";
 
+let sent: { method?: string; url?: string; body?: unknown; withCredentials?: boolean } = {};
+const originalAdapter = authApiClient.defaults.adapter;
+
+const respondWith = (status: number, data: unknown) => {
+  authApiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+    sent = { method: config.method, url: config.url, body: config.data ? JSON.parse(config.data as string) : undefined, withCredentials: config.withCredentials };
+    const response = { data, status, statusText: "", headers: {}, config };
+    if (status >= 400) {
+      throw Object.assign(new Error("request failed"), { isAxiosError: true, response, config });
+    }
+    return response;
+  };
+};
+
+beforeEach(() => {
+  sent = {};
+  vi.stubGlobal("localStorage", { getItem: () => null });
+});
+afterEach(() => {
+  authApiClient.defaults.adapter = originalAdapter;
+  vi.unstubAllGlobals();
+});
+
 // authApiClient は axios のインスタンスなので、adapter を差し替えて、実際に送られるリクエスト
 // (メソッド・パス・snake_case に変換された本文)と、応答の変換を確かめる。
 describe("authApi の signup と、メールのリンクでの確認", () => {
-  let sent: { method?: string; url?: string; body?: unknown; withCredentials?: boolean } = {};
-  const originalAdapter = authApiClient.defaults.adapter;
-
-  const respondWith = (status: number, data: unknown) => {
-    authApiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
-      sent = { method: config.method, url: config.url, body: config.data ? JSON.parse(config.data as string) : undefined, withCredentials: config.withCredentials };
-      const response = { data, status, statusText: "", headers: {}, config };
-      if (status >= 400) {
-        throw Object.assign(new Error("request failed"), { isAxiosError: true, response, config });
-      }
-      return response;
-    };
-  };
-
-  beforeEach(() => {
-    sent = {};
-    vi.stubGlobal("localStorage", { getItem: () => null });
-  });
-  afterEach(() => {
-    authApiClient.defaults.adapter = originalAdapter;
-    vi.unstubAllGlobals();
-  });
-
   it("signup は POST /signup にキーを snake_case にして送り、202 の message を返す", async () => {
     respondWith(202, { message: "Confirmation email sent" });
 
@@ -73,29 +73,6 @@ describe("authApi の signup と、メールのリンクでの確認", () => {
 });
 
 describe("authApi の Google でのサインイン", () => {
-  let sent: { method?: string; url?: string; body?: unknown; withCredentials?: boolean } = {};
-  const originalAdapter = authApiClient.defaults.adapter;
-
-  const respondWith = (status: number, data: unknown) => {
-    authApiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
-      sent = { method: config.method, url: config.url, body: config.data ? JSON.parse(config.data as string) : undefined, withCredentials: config.withCredentials };
-      const response = { data, status, statusText: "", headers: {}, config };
-      if (status >= 400) {
-        throw Object.assign(new Error("request failed"), { isAxiosError: true, response, config });
-      }
-      return response;
-    };
-  };
-
-  beforeEach(() => {
-    sent = {};
-    vi.stubGlobal("localStorage", { getItem: () => null });
-  });
-  afterEach(() => {
-    authApiClient.defaults.adapter = originalAdapter;
-    vi.unstubAllGlobals();
-  });
-
   it("exchangeGoogleCode は POST /auth/google/exchange にコードを送り、サインインの成功を camelCase で返す", async () => {
     respondWith(200, { id: "u1", username: "carol", email: "c@example.com", admin: false, can_moderate: false, token: "jwt", return_to: "/shops" });
 
