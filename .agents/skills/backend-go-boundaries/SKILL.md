@@ -15,7 +15,7 @@ metadata:
 ## 概要
 
 `backend-go/` 配下の変更にはこのスキルを使う。この Go API は `frontend/` の
-React SPA にサービスを提供し、クリーンアーキテクチャに従う。スタック: Go 1.22+ の
+React SPA にサービスを提供し、クリーンアーキテクチャに従う。スタック: Go 1.27 の
 標準 `net/http` ルーティング + `sqlc` + PostgreSQL 16。Web フレームワークも ORM も使わない。
 
 ## レイアウトと依存関係のルール

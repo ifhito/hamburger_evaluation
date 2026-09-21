@@ -2,7 +2,7 @@
 
 ## 技術スタック
 
-Go 1.22+ の API(標準 `net/http` + sqlc + pgx)と React 19 / TypeScript / Vite の SPA を PostgreSQL 16 で動かす monorepo。API のエンドポイント一覧とデータベーススキーマは `CLAUDE.md` を参照する。
+Go 1.27 の API(標準 `net/http` + sqlc + pgx)と React 19 / TypeScript / Vite の SPA を PostgreSQL 16 で動かす monorepo。API のエンドポイント一覧とデータベーススキーマは `CLAUDE.md` を参照する。
 
 ## ビルドとテスト
 

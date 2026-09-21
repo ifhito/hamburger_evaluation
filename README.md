@@ -4,7 +4,7 @@
 
 ## Stack
 
-- `backend-go/`: Go 1.22+, net/http + sqlc + pgx, PostgreSQL 16, JWT auth
+- `backend-go/`: Go 1.27, net/http + sqlc + pgx, PostgreSQL 16, JWT auth
 - `frontend/`: React 19, TypeScript, Vite, React Router, SWR, Jotai, axios, Storybook
 
 ## Repository Layout
