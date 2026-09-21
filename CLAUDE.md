@@ -204,7 +204,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `POST /signup/confirm` — 確認メールのリンクの平文トークン(`{"token":"…"}`)でアカウントを作成する。成功すると従来の signup と同じ 201 `{id, username, email, admin, can_moderate, token}`(`can_moderate` は login・`GET /me` と共通)を返し、そのままログイン状態にできる。期限切れ・存在しない・改ざん・使用済みのトークン(と、確認までの間に同じ email のユーザーが作られていた場合)は、区別できない同一の 400 `{"error":"Confirmation token is invalid or has expired"}`
 - `POST /login` — 認証して JWT トークンを受け取る (email とパスワードは signup と同じ規則を `domain.ValidateCredentials` で判定し、満たさなければ照合の前に 422。規則を満たしたうえで誤っていれば 401 `Invalid email or password`)
 - `GET /me` — Bearer トークンから解決した現在のユーザー(`id`・`username`・`email`・`admin`・`can_moderate`)。無効・期限切れのトークンは 401。frontend は、トークンの有効性を自分で判断せず、起動時にこの応答でログイン状態を復元する。`can_moderate`(moderation ができるか。domain の `User.CanModerate`)は、`POST /login`・`POST /signup` の応答にも含まれ、frontend は `admin` から権限を導かず、管理画面の出し分けをこの値で行う (要認証)
-- `GET /meta` — frontend が描画に使う、domain のルールの値(今は `{"rating": {"min": 1, "max": 5}}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは domain の `MinRating` / `MaxRating` だけで、frontend は範囲の定数を持たず、評価の選択肢・★の描画・絞り込みにこの値を使う
+- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、写真の上限は `photo.MaxEdge` と handler の `maxPhotoBytes`)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小にこの値を使う
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**
@@ -220,6 +220,10 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `DELETE /reviews/:id` — レビューの削除 (要認証)
 
 **写真**
+- レビューに付ける写真(`POST /reviews`・`PUT /reviews/:id` の `photo` パート)は、**JPEG・PNG・WebP** だけを受け付ける。形式は、ファイルの中身で判別する(申告された Content-Type は見ない)。保存は、JPEG は JPEG、PNG は PNG、WebP は JPEG で、長辺を 1,600 px 以下に縮小して再エンコードする(拡大はしない)。向きは、保存する画素が正立するように直す
+- **HEIC / HEIF は受け付けない**(422)。iPhone の既定の形式だが、対応しないことにした。理由: サーバーで変換するには、デコーダ(WASM の libheif。LGPL)の依存が要り、メモリを大きく使う(1,600 万画素で約 490 MiB)うえ、iPhone 15 以降の標準の写真(約 2,447 万画素)は、コンテナの上限(1 GiB)に収まらない。PC の Chrome は HEIC を読めないので、救うにはブラウザ側にもデコーダが要る。**iPhone の Safari は、選択欄(`accept`)が JPEG・PNG・WebP だけのとき、写真を JPEG に変換して渡す**ので、iPhone からの投稿は通る。frontend の `accept` に HEIC / HEIF を加えないこと(加えると、iPhone が HEIC のまま渡す)。検出は、ファイルの先頭の `ftyp` ボックスの主なブランド(`heic`・`heix`・`mif1`・`heif` など)だけを見る(`photo.looksLikeHEIF`)
+- 上限(すべて backend で判定する): ファイルは 5 MiB、寸法は 1 辺 10,000 px かつ 2,400 万画素。寸法は、デコードの前に、ヘッダーから読んで確かめる。frontend は、送る前に、長辺が `GET /meta` の `photo.max_edge` を超える(またはファイルが `photo.max_bytes` を超える)写真を縮小する
+- 422 のメッセージは原因ごとに分かれる: `Photo must be a JPEG, PNG, or WebP image`(対応しない形式・壊れている)、`Photo must be a JPEG, PNG, or WebP image (HEIC/HEIF is not supported)`(HEIC / HEIF。対応しない理由が分かる)、`Photo dimensions are too large (max 10000px per side and 24 megapixels)`(寸法)、`Photo is too large (max 5MB)`(ファイルの大きさ)
 - `GET /photos/*` — ディスクに保存されたレビュー写真を配信 (認証不要。末尾が `/` のディレクトリ path は一覧せず 404、末尾 `/` なしは 301 で `/` 付きへ転送されてから 404)。`PHOTO_STORAGE` が `disk` (既定) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 
 **ユーザー**
@@ -297,7 +301,7 @@ frontend/src/
 ├── domains/      # auth、reviews、shops、users
 ├── api/          # API クライアント / HTTP 境界
 ├── states/       # グローバル state
-├── lib/          # 共通ユーティリティ (date、i18n、rating)
+├── lib/          # 共通ユーティリティ (date、i18n、rating、photoResize)
 └── components/   # 共通 UI コンポーネント
 ```
 
@@ -305,6 +309,12 @@ frontend/src/
 
 - ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる。
 - 開発時は Vite の proxy が `/api` を Go API へ転送する。転送先の既定は `http://host.docker.internal:8080` で、`VITE_API_PROXY_TARGET` で変更できる。レビュー写真の `/photos` も同じ転送先へ proxy される(本番の nginx にも `/photos/` がある)。
+
+### 写真の送信
+
+- 写真を選ぶ input の `accept` は、**JPEG・PNG・WebP だけ**にする。HEIC / HEIF を加えない: iPhone の Safari は、`accept` が JPEG・PNG・WebP だけのとき、写真を JPEG に変換して渡す(加えると、HEIC のまま渡り、backend は HEIC / HEIF を受け付けない)。
+- 送る前に、`useCreateReview` / `useUpdateReview` が `shrinkPhoto` を通す。長辺が上限(`GET /meta` の `photo.maxEdge`)を超える、またはファイルが `photo.maxBytes` を超えるときだけ、canvas で縮小した JPEG にする(向きは `createImageBitmap` の `imageOrientation: "from-image"` で画素に反映する)。**上限の値は frontend に書かない**(backend の値を使う)。
+- 縮小できないとき(ブラウザが画像を読み込めないなど)は、失敗にせず、元のファイルをそのまま送る。backend が受け付けるか、理由つきのメッセージ(422 の 4 種類。HEIC / HEIF は、対応しない理由つき)を返し、それを画面にそのまま出す。
 
 ### Frontend コマンド
 
@@ -348,6 +358,7 @@ docker compose -p hamburger-penpot -f design/docker-compose.yml --env-file desig
 ```
 
 - 書き出したデザイン(`.penpot`)は `design/files/` に置いて git で保存する(バイナリなので差分は読めない)。
+- いまの画面を再現したデザインは `design/files/hamburger-evaluation.penpot`(画面・部品・色と文字のスタイル)。画面を変えたら、`design/scripts/` で作り直す(手順は `design/README.md` の「いまの画面から作り直す」)。
 - ポートは 9001(既存の 8080・5173・5433 と重ならない)。Penpot は複数のコンテナで数 GiB のメモリを使うので、使わないときは `down` する。
 - `design/.env` は秘密(Penpot の鍵)を含む。エージェントは読まない(`.claude/settings.json` の deny 対象)。
 
