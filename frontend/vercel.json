@@ -3,6 +3,7 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://burger-stack-421794940461.asia-northeast1.run.app/:path*" }
+    { "source": "/api/:path*", "destination": "https://burger-stack-421794940461.asia-northeast1.run.app/:path*" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }

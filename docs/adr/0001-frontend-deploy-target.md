@@ -97,6 +97,47 @@ PR ごとに URL が変わるプレビュー環境は**事前登録できない*
 | DigitalOcean App Platform | 静的 3 つまで無料(帯域 1GB/月) | 帯域が小さすぎる |
 | GitHub Pages / Firebase Hosting | 無料 | リライト不可。B 方式(CORS 実装)が前提になる |
 
+## 実測(2026-09-22、Phase 6)
+
+同じビルド成果物を 4 社に配置し、転送先を Cloud Run(東京)にそろえて計測した。
+
+| ホスト | HTML p50 | `/api` 転送 p50 | deep link | 転送設定 |
+|---|---|---|---|---|
+| **Cloudflare Workers** | 54ms | **285ms** | ○ | JS 11 行 |
+| Render Static | **40ms** | 505ms | ○ | YAML 7 行 |
+| Netlify | 287ms | 827ms | ○ | TOML 9 行 |
+| Vercel | 44ms | **計測不能** | ○ | JSON 10 行 |
+
+参考: API 直叩きは 288ms。
+
+### 判明した点
+
+- **HTML の速さと転送の速さは連動しない。** Render は HTML が最速(40ms)だが転送は 3 位、
+  Cloudflare は HTML が 3 位だが転送は最速。**静的配信の速さだけで選ぶと API 経由で損をする**
+- **記述量の差は小さい。** 本 ADR では「Cloudflare はコードを書く手間がある」と減点していたが、
+  実際の差は 4 行しかなく、しかも転送は最速だった。**減点の根拠は薄かった**
+- **Vercel の制約が 3 つに増えた。** 非商用限定に加え、**既定で非公開**(Deployment Protection)、
+  さらに **50 回の計測で Bot 対策に遮断された**(`x-vercel-mitigated: challenge`)。
+  他の 3 社では同じ計測が通った
+- **Render は Rewrite と Redirect の取り違えで壊れる。** Redirect だとブラウザが直接 API に
+  飛ばされ、オリジンが変わって CORS で失敗する
+
+### 前提が変わった
+
+本 ADR は「API と同じ事業者に置く」ことを決定の根拠にしていたが、
+[ADR-0002](0002-backend-deploy-target.md) で API が Cloud Run になったため、
+**同居という選択肢自体が消えた**。4 社とも「API は別事業者」という同じ条件になり、
+比較としてはむしろ公平になった。
+
+### 決定を変える
+
+**第一候補を Cloudflare Workers にする。** 転送が最速で、帯域無制限・商用可という
+条件も唯一である。コードを書く手間は 4 行分でしかなかった。
+
+Vercel は制約が 3 つあり、候補から外す。
+
+詳細は `docs/benchmarks/phase6-summary.md` にある。
+
 ## 決定(案)
 
 API(ADR-0002)と同じ事業者に置く。
