@@ -46,26 +46,19 @@ type Shops struct {
 	photos PhotoURLs
 }
 
-// ShopsOption は、Shops の任意の依存を足す。
-type ShopsOption func(*Shops)
-
-// WithPhotoURLs は、ショップの写真のキーを公開 URL に直す写真の保存先を渡す。渡さないと、
-// ショップの写真の URL は nil になる(本番の配線(cmd/api)は必ず渡す)。
-func WithPhotoURLs(photos PhotoURLs) ShopsOption {
-	return func(s *Shops) { s.photos = photos }
-}
-
-func NewShops(query ShopQuery, shops *domain.Shops, opts ...ShopsOption) *Shops {
-	s := &Shops{query: query, shops: shops}
-	for _, opt := range opts {
-		opt(s)
+// NewShops は shop の use case を配線する。photos(ショップの写真のキーを公開 URL に直す写真の保存先)は
+// non-nil でなければならない(本番では disk か S3、テストでは fake)。渡し忘れて、写真の URL が黙って
+// null になることのないよう、nil の photos は、ここで fail-loud する(NewReviews と同じ)。
+func NewShops(query ShopQuery, shops *domain.Shops, photos PhotoURLs) *Shops {
+	if photos == nil {
+		panic("usecase.NewShops: nil PhotoURLs")
 	}
-	return s
+	return &Shops{query: query, shops: shops, photos: photos}
 }
 
-// withPhotoURL は、集計の写真のキーを公開 URL に直す(写真がない、または写真の保存先が渡されていないときは nil)。
+// withPhotoURL は、集計の写真のキーを公開 URL に直す(写真がないときは nil)。
 func (s *Shops) withPhotoURL(summary domain.ShopSummary) domain.ShopSummary {
-	if summary.PhotoKey != nil && s.photos != nil {
+	if summary.PhotoKey != nil {
 		url := s.photos.URL(*summary.PhotoKey)
 		summary.PhotoURL = &url
 	}

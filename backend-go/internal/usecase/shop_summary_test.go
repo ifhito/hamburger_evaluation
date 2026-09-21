@@ -32,7 +32,7 @@ func TestShopsListSummaries(t *testing.T) {
 			}, nil
 		},
 	}
-	shops := usecase.NewShops(query, domain.NewShops(&fakeShopRepo{}), usecase.WithPhotoURLs(stubPhotoURLs{}))
+	shops := usecase.NewShops(query, domain.NewShops(&fakeShopRepo{}), stubPhotoURLs{})
 
 	t.Run("集計は、一覧の全ショップ分を 1 回の問い合わせで取り、写真のキーは公開 URL に直して添える", func(t *testing.T) {
 		summaryCalls, gotIDs = 0, nil // このサブテストの中だけで数える(ほかのサブテストの呼び出しを含めない)
@@ -68,20 +68,19 @@ func TestShopsListSummaries(t *testing.T) {
 				return nil, boom
 			},
 		}
-		_, _, err := usecase.NewShops(failing, domain.NewShops(&fakeShopRepo{})).List(context.Background(), nil, "", 1, 20)
+		_, _, err := usecase.NewShops(failing, domain.NewShops(&fakeShopRepo{}), stubPhotoURLs{}).List(context.Background(), nil, "", 1, 20)
 		if !errors.Is(err, boom) {
 			t.Errorf("err = %v, want boom", err)
 		}
 	})
 
-	t.Run("写真の保存先を渡していないときは、写真のキーがあっても URL は nil になる", func(t *testing.T) {
-		list, _, err := usecase.NewShops(query, domain.NewShops(&fakeShopRepo{})).List(context.Background(), nil, "", 1, 20)
-		if err != nil {
-			t.Fatalf("List returned error: %v", err)
-		}
-		if list[0].Summary.PhotoURL != nil {
-			t.Errorf("PhotoURL = %v, want nil", *list[0].Summary.PhotoURL)
-		}
+	t.Run("写真の保存先が nil のときは、渡し忘れが黙って null になるのではなく、配線の時点で panic する", func(t *testing.T) {
+		defer func() {
+			if recover() == nil {
+				t.Error("NewShops(nil の PhotoURLs) が panic しなかった")
+			}
+		}()
+		usecase.NewShops(query, domain.NewShops(&fakeShopRepo{}), nil)
 	})
 }
 
@@ -94,7 +93,7 @@ func TestShopsGetSummary(t *testing.T) {
 			return map[string]domain.ShopSummary{ids[0]: domain.NewShopSummary(2, 3.5, strPtr("reviews/x.jpg"))}, nil
 		},
 	}
-	got, err := usecase.NewShops(query, domain.NewShops(&fakeShopRepo{}), usecase.WithPhotoURLs(stubPhotoURLs{})).
+	got, err := usecase.NewShops(query, domain.NewShops(&fakeShopRepo{}), stubPhotoURLs{}).
 		Get(context.Background(), nil, shop.ID)
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)

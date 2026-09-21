@@ -15,7 +15,6 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 func jsonKeys(t *testing.T, raw []byte) []string {
@@ -39,7 +38,7 @@ func TestShopSummaryFields(t *testing.T) {
 	repo.summaries = map[string]domain.ShopSummary{
 		uid.N(1): domain.NewShopSummary(3, 4.25, shopPtr("reviews/latest.jpg")),
 	}
-	router, aliceAuth, _, _ := newShopsRouter(t, repo, usecase.WithPhotoURLs(storage.NewDisk(t.TempDir(), "/photos")))
+	router, aliceAuth, _, _ := newShopsRouter(t, repo)
 
 	t.Run("一覧は、レビューのあるショップに写真の URL・平均評価(小数 1 桁)・件数を付け、レビューのないショップには null・null・0 を付ける", func(t *testing.T) {
 		rec := do(router, http.MethodGet, "/shops", "", aliceAuth)
@@ -161,7 +160,7 @@ func TestShopSummaryThroughRealQuery(t *testing.T) {
 
 	users, auth, _ := newAuthKit()
 	shopFake := &shopStoreFake{}
-	shops := usecase.NewShops(query.NewShopQuery(conn), domain.NewShops(shopFake), usecase.WithPhotoURLs(storage.NewDisk(t.TempDir(), "/photos")))
+	shops := shopsUsecase(query.NewShopQuery(conn), shopFake)
 	router := handler.NewRouter(okPinger, auth, unusedSignups(), shops,
 		reviewsUsecase(newReviewStoreFake(), storage.NewDisk(t.TempDir(), "/photos")), usersUsecase(users, hasherFake{}), nil, nil, nil)
 

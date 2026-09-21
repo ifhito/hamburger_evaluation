@@ -118,7 +118,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		photoFiles = handler.PhotoFileServer(cfg.PhotoDiskDir)
 	}
 
-	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)), usecase.WithPhotoURLs(photos))
+	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)), photos)
 	// 統計の再計算役(BurgerStatsRecalculator)は、その手順を持ち、現在時刻を外から受け取る。
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, photos)

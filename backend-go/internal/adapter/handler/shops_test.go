@@ -104,7 +104,7 @@ func (f *shopStoreFake) ListShopReviews(_ context.Context, shopID string) ([]dom
 
 // newShopsRouter は、auth kit と与えられた shop の fake で router を配線し、
 // 通常のユーザーと admin 用に発行した Bearer ヘッダーを返す。
-func newShopsRouter(t *testing.T, repo *shopStoreFake, opts ...usecase.ShopsOption) (router http.Handler, aliceAuth, adminAuth string, aliceID string) {
+func newShopsRouter(t *testing.T, repo *shopStoreFake) (router http.Handler, aliceAuth, adminAuth string, aliceID string) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
 	alice := users.seed("alice", "alice@example.com", "Password123!")
@@ -119,7 +119,7 @@ func newShopsRouter(t *testing.T, repo *shopStoreFake, opts ...usecase.ShopsOpti
 		t.Fatalf("issue admin token: %v", err)
 	}
 	reviewRepo := newReviewStoreFake()
-	return handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(repo, domain.NewShops(repo), opts...),
+	return handler.NewRouter(okPinger, auth, unusedSignups(), shopsUsecase(repo, repo),
 			reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
 			usersUsecase(users, hasherFake{}), nil, nil, nil),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID

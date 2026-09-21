@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
@@ -192,7 +193,7 @@ func TestShopSummaries(t *testing.T) {
 		}
 		countQueries := func(keyword string, perPage int) (queries, shops int) {
 			n := 0
-			shopsUC := usecase.NewShops(query.NewShopQuery(countingDB{conn: conn, n: &n}), domain.NewShops(nil))
+			shopsUC := usecase.NewShops(query.NewShopQuery(countingDB{conn: conn, n: &n}), domain.NewShops(nil), storage.NewDisk("", "/photos"))
 			list, _, err := shopsUC.List(ctx, nil, keyword, 1, perPage)
 			if err != nil {
 				t.Fatalf("List returned error: %v", err)

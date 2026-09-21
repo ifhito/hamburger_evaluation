@@ -15,7 +15,7 @@ import (
 // トランザクションの代わりをする。
 
 func newShops(query usecase.ShopQuery, repo domain.ShopRepository) *usecase.Shops {
-	return usecase.NewShops(query, domain.NewShops(repo))
+	return usecase.NewShops(query, domain.NewShops(repo), stubPhotoURLs{})
 }
 
 func newReviews(query usecase.ReviewQuery, repo domain.ReviewRepository, photos usecase.PhotoStorage) *usecase.Reviews {
