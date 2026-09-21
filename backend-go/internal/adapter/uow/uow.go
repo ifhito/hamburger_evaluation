@@ -61,6 +61,9 @@ func (u *UnitOfWork) Do(ctx context.Context, fn func(ctx context.Context, tx use
 		Users:       domain.NewUsers(repository.NewUserRepository(pgxTx)),
 		BurgerStats: domain.NewBurgerStats(repository.NewBurgerStatRepository(pgxTx)),
 		Stats:       query.NewBurgerStatsQuery(pgxTx),
+		// 確認待ちの signup: 書き込みと読み取りの両方が、同じトランザクションに結び付く。
+		SignupVerifications: domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pgxTx)),
+		PendingSignups:      query.NewSignupVerificationQuery(pgxTx),
 	}
 	if err := fn(ctx, tx); err != nil {
 		return err

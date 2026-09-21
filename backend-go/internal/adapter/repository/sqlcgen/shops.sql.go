@@ -136,7 +136,7 @@ type ListShopReviewsRow struct {
 
 // その shop の、discard されていない user の、discard されていない review。
 // 新しい順。u.discarded_at フィルタは、discard 済みの user の（まだ kept な）
-// review を shop 詳細から隠す（S8）。
+// review を shop 詳細から隠す。
 func (q *Queries) ListShopReviews(ctx context.Context, shopID string) ([]ListShopReviewsRow, error) {
 	rows, err := q.db.Query(ctx, listShopReviews, shopID)
 	if err != nil {

@@ -59,7 +59,7 @@ func auditWalk(t *testing.T, at string, v any) []string {
 
 // TestOtherEndpointsDoNotLeakUserPrivateFields は、user 以外のエンドポイント
 // （/reviews、/shops、/admin/shops）が、どの viewer に対しても email と admin を
-// 返さないことを、本物の DB と router で固定する（AC8 の監査）。他人の email を
+// 返さないことを、本物の DB と router で固定する。他人の email を
 // 持つユーザーが作成者・投稿者として絡んだデータを用意し、レスポンスの JSON を再帰的に
 // 走査して、email/admin 系のキーが存在しないこと、body に email 文字列（"@"）が
 // 含まれないこと、ユーザー参照が {id, username} だけであることを確かめる。

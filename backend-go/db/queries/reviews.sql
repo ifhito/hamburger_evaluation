@@ -10,7 +10,7 @@ RETURNING *;
 -- （N+1 なし）。shops_burgers に対する単純な JOIN ではなく EXISTS を使うのは、
 -- 複数の active な shop に紐づく burger でも、ちょうど 1 行だけが返るように
 -- するためである。u.discarded_at フィルタは、discard 済みの user の
--- （まだ kept な）review をフィードから隠す（S8）。
+-- （まだ kept な）review をフィードから隠す。
 -- 4 つの narg フィルタ（NULL = 未指定、AND で結合される）のうち、
 -- filter_user_id 以外は Rails の ReviewQuery に対応する：
 -- filter_rating は rating の完全一致である（範囲外の値が smallint 列で
@@ -59,7 +59,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- discard されていない user の、discard されていない review 1 件（author、
 -- burger、統計付き）。公開の詳細 endpoint と、編集・削除の認可のための
 -- 読み込み（user_id が所有者チェックを担う）の両方に使われる。author が
--- discard 済みの review は、存在しない review と区別がつかなくなる（S8）。
+-- discard 済みの review は、存在しない review と区別がつかなくなる。
 SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
@@ -93,7 +93,7 @@ WHERE id = $1 AND discarded_at IS NULL
 RETURNING *;
 
 -- name: UpdateReviewPhotoKey :one
--- 列を限定した写真の差し替え（S10）：photo_key だけを更新し
+-- 列を限定した写真の差し替え：photo_key だけを更新し
 -- （rating/comment/discarded_at は決して更新しない）、review がまだ kept な
 -- 間だけ更新する。photo_key は burger_stats に影響しないので、
 -- 再計算は不要である。

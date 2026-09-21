@@ -22,7 +22,7 @@ const pgUniqueViolation = "23505"
 
 // UserRepository は、sqlc 生成のクエリ上で domain.UserRepository（書き込み）を
 // 実装する。ストレージの詳細（sqlc の行、pgtype、pg のエラーコード）はこの境界の
-// 内側にとどまり、呼び出し側には domain の型とエラーしか見えない。S8 の書き込み
+// 内側にとどまり、呼び出し側には domain の型とエラーしか見えない。書き込み
 // （プロフィールの更新、user の discard）はトランザクションで行われるので、
 // 接続は ReviewRepository のものと同様に Begin できなければならない。読み取りは
 // adapter/query の UserQuery が担う。

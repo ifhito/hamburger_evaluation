@@ -98,7 +98,7 @@ func TestReviewQuery(t *testing.T) {
 		// cheese の review は、cheese が active な 2 つの shop に link されて
 		// いても、ちょうど 1 回だけ現れなければならない（行を増殖させる JOIN
 		// ではなく EXISTS）。pending だけ・rejected だけの burger の review と、
-		// discard 済みの review は現れない（SQL レベルでの AC5/AC6）。
+		// discard 済みの review は現れない。
 		if got, want := reviewIDs(reviews), []string{tieHi, tieLo, rOld}; !reflect.DeepEqual(got, want) {
 			t.Fatalf("ids = %v, want %v", got, want)
 		}
@@ -275,7 +275,7 @@ func TestReviewQuery(t *testing.T) {
 		}
 	})
 
-	t.Run("AC6 discard 済みの review と存在しない review は ErrReviewNotFound になる", func(t *testing.T) {
+	t.Run("discard 済みのレビューと存在しないレビューは、ErrReviewNotFound になる", func(t *testing.T) {
 		for name, id := range map[string]string{"discarded": rDiscarded, "unknown": uid.N(99999)} {
 			if _, err := reviewQuery.GetReview(ctx, id); !errors.Is(err, domain.ErrReviewNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrReviewNotFound)
@@ -399,7 +399,7 @@ func TestReviewQueryListByUser(t *testing.T) {
 	}
 	byUser := func(id string) usecase.ReviewListFilter { return usecase.ReviewListFilter{UserID: &id} }
 
-	t.Run("AC1 UserID はその user の公開 review だけを新しい順に pagination して返す", func(t *testing.T) {
+	t.Run("ユーザー ID を指定すると、そのユーザーの公開レビューだけが、新しい順にページ分けして返る", func(t *testing.T) {
 		if got, want := list(t, byUser(alice), 20, 0), aliceIDs[:20]; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 1 = %v, want %v", got, want)
 		}
@@ -419,7 +419,7 @@ func TestReviewQueryListByUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 UserID は rating と AND で組み合わされる", func(t *testing.T) {
+	t.Run("ユーザー ID と評価を両方指定すると、両方に合うレビューだけが返る", func(t *testing.T) {
 		// alice の rating 5 だけが残る。alice の他の rating と、bob の rating 5 は
 		// 返らない。
 		rating := 5
@@ -430,7 +430,7 @@ func TestReviewQueryListByUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC4 discard 済みの user と存在しない user の id は空になる", func(t *testing.T) {
+	t.Run("退会済み(discard 済み)のユーザーと存在しないユーザーの id を指定すると、結果は空になる", func(t *testing.T) {
 		carolReview := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, "carol was here", carol, cheese, nil, base)
 		// discard する前は、carol の review は見える（このテストが空を検証する
 		// 意味を持つための前提）。
@@ -448,7 +448,7 @@ func TestReviewQueryListByUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC5 pending な shop の burger だけの review しかない user は空になり、公開ルールを迂回しない", func(t *testing.T) {
+	t.Run("承認待ちのショップのバーガーのレビューしかないユーザーの結果は空になり、公開のルールを迂回しない", func(t *testing.T) {
 		daveA := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "dave secret 1", dave, secret, nil, base)
 		daveB := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, "dave secret 2", dave, secret, nil, base.Add(time.Minute))
 		// UserID なしのフィードにも現れない（公開ルールの前提）。
@@ -462,7 +462,7 @@ func TestReviewQueryListByUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC5 UserID を指定しても discard 済みの review と非公開の burger の review は除外される", func(t *testing.T) {
+	t.Run("ユーザー ID を指定しても、discard 済みのレビューと、非公開のバーガーのレビューは除かれる", func(t *testing.T) {
 		kept := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, "erin kept", erin, cheese, nil, base)
 		dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 1, "erin discarded", erin, cheese, time.Now(), base.Add(time.Minute))
 		dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "erin on pending", erin, secret, nil, base.Add(2*time.Minute))
@@ -472,7 +472,7 @@ func TestReviewQueryListByUser(t *testing.T) {
 	})
 }
 
-// TestReviewQueryPhotoKey は、S10 の photo_key を、結合された読み取りクエリが返すことを検証する。
+// TestReviewQueryPhotoKey は、写真の key(photo_key)を、結合された読み取りクエリが返すことを検証する。
 // データは SQL の INSERT で用意する。
 func TestReviewQueryPhotoKey(t *testing.T) {
 	if testing.Short() {

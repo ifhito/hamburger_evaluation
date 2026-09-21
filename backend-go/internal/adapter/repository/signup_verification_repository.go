@@ -8,21 +8,21 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
 // SignupVerificationRepository は、sqlc 生成のクエリ上で
-// domain.SignupVerificationRepository（書き込み）を実装する。確認（users の作成と
-// 確認待ちの削除）は 1 つの transaction で行うので、接続は Begin できなければならない。
+// domain.SignupVerificationRepository（書き込み）を実装する。1 つの操作は 1 つの文で行い、
+// 複数の操作をまとめて 1 つのトランザクションにするのは、この型の呼び出し側（usecase の
+// UnitOfWork）の役目である。UnitOfWork の中では、db にトランザクション（pgx.Tx）が渡される。
 type SignupVerificationRepository struct {
-	db beginnerDBTX
-	q  *sqlcgen.Queries
+	q *sqlcgen.Queries
 }
 
-// NewSignupVerificationRepository は db（通常は共有の pgx pool）をラップする。
-func NewSignupVerificationRepository(db beginnerDBTX) *SignupVerificationRepository {
-	return &SignupVerificationRepository{db: db, q: sqlcgen.New(db)}
+// NewSignupVerificationRepository は db（通常は共有の pgx pool。UnitOfWork の中では pgx.Tx）を
+// ラップする。
+func NewSignupVerificationRepository(db sqlcgen.DBTX) *SignupVerificationRepository {
+	return &SignupVerificationRepository{q: sqlcgen.New(db)}
 }
 
 var _ domain.SignupVerificationRepository = (*SignupVerificationRepository)(nil)
@@ -48,42 +48,27 @@ func (r *SignupVerificationRepository) CreateSignupVerification(ctx context.Cont
 	return domain.SignupVerificationReceipt{Accepted: true, ID: row.ID, Generation: int(row.Generation)}, nil
 }
 
-// CreateUserFromSignupVerification は、tokenHash の期限内の確認待ちをロックし、その内容で
-// users を作成し、確認待ちを削除する。すべて 1 つの transaction で行う。行が見つからない
-// （期限切れ・存在しない・使用済み）ときは domain.ErrSignupTokenInvalid、同じ email の users が
-// すでにあるとき（unique violation）は domain.ErrEmailTaken を返し、どちらも rollback される。
-// 確認待ちを先にロックするので、同じトークンでの並行する確認は直列になり、2 件目は
-// ErrSignupTokenInvalid になる。
-func (r *SignupVerificationRepository) CreateUserFromSignupVerification(ctx context.Context, tokenHash string) (domain.User, error) {
-	var user domain.User
-	err := withTx(ctx, r.db, "confirm signup", func(q *sqlcgen.Queries) error {
-		pending, err := q.LockSignupVerificationByTokenHash(ctx, tokenHash)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("confirm signup: %w", domain.ErrSignupTokenInvalid)
-			}
-			return fmt.Errorf("confirm signup: lock verification: %w", err)
+// LockSignupVerification は、tokenHash の期限内の確認待ちの行を FOR UPDATE で排他ロックする。
+// 行の中身は返さない。行が見つからない（期限切れ・存在しない・使用済み）ときは、
+// domain.ErrSignupTokenInvalid を返す。トランザクションの中で呼べば、そのトランザクションが
+// 終わるまで、同じトークンを扱うほかの処理は待たされる。待っている間に先の処理が確認待ちを
+// 削除して確定すると、待っていた側は行が消えているのを見て、同じエラーになる。
+func (r *SignupVerificationRepository) LockSignupVerification(ctx context.Context, tokenHash string) error {
+	if _, err := r.q.LockSignupVerificationByTokenHash(ctx, tokenHash); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("lock signup verification: %w", domain.ErrSignupTokenInvalid)
 		}
-		row, err := q.CreateUser(ctx, sqlcgen.CreateUserParams{
-			Email:          pending.Email,
-			Username:       pending.Username,
-			PasswordDigest: pending.PasswordDigest,
-			// 新しいユーザーは決して admin にならない。昇格は signup の範囲外である。
-			Admin: false,
-		})
-		if err != nil {
-			return fmt.Errorf("confirm signup: create user: %w", mapUserWriteError(err))
-		}
-		if err := q.DeleteSignupVerification(ctx, pending.ID); err != nil {
-			return fmt.Errorf("confirm signup: delete verification: %w", err)
-		}
-		user = rowmap.User(row)
-		return nil
-	})
-	if err != nil {
-		return domain.User{}, err
+		return fmt.Errorf("lock signup verification: %w", err)
 	}
-	return user, nil
+	return nil
+}
+
+// DiscardSignupVerification は、id の確認待ちを削除する。
+func (r *SignupVerificationRepository) DiscardSignupVerification(ctx context.Context, id string) error {
+	if err := r.q.DeleteSignupVerification(ctx, id); err != nil {
+		return fmt.Errorf("discard signup verification: %w", err)
+	}
+	return nil
 }
 
 // DiscardExpiredSignupVerifications は、期限切れの確認待ちを最大 limit 件まで削除し、

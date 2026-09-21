@@ -26,7 +26,7 @@ services:
       # 署名および検証される。
       JWT_SECRET: ${JWT_SECRET:-}
       GOMEMLIMIT: 920MiB
-      # signup の確認メール(S16)。開発では、下の mailpit(認証なし・暗号化なし)へ送る。
+      # signup の確認メール。開発では、下の mailpit(認証なし・暗号化なし)へ送る。
       # 本番は SMTP_HOST・SMTP_PORT・SMTP_SECURITY(tls / starttls)・SMTP_USER・SMTP_PASSWORD を
       # 設定し、MAIL_FROM は検証済みの送信元にする(例は CLAUDE.md の「signup の確認メール」)。
       SMTP_HOST: mailpit
@@ -37,7 +37,7 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
     mem_limit: 1g
 
-  # 開発用のメール受信(S16)。api-go の確認メールを SMTP :1025(compose のネットワーク内だけ)で
+  # 開発用のメール受信。api-go の確認メールを SMTP :1025(compose のネットワーク内だけ)で
   # 受け取り、Web UI(http://localhost:8025)で読める。
   mailpit:
     image: axllent/mailpit:v1.22.3
