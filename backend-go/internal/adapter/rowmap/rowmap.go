@@ -81,3 +81,15 @@ func User(row sqlcgen.User) domain.User {
 		Admin:    row.Admin,
 	}
 }
+
+// UserIdentity は、sqlc の user_identities の行を domain.UserIdentity に変換する。
+func UserIdentity(row sqlcgen.UserIdentity) domain.UserIdentity {
+	return domain.UserIdentity{
+		ID:             row.ID,
+		UserID:         row.UserID,
+		Provider:       row.Provider,
+		ProviderUserID: row.ProviderUserID,
+		Email:          row.Email,
+		CreatedAt:      row.CreatedAt.Time,
+	}
+}

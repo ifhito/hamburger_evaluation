@@ -28,8 +28,8 @@ func NewUserQuery(db sqlcgen.DBTX) *UserQuery {
 var _ usecase.UserQuery = (*UserQuery)(nil)
 
 // GetActiveUserByEmail は、指定された email を持つ discard されていない
-// user をその password digest とともに返す。または domain.ErrUserNotFound を
-// 返す。
+// user をその password digest とともに返す。パスワードを持たないアカウントの digest は空文字列である。
+// 該当がなければ domain.ErrUserNotFound を返す。
 func (r *UserQuery) GetActiveUserByEmail(ctx context.Context, email string) (usecase.UserCredentials, error) {
 	row, err := r.q.GetActiveUserByEmail(ctx, email)
 	if err != nil {
@@ -38,7 +38,7 @@ func (r *UserQuery) GetActiveUserByEmail(ctx context.Context, email string) (use
 		}
 		return usecase.UserCredentials{}, fmt.Errorf("get active user by email: %w", err)
 	}
-	return usecase.UserCredentials{User: rowmap.User(row), PasswordDigest: row.PasswordDigest}, nil
+	return usecase.UserCredentials{User: rowmap.User(row), PasswordDigest: row.PasswordDigest.String}, nil
 }
 
 // GetActiveUserByID は、指定された id を持つ discard されていない user を

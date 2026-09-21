@@ -248,6 +248,27 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 
 **制限**: アプリの説明を取りに行く回数の制限(レート制限)は、まだない(SSRF の対策と、取得結果のキャッシュだけ)。
 
+### Google のアカウントでのサインイン
+
+メール + パスワードのほかに、Google のアカウントで、サインイン・新規登録・結び付けができる(`internal/adapter/googleauth`。認可コード + PKCE(S256)。ライブラリは `github.com/coreos/go-oidc/v3` と `golang.org/x/oauth2`)。`GOOGLE_CLIENT_ID` を設定したときだけ有効で、設定しなければ、`/auth/google/*` と `/me/identities*` は登録されず(404)、`GET /meta` の `login_providers` は空になる。Google Cloud での準備と手元での確かめ方は `docs/google-login-setup.md`。
+
+- 流れ: ① 画面の「Google でサインイン」が `GET /auth/google/start`(query の `return_to`)へ移動 → ② API が、手続きの秘密(state・nonce・PKCE の検証値・戻り先)を、暗号化した短命の cookie(`google_login_flow`。HttpOnly・SameSite=Lax・path は戻り先の path だけ。使い終わったら消す)に封じて、Google の認可の画面へ 302 → ③ Google が `GET /auth/google/callback` へ戻す。API が state を確かめ、認可コードを交換し、ID トークン(署名・発行者・宛先・有効期限・nonce・`email_verified`)を検証する → ④ **結果(成功も失敗も)は、短命(60 秒)・1 回限りの「画面へ渡すコード」に入れて**、frontend の `/auth/google/complete?code=…` へ 303 → ⑤ 画面が `POST /auth/google/exchange`(`{"code": "…"}`)で交換して、結果を受け取る。**ログインの証(JWT)は URL に載せず、交換の応答でだけ返す。**
+- 識別は、メールでなく、Google の `sub`(`user_identities.provider_user_id`)。結び付いていればサインイン。結び付いておらず、同じメール(大文字小文字を区別しない)の利用者がいなければ、パスワードなしで新規登録(ユーザー名は `domain.UsernameFromProfile`。あとで変更できる)。**同じメールの利用者がいるときは、自動では結び付けない**(409 と案内。パスワードでサインインして、プロフィールから結び付ける)。
+- 結び付け(ログイン済み): `POST /me/identities/google/link`(1 回限りの開始のコードを返す)→ 画面が `/auth/google/start?link_code=…` へ移動 → 同じ流れで、その利用者に `sub` を結び付ける。`GET /me/identities`(一覧。`can_unlink`)。`DELETE /me/identities/google`(204。**パスワードなしのアカウントは、サインインする方法がなくなるので 422**。判断は domain の `CanUnlinkIdentity`)。
+- 戻り先(`return_to`)は、アプリの中のパスだけ(`domain.SanitizeReturnTo`。外部の URL・`//host`・`\`・制御文字は、既定の画面になる)。S39 の許可の画面へ戻る流れ(`/oauth/authorize?...`)も、この経路で戻る。
+- パスワードなしのアカウント: `users.password_digest` は NULL。パスワードでのサインインは、知らないメールと同じ失敗(文言・ステータス・hash の比較 1 回分)になる。
+- テーブル: `user_identities`(`UNIQUE(provider, provider_user_id)`・`UNIQUE(user_id, provider)`。Google のトークンは保存しない)、`login_handoffs`(画面へ渡すコードの中身。`code_hash` は SHA-256。使うと消える)。`users.password_digest` を NULL 可にしたので、**適用済みの開発用 DB は作り直す**(`migrate drop -f` → `migrate up` → `seed`)。
+- テスト: 本物の Google にはつながず、`internal/testutil/fakeoidc`(OpenID Connect の提供元の代役)を使う。**本番のコードから import しない。**
+
+**環境変数**(有効にしたのに足りない・不正なときは起動時に落ちる。値はログ・エラーに出さない)
+
+| 変数 | 必須 | 内容 |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` | 任意(設定すると有効) | Google Cloud Console で作った OAuth クライアントの ID |
+| `GOOGLE_CLIENT_SECRET` | 有効なとき必須 | そのクライアントの秘密の鍵。**秘密。ログ・コード・PR・チャットに書かない。`.env` は Git に入れない** |
+| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:8080/auth/google/callback`) |
+| `GOOGLE_OIDC_ISSUER` | 任意 | OpenID Connect の提供元。既定は `https://accounts.google.com`。テスト・隔離した確認で、代役に向けるためだけにある。https か、ループバック(`localhost`・`127.0.0.1`・`[::1]`)の http だけ許す。**本番では設定しない** |
+
 ### リモートの MCP サーバー(`/mcp`)
 
 AI アプリ(Claude Code など)が、このアプリのショップ・レビューを調べ、許可されたときだけ、利用者の名前でレビューの投稿・編集・削除とショップの申請をするための、MCP(Model Context Protocol。AI が外部のツールを使う標準の決まり)のサーバーである。backend-go の API と**同じプロセス**に入っていて(`internal/adapter/handler/mcp*.go`)、OAuth の認可サーバー(上の節)を有効にしたとき(`OAUTH_ISSUER`)だけ登録される。SDK は公式の `github.com/modelcontextprotocol/go-sdk`(Go 1.25 以上が必要)。
@@ -273,6 +294,14 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 **ヘルスチェック**
 - `GET /up` — ヘルスチェック (DB への ping)
 
+**Google でのサインイン**(`GOOGLE_CLIENT_ID` を設定したときだけ。詳細は「Google のアカウントでのサインイン」)
+- `GET /auth/google/start` — Google の認可の画面へ 302(query: `return_to`、結び付けのときは `link_code`)
+- `GET /auth/google/callback` — Google からの戻り。結果を入れた 1 回限りのコードを付けて、frontend の `/auth/google/complete` へ 303
+- `POST /auth/google/exchange` — コードを交換して結果を返す(サインインの成功 200 + `token`・`return_to`、結び付けの成功 200 + `linked`、重複 409、失敗・無効なコード 400)
+- `POST /me/identities/google/link` — 結び付けの開始のコードを返す (要認証)
+- `GET /me/identities` — 結び付き(Google など)の一覧。`can_unlink` (要認証)
+- `DELETE /me/identities/google` — 結び付きの解除 204 (要認証。解除するとサインインする方法がなくなるなら 422)
+
 **OAuth の認可サーバー**(`OAUTH_ISSUER` を設定したときだけ。詳細は「OAuth の認可サーバー」)
 - `GET /.well-known/oauth-authorization-server` — 認可サーバーの情報(RFC 8414)
 - `GET /oauth/authorize` — 認可の入口。検証して、許可を尋ねる画面へ 303 で渡す
@@ -290,7 +319,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `POST /signup/confirm` — 確認メールのリンクの平文トークン(`{"token":"…"}`)でアカウントを作成する。成功すると従来の signup と同じ 201 `{id, username, email, admin, can_moderate, token}`(`can_moderate` は login・`GET /me` と共通)を返し、そのままログイン状態にできる。期限切れ・存在しない・改ざん・使用済みのトークン(と、確認までの間に同じ email のユーザーが作られていた場合)は、区別できない同一の 400 `{"error":"Confirmation token is invalid or has expired"}`
 - `POST /login` — 認証して JWT トークンを受け取る (email とパスワードは signup と同じ規則を `domain.ValidateCredentials` で判定し、満たさなければ照合の前に 422。規則を満たしたうえで誤っていれば 401 `Invalid email or password`)
 - `GET /me` — Bearer トークンから解決した現在のユーザー(`id`・`username`・`email`・`admin`・`can_moderate`)。無効・期限切れのトークンは 401。frontend は、トークンの有効性を自分で判断せず、起動時にこの応答でログイン状態を復元する。`can_moderate`(moderation ができるか。domain の `User.CanModerate`)は、`POST /login`・`POST /signup` の応答にも含まれ、frontend は `admin` から権限を導かず、管理画面の出し分けをこの値で行う (要認証)
-- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}, "text": {"review_comment_max_chars": 2000, "burger_name_max_chars": 100, "shop_name_max_chars": 100, "username_max_chars": 50, "bio_max_chars": 500, "moderation_note_max_chars": 500}, "password": {"min_bytes": 8, "max_bytes": 72}}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、文字数の上限は domain の `Max*Chars`、パスワードの長さは `MinPasswordBytes` / `MaxPasswordBytes`、写真の上限は `photo.MaxEdge` と handler の `maxPhotoBytes`)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小・文字数のカウンター・パスワードの説明文にこの値を使う。文字数はコードポイント数(日本語・絵文字も 1 文字)、パスワードはバイト数(日本語は 1 文字が 3 バイト)。domain に `Max*` / `Min*` の公開の定数を足したときは、`GET /meta` に足すか、出さない理由を `handler/meta_limits_test.go` の一覧に書く(書かないとテストが失敗する)。frontend の文字数のカウンター(`CharCounter`)は表示だけで、上限を超えても入力も送信も止めない(判定は backend の 422)
+- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}, "text": {"review_comment_max_chars": 2000, "burger_name_max_chars": 100, "shop_name_max_chars": 100, "username_max_chars": 50, "bio_max_chars": 500, "moderation_note_max_chars": 500}, "password": {"min_bytes": 8, "max_bytes": 72}, "login_providers": []}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、文字数の上限は domain の `Max*Chars`、パスワードの長さは `MinPasswordBytes` / `MaxPasswordBytes`、写真の上限は `photo.MaxEdge` と handler の `maxPhotoBytes`)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小・文字数のカウンター・パスワードの説明文にこの値を使う。文字数はコードポイント数(日本語・絵文字も 1 文字)、パスワードはバイト数(日本語は 1 文字が 3 バイト)。domain に `Max*` / `Min*` の公開の定数を足したときは、`GET /meta` に足すか、出さない理由を `handler/meta_limits_test.go` の一覧に書く(書かないとテストが失敗する)。frontend の文字数のカウンター(`CharCounter`)は表示だけで、上限を超えても入力も送信も止めない(判定は backend の 422)。`login_providers` は、パスワードのほかに使えるサインイン方法で、規則ではなく設定(環境変数)で決まる(Google が有効なら `["google"]`、無効なら空の配列。frontend は、これに含まれる方法のボタンだけを出す。MCP の `get_meta` には含めない)
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**

@@ -66,6 +66,8 @@ func (u *UnitOfWork) Do(ctx context.Context, fn func(ctx context.Context, tx use
 		PendingSignups:      query.NewSignupVerificationQuery(pgxTx),
 		// OAuth の許可: 退会のとき、ユーザーの論理削除と同じトランザクションで、許可(と、発行済みのトークン)を取り消す。
 		OAuthGrants: domain.NewOAuthGrants(repository.NewOAuthGrantRepository(pgxTx)),
+		// 外部のサービスのアカウントとの結び付き: 外部のサービスでの新規登録で、ユーザーの作成と同じトランザクションで記録する。
+		UserIdentities: domain.NewUserIdentities(repository.NewUserIdentityRepository(pgxTx)),
 	}
 	if err := fn(ctx, tx); err != nil {
 		return err

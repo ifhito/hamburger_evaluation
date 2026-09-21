@@ -523,3 +523,79 @@ func TestLoadConfigMCPAllowedOrigins(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigGoogle(t *testing.T) {
+	// テスト用の使い捨ての値である(本物の秘密ではない)。
+	const secret = "test-only-google-client-secret"
+	base := func(extra map[string]string) func(string) string {
+		env := map[string]string{"DATABASE_URL": "postgres://localhost/app", "JWT_SECRET": "test-only-secret"}
+		for k, v := range extra {
+			env[k] = v
+		}
+		return withMailEnv(env)
+	}
+	valid := func(extra map[string]string) map[string]string {
+		env := map[string]string{
+			"GOOGLE_CLIENT_ID": "client-id.apps.example", "GOOGLE_CLIENT_SECRET": secret,
+			"GOOGLE_REDIRECT_URL": "http://localhost:8080/auth/google/callback",
+		}
+		for k, v := range extra {
+			env[k] = v
+		}
+		return env
+	}
+
+	t.Run("GOOGLE_CLIENT_ID を設定しなければ、Google でのサインインは無効で、ほかの GOOGLE_* は読まない", func(t *testing.T) {
+		cfg, err := LoadConfig(base(map[string]string{"GOOGLE_CLIENT_SECRET": "", "GOOGLE_OIDC_ISSUER": "http://evil.example.com"}))
+		if err != nil || cfg.Google.Enabled {
+			t.Fatalf("cfg.Google = %+v, err = %v, want disabled without error", cfg.Google, err)
+		}
+	})
+
+	t.Run("クライアントの ID・秘密・戻り先を設定すると、有効になり、提供元は Google の既定になる", func(t *testing.T) {
+		cfg, err := LoadConfig(base(valid(nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := GoogleConfig{
+			Enabled: true, ClientID: "client-id.apps.example", ClientSecret: secret,
+			RedirectURL: "http://localhost:8080/auth/google/callback", Issuer: "https://accounts.google.com",
+		}
+		if cfg.Google != want {
+			t.Errorf("Google = %+v, want %+v", cfg.Google, want)
+		}
+	})
+
+	t.Run("提供元は、https か、ループバックの http なら、差し替えられる(末尾の / は取り除く)", func(t *testing.T) {
+		for _, issuer := range []string{"https://idp.example.com/", "http://127.0.0.1:9000", "http://localhost:9000", "http://[::1]:9000"} {
+			cfg, err := LoadConfig(base(valid(map[string]string{"GOOGLE_OIDC_ISSUER": issuer})))
+			if err != nil || cfg.Google.Issuer != strings.TrimRight(issuer, "/") {
+				t.Errorf("issuer %q: Google.Issuer = %q, err = %v", issuer, cfg.Google.Issuer, err)
+			}
+		}
+	})
+
+	failures := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"秘密の鍵がないと、起動に失敗する", valid(map[string]string{"GOOGLE_CLIENT_SECRET": ""}), "GOOGLE_CLIENT_SECRET"},
+		{"戻り先がないと、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": ""}), "GOOGLE_REDIRECT_URL"},
+		{"戻り先が URL でないと、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "localhost:8080/cb"}), "GOOGLE_REDIRECT_URL"},
+		{"戻り先に断片があると、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "http://localhost:8080/cb#x"}), "GOOGLE_REDIRECT_URL"},
+		{"提供元が外部の http だと(認可コードが平文で送られるので)、起動に失敗する", valid(map[string]string{"GOOGLE_OIDC_ISSUER": "http://idp.example.com"}), "GOOGLE_OIDC_ISSUER"},
+		{"提供元が URL でないと、起動に失敗する", valid(map[string]string{"GOOGLE_OIDC_ISSUER": "idp"}), "GOOGLE_OIDC_ISSUER"},
+	}
+	for _, tt := range failures {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadConfig(base(tt.env))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want it to mention %s", err, tt.want)
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Fatalf("エラーの文言に、クライアントの秘密が含まれている: %v", err)
+			}
+		})
+	}
+}

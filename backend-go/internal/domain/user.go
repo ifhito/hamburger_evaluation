@@ -58,7 +58,8 @@ func (u User) ProfileFor(viewer *User) UserProfile {
 
 // CreateUserParams は、新しいユーザーとして永続化するフィールドを保持する。
 // パスワードはハッシュ化済みの状態で渡される。repository が平文を目にする
-// ことはない。
+// ことはない。PasswordDigest が空文字列のときは、パスワードでサインインする方法を持たない
+// アカウント(外部のサービスだけで作るもの)として作る。
 type CreateUserParams struct {
 	Username       string
 	Email          string

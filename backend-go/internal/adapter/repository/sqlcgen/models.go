@@ -34,6 +34,16 @@ type BurgerStatsRecalcRequest struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type LoginHandoff struct {
+	ID        string
+	CodeHash  string
+	Outcome   string
+	UserID    *string
+	ReturnTo  string
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
 type MailDelivery struct {
 	ID             string
 	Kind           string
@@ -115,9 +125,18 @@ type User struct {
 	Email          string
 	Username       string
 	Bio            string
-	PasswordDigest string
+	PasswordDigest pgtype.Text
 	Admin          bool
 	DiscardedAt    pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+}
+
+type UserIdentity struct {
+	ID             string
+	UserID         string
+	Provider       string
+	ProviderUserID string
+	Email          string
+	CreatedAt      pgtype.Timestamptz
 }

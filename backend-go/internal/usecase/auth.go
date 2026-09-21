@@ -12,7 +12,9 @@ import (
 // そのパスワードの digest を組にしたものである。digest は意図的に
 // domain.User 上には決して置かれない。
 type UserCredentials struct {
-	User           domain.User
+	User domain.User
+	// PasswordDigest は、パスワードの digest である。パスワードでサインインする方法を持たない
+	// アカウント(外部のサービスだけで作ったもの)は、空文字列である。
 	PasswordDigest string
 }
 
@@ -87,7 +89,14 @@ func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, 
 		}
 		return domain.User{}, "", fmt.Errorf("get user by email: %w", err)
 	}
-	if err := a.hasher.Compare(creds.PasswordDigest, password); err != nil {
+	digest := creds.PasswordDigest
+	if digest == "" {
+		// パスワードでサインインする方法を持たないアカウント(外部のサービスだけで作ったもの)。
+		// 未知の email と同じく、hash の比較を 1 回分消費して、同じ失敗を返す。応答の文言も時間も、
+		// 「そのアカウントにパスワードがない」ことを、外から推測させない。
+		digest = dummyPasswordDigest
+	}
+	if err := a.hasher.Compare(digest, password); err != nil || creds.PasswordDigest == "" {
 		return domain.User{}, "", domain.ErrInvalidCredentials
 	}
 	token, err := a.issuer.Issue(creds.User.ID)

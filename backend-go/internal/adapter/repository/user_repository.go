@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
@@ -42,9 +43,10 @@ var _ domain.UserRepository = (*UserRepository)(nil)
 // violation は domain.ErrEmailTaken に対応づけられる。
 func (r *UserRepository) CreateUser(ctx context.Context, params domain.CreateUserParams) (domain.User, error) {
 	row, err := r.q.CreateUser(ctx, sqlcgen.CreateUserParams{
-		Email:          params.Email,
-		Username:       params.Username,
-		PasswordDigest: params.PasswordDigest,
+		Email:    params.Email,
+		Username: params.Username,
+		// パスワードでサインインする方法を持たないアカウント(外部のサービスだけで作ったもの)は、空文字列を NULL で保存する。
+		PasswordDigest: pgtype.Text{String: params.PasswordDigest, Valid: params.PasswordDigest != ""},
 		Admin:          params.Admin,
 	})
 	if err != nil {
@@ -87,7 +89,7 @@ func (r *UserRepository) UpdateUserProfile(ctx context.Context, id string, chang
 			}
 		}
 		if changes.PasswordDigest != nil {
-			row, err = q.UpdateUserPasswordDigest(ctx, sqlcgen.UpdateUserPasswordDigestParams{ID: id, PasswordDigest: *changes.PasswordDigest})
+			row, err = q.UpdateUserPasswordDigest(ctx, sqlcgen.UpdateUserPasswordDigestParams{ID: id, PasswordDigest: pgtype.Text{String: *changes.PasswordDigest, Valid: true}})
 			if err != nil {
 				return fmt.Errorf("update user profile: password digest: %w", mapUserWriteError(err))
 			}

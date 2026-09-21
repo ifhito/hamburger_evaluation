@@ -62,7 +62,7 @@ func TestMe(t *testing.T) {
 }
 
 // TestMeta は GET /meta を扱う：認証なしで、domain の rating の範囲・文字数の上限・パスワードの長さと、
-// 写真の上限(長辺・バイト数)を返し、キャッシュしてよいことを示す(frontend はこれらの値を複製しない)。
+// 写真の上限(長辺・バイト数)、使えるサインイン方法を返し、キャッシュしてよいことを示す(frontend はこれらの値を複製しない)。
 // 値は domain の定数を参照して比べるので、定数を変えると、応答も一緒に変わることの確認にもなる。
 func TestMeta(t *testing.T) {
 	_, auth, _ := newAuthKit()
@@ -79,7 +79,9 @@ func TestMeta(t *testing.T) {
 		`,"username_max_chars":` + itoa(domain.MaxUsernameChars) +
 		`,"bio_max_chars":` + itoa(domain.MaxBioChars) +
 		`,"moderation_note_max_chars":` + itoa(domain.MaxModerationNoteChars) + `},` +
-		`"password":{"min_bytes":` + itoa(domain.MinPasswordBytes) + `,"max_bytes":` + itoa(domain.MaxPasswordBytes) + `}}`
+		`"password":{"min_bytes":` + itoa(domain.MinPasswordBytes) + `,"max_bytes":` + itoa(domain.MaxPasswordBytes) + `},` +
+		// パスワード以外のサインイン方法は、設定(環境変数)で決まる。Google が無効なときは、空の配列である。
+		`"login_providers":[]}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

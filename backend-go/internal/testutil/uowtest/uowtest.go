@@ -179,6 +179,9 @@ type UoW struct {
 	// 削除)に使う代役である。未設定(nil)のものが使われると panic する。
 	SignupVerifications domain.SignupVerificationRepository
 	PendingSignups      usecase.SignupVerificationQuery
+	// UserIdentities は、外部のサービスでの新規登録で、結び付きを記録する代役である。未設定(nil)のものが使われると
+	// panic する。
+	UserIdentities domain.UserIdentityRepository
 	// Grants は、退会のときの、許可の取り消しを記録する代役である。未設定(nil)なら、Do が空のものを作る。
 	Grants *GrantRevocations
 	// BeginErr を設定すると、Do はトランザクションを開始できずにそのエラーを返す。CommitErr を
@@ -234,6 +237,7 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 		// 使うと panic して、テストが想定していない操作に気づける。
 		SignupVerifications: domain.NewSignupVerifications(u.SignupVerifications),
 		PendingSignups:      u.PendingSignups,
+		UserIdentities:      domain.NewUserIdentities(u.UserIdentities),
 	}
 	if err := fn(ctx, tx); err != nil {
 		u.Rollbacks++

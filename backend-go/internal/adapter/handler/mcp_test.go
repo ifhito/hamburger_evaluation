@@ -696,8 +696,13 @@ func TestMCPReadTools(t *testing.T) {
 		if isErr {
 			t.Fatalf("get_meta failed: %s", text)
 		}
-		if want := k.get(t, "/meta", ""); text != want {
-			t.Errorf("get_meta = %s, want the same as GET /meta: %s", text, want)
+		// GET /meta の、サインイン方法(設定で決まるもの。規則ではない)は、MCP の get_meta には含めない。
+		want := k.get(t, "/meta", "")
+		if i := strings.Index(want, `,"login_providers"`); i >= 0 {
+			want = want[:i] + "}"
+		}
+		if text != want {
+			t.Errorf("get_meta = %s, want the same rules as GET /meta: %s", text, want)
 		}
 	})
 

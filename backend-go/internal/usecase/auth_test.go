@@ -310,3 +310,37 @@ func TestAuthAuthenticateToken(t *testing.T) {
 		}
 	})
 }
+
+// digestRecordingHasher は、Compare に渡された digest を、呼ばれた順に記録する。
+type digestRecordingHasher struct{ compared []string }
+
+func (h *digestRecordingHasher) Hash(password string) (string, error) {
+	return "digest(" + password + ")", nil
+}
+func (h *digestRecordingHasher) Compare(digest, password string) error {
+	h.compared = append(h.compared, digest)
+	if digest != "digest("+password+")" {
+		return errors.New("password mismatch")
+	}
+	return nil
+}
+
+// パスワードでサインインする方法を持たないアカウント(外部のサービスだけで作ったもの)は、パスワードでの
+// サインインで、知らない email と同じ失敗になり、hash の比較も 1 回分消費する(応答の時間から、アカウントに
+// パスワードがないことを推測させない)。
+func TestAuthLoginForAccountWithoutPassword(t *testing.T) {
+	user := domain.User{ID: uid.N(1), Username: "carol", Email: "carol@example.com"}
+	query := &fakeUserQuery{getByEmail: func(_ context.Context, _ string) (usecase.UserCredentials, error) {
+		return usecase.UserCredentials{User: user, PasswordDigest: ""}, nil
+	}}
+	hasher := &digestRecordingHasher{}
+	auth := newAuth(query, hasher, fakeIssuer{}, fakeVerifier{})
+
+	got, token, err := auth.Login(context.Background(), "carol@example.com", "Password123!")
+	if !errors.Is(err, domain.ErrInvalidCredentials) || token != "" || got != (domain.User{}) {
+		t.Fatalf("Login = (%+v, %q, %v), want ErrInvalidCredentials", got, token, err)
+	}
+	if len(hasher.compared) != 1 || hasher.compared[0] == "" {
+		t.Fatalf("hash の比較 = %q, want 空でない digest との比較が 1 回(時間の差を出さない)", hasher.compared)
+	}
+}

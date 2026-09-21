@@ -32,6 +32,19 @@ type OAuthEndpoints interface {
 	HandleRevoke(http.ResponseWriter, *http.Request)
 }
 
+// RouterOption は、NewRouter の省略できる設定である(有効なときだけ渡す機能の窓口)。
+type RouterOption func(*routerExtras)
+
+type routerExtras struct {
+	google *GoogleLogin
+}
+
+// WithGoogleLogin は、Google のアカウントでのサインインの窓口を登録する。渡さなければ(Google での
+// サインインが無効なとき)、/auth/google/* と、外部のサービスとの結び付けの API は未登録で、404 になる。
+func WithGoogleLogin(g *GoogleLogin) RouterOption {
+	return func(e *routerExtras) { e.google = g }
+}
+
 // NewRouter は HTTP handler のツリーを構築する：stdlib の Go 1.22 の
 // method パターン mux を、グローバルな body cap の middleware で包んだもの
 // である。未知の route は 404、誤った method は 405 を返し、どちらも JSON の
@@ -43,19 +56,23 @@ type OAuthEndpoints interface {
 // とき）、認可サーバーの情報・認可・トークン・取り消しの窓口と、許可の画面・許可したアプリの一覧が使う
 // API を登録する。nil なら、これらは未登録で、404 になる。mcp は nil でない場合（リモートの MCP サーバーが
 // 有効なとき）、POST /mcp と保護されたリソースの情報の窓口を登録する。nil なら未登録で、404 になる。
-func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler, oauth *OAuth, mcp MCPEndpoints) http.Handler {
+func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler, oauth *OAuth, mcp MCPEndpoints, opts ...RouterOption) http.Handler {
+	var extras routerExtras
+	for _, opt := range opts {
+		opt(&extras)
+	}
 	mux := http.NewServeMux()
 	if photoFiles != nil {
 		mux.Handle("GET /photos/", http.StripPrefix("/photos/", photoFiles))
 	}
-	registerRoutes(mux, append(append(oauthRoutes(oauth, auth), mcpRoutes(mcp)...), []route{
+	registerRoutes(mux, append(append(append(oauthRoutes(oauth, auth), mcpRoutes(mcp)...), googleRoutes(extras.google, auth)...), []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(signups)}},
 		{path: "/signup/confirm", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignupConfirm(signups)}},
 		{path: "/login", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogin(auth)}},
 		{path: "/logout", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogout}, middleware: RequireAuth(auth)},
 		{path: "/me", methods: map[string]http.HandlerFunc{http.MethodGet: handleMe}, middleware: RequireAuth(auth)},
-		{path: "/meta", methods: map[string]http.HandlerFunc{http.MethodGet: handleMeta}},
+		{path: "/meta", methods: map[string]http.HandlerFunc{http.MethodGet: handleMeta(extras.google.LoginProviders())}},
 		// GET は匿名でも使える（OptionalAuth）ままで、ログインが必要なのは
 		// shop の投稿だけであり、そのため method ごとの上書きを行う。
 		{
@@ -138,6 +155,24 @@ func oauthRoutes(oauth *OAuth, auth *usecase.Auth) []route {
 		{path: "/oauth/authorize/decision", methods: map[string]http.HandlerFunc{http.MethodPost: handleOAuthDecision(oauth.Consents)}, middleware: RequireAuth(auth)},
 		{path: "/oauth/grants", methods: map[string]http.HandlerFunc{http.MethodGet: handleListOAuthGrants(oauth.Apps)}, middleware: RequireAuth(auth)},
 		{path: "/oauth/grants/{id}", methods: map[string]http.HandlerFunc{http.MethodDelete: handleRevokeOAuthGrant(oauth.Apps)}, middleware: RequireAuth(auth)},
+	}
+}
+
+// googleRoutes は、Google のアカウントでのサインインの route を返す。g が nil なら、何も返さない。
+// 認可の画面への移動と、Google からの戻りは、利用者のブラウザが開くので、認証の middleware は付けない
+// (結び付けは、開始のコードで利用者を伝える)。結果との交換は、コードそのものが資格なので、これも付けない。
+// 結び付けの API(コードの発行・一覧・解除)は、利用者本人の JWT で守る(RequireAuth)。
+func googleRoutes(g *GoogleLogin, auth *usecase.Auth) []route {
+	if g == nil {
+		return nil
+	}
+	return []route{
+		{path: "/auth/google/start", methods: map[string]http.HandlerFunc{http.MethodGet: g.HandleStart}},
+		{path: "/auth/google/callback", methods: map[string]http.HandlerFunc{http.MethodGet: g.HandleCallback}},
+		{path: "/auth/google/exchange", methods: map[string]http.HandlerFunc{http.MethodPost: g.HandleExchange}},
+		{path: "/me/identities", methods: map[string]http.HandlerFunc{http.MethodGet: g.HandleListIdentities}, middleware: RequireAuth(auth)},
+		{path: "/me/identities/google/link", methods: map[string]http.HandlerFunc{http.MethodPost: g.HandleLinkIntent}, middleware: RequireAuth(auth)},
+		{path: "/me/identities/google", methods: map[string]http.HandlerFunc{http.MethodDelete: g.HandleUnlinkGoogle}, middleware: RequireAuth(auth)},
 	}
 }
 

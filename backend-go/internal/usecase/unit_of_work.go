@@ -41,6 +41,9 @@ type Tx struct {
 	SignupVerifications *domain.SignupVerifications
 	PendingSignups      SignupVerificationQuery
 	OAuthGrants         *domain.OAuthGrants
+	// UserIdentities は、外部のサービス(Google など)のアカウントとの結び付きである。外部のサービスでの
+	// 新規登録で、ユーザーの作成と同じトランザクションで記録する。
+	UserIdentities *domain.UserIdentities
 }
 
 // UnitOfWork(作業のひとまとまり)は、「ここからここまでの書き込みと読み取りを、まとめて 1 つの

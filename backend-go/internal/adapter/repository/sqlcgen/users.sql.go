@@ -7,6 +7,8 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
@@ -18,7 +20,7 @@ RETURNING id, email, username, bio, password_digest, admin, discarded_at, create
 type CreateUserParams struct {
 	Email          string
 	Username       string
-	PasswordDigest string
+	PasswordDigest pgtype.Text
 	Admin          bool
 }
 
@@ -201,7 +203,7 @@ RETURNING id, email, username, bio, password_digest, admin, discarded_at, create
 
 type UpdateUserPasswordDigestParams struct {
 	ID             string
-	PasswordDigest string
+	PasswordDigest pgtype.Text
 }
 
 // 列を限定したプロフィール更新：password_digest だけを更新する（理由は

@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/googleauth"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/oauthserver"
@@ -180,7 +181,37 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		mcp = mcpServer
 	}
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles, oauth, mcp), ready)
+	// Google のアカウントでのサインインは、GOOGLE_CLIENT_ID を設定したときだけ有効になる(設定がなければ、
+	// 窓口は登録されず、GET /meta の login_providers も空になる)。ユーザーの作成と結び付きの記録は、
+	// UnitOfWork の中で 1 つのトランザクションにする。
+	var routerOpts []handler.RouterOption
+	if cfg.Google.Enabled {
+		googleLogins := usecase.NewGoogleLogins(
+			googleauth.New(googleauth.Config{
+				ClientID:     cfg.Google.ClientID,
+				ClientSecret: cfg.Google.ClientSecret,
+				RedirectURL:  cfg.Google.RedirectURL,
+				Issuer:       cfg.Google.Issuer,
+			}),
+			query.NewUserIdentityQuery(pool),
+			userQuery,
+			unitOfWork,
+			domain.NewLoginHandoffs(repository.NewLoginHandoffRepository(pool)),
+			domain.NewUserIdentities(repository.NewUserIdentityRepository(pool)),
+			jwtCodec,
+		)
+		googleLogin, err := handler.NewGoogleLogin(googleLogins, handler.GoogleLoginConfig{
+			AppBaseURL:   cfg.AppBaseURL,
+			RedirectURL:  cfg.Google.RedirectURL,
+			CookieSecret: cfg.JWTSecret,
+		})
+		if err != nil {
+			return fmt.Errorf("google login: %w", err)
+		}
+		routerOpts = append(routerOpts, handler.WithGoogleLogin(googleLogin))
+	}
+
+	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles, oauth, mcp, routerOpts...), ready)
 }
 
 // serve は、明示的な timeout を設定した http.Server（素の ListenAndServe は

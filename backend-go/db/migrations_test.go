@@ -145,12 +145,13 @@ func TestMigrationsAcceptance(t *testing.T) {
 		if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(reviewID) {
 			t.Errorf("reviews.id = %q, want a lowercase v4 uuid", reviewID)
 		}
+		// provider_user_id は、外部のサービス(Google など)が付ける、その利用者の ID(文字列)で、このアプリが採番する ID ではない。
 		// OAuth の client_id は、このアプリが採番する ID ではなく、アプリ(クライアント)が自分を名乗る
 		// 識別子(自分の説明を公開している URL など)なので、uuid にしない。
 		rows, err := conn.Query(ctx, `SELECT table_name || '.' || column_name || ':' || data_type
 			FROM information_schema.columns
 			WHERE table_schema = 'public' AND table_name <> 'schema_migrations'
-			  AND (column_name = 'id' OR column_name LIKE '%\_id') AND column_name <> 'client_id' AND data_type <> 'uuid'
+			  AND (column_name = 'id' OR column_name LIKE '%\_id') AND column_name NOT IN ('client_id', 'provider_user_id') AND data_type <> 'uuid'
 			ORDER BY 1`)
 		if err != nil {
 			t.Fatalf("query id columns: %v", err)
@@ -217,6 +218,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 			"users_username_max_length":        domain.MaxUsernameChars,
 			"users_bio_max_length":             domain.MaxBioChars,
 			"users_email_max_length":           domain.MaxEmailChars,
+			"user_identities_email_max_length": domain.MaxEmailChars,
 
 			"burger_stats_recalc_requests_last_error_max_length": domain.MaxRecalcFailureReasonChars,
 
@@ -339,7 +341,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	t.Helper()
 
-	wantTables := []string{"burger_stats", "burger_stats_recalc_requests", "burgers", "mail_deliveries", "oauth_grants", "oauth_token_sessions", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
+	wantTables := []string{"burger_stats", "burger_stats_recalc_requests", "burgers", "login_handoffs", "mail_deliveries", "oauth_grants", "oauth_token_sessions", "reviews", "shops", "shops_burgers", "signup_verifications", "user_identities", "users"}
 	gotTables := queryStrings(ctx, t, conn,
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
@@ -367,6 +369,14 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burgers/name/text/NO",
 		"burgers/created_at/timestamp with time zone/NO",
 		"burgers/updated_at/timestamp with time zone/NO",
+		// login_handoffs は 000014 で追加された(外部のサービスでのサインインの結果を、画面へ渡すコード)。
+		"login_handoffs/id/uuid/NO",
+		"login_handoffs/code_hash/text/NO",
+		"login_handoffs/outcome/text/NO",
+		"login_handoffs/user_id/uuid/YES",
+		"login_handoffs/return_to/text/NO",
+		"login_handoffs/expires_at/timestamp with time zone/NO",
+		"login_handoffs/created_at/timestamp with time zone/NO",
 		// mail_deliveries は 000009 で追加された。
 		"mail_deliveries/id/uuid/NO",
 		"mail_deliveries/kind/text/NO",
@@ -427,11 +437,19 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"signup_verifications/last_sent_at/timestamp with time zone/NO",
 		"signup_verifications/generation/integer/NO",
 		"signup_verifications/created_at/timestamp with time zone/NO",
+		// user_identities は 000013 で追加された(外部のサービスのアカウントとの結び付き)。
+		"user_identities/id/uuid/NO",
+		"user_identities/user_id/uuid/NO",
+		"user_identities/provider/text/NO",
+		"user_identities/provider_user_id/text/NO",
+		"user_identities/email/text/NO",
+		"user_identities/created_at/timestamp with time zone/NO",
 		"users/id/uuid/NO",
 		"users/email/text/NO",
 		"users/username/text/NO",
 		"users/bio/text/NO",
-		"users/password_digest/text/NO",
+		// パスワードでサインインする方法を持たないアカウントは NULL(外部のサービスだけで作ったもの)。
+		"users/password_digest/text/YES",
 		"users/admin/boolean/NO",
 		"users/discarded_at/timestamp with time zone/YES",
 		"users/created_at/timestamp with time zone/NO",
@@ -481,6 +499,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"users/users_username_max_length/c",
 		"users/users_bio_max_length/c",
 		"users/users_email_max_length/c",
+		"users/users_password_digest_not_empty/c",
 		"reviews/reviews_user_id_fkey/f",
 		"reviews/reviews_burger_id_fkey/f",
 		"burger_stats/burger_stats_burger_id_key/u",
@@ -511,6 +530,18 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"oauth_token_sessions/oauth_token_sessions_kind_signature_key/u",
 		"oauth_token_sessions/oauth_token_sessions_kind_check/c",
 		"oauth_token_sessions/oauth_token_sessions_signature_length/c",
+		"user_identities/user_identities_pkey/p",
+		"user_identities/user_identities_user_id_fkey/f",
+		"user_identities/user_identities_provider_check/c",
+		"user_identities/user_identities_provider_user_id_check/c",
+		"user_identities/user_identities_email_max_length/c",
+		"user_identities/user_identities_provider_user_key/u",
+		"user_identities/user_identities_user_provider_key/u",
+		"login_handoffs/login_handoffs_pkey/p",
+		"login_handoffs/login_handoffs_user_id_fkey/f",
+		"login_handoffs/login_handoffs_code_hash_key/u",
+		"login_handoffs/login_handoffs_outcome_check/c",
+		"login_handoffs/login_handoffs_user_check/c",
 	}
 	for _, want := range wantConstraints {
 		if !constraints[want] {
@@ -535,6 +566,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"idx_oauth_token_sessions_grant_id",
 		"idx_oauth_token_sessions_user_id",
 		"idx_oauth_token_sessions_expires_at",
+		"idx_login_handoffs_expires_at",
+		"idx_login_handoffs_user_id",
 	}
 	for _, want := range wantIndexes {
 		if !indexes[want] {
@@ -595,6 +628,8 @@ var textLimitCases = []textLimitCase{
 		"INSERT INTO users (email, username, password_digest, bio) VALUES ('b' || md5(random()::text) || '@example.com', 'bio-user', 'digest', $1)"},
 	{"users.email", domain.MaxEmailChars, "users_email_max_length",
 		"INSERT INTO users (email, username, password_digest) VALUES ($1, 'limit-user', 'digest')"},
+	{"user_identities.email", domain.MaxEmailChars, "user_identities_email_max_length",
+		"INSERT INTO user_identities (user_id, provider, provider_user_id, email) VALUES ((SELECT id FROM users ORDER BY created_at LIMIT 1), 'google', 'sub-' || md5(random()::text), $1)"},
 	{"burger_stats_recalc_requests.last_error", domain.MaxRecalcFailureReasonChars, "burger_stats_recalc_requests_last_error_max_length",
 		"INSERT INTO burger_stats_recalc_requests (burger_id, last_error) VALUES ((SELECT id FROM burgers ORDER BY created_at LIMIT 1), $1)"},
 }
