@@ -44,7 +44,7 @@ afterEach(cleanup);
 
 describe("SigninPage(サインインの画面)", () => {
   it("サインインに失敗したとき、API が返した文言を、そのまま、画面側の見出しつきの赤いエラーで出す", async () => {
-    login.mockRejectedValue(new ApiError(["Invalid email or password"], 401));
+    login.mockRejectedValue(new ApiError(["Too many attempts. Try again later"], 429));
     const page = await show();
 
     await submit(page);
@@ -52,7 +52,8 @@ describe("SigninPage(サインインの画面)", () => {
     await eventually(() => expect(page.querySelector("[role=alert]")).not.toBeNull());
     const alert = need(page.querySelector("[role=alert]"), "alert");
     expect(alert.textContent).toContain("Could not sign in");
-    expect(alert.textContent).toContain("Invalid email or password");
+    expect(alert.textContent).toContain("Too many attempts. Try again later");
+    expect(alert.textContent).not.toContain("Invalid email or password");
   });
 
   it("API の文言がない失敗(通信の失敗など)のときは、こちらの文言を出す", async () => {
