@@ -1,0 +1,25 @@
+.card {
+  font-family: var(--ui-font);
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-bg);
+}
+
+.padded {
+  padding: 20px 24px;
+}
+
+/* 太い枠は、1px の枠 + 内側の 1px の線で作る(枠の太さを変えないので、余白の有無にかかわらず、大きさが変わらない) */
+.current {
+  border-color: var(--ui-text);
+  background: var(--ui-surface-2);
+  outline: 1px solid var(--ui-text);
+  outline-offset: -2px;
+}
+
+@media (max-width: 720px) {
+  .padded {
+    padding: 16px;
+  }
+}
