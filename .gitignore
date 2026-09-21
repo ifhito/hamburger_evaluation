@@ -19,6 +19,7 @@ frontend/.env.*
 # backend-go も同様に、値の雛形(.env.example)だけをコミットする。backend-go/.env は秘密を含むのでコミットしない
 !backend-go/.env.example
 !backend-go/.env.bench.example
+!backend-go/.env.storage.example
 
 # 旧 API(backend/)の名残として手元に残りうる秘密ファイル。誤って commit しない
 backend/.kamal/secrets
