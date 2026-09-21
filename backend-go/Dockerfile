@@ -1,10 +1,5 @@
 FROM golang:1.22
 
-# HEIC のデコーダは、通常は「あれば OS の libheif を使い、なければ WASM」と切り替わる。OS の libheif は
-# 隔離されておらず、環境で動きが変わるので、常に WASM(隔離された実行系)だけを使う。ここで指定した
-# build タグは、このイメージの中の go build・go test のすべてに効く。
-ENV GOFLAGS=-tags=nodynamic
-
 WORKDIR /app
 
 COPY go.mod go.sum ./

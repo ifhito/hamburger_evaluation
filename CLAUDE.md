@@ -201,11 +201,10 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `DELETE /reviews/:id` — レビューの削除 (要認証)
 
 **写真**
-- レビューに付ける写真(`POST /reviews`・`PUT /reviews/:id` の `photo` パート)は、**JPEG・PNG・WebP・HEIC**(HEIF に入った HEVC の静止画。iPhone の既定の形式)を受け付ける。形式は、ファイルの中身で判別する(申告された Content-Type は見ない)。保存は、JPEG は JPEG、PNG は PNG、WebP と HEIC は JPEG で、長辺を 1,600 px 以下に縮小して再エンコードする(拡大はしない)。向きは、保存する画素が正立するように直す(HEIC は、デコーダが回転の情報を適用するので、二重には回転しない)
-- 上限(すべて backend で判定する): ファイルは 5 MiB、寸法は 1 辺 10,000 px かつ 2,400 万画素(**HEIC は 1,600 万画素**。HEIC のデコードは 1 画素あたり約 31 バイトのメモリを使い、1,600 万画素で約 490 MiB、2,400 万画素では約 760 MiB になって、コンテナの上限(1 GiB)に収まらないため)。寸法は、デコードの前に、ヘッダーから読んで確かめる。HEIC のデコードは同時に 1 件で、その間は JPEG などのデコードも止まる(メモリの実測にもとづく)。順番待ちとデコードそのものに、それぞれ 8 秒の時間制限がある
-- HEIC のデコードの順番が 8 秒以内に回ってこないほど混み合っているときは、写真の問題ではないので、422 ではなく **503**(`Retry-After: 5`。`{"error":"photo processing is busy, please try again"}`)を返す(デコードそのものが 8 秒を超えるものは、処理しきれない写真として 422)
-- 422 のメッセージは原因ごとに 3 種類: `Photo must be a JPEG, PNG, WebP, or HEIC image`(対応しない形式・壊れている・AVIF などの別の形式)、`Photo dimensions are too large (max 10000px per side and 24 megapixels, 16 megapixels for HEIC)`(寸法)、`Photo is too large (max 5MB)`(ファイルの大きさ)
-- HEIC のデコーダは、libheif を WASM(隔離された実行系)にコンパイルして純 Go で動かすライブラリ(`github.com/gen2brain/heic`)で、cgo を使わない。既定では「OS に libheif があればそれを使い、なければ WASM」と切り替わるので、**常に WASM だけを使うよう、build タグ `nodynamic` を付ける**(Dockerfile の `ENV GOFLAGS=-tags=nodynamic` が、イメージの中の go build・go test に効く。ホストで直接ビルド・テストするときは `GOFLAGS=-tags=nodynamic go test ./...`)。デコーダの WASM は libheif・libde265(どちらも LGPL-3.0)を含む。このサービスはバイナリを配布しないので、LGPL の義務(配布時のライセンス表示・ソースの提示)は生じないが、バイナリやイメージを配布するときは、`LICENSE.libheif`・`LICENSE.libde265`(モジュールの `lib/` にある)を同梱する
+- レビューに付ける写真(`POST /reviews`・`PUT /reviews/:id` の `photo` パート)は、**JPEG・PNG・WebP** だけを受け付ける。形式は、ファイルの中身で判別する(申告された Content-Type は見ない)。保存は、JPEG は JPEG、PNG は PNG、WebP は JPEG で、長辺を 1,600 px 以下に縮小して再エンコードする(拡大はしない)。向きは、保存する画素が正立するように直す
+- **HEIC / HEIF は受け付けない**(422)。iPhone の既定の形式だが、対応しないことにした。理由: サーバーで変換するには、デコーダ(WASM の libheif。LGPL)の依存が要り、メモリを大きく使う(1,600 万画素で約 490 MiB)うえ、iPhone 15 以降の標準の写真(約 2,447 万画素)は、コンテナの上限(1 GiB)に収まらない。PC の Chrome は HEIC を読めないので、救うにはブラウザ側にもデコーダが要る。**iPhone の Safari は、選択欄(`accept`)が JPEG・PNG・WebP だけのとき、写真を JPEG に変換して渡す**ので、iPhone からの投稿は通る。frontend の `accept` に HEIC / HEIF を加えないこと(加えると、iPhone が HEIC のまま渡す)。検出は、ファイルの先頭の `ftyp` ボックスの主なブランド(`heic`・`heix`・`mif1`・`heif` など)だけを見る(`photo.looksLikeHEIF`)
+- 上限(すべて backend で判定する): ファイルは 5 MiB、寸法は 1 辺 10,000 px かつ 2,400 万画素。寸法は、デコードの前に、ヘッダーから読んで確かめる。frontend は、送る前に、長辺が `GET /meta` の `photo.max_edge` を超える(またはファイルが `photo.max_bytes` を超える)写真を縮小する
+- 422 のメッセージは原因ごとに分かれる: `Photo must be a JPEG, PNG, or WebP image`(対応しない形式・壊れている)、`Photo must be a JPEG, PNG, or WebP image (HEIC/HEIF is not supported)`(HEIC / HEIF。対応しない理由が分かる)、`Photo dimensions are too large (max 10000px per side and 24 megapixels)`(寸法)、`Photo is too large (max 5MB)`(ファイルの大きさ)
 - `GET /photos/*` — ディスクに保存されたレビュー写真を配信 (認証不要。末尾が `/` のディレクトリ path は一覧せず 404、末尾 `/` なしは 301 で `/` 付きへ転送されてから 404)。`PHOTO_STORAGE` が `disk` (既定) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 
 **ユーザー**
@@ -340,6 +339,7 @@ docker compose -p hamburger-penpot -f design/docker-compose.yml --env-file desig
 ```
 
 - 書き出したデザイン(`.penpot`)は `design/files/` に置いて git で保存する(バイナリなので差分は読めない)。
+- いまの画面を再現したデザインは `design/files/hamburger-evaluation.penpot`(画面・部品・色と文字のスタイル)。画面を変えたら、`design/scripts/` で作り直す(手順は `design/README.md` の「いまの画面から作り直す」)。
 - ポートは 9001(既存の 8080・5173・5433 と重ならない)。Penpot は複数のコンテナで数 GiB のメモリを使うので、使わないときは `down` する。
 - `design/.env` は秘密(Penpot の鍵)を含む。エージェントは読まない(`.claude/settings.json` の deny 対象)。
 

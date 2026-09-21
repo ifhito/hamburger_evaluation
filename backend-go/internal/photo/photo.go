@@ -1,10 +1,9 @@
 // Package photo は、アップロードされたレビュー写真を検証して正規化する。
 // 実際の画像フォーマットを magic bytes から判別し（クライアントが申告した
 // content type は無視する）、decompression bomb を防ぎ、長辺が maxEdge に収まる
-// ように縮小し、再エンコードする。HEIC(iPhone の既定の形式)は、標準ライブラリにデコーダが
-// ないので、WASM で動く純 Go のデコーダ(github.com/gen2brain/heic)を使う。依存するのは標準
-// ライブラリと golang.org/x/image と、そのデコーダだけで、adapter・DB・HTTP には依存しないので、
-// 内向きの依存ルールに違反することなく usecase から import してよい。
+// ように縮小し、再エンコードする。依存するのは標準ライブラリと
+// golang.org/x/image だけなので、内向きの依存ルールに違反することなく
+// usecase から import してよい。
 package photo
 
 import (
@@ -24,12 +23,22 @@ import (
 	_ "golang.org/x/image/webp" // image.Decode に webp を登録する（pure-Go で decode のみ）
 )
 
-// ErrUnsupportedImage は、サイズ上限内で decode できる jpeg/png/webp/heic では
+// ErrUnsupportedImage は、サイズ上限内で decode できる jpeg/png/webp では
 // ないアップロードを表す。handler はこれを 422 にマップする。
 var ErrUnsupportedImage = errors.New("unsupported image")
 
-// MaxEdge は、保存する写真の長辺の上限(ピクセル)である。frontend が縮小の目安として使えるように、
-// GET /meta で返す。
+// ErrDimensionsTooLarge は、寸法(横・縦・画素数)が上限を超える写真を表す。ErrUnsupportedImage の
+// 一種でもある(errors.Is でどちらにも一致する)。直し方が形式の違いとは違う(画像を小さくする)ので、
+// handler が別のメッセージにできるように、区別している。
+var ErrDimensionsTooLarge = fmt.Errorf("%w: dimensions exceed the limit", ErrUnsupportedImage)
+
+// ErrHEIFNotSupported は、HEIC / HEIF(iPhone の既定の形式)の写真を表す。対応しない形式の一種でも
+// ある(ErrUnsupportedImage でもある)。デコーダの依存とメモリの負担が、得られる価値に見合わないので、
+// 受け付けない。handler は、対応しない理由が分かる別のメッセージにする。
+var ErrHEIFNotSupported = fmt.Errorf("%w: HEIC/HEIF is not supported", ErrUnsupportedImage)
+
+// MaxEdge は、保存する写真の長辺の上限(ピクセル)である。frontend が送る前に縮小する目安として
+// 使えるように、GET /meta で返す。
 const MaxEdge = 1600
 
 const (
@@ -103,18 +112,17 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 		return Processed{}, fmt.Errorf("%w: empty or unreadable payload", ErrUnsupportedImage)
 	}
 	ct := http.DetectContentType(head)
-	heif := looksLikeHEIF(head)
-	switch {
-	case heif, ct == "image/jpeg", ct == "image/png", ct == "image/webp":
+	switch ct {
+	case "image/jpeg", "image/png", "image/webp":
 	default:
+		if looksLikeHEIF(head) {
+			return Processed{}, ErrHEIFNotSupported
+		}
 		return Processed{}, fmt.Errorf("%w: detected %s", ErrUnsupportedImage, ct)
 	}
 	data, err := io.ReadAll(br)
 	if err != nil {
 		return Processed{}, fmt.Errorf("read image: %w", err)
-	}
-	if heif {
-		return processHEIF(ctx, data)
 	}
 	// EXIF Orientation は元のアップロードのバイト列から取得しなければならない。
 	// 下の再エンコードで metadata はすべて失われるため、保存されるピクセル
@@ -152,19 +160,13 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	// shrink の後に orient する。そうすればこの変換が触るピクセルが少なくなり、
 	// 長辺は回転しても変わらないので、shrink を先に行っても正しい。
 	img = orient(shrink(img), orientation)
+	var out bytes.Buffer
 	if format == "png" {
-		var out bytes.Buffer
 		if err := png.Encode(&out, img); err != nil {
 			return Processed{}, fmt.Errorf("encode png: %w", err)
 		}
 		return Processed{Data: out.Bytes(), ContentType: "image/png", Ext: ".png"}, nil
 	}
-	return encodeJPEG(img)
-}
-
-// encodeJPEG は img を JPEG に再エンコードする(向き・大きさは、呼び出し側で整えたあと)。
-func encodeJPEG(img image.Image) (Processed, error) {
-	var out bytes.Buffer
 	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
 		return Processed{}, fmt.Errorf("encode jpeg: %w", err)
 	}
@@ -188,4 +190,17 @@ func shrink(img image.Image) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, dw, dh))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Src, nil)
 	return dst
+}
+
+// heifBrands は、HEIC / HEIF の写真が、ファイルの先頭の ftyp ボックスに書く「主なブランド」である。
+var heifBrands = map[string]bool{
+	"heic": true, "heix": true, "hevc": true, "hevx": true, "heim": true, "heis": true,
+	"hevm": true, "hevs": true, "mif1": true, "msf1": true, "heif": true,
+}
+
+// looksLikeHEIF は、先頭のバイト列が HEIC / HEIF の写真かどうかを、ftyp ボックスの主なブランドだけで
+// 判断する(4 バイトの大きさ、"ftyp"、4 バイトの主なブランド)。AVIF は主なブランドが "avif" なので、
+// 一致しない。中身の検査ではなく、断るときのメッセージを変えるためだけの判断である。
+func looksLikeHEIF(head []byte) bool {
+	return len(head) >= 12 && string(head[4:8]) == "ftyp" && heifBrands[string(head[8:12])]
 }
