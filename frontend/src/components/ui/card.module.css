@@ -1,0 +1,30 @@
+.card {
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-bg);
+}
+
+.padded {
+  padding: 20px 24px;
+}
+
+/* 太い枠の分だけ余白を 1px 減らし、大きさが変わらないようにする */
+.current {
+  border: 2px solid var(--ui-text);
+  background: var(--ui-surface-2);
+}
+
+.current.padded {
+  padding: 19px 23px;
+}
+
+@media (max-width: 720px) {
+  .padded {
+    padding: 16px;
+  }
+
+  .current.padded {
+    padding: 15px;
+  }
+}

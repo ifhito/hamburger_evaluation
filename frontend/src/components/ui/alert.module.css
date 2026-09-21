@@ -1,0 +1,53 @@
+.alert {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px 16px 26px;
+  border: 1px solid var(--ui-danger);
+  border-radius: 8px;
+  background: var(--ui-danger-surface);
+}
+
+.band {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 6px;
+  border-radius: 8px 0 0 8px;
+  background: var(--ui-danger);
+}
+
+.mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--ui-danger);
+  color: var(--ui-bg);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.title {
+  display: block;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--ui-danger);
+}
+
+.msg,
+.list {
+  margin-top: 2px;
+  line-height: 1.6;
+  color: var(--ui-text);
+}
+
+/* 箇条書きの印は、文字として書かず、見た目だけで付ける */
+.list {
+  padding-left: 1.25em;
+}

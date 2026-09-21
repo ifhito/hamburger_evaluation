@@ -1,0 +1,18 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-text);
+  border-radius: 14px;
+  background: var(--ui-bg);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ui-text);
+}
+
+.accent {
+  border-color: transparent;
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
