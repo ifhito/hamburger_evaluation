@@ -24,6 +24,9 @@ export interface ShopDetail extends Shop {
 export interface AdminShop extends Shop {
   moderationNote: string | null;
   creator: ShopCreator | null;
+  // 承認・却下の操作を出してよいか。backend の domain が status から判断して返す(frontend は status を比較しない)。
+  canApprove: boolean;
+  canReject: boolean;
 }
 
 export interface ShopCreateInput {

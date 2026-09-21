@@ -79,6 +79,15 @@ func (s Shop) Approve() Shop {
 	return s
 }
 
+// CanBeApproved は、承認の操作を画面が提示してよいか（状態が変わる遷移か）を返す。
+// すでに active の shop の承認は、何も変えない遷移なので false である（API は、
+// 冪等な同じ遷移も受け付ける）。rejected の shop の再承認は許される。
+func (s Shop) CanBeApproved() bool { return s.Status != ShopStatusActive }
+
+// CanBeRejected は、却下の操作を画面が提示してよいかを返す。すでに rejected の shop の
+// 却下は、note を変えるだけの遷移として API は受け付けるが、画面は提示しない。
+func (s Shop) CanBeRejected() bool { return s.Status != ShopStatusRejected }
+
 // Reject は rejected への moderation 遷移であり、現在のどの status からでも
 // 行える。省略可能な note は以前の note を置き換える（nil ならクリアされる）。
 func (s Shop) Reject(note *string) Shop {

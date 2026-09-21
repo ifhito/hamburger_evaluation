@@ -13,6 +13,10 @@ type User struct {
 	Admin    bool
 }
 
+// CanModerate は、shop の moderation（一覧・名称変更・承認・却下）を行ってよいかを返す。
+// 権限の判断はこの 1 か所に置き、usecase の認可と、API が返す can_moderate が同じ値を使う。
+func (u User) CanModerate() bool { return u.Admin }
+
 // Manages は、ユーザーが指定された id の account を管理（編集または削除）
 // してよいかどうかを返す。自分自身の管理のみ可能で、admin にも例外はない
 // （issue #16 R2/R3）。
