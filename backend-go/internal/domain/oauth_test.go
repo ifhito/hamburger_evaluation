@@ -364,3 +364,25 @@ func TestValidateOAuthPKCE(t *testing.T) {
 		})
 	}
 }
+
+// TestOAuthScopeWrites は、範囲ごとの「書き込みを伴うか」が、定義のすべての範囲について決めてあることを確かめる。
+// 範囲を足すときは、この表にも、書き込みを伴うかを書く(書かないと、書き込みの強調が黙って外れるので、ここで落とす)。
+func TestOAuthScopeWrites(t *testing.T) {
+	want := map[string]bool{
+		domain.OAuthScopeRead:  false,
+		domain.OAuthScopeWrite: true,
+	}
+	for _, scope := range domain.OAuthScopes() {
+		writes, decided := want[scope.Name]
+		if !decided {
+			t.Errorf("範囲 %s の「書き込みを伴うか」が、この表にない。決めて書き足す", scope.Name)
+			continue
+		}
+		if scope.Writes != writes {
+			t.Errorf("範囲 %s の Writes = %v, want %v", scope.Name, scope.Writes, writes)
+		}
+	}
+	if len(domain.OAuthScopes()) != len(want) {
+		t.Errorf("定義の範囲の数 = %d, この表の数 = %d", len(domain.OAuthScopes()), len(want))
+	}
+}
