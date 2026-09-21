@@ -7,6 +7,11 @@
 // オブジェクト（domain.Shops など）を通し、repository には依存しない。repository の
 // interface は domain が宣言し、それを呼ぶのは domain のコードだけである。
 //
+// トランザクションをまたぐ手順（review の書き込みと burger の統計の再計算、退会と統計の
+// 再計算）は、usecase が UnitOfWork.Do の中で組み立てる（BurgerStatsRecalculator）。UnitOfWork
+// は usecase が宣言し、実装は adapter/uow が担う。Tx が渡す書き込みは domain の書き込み
+// オブジェクトで、読み取りは usecase の Query なので、この手順も repository には依存しない。
+//
 // import するのは domain、photo（標準ライブラリと golang.org/x/image だけに
 // 依存する、アップロード画像の検証・正規化）、標準ライブラリだけである。
 // このパッケージ自身は HTTP も SQL ドライバも使わず、adapter パッケージから

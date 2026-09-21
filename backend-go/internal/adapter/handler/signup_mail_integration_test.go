@@ -18,6 +18,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/uow"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/smtptest"
@@ -69,13 +70,15 @@ func newMailKit(t *testing.T, smtpHost string, smtpPort int) *mailKit {
 		}
 	})
 
+	unitOfWork := uow.New(pool)
+	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	kit := &mailKit{pool: pool, now: time.Date(2026, 1, 1, 12, 0, 30, 0, time.UTC)}
 	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pool)),
 		hasher, mailer, codec, usecase.SignupConfig{BaseURL: "https://app.example.com", Now: func() time.Time { return kit.now }})
 	kit.router = handler.NewRouter(pool, usecase.NewAuth(userQuery, hasher, codec, codec), signups,
 		usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool))),
-		usecase.NewReviews(query.NewReviewQuery(pool), domain.NewReviews(repository.NewReviewRepository(pool)), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userQuery, userWrites, hasher), nil)
+		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, hasher), nil)
 	return kit
 }
 

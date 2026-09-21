@@ -18,6 +18,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/uow"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
@@ -81,8 +82,8 @@ func newUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(string) st
 	reviewRepo := newReviewStoreFake()
 	shopRepo := &shopStoreFake{}
 	router := handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
-		usecase.NewReviews(reviewRepo, domain.NewReviews(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(repo, domain.NewUsers(repo), hasherFake{}), nil)
+		reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
+		usersUsecase(repo, hasherFake{}), nil)
 	token := func(id string) string {
 		t.Helper()
 		tok, err := codec.Issue(id)
@@ -632,10 +633,12 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	mailer := &mailRecorder{}
 	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)),
 		hasher, mailer, codec, testSignupConfig)
+	unitOfWork := uow.New(conn)
+	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(conn, auth, signups,
 		usecase.NewShops(query.NewShopQuery(conn), domain.NewShops(repository.NewShopRepository(conn))),
-		usecase.NewReviews(query.NewReviewQuery(conn), domain.NewReviews(repository.NewReviewRepository(conn)), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), hasher), nil)
+		usecase.NewReviews(query.NewReviewQuery(conn), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), unitOfWork, recalc, hasher), nil)
 	return conn, &mailedRouter{Handler: router, mailer: mailer}
 }
 

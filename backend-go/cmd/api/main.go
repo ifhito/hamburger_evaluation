@@ -20,6 +20,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/uow"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -110,8 +111,12 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	}
 
 	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)))
-	reviews := usecase.NewReviews(query.NewReviewQuery(pool), domain.NewReviews(repository.NewReviewRepository(pool)), photos)
-	users := usecase.NewUsers(userQuery, userWrites, infra.BcryptPasswordHasher{})
+	// トランザクションをまたぐ手順（review の書き込みと burger の統計の再計算、退会と統計の再計算）は、
+	// usecase が UnitOfWork.Do の中で組み立てる。
+	unitOfWork := uow.New(pool)
+	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
+	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, photos)
+	users := usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, infra.BcryptPasswordHasher{})
 
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles), ready)
 }

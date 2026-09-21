@@ -173,9 +173,9 @@ func (f *reviewStoreFake) CreateReview(_ context.Context, review domain.Review) 
 	return review, nil
 }
 
-func (f *reviewStoreFake) CreateReviewForNamedBurger(ctx context.Context, shopID string, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
+func (f *reviewStoreFake) CreateShopBurger(_ context.Context, shopID string, burgerName string) (domain.ShopReviewBurger, error) {
 	if f.err != nil {
-		return domain.Review{}, domain.ShopReviewBurger{}, f.err
+		return domain.ShopReviewBurger{}, f.err
 	}
 	var burger domain.ShopReviewBurger
 	found := false
@@ -198,12 +198,7 @@ func (f *reviewStoreFake) CreateReviewForNamedBurger(ctx context.Context, shopID
 		f.burgers[nextID] = burger
 		f.links[shopID] = append(f.links[shopID], nextID)
 	}
-	review.BurgerID = burger.ID
-	created, err := f.CreateReview(ctx, review)
-	if err != nil {
-		return domain.Review{}, domain.ShopReviewBurger{}, err
-	}
-	return created, burger, nil
+	return burger, nil
 }
 
 func (f *reviewStoreFake) UpdateReviewContent(_ context.Context, id int64, rating int, comment string) (domain.Review, error) {
@@ -314,8 +309,8 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewStoreFake) (router http.Han
 	photoDir = t.TempDir()
 	shopRepo := &shopStoreFake{}
 	router = handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
-		usecase.NewReviews(repo, domain.NewReviews(repo), storage.NewDisk(photoDir, "/photos")),
-		usecase.NewUsers(users, domain.NewUsers(users), hasherFake{}), handler.PhotoFileServer(photoDir))
+		reviewsUsecase(repo, storage.NewDisk(photoDir, "/photos")),
+		usersUsecase(users, hasherFake{}), handler.PhotoFileServer(photoDir))
 	return router, photoDir, token(alice.ID), token(bob.ID), token(admin.ID)
 }
 
@@ -958,6 +953,9 @@ func TestReviewsRequireAuth(t *testing.T) {
 	}
 }
 
+// upperUUID は、16 進数に大文字を含む UUID である。正規形（小文字）ではないので、不正な形式として扱われる。
+const upperUUID = "0000000A-0000-4000-8000-00000000000A"
+
 // TestCreateReviewTargetIDFormat は、レビュー投稿（POST /reviews）で、ショップの id（shop_id）と
 // バーガーの id（burger_id）の形式が正しく扱われることを確かめる。空は「指定なし」で、
 // ショップの id がなければ存在しないショップとして 404、バーガーの id がなければバーガー名
@@ -1006,6 +1004,3 @@ func TestCreateReviewTargetIDFormat(t *testing.T) {
 		})
 	}
 }
-
-// upperUUID は、16 進数に大文字を含む UUID である。正規形（小文字）ではないので、不正な形式として扱われる。
-const upperUUID = "0000000A-0000-4000-8000-00000000000A"
