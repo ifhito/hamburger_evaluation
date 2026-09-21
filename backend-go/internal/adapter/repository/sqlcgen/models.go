@@ -24,6 +24,19 @@ type BurgerStat struct {
 	CalculatedAt  pgtype.Timestamptz
 }
 
+type MailDelivery struct {
+	ID             string
+	Kind           string
+	Recipient      string
+	IdempotencyKey string
+	Status         string
+	FailureKind    pgtype.Text
+	Attempts       int32
+	LastError      pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	SentAt         pgtype.Timestamptz
+}
+
 type Review struct {
 	ID          int64
 	Rating      int16
@@ -49,6 +62,18 @@ type Shop struct {
 type ShopsBurger struct {
 	ShopID   int64
 	BurgerID int64
+}
+
+type SignupVerification struct {
+	ID             string
+	Email          string
+	Username       string
+	PasswordDigest string
+	TokenHash      string
+	ExpiresAt      pgtype.Timestamptz
+	LastSentAt     pgtype.Timestamptz
+	Generation     int32
+	CreatedAt      pgtype.Timestamptz
 }
 
 type User struct {

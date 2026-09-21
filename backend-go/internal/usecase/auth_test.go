@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -126,202 +125,6 @@ func assertValidationError(t *testing.T, err error, wantMsgs []string) {
 	}
 }
 
-func TestAuthSignupValidation(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    usecase.SignupInput
-		wantMsgs []string
-	}{
-		{
-			name:     "username が空だと検証エラーになる",
-			input:    usecase.SignupInput{Email: "a@example.com", Password: "Password123!"},
-			wantMsgs: []string{"Username can't be blank"},
-		},
-		{
-			name:     "email が空だと検証エラーになる",
-			input:    usecase.SignupInput{Username: "alice", Password: "Password123!"},
-			wantMsgs: []string{"Email can't be blank"},
-		},
-		{
-			name:     "email の形式が不正だと検証エラーになる",
-			input:    usecase.SignupInput{Username: "alice", Email: "abc", Password: "Password123!"},
-			wantMsgs: []string{"Email is invalid"},
-		},
-		{
-			name:     "表示名つきの email は形式が不正として検証エラーになる",
-			input:    usecase.SignupInput{Username: "alice", Email: "Alice <a@example.com>", Password: "Password123!"},
-			wantMsgs: []string{"Email is invalid"},
-		},
-		{
-			name:     "password が空だと検証エラーになる",
-			input:    usecase.SignupInput{Username: "alice", Email: "a@example.com"},
-			wantMsgs: []string{"Password can't be blank"},
-		},
-		{
-			// 文字種は満たす 73 バイトにして、too long だけが出ることを見る。
-			name: "72 バイトを超える password は too long だけの検証エラーになる",
-			input: usecase.SignupInput{
-				Username: "alice",
-				Email:    "a@example.com",
-				Password: "Aa1!" + strings.Repeat("x", 69),
-			},
-			wantMsgs: []string{"Password is too long (maximum is 72 characters)"},
-		},
-		{
-			// 強度ルール（domain.ValidatePassword）が signup に適用されていることを示す代表例。
-			// 全パターンと境界の網羅は domain のテストが担う。
-			name:     "弱い password は短さと文字種の 2 件の検証エラーになる",
-			input:    usecase.SignupInput{Username: "alice", Email: "a@example.com", Password: "abc123"},
-			wantMsgs: []string{"Password is too short (minimum is 8 characters)", "Password must include letters, numbers and symbols"},
-		},
-		{
-			name:     "記号のない 8 バイトの password は文字種だけの検証エラーになる",
-			input:    usecase.SignupInput{Username: "alice", Email: "a@example.com", Password: "abcd1234"},
-			wantMsgs: []string{"Password must include letters, numbers and symbols"},
-		},
-		{
-			name:     "日本語と数字と記号だけの password は文字種の検証エラーになる",
-			input:    usecase.SignupInput{Username: "alice", Email: "a@example.com", Password: "あいう123!!"},
-			wantMsgs: []string{"Password must include letters, numbers and symbols"},
-		},
-		{
-			name: "password confirmation が password と一致しないと検証エラーになる",
-			input: usecase.SignupInput{
-				Username:             "alice",
-				Email:                "a@example.com",
-				Password:             "Password123!",
-				PasswordConfirmation: strPtr("Password124!"),
-			},
-			wantMsgs: []string{"Password confirmation doesn't match Password"},
-		},
-		{
-			name:  "全フィールドが空だと 3 件の検証エラーをまとめて返す",
-			input: usecase.SignupInput{},
-			wantMsgs: []string{
-				"Username can't be blank",
-				"Email can't be blank",
-				"Password can't be blank",
-			},
-		},
-		{
-			// API の外部契約であるメッセージの順序（username → email → password → confirmation）を固定する。
-			name: "複数の違反があるとき username、email、password、confirmation の順に返す",
-			input: usecase.SignupInput{
-				Password:             "abc123",
-				PasswordConfirmation: strPtr("other"),
-			},
-			wantMsgs: []string{
-				"Username can't be blank",
-				"Email can't be blank",
-				"Password is too short (minimum is 8 characters)",
-				"Password must include letters, numbers and symbols",
-				"Password confirmation doesn't match Password",
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// validation が失敗したとき、repository にもハッシュ化にも到達してはならない。
-			hasher := &recordingHasher{}
-			auth := newAuth(&fakeUserQuery{}, &fakeUserRepo{}, hasher, fakeIssuer{}, fakeVerifier{})
-			_, _, err := auth.Signup(context.Background(), tt.input)
-			assertValidationError(t, err, tt.wantMsgs)
-			if hasher.hashCalls != 0 {
-				t.Errorf("Hash calls = %d, want 0 (validation failure must not hash)", hasher.hashCalls)
-			}
-		})
-	}
-}
-
-func TestAuthSignup(t *testing.T) {
-	t.Run("有効な入力なら、ハッシュ化した password で非 admin ユーザーを作成し token を返す", func(t *testing.T) {
-		var gotParams domain.CreateUserParams
-		repo := &fakeUserRepo{
-			createUser: func(_ context.Context, params domain.CreateUserParams) (domain.User, error) {
-				gotParams = params
-				return domain.User{ID: uid.N(1), Username: params.Username, Email: params.Email, Admin: params.Admin}, nil
-			},
-		}
-		auth := newAuth(&fakeUserQuery{}, repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
-
-		user, token, err := auth.Signup(context.Background(), usecase.SignupInput{
-			Username:             "alice",
-			Email:                "a@example.com",
-			Password:             "Password123!",
-			PasswordConfirmation: strPtr("Password123!"),
-		})
-		if err != nil {
-			t.Fatalf("Signup returned error: %v", err)
-		}
-		wantParams := domain.CreateUserParams{
-			Username:       "alice",
-			Email:          "a@example.com",
-			PasswordDigest: "digest(Password123!)",
-			Admin:          false,
-		}
-		if gotParams != wantParams {
-			t.Fatalf("CreateUser params = %+v, want %+v", gotParams, wantParams)
-		}
-		wantUser := domain.User{ID: uid.N(1), Username: "alice", Email: "a@example.com", Admin: false}
-		if user != wantUser {
-			t.Fatalf("Signup user = %+v, want %+v", user, wantUser)
-		}
-		if want := "token-for-" + uid.N(1); token != want {
-			t.Fatalf("Signup token = %q, want %q", token, want)
-		}
-	})
-
-	t.Run("password confirmation が nil でも受け付ける", func(t *testing.T) {
-		repo := &fakeUserRepo{
-			createUser: func(_ context.Context, params domain.CreateUserParams) (domain.User, error) {
-				return domain.User{ID: uid.N(2), Username: params.Username, Email: params.Email}, nil
-			},
-		}
-		auth := newAuth(&fakeUserQuery{}, repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
-		_, _, err := auth.Signup(context.Background(), usecase.SignupInput{
-			Username: "alice",
-			Email:    "a@example.com",
-			Password: "Password123!",
-		})
-		if err != nil {
-			t.Fatalf("Signup returned error: %v", err)
-		}
-	})
-
-	t.Run("email が重複していると検証エラーとして返る", func(t *testing.T) {
-		repo := &fakeUserRepo{
-			createUser: func(context.Context, domain.CreateUserParams) (domain.User, error) {
-				return domain.User{}, fmt.Errorf("create user: %w", domain.ErrEmailTaken)
-			},
-		}
-		auth := newAuth(&fakeUserQuery{}, repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
-		_, _, err := auth.Signup(context.Background(), usecase.SignupInput{
-			Username: "alice",
-			Email:    "a@example.com",
-			Password: "Password123!",
-		})
-		assertValidationError(t, err, []string{"Email has already been taken"})
-	})
-
-	t.Run("それ以外の repository エラーはそのまま伝播する", func(t *testing.T) {
-		repoErr := errors.New("connection lost")
-		repo := &fakeUserRepo{
-			createUser: func(context.Context, domain.CreateUserParams) (domain.User, error) {
-				return domain.User{}, repoErr
-			},
-		}
-		auth := newAuth(&fakeUserQuery{}, repo, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
-		_, _, err := auth.Signup(context.Background(), usecase.SignupInput{
-			Username: "alice",
-			Email:    "a@example.com",
-			Password: "Password123!",
-		})
-		if !errors.Is(err, repoErr) {
-			t.Fatalf("error = %v, want wrapped %v", err, repoErr)
-		}
-	})
-}
-
 func TestAuthLogin(t *testing.T) {
 	activeUser := domain.User{ID: uid.N(7), Username: "alice", Email: "a@example.com"}
 	query := &fakeUserQuery{
@@ -332,7 +135,7 @@ func TestAuthLogin(t *testing.T) {
 			return usecase.UserCredentials{User: activeUser, PasswordDigest: "digest(Password123!)"}, nil
 		},
 	}
-	auth := newAuth(query, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+	auth := newAuth(query, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 
 	tests := []struct {
 		name      string
@@ -386,7 +189,7 @@ func TestAuthLogin(t *testing.T) {
 	for _, tt := range rejected {
 		t.Run(tt.name, func(t *testing.T) {
 			hasher := &recordingHasher{}
-			auth := newAuth(&fakeUserQuery{}, &fakeUserRepo{}, hasher, fakeIssuer{}, fakeVerifier{})
+			auth := newAuth(&fakeUserQuery{}, hasher, fakeIssuer{}, fakeVerifier{})
 			_, token, err := auth.Login(context.Background(), tt.email, tt.password)
 			var vErr *domain.ValidationError
 			if !errors.As(err, &vErr) {
@@ -414,7 +217,7 @@ func TestAuthLogin(t *testing.T) {
 			},
 		}
 		hasher := &recordingHasher{}
-		auth := newAuth(notFound, &fakeUserRepo{}, hasher, fakeIssuer{}, fakeVerifier{})
+		auth := newAuth(notFound, hasher, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Login(context.Background(), "b@example.com", "Password123!")
 		if !errors.Is(err, domain.ErrInvalidCredentials) {
 			t.Fatalf("Login error = %v, want %v", err, domain.ErrInvalidCredentials)
@@ -431,7 +234,7 @@ func TestAuthLogin(t *testing.T) {
 				return usecase.UserCredentials{}, repoErr
 			},
 		}
-		auth := newAuth(failing, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+		auth := newAuth(failing, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Login(context.Background(), "a@example.com", "Password123!")
 		if !errors.Is(err, repoErr) || errors.Is(err, domain.ErrInvalidCredentials) {
 			t.Fatalf("Login error = %v, want wrapped %v", err, repoErr)
@@ -464,7 +267,7 @@ func TestAuthAuthenticateToken(t *testing.T) {
 			return "", errors.New("invalid token")
 		}
 	}}
-	auth := newAuth(query, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, verifier)
+	auth := newAuth(query, fakeHasher{}, fakeIssuer{}, verifier)
 
 	tests := []struct {
 		name    string
@@ -500,7 +303,7 @@ func TestAuthAuthenticateToken(t *testing.T) {
 				return domain.User{}, repoErr
 			},
 		}
-		auth := newAuth(failing, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, verifier)
+		auth := newAuth(failing, fakeHasher{}, fakeIssuer{}, verifier)
 		_, err := auth.AuthenticateToken(context.Background(), "valid-active")
 		if !errors.Is(err, repoErr) || errors.Is(err, domain.ErrUnauthenticated) {
 			t.Fatalf("AuthenticateToken error = %v, want wrapped %v", err, repoErr)

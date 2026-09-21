@@ -17,14 +17,17 @@ import {
   setStoredUser,
   removeStoredUser,
 } from "./storage";
-import type { AuthUser, LoginRequest, SignupRequest } from "./types";
+import type { AuthUser, AuthUserResponse, LoginRequest, SignupRequest } from "./types";
 
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
   login(data: LoginRequest): Promise<void>;
+  /** 確認メールの送信を申し込む。アカウントは確認メールのリンクを開くまで作られず、ログインもしない。 */
   signup(data: SignupRequest): Promise<void>;
+  /** 確認メールのリンクのトークンでアカウントを作成し、そのままログイン状態にする。 */
+  confirmSignup(token: string): Promise<void>;
   logout(): Promise<void>;
   refreshUser(user: AuthUser): void;
 }
@@ -70,9 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, [setUser, setTokenAtom]);
 
-  const signup = useCallback(
-    async (data: SignupRequest) => {
-      const res = await authApi.signup(data);
+  // ログインと、signup の確認は、同じ本文(user と token)で認証状態にする。
+  const applyAuthResponse = useCallback(
+    (res: AuthUserResponse) => {
       setToken(res.token);
       setTokenAtom(res.token);
       const authUser: AuthUser = { id: res.id, username: res.username, email: res.email, admin: res.admin };
@@ -82,16 +85,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [setUser, setTokenAtom]
   );
 
+  const signup = useCallback(async (data: SignupRequest) => {
+    await authApi.signup(data);
+  }, []);
+
+  const confirmSignup = useCallback(
+    async (confirmToken: string) => {
+      applyAuthResponse(await authApi.confirmSignup(confirmToken));
+    },
+    [applyAuthResponse]
+  );
+
   const login = useCallback(
     async (data: LoginRequest) => {
-      const res = await authApi.login(data);
-      setToken(res.token);
-      setTokenAtom(res.token);
-      const authUser: AuthUser = { id: res.id, username: res.username, email: res.email, admin: res.admin };
-      setUser(authUser);
-      setStoredUser(authUser);
+      applyAuthResponse(await authApi.login(data));
     },
-    [setUser, setTokenAtom]
+    [applyAuthResponse]
   );
 
   const logout = useCallback(async () => {
@@ -115,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, signup, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, signup, confirmSignup, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

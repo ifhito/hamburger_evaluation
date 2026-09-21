@@ -231,12 +231,12 @@ func TestPasswordRuleParity(t *testing.T) {
 	}
 	for _, tt := range passwords {
 		t.Run(tt.name, func(t *testing.T) {
-			signupRepo := &fakeUserRepo{
-				createUser: func(_ context.Context, params domain.CreateUserParams) (domain.User, error) {
-					return domain.User{ID: uid.N(1), Username: params.Username, Email: params.Email}, nil
+			signupRepo := &fakeSignupRepo{
+				create: func(context.Context, domain.CreateSignupVerificationParams) (domain.SignupVerificationReceipt, error) {
+					return acceptedReceipt, nil
 				},
 			}
-			_, _, signupErr := newAuth(&fakeUserQuery{}, signupRepo, fakeHasher{}, fakeIssuer{}, fakeVerifier{}).Signup(
+			signupErr := newSignups(notRegistered, signupRepo, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig).Request(
 				context.Background(),
 				usecase.SignupInput{Username: "alice", Email: "a@example.com", Password: tt.password},
 			)

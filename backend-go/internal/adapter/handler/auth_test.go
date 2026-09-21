@@ -114,7 +114,15 @@ func (f *userStoreFake) seed(username, email, password string) domain.User {
 func newAuthKit() (*userStoreFake, *usecase.Auth, *infra.JWTCodec) {
 	repo := newUserStoreFake()
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	return repo, usecase.NewAuth(repo, domain.NewUsers(repo), hasherFake{}, codec, codec), codec
+	return repo, usecase.NewAuth(repo, hasherFake{}, codec, codec), codec
+}
+
+// unusedSignups は、signup を使わないテストの router に渡す Signups である。保存先もメールの
+// 送り先も、その場で捨てる fake になっている。
+func unusedSignups() *usecase.Signups {
+	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
+	return usecase.NewSignups(newUserStoreFake(), domain.NewSignupVerifications(newSignupStoreFake(newUserStoreFake())),
+		hasherFake{}, &mailRecorder{}, codec, testSignupConfig)
 }
 
 // newTestRouter は、db の health か routing の挙動だけを必要とするテスト向けの
@@ -134,7 +142,7 @@ func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.
 	reviewRepo := newReviewStoreFake()
 	users := newUserStoreFake()
 	shopRepo := &shopStoreFake{}
-	return handler.NewRouter(p, auth, usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
+	return handler.NewRouter(p, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
 		usecase.NewReviews(reviewRepo, domain.NewReviews(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(users, domain.NewUsers(users), hasherFake{}), nil)
 }
@@ -169,37 +177,8 @@ func decodeAuthUser(t *testing.T, body []byte) (resp struct {
 	return resp
 }
 
-// TestSignupThenLogout は AC1 を扱う：新規の signup は、完全な snake_case の
-// body を伴う 201 と、保護された POST /logout ルートをただちに通過できる
-// トークンを返す。
-func TestSignupThenLogout(t *testing.T) {
-	_, auth, _ := newAuthKit()
-	router := newTestRouterWith(t, okPinger, auth)
-
-	rec := do(router, http.MethodPost, "/signup",
-		`{"username":"alice","email":"alice@example.com","password":"Password123!","password_confirmation":"Password123!"}`, "")
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("signup status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
-	}
-	user := decodeAuthUser(t, rec.Body.Bytes())
-	if user.ID != uid.N(1) || user.Username != "alice" || user.Email != "alice@example.com" || user.Admin {
-		t.Errorf("signup body = %+v, want id=%s alice alice@example.com admin=false", user, uid.N(1))
-	}
-	if user.Token == "" {
-		t.Fatal("signup token is empty")
-	}
-
-	rec = do(router, http.MethodPost, "/logout", "", "Bearer "+user.Token)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("logout status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
-	}
-	if got := rec.Body.String(); got != `{"message":"Logged out successfully"}` {
-		t.Errorf("logout body = %q, want the Rails-parity message", got)
-	}
-}
-
-// TestSignupErrors は AC2（既に使われている email -> 422）に加え、POST /signup
-// の decode 経路と失敗経路を扱う。
+// TestSignupErrors は、POST /signup の検証エラー（422）・decode 経路・失敗経路を扱う。
+// 登録の有無に依存する応答（登録済みの email）は signup_test.go が扱う。
 func TestSignupErrors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -208,13 +187,6 @@ func TestSignupErrors(t *testing.T) {
 		wantStatus int
 		wantBody   string // 完全一致させる body。空なら status のみを検証する
 	}{
-		{
-			name:       "AC2 使用済みの email は 422 を返す",
-			setup:      func(repo *userStoreFake) { repo.seed("bob", "bob@example.com", "Password123!") },
-			body:       `{"username":"bob2","email":"bob@example.com","password":"Password123!"}`,
-			wantStatus: http.StatusUnprocessableEntity,
-			wantBody:   `{"errors":["Email has already been taken"]}`,
-		},
 		{
 			name:       "空のフィールドはすべてのメッセージ付きで 422 を返す",
 			body:       `{"username":"","email":"","password":""}`,
@@ -258,14 +230,15 @@ func TestSignupErrors(t *testing.T) {
 			wantBody:   `{"errors":["Password must include letters, numbers and symbols"]}`,
 		},
 		{
-			name:       "規則を満たす強いパスワードは 201 を返す",
+			name:       "規則を満たす強いパスワードは 202 を返す",
 			body:       `{"username":"eve","email":"eve@example.com","password":"Abcdef1!"}`,
-			wantStatus: http.StatusCreated,
+			wantStatus: http.StatusAccepted,
+			wantBody:   `{"message":"Confirmation email sent"}`,
 		},
 		{
 			name:       "未知の余分なフィールドは無視される",
 			body:       `{"username":"carol","email":"carol@example.com","password":"Password123!","future_field":true}`,
-			wantStatus: http.StatusCreated,
+			wantStatus: http.StatusAccepted,
 		},
 		{
 			name:       "不正な JSON は 400 を返す",
@@ -280,7 +253,7 @@ func TestSignupErrors(t *testing.T) {
 			wantBody:   `{"error":"invalid JSON body"}`,
 		},
 		{
-			name:       "repository の失敗は 500 を返す",
+			name:       "email の検索の失敗は 500 を返す",
 			setup:      func(repo *userStoreFake) { repo.err = io.ErrUnexpectedEOF },
 			body:       `{"username":"dan","email":"dan@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusInternalServerError,
@@ -289,11 +262,11 @@ func TestSignupErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo, auth, _ := newAuthKit()
+			kit := newSignupKit(t)
 			if tt.setup != nil {
-				tt.setup(repo)
+				tt.setup(kit.users)
 			}
-			rec := do(newTestRouterWith(t, okPinger, auth), http.MethodPost, "/signup", tt.body, "")
+			rec := do(kit.router, http.MethodPost, "/signup", tt.body, "")
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tt.wantStatus, rec.Body)
 			}

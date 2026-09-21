@@ -97,6 +97,7 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 		{name: "未知のルートは 404 を返す", method: http.MethodGet, path: "/nope", wantStatus: http.StatusNotFound},
 		{name: "誤ったメソッドは 405 を返す", method: http.MethodPost, path: "/up", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
 		{name: "GET /signup は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/signup", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
+		{name: "GET /signup/confirm は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/signup/confirm", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 		{name: "DELETE /shops は 405 を返し Allow は GET, POST になる", method: http.MethodDelete, path: "/shops", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
 		{name: "DELETE /shops/1 は 405 を返し Allow は GET になる", method: http.MethodDelete, path: "/shops/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
 		{name: "PATCH /reviews は 405 を返し Allow は GET, POST になる", method: http.MethodPatch, path: "/reviews", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},

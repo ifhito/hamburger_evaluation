@@ -87,8 +87,9 @@ func (in UpdateUserInput) validate(currentEmail string) []string {
 // controller は path の id を無視して current_user に対して動作していた）。
 // load（存在しないユーザーと discard 済みのユーザーはどちらも 404。所有者で
 // なくても同じ）、domain の本人管理ルール（403）、入力の validation
-// （422）、そしてカラム限定の書き込みの順である。すでに使われている email は、
-// signup と同様に *domain.ValidationError として返される。
+// （422）、そしてカラム限定の書き込みの順である。すでに使われている email は
+// *domain.ValidationError として返される（signup と違い、email の変更には確認メールを挟まない
+// ので、認証済みのユーザーには登録の有無が分かる。既知の残課題として CLAUDE.md に記録している）。
 func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string, input UpdateUserInput) (domain.User, error) {
 	target, err := s.query.GetActiveUserByID(ctx, targetID)
 	if err != nil {
