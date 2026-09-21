@@ -94,12 +94,12 @@ func (r *UserRepository) UpdateUserProfile(ctx context.Context, id string, chang
 	return rowmap.User(row), nil
 }
 
-// DiscardUser は user を soft delete する（users.discarded_at に時刻を刻み、
-// hard DELETE は決して行わない）。存在しない user や、すでに discard 済みの user は
-// どの行にも一致せず、domain.ErrUserNotFound を返す。user の review 自体は kept のままである
-// （reviews.discarded_at は決して書き込まれない。Rails parity。非表示化は読み取り側の
-// u.discarded_at フィルタで行う）。その review が付く burger の統計は、トランザクションを
-// 持つ usecase が、同じトランザクションで再計算する。
+// DiscardUser はユーザーを論理削除する(削除日時を記録するだけで、行は消さない)。ユーザーが存在しない、
+// またはすでに論理削除済みなら domain.ErrUserNotFound を返す。
+//
+// ユーザーのレビューには触れない(レビューの削除日時は書き込まない)。画面から隠すのは、読み取りの
+// 側で、削除済みのユーザーのレビューを除いて行う。ユーザーのレビューが付いているバーガーの統計は
+// 退会によって変わるので、トランザクションを持つ usecase が、同じトランザクションで計算し直す。
 func (r *UserRepository) DiscardUser(ctx context.Context, id string) error {
 	if _, err := r.q.DiscardUser(ctx, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

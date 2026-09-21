@@ -1,7 +1,13 @@
-// Package uowtest は、usecase のテストで UnitOfWork を DB なしに組み立てるための test double を
-// 提供する。usecase.UnitOfWork のフェイクは、渡された repository のフェイクを domain の書き込み
-// オブジェクトで包んで Tx を作り、fn が成功すれば commit、エラーなら rollback を記録する。
-// burger の統計は Stats が受け止め、ロックと保存の呼び出し順を記録する。
+// Package uowtest は、usecase のテストで、データベースなしに UnitOfWork を使えるようにする、
+// テスト用の代役(フェイク)を提供する。UnitOfWork(作業のひとまとまり)は、ここからここまでの
+// 書き込みと読み取りを、まとめて 1 つのトランザクションにする範囲を、usecase が指定する仕組みで、
+// 途中でエラーになれば全体を取り消す(rollback)。
+//
+// UoW は、渡された repository の代役を domain の書き込みオブジェクトで包んで Tx を作り、fn が成功
+// すれば commit、エラーを返せば rollback したものとして回数を数える。バーガーの統計に対する操作
+// (ロック・元データの読み取り・保存)は Stats が受け止め、呼ばれた順に記録する。本物の
+// トランザクションの隔離やロックの効き目は、実データベースを使うテスト(adapter/uow)で確かめる。
+// 本番のコードから import してはならない。
 package uowtest
 
 import (
@@ -14,10 +20,10 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// FixedTime は、Clock の既定の時刻である。
+// FixedTime は、Clock の既定の時刻である(テストの結果が実行時刻に左右されないようにする)。
 var FixedTime = time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 
-// Clock は、固定の時刻を返す usecase.Clock である。T が零値なら FixedTime を返す。
+// Clock は、常に同じ時刻を返す usecase.Clock である。T が未設定(ゼロ値)なら FixedTime を返す。
 type Clock struct{ T time.Time }
 
 // Now は固定の時刻を返す。
@@ -28,20 +34,27 @@ func (c Clock) Now() time.Time {
 	return c.T
 }
 
-// Stats は、domain.BurgerStatRepository と usecase.BurgerStatsQuery のフェイクである。
-// 呼び出しを Ops に "lock:<id>" "facts:<id>" "save:<id>" "reviewed-by:<user>" の形で順に記録する。
-// Facts と ReviewedBy が nil のときは、facts も対象の burger も空を返す。
+// Stats は、domain.BurgerStatRepository(統計のロックと保存)と usecase.BurgerStatsQuery(統計の
+// 元データの読み取り)の、両方を兼ねる代役である。呼び出しを、Ops に次の形で呼ばれた順に記録する。
+//
+//	"lock:<バーガー ID>"        バーガーの行のロック
+//	"facts:<バーガー ID>"       バーガーの統計の元データの読み取り
+//	"save:<バーガー ID>"        統計の保存
+//	"reviewed-by:<ユーザー ID>" ユーザーがレビューしたバーガーの一覧の読み取り
+//
+// Facts と ReviewedBy が未設定(nil)のときは、元データも対象のバーガーも空として返す。
 type Stats struct {
 	mu sync.Mutex
-	// Ops は呼び出しの記録である（順序つき）。
+	// Ops は、上の形式で記録した操作の並びである(呼ばれた順)。
 	Ops []string
-	// Saved は保存された統計である（順序つき）。
+	// Saved は、保存された統計である(保存された順)。
 	Saved []domain.BurgerStat
-	// Facts は ListBurgerReviewFacts の振る舞いである。
+	// Facts は、統計の元データの読み取り(ListBurgerReviewFacts)が返す内容を決める。
 	Facts func(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error)
-	// ReviewedBy は ListReviewedBurgerIDsByUser の振る舞いである。
+	// ReviewedBy は、ユーザーがレビューしたバーガーの一覧の読み取り(ListReviewedBurgerIDsByUser)が
+	// 返す内容を決める。
 	ReviewedBy func(ctx context.Context, userID string) ([]int64, error)
-	// LockErr と SaveErr は、ロックと保存のエラーである。
+	// LockErr と SaveErr を設定すると、それぞれロックと保存がそのエラーで失敗する。
 	LockErr, SaveErr error
 }
 
@@ -56,17 +69,19 @@ func (s *Stats) record(op string) {
 	s.Ops = append(s.Ops, op)
 }
 
-// Note は、テストが repository のフェイクなどから、呼び出しの順序の記録に印を足すためのものである
-// （例: insert がロックの後にあることを確かめる）。
+// Note は、テストが別の代役(レビューの登録など)から、操作の記録に印を足すためのものである。
+// 統計に対する操作と、レビューに対する操作の前後関係(登録の前にロックしているか、など)を、
+// 1 つの並びで確かめられる。
 func (s *Stats) Note(op string) { s.record(op) }
 
-// LockBurgerStat は、ロックの呼び出しを記録する。
+// LockBurgerStat は、ロックの呼び出しを記録する(LockErr があればそのエラーで失敗する)。
 func (s *Stats) LockBurgerStat(_ context.Context, burgerID int64) error {
 	s.record("lock:" + itoa(burgerID))
 	return s.LockErr
 }
 
-// UpdateBurgerStat は、保存された統計を記録する。
+// UpdateBurgerStat は、保存の呼び出しと、保存された統計を記録する(SaveErr があればそのエラーで
+// 失敗し、統計は記録しない)。
 func (s *Stats) UpdateBurgerStat(_ context.Context, stat domain.BurgerStat) error {
 	s.record("save:" + itoa(stat.BurgerID))
 	if s.SaveErr != nil {
@@ -78,7 +93,7 @@ func (s *Stats) UpdateBurgerStat(_ context.Context, stat domain.BurgerStat) erro
 	return nil
 }
 
-// ListBurgerReviewFacts は、Facts があればそれを返し、なければ空を返す。
+// ListBurgerReviewFacts は、Facts があればその結果を、なければ空を返す。
 func (s *Stats) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error) {
 	s.record("facts:" + itoa(burgerID))
 	if s.Facts == nil {
@@ -87,7 +102,7 @@ func (s *Stats) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]do
 	return s.Facts(ctx, burgerID)
 }
 
-// ListReviewedBurgerIDsByUser は、ReviewedBy があればそれを返し、なければ空を返す。
+// ListReviewedBurgerIDsByUser は、ReviewedBy があればその結果を、なければ空を返す。
 func (s *Stats) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]int64, error) {
 	s.record("reviewed-by:" + userID)
 	if s.ReviewedBy == nil {
@@ -96,22 +111,24 @@ func (s *Stats) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) 
 	return s.ReviewedBy(ctx, userID)
 }
 
-// UoW は usecase.UnitOfWork のフェイクである。Reviews と Users の repository（フェイク）を、
-// 呼ばれたときの Tx の書き込みオブジェクトにする。nil のものは、使われると panic する
-// （想定外の書き込みに対して fail-loud する）。Stats が nil のときは、空の Stats を使う。
+// UoW は usecase.UnitOfWork(まとめて 1 つのトランザクションにする範囲を、usecase が指定する仕組み)の
+// 代役である。名前は Unit of Work の略。Reviews と Users に渡した repository の代役を、Do が
+// 作る Tx の書き込みオブジェクトにする。未設定(nil)のものが使われると panic するので、テストが
+// 想定していない書き込みは、黙って通らずに失敗する。Stats が未設定なら、空の Stats を使う。
 type UoW struct {
 	Reviews domain.ReviewRepository
 	Users   domain.UserRepository
 	Stats   *Stats
-	// BeginErr は、Do が開始できないエラー、CommitErr は commit のエラーである。
+	// BeginErr を設定すると、Do はトランザクションを開始できずにそのエラーを返す。CommitErr を
+	// 設定すると、fn が成功しても commit に失敗してそのエラーを返す(rollback として数える)。
 	BeginErr, CommitErr error
-	// Commits と Rollbacks は、fn の結果に応じて数える。
+	// Commits と Rollbacks は、commit と rollback になった回数である。
 	Commits, Rollbacks int
 }
 
 var _ usecase.UnitOfWork = (*UoW)(nil)
 
-// Do は fn を実行し、成功なら commit、エラーなら rollback を記録する。
+// Do は fn を実行し、成功なら commit、エラーなら rollback として回数を数える。
 func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx) error) error {
 	if u.BeginErr != nil {
 		return u.BeginErr

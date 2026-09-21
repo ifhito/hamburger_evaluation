@@ -99,9 +99,9 @@ func TestUserRepositoryManagement(t *testing.T) {
 	}
 
 	// active な shop 1 つが 2 つの burger を提供している："shared" は victim と
-	// alice の両方が review し、"solo" は victim だけが review した。discard 後の
-	// stats の再計算と、読み取り経路の見え方は、トランザクションを持つ usecase の
-	// UnitOfWork のテスト（adapter/uow）が扱う。
+	// alice の両方が review し、"solo" は victim だけが review した。退会後の統計の再計算と、
+	// 読み取りでの見え方は、トランザクションを持つ usecase を通して、adapter/uow のテストが
+	// 確かめている(このテストが確かめるのは、書き込みの結果だけ)。
 	shop := dbtest.InsertRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
@@ -194,7 +194,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("DiscardUser は user に discard 時刻を刻み、review には触れない", func(t *testing.T) {
+	t.Run("ユーザーを論理削除すると、削除日時が記録されて有効なユーザーとして引けなくなるが、そのユーザーのレビューは削除されない", func(t *testing.T) {
 		if err := repo.DiscardUser(ctx, victim); err != nil {
 			t.Fatalf("DiscardUser returned error: %v", err)
 		}

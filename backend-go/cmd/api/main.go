@@ -111,8 +111,10 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	}
 
 	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)))
-	// トランザクションをまたぐ手順（review の書き込みと burger の統計の再計算、退会と統計の再計算）は、
-	// usecase が UnitOfWork.Do の中で組み立てる。
+	// レビューの保存とバーガーの統計の再計算、ユーザーの退会と統計の再計算は、両方成功したときだけ
+	// 確定し、途中で失敗したら両方取り消す必要がある。そのため usecase は、UnitOfWork(ここからここまでを
+	// まとめて 1 つのトランザクションにする範囲を、usecase が指定する仕組み)の中でこれらを行う。
+	// 統計の再計算役(BurgerStatsRecalculator)は、その手順を持ち、現在時刻を外から受け取る。
 	unitOfWork := uow.New(pool)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, photos)

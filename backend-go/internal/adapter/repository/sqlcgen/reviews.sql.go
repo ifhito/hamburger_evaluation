@@ -245,11 +245,12 @@ WHERE user_id = $1 AND discarded_at IS NULL
 ORDER BY burger_id
 `
 
-// user の kept な review が対象とする、重複を除いた burger。S8 の
-// user discard に伴う統計再計算のために使う。burger_id 昇順の ORDER BY は
-// 欠かせない。統計の再計算（usecase の BurgerStatsRecalculator）は各 burger を FOR UPDATE でロックし、
-// 複数の burger を扱う呼び出し元はすべて burger_id の昇順でロックしなければ
-// ならない。そうすれば、burger の集合が重なってもデッドロックしない。
+// ユーザーの有効なレビューが付いている、重複のないバーガー。ユーザーの退会に伴って、統計を
+// 計算し直す対象を知るために使う。burger_id 昇順の ORDER BY は欠かせない。統計の再計算
+// (usecase の BurgerStatsRecalculator)は、バーガーの行を FOR UPDATE でロックする。複数の
+// バーガーを続けてロックする処理は、すべて burger_id の昇順にそろえる必要がある。そうすれば、
+// 同時に退会する 2 人のレビューが同じバーガーに付いていても、逆の順序で待ち合って止まる
+// (デッドロックする)ことがない。
 func (q *Queries) ListUserKeptReviewBurgerIDs(ctx context.Context, userID string) ([]int64, error) {
 	rows, err := q.db.Query(ctx, listUserKeptReviewBurgerIDs, userID)
 	if err != nil {
