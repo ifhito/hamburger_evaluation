@@ -12,7 +12,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, username, password_digest, admin)
 VALUES ($1, $2, $3, $4)
-RETURNING id, email, username, password_digest, admin, discarded_at, created_at, updated_at
+RETURNING id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at
 `
 
 type CreateUserParams struct {
@@ -34,6 +34,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.ID,
 		&i.Email,
 		&i.Username,
+		&i.Bio,
 		&i.PasswordDigest,
 		&i.Admin,
 		&i.DiscardedAt,
@@ -61,7 +62,7 @@ func (q *Queries) DiscardUser(ctx context.Context, id string) (string, error) {
 }
 
 const getActiveUserByEmail = `-- name: GetActiveUserByEmail :one
-SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
+SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
 WHERE email = $1 AND discarded_at IS NULL
 `
 
@@ -72,6 +73,7 @@ func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User,
 		&i.ID,
 		&i.Email,
 		&i.Username,
+		&i.Bio,
 		&i.PasswordDigest,
 		&i.Admin,
 		&i.DiscardedAt,
@@ -82,7 +84,7 @@ func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User,
 }
 
 const getActiveUserByID = `-- name: GetActiveUserByID :one
-SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
+SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
 WHERE id = $1 AND discarded_at IS NULL
 `
 
@@ -93,6 +95,7 @@ func (q *Queries) GetActiveUserByID(ctx context.Context, id string) (User, error
 		&i.ID,
 		&i.Email,
 		&i.Username,
+		&i.Bio,
 		&i.PasswordDigest,
 		&i.Admin,
 		&i.DiscardedAt,
@@ -103,7 +106,7 @@ func (q *Queries) GetActiveUserByID(ctx context.Context, id string) (User, error
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, username, password_digest, admin, discarded_at, created_at, updated_at FROM users
+SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
 WHERE id = $1
 `
 
@@ -114,6 +117,39 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 		&i.ID,
 		&i.Email,
 		&i.Username,
+		&i.Bio,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserBio = `-- name: UpdateUserBio :one
+UPDATE users
+SET bio = $2,
+    updated_at = now()
+WHERE id = $1 AND discarded_at IS NULL
+RETURNING id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at
+`
+
+type UpdateUserBioParams struct {
+	ID  string
+	Bio string
+}
+
+// 列を限定したプロフィール更新：自己紹介文（bio 列）だけを更新する（理由は
+// UpdateUserUsername を参照）。
+func (q *Queries) UpdateUserBio(ctx context.Context, arg UpdateUserBioParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserBio, arg.ID, arg.Bio)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.Bio,
 		&i.PasswordDigest,
 		&i.Admin,
 		&i.DiscardedAt,
@@ -128,7 +164,7 @@ UPDATE users
 SET email = $2,
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
-RETURNING id, email, username, password_digest, admin, discarded_at, created_at, updated_at
+RETURNING id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at
 `
 
 type UpdateUserEmailParams struct {
@@ -145,6 +181,7 @@ func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams
 		&i.ID,
 		&i.Email,
 		&i.Username,
+		&i.Bio,
 		&i.PasswordDigest,
 		&i.Admin,
 		&i.DiscardedAt,
@@ -159,7 +196,7 @@ UPDATE users
 SET password_digest = $2,
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
-RETURNING id, email, username, password_digest, admin, discarded_at, created_at, updated_at
+RETURNING id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at
 `
 
 type UpdateUserPasswordDigestParams struct {
@@ -176,6 +213,7 @@ func (q *Queries) UpdateUserPasswordDigest(ctx context.Context, arg UpdateUserPa
 		&i.ID,
 		&i.Email,
 		&i.Username,
+		&i.Bio,
 		&i.PasswordDigest,
 		&i.Admin,
 		&i.DiscardedAt,
@@ -190,7 +228,7 @@ UPDATE users
 SET username = $2,
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
-RETURNING id, email, username, password_digest, admin, discarded_at, created_at, updated_at
+RETURNING id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at
 `
 
 type UpdateUserUsernameParams struct {
@@ -208,6 +246,7 @@ func (q *Queries) UpdateUserUsername(ctx context.Context, arg UpdateUserUsername
 		&i.ID,
 		&i.Email,
 		&i.Username,
+		&i.Bio,
 		&i.PasswordDigest,
 		&i.Admin,
 		&i.DiscardedAt,

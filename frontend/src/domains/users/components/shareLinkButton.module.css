@@ -1,0 +1,32 @@
+.share {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.copied {
+  color: var(--color-success);
+  font-size: 0.875rem;
+}
+
+.manual {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.manualLabel {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.linkInput {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  background: #fff;
+}

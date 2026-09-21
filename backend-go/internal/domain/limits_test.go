@@ -39,6 +39,7 @@ var limitCases = []limitCase{
 	{"バーガー名", "Burger name", MaxBurgerNameChars, func(s string) []string { return errMessages(ValidateBurgerName(s)) }, repeatUnit, allUnits},
 	{"ショップ名", "Name", MaxShopNameChars, func(s string) []string { return errMessages(ValidateShopName(s)) }, repeatUnit, allUnits},
 	{"ユーザー名", "Username", MaxUsernameChars, ValidateUsername, repeatUnit, allUnits},
+	{"自己紹介文", "Bio", MaxBioChars, ValidateBio, repeatUnit, allUnits},
 	{"却下メモ", "Moderation note", MaxModerationNoteChars, func(s string) []string { return errMessages(ValidateModerationNote(&s)) }, repeatUnit, allUnits},
 	// email は形式としても有効でなければならないので、ASCII のローカル部を伸ばして全体の文字数を合わせる。
 	{"メール", "Email", MaxEmailChars, ValidateEmail, func(unit string, n int) string {
