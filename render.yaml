@@ -1,0 +1,59 @@
+# Render のブループリント。Phase 4 の検証で使う。
+#
+# 使い方: Render のダッシュボードで New → Blueprint を選び、このリポジトリの
+# docs/deploy-verification ブランチを指定する。環境変数は sync: false にしてあるので、
+# ダッシュボードで個別に入れる(scripts/bench/deploy-env.sh が一覧を出す)。
+services:
+  - type: web
+    name: hamburger-api
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: docs/deploy-verification
+    rootDir: backend-go
+    dockerfilePath: ./Dockerfile.prod
+    healthCheckPath: /up
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DB_MAX_CONNS
+        value: 5
+      - key: JWT_TTL
+        value: 24h
+      - key: PHOTO_STORAGE
+        value: s3
+      - key: STATS_WORKER_INTERVAL
+        value: 1s
+      # 以下は秘密か、デプロイ後に確定する値。ダッシュボードで入れる。
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: OAUTH_ISSUER
+        sync: false
+      - key: OAUTH_TOKEN_SECRET
+        sync: false
+      - key: PHOTO_S3_ENDPOINT
+        sync: false
+      - key: PHOTO_S3_BUCKET
+        sync: false
+      - key: PHOTO_S3_ACCESS_KEY_ID
+        sync: false
+      - key: PHOTO_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: PHOTO_PUBLIC_BASE_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURITY
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
