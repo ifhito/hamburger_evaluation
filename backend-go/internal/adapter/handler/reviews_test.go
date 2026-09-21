@@ -440,7 +440,7 @@ func TestCreateReview(t *testing.T) {
 		}
 	})
 
-	t.Run("正の burger_id は burger_name より優先される", func(t *testing.T) {
+	t.Run("指定された burger_id は burger_name より優先される", func(t *testing.T) {
 		repo := seedReviewWorld(uid.N(1))
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"Both","shop_id":%q,"burger_id":%q,"burger_name":"Veggie"}}`,

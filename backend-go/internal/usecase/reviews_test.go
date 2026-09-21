@@ -354,7 +354,7 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("正の burger_id は burger_name より優先される", func(t *testing.T) {
+	t.Run("指定された burger_id は burger_name より優先される", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		// createReviewForNamedBurger は未設定：呼び出しは panic する
 		repo := &fakeReviewRepo{

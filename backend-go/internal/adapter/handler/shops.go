@@ -137,7 +137,7 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 }
 
 // handleGetShop は GET /shops/{id} を処理する：creator と reviews を伴う
-// shop の詳細、または未知、隠された、数値でない id に対する統一された 404。
+// shop の詳細、または未知、隠された、UUID の正規形でない id に対する統一された 404。
 func handleGetShop(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := shopIDPathValue(w, r)

@@ -274,7 +274,7 @@ func TestGetShopDetail(t *testing.T) {
 
 // TestGetShopVisibility は AC4 と AC6 を扱う：pending な shop は匿名の
 // viewer には 404 だが creator と admin には開かれており、未知の id と
-// 数値でない id は同一の body で 404 になり、失敗は 500 になる。
+// UUID の正規形でない id は同一の body で 404 になり、失敗は 500 になる。
 func TestGetShopVisibility(t *testing.T) {
 	repo := seedShops(uid.N(1))
 	router, aliceAuth, adminAuth, _ := newShopsRouter(t, repo)

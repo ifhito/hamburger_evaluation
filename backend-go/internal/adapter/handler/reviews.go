@@ -90,9 +90,10 @@ func isMultipart(r *http.Request) bool {
 // 名前の値は捨てられる。false は、エラーレスポンスが既に書き込まれたことを
 // 意味する：グローバルな body cap が作動した場合は 413、サイズ超過または
 // 画像でない写真には 422、不正な multipart（photo part の重複や、text
-// フィールドの cap 超過を含む）には 400 である。rating/shop_id/burger_id が
-// 存在しない、または数値でない場合は 0 にデコードされ、JSON の body と同じ
-// validation/not-found の経路に流れる。
+// フィールドの cap 超過を含む）には 400 である。rating が存在しない、または
+// 数値でない場合は 0 にデコードされ、shop_id/burger_id が存在しない場合は空になり、
+// JSON の body と同じ validation/not-found の経路に流れる（shop_id/burger_id の形式の
+// 判定は validReviewTargetIDs が行う）。
 func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartReviewForm, bool) {
 	var form multipartReviewForm
 	mr, err := r.MultipartReader()
