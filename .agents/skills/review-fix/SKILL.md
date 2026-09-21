@@ -1,6 +1,6 @@
 ---
 name: review-fix
-description: 未コミットの変更を reviewer エージェントでレビューし、Critical/Warning の指摘を implementer エージェントで自動修正し、クリーンになるまで再レビューする。コミット前や、ユーザーが「レビューして直して」と頼んだときに使う。
+description: 未コミットの変更を reviewer エージェントと /code-review でレビューし、Critical/Warning の指摘を implementer エージェントで自動修正し、クリーンになるまで再レビューする。コミット前や、ユーザーが「レビューして直して」と頼んだときに使う。
 version: 1.0.0
 author: BurgerStack Agents
 license: MIT
@@ -39,13 +39,26 @@ Agent ツールでループを手動再実装しないこと。ラウンド上�
   走らせる(`origin/main` との差分が対象。重いので 2 ラウンド目以降は `reviewer` だけ)。
   `reviewer` は Skill ツールを持たないので、ワークフローが、Skill を呼べる別のエージェントに
   任せる。`reviewer` 自身は `/code-review` を呼ばない(二重に呼ばない)。
-- `/code-review` の結果は「未検証」と明記される。`reviewer` の指摘と同じ path:line は 1 つに
-  まとめ、**必ず V1(`verifier`)に通す**。V1 を通らずに修正へ進めない。
+- `/code-review` の結果は「未検証」と明記される。`reviewer` の指摘と、**別々のパスが同じ path:line**
+  を指したときだけ 1 つにまとめ(同じパスの別々の指摘はまとめない)、**Warning 以上は必ず V1
+  (`verifier`)に通す**。V1 を通らずに修正へ進めない。Suggestion(意見・整理・命名・重複の指摘)は、
+  V1 に通さず、自動修正もせず、未検証のまま提示する。`code-review` が修正案を返さない指摘は、
+  「修正案なし」として V1 に渡り、自明で局所的でない限り、自動修正の対象にならない。
 - **対象のディレクトリに注意**: `/code-review` は、呼んだセッションの作業ディレクトリ(主ディレクトリ)の
   差分を見る(実測)。**`git worktree` で作業しているときは、`args` に `worktree: <絶対パス>` を含める**
   (例: `args: "worktree: /Users/hotake/Documents/he-xxx"`)。含めないと、別の木(主ディレクトリの
-  未コミットの変更)を黙ってレビューする。ワークフローは、結果の指摘のファイルが対象の差分に
-  含まれるかを確かめ、違えば「別の木をレビューした」として未実行と扱う。
+  未コミットの変更)を黙ってレビューする。`worktree:` を指定すると、`reviewer`・`verifier`・`implementer`
+  にも、そのパスで作業するよう伝わる(指定しないと、みな主ディレクトリを見る)。ワークフローは、
+  code-review を呼んだエージェントが報告した対象(`reviewedRoot`)を、指定した `worktree` と**コードで**
+  比べ、違えば「別の木をレビューした」、差分が 0 件なら「差分が空」として未実行と扱う(対象を
+  報告する部分は、エージェントの自己申告)。`worktree:` を指定しなかったときは、対象を確かめるよう
+  `notices` で促す。
+- 差分の基準は、`git fetch origin` のあと `git merge-base origin/main HEAD`(古いローカルの `main` から
+  切った worktree で、新しいコミットの逆向きの差分が混ざらないように)。未追跡のファイルは
+  `git diff` に出ないので、`reviewer` の担当。
+- `/code-review` は時間がかかる(中くらいの差分で 10〜25 分)。バックグラウンドの fork として実行され、
+  結果は通知として届く。待つ間は、ターンを閉じず、短いコマンド(`date && sleep 25`。`sleep` で
+  始まる長いコマンドは、この環境で拒否される)を繰り返す。`ultra`(クラウド)は使わない。
 - `/code-review` が使えない・失敗したときは、黙って飛ばさない。結果の `codeReview` に
   `{ ran: false, reason }`、`notices` に「code-review 未実行(理由)」が入る。
 
@@ -53,8 +66,11 @@ Agent ツールでループを手動再実装しないこと。ラウンド上�
 
 日本語で報告する。ユーザーに見せるのは、ユーザーの判断が必要なものだけ:
 
-0. **最初に `codeReview` を確認する**。`ran: false` なら、`notices` の内容(未実行の理由)を
-   利用者に伝え、**手動で `/code-review` を実行するよう促す**(結果の要約は PR のコメントに残す)。
+0. **最初に `complete` と `codeReview` を確認する**。`complete: false`(= `codeReview.ran` が false)の
+   結果は、`status` が `clean` などでも、**完了として扱わない**。`notices` の内容(未実行の理由)を
+   利用者に伝え、**手動で `/code-review` を実行するよう促す**。`codeReview.ran` が true なら、
+   `codeReview.findingCount` と `codeReview.findings`(生の指摘)、V1 の結果から、**PR のコメント**
+   (指摘の件数・確度・直した内容)を作って残す。
 1. **まず `userDecisions` を提示する**。P1 → P2 → P3 の順で、それぞれを
    選択肢・推奨・影響を添えた 1 つの判断質問として示す。冒頭は最大 5 件、
    あふれた分は付録へ。P1 は作業をブロックする。

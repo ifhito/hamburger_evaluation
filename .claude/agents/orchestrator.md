@@ -38,11 +38,18 @@ integration: committing implementer work, pushing, and managing the draft PR.
       the exact reason it could not run (and ask the user to run
       `/code-review` by hand). Its output says its findings are unverified —
       they go through V1 like every other finding. **Name the worktree in
-      the skill args** (absolute path + `git -C <path> diff origin/main`, other
-      directories out of scope): the skill reviews the calling session's own
-      working directory, so without it a worktree PR silently gets the main
-      checkout reviewed instead (observed). Check that the files in its
-      findings belong to the PR's diff.
+      the skill args** (absolute path + the diff command
+      `git -C <path> diff $(git -C <path> merge-base origin/main HEAD)` after
+      `git fetch origin`; other directories out of scope): the skill reviews
+      the calling session's own working directory, so without it a worktree
+      PR silently gets the main checkout reviewed instead (observed). Verify
+      the target the skill reports equals your worktree and its diff is not
+      empty; **a review of another tree (or an empty diff) counts as NOT run
+      — never post it as evidence.** Use the default effort (never `ultra`).
+      The skill runs as a background fork and takes 10–25 minutes for a
+      mid-size diff: keep your turn open and wait with short commands
+      (`date && sleep 25`; a command that starts with a long `sleep` is
+      blocked) until its result arrives.
    c. `ponytail:ponytail-review` skill on the diff (over-engineering pass).
 6. **Verify (V1)** — merge and dedupe findings from all three passes
    (including the unverified `code-review` findings), then
@@ -83,8 +90,10 @@ integration: committing implementer work, pushing, and managing the draft PR.
       in the PR body), CI is green, and there are no conflicts or unanswered
       comments (user decision).
     - **Before any `gh pr ready`**: the PR must carry the step 5b evidence
-      (a `code-review` summary comment, or its stated reason for not
-      running). Without it, the PR stays draft.
+      a `code-review` **summary comment** (findings, verdicts, fixes). A
+      comment that only says it "could not run" is NOT evidence: the PR stays
+      draft as a P1 (the user runs `/code-review` by hand, or decides to
+      proceed without it), even if it is small.
     - **Small + no P1/P2 pending** (P3-only or none): finish the branch —
       `gh pr ready`, then fast-forward main with
       `git push origin feat/<slug>:main` (a plain push: refused unless main

@@ -41,8 +41,11 @@ Procedure:
 9. Present ONLY user-decision items, ordered P1 (blocks) / P2 (decide now) /
    P3 (optional), each as one question with options + recommendation.
    Max 5 up front. Never re-litigate auto-fixed or discarded items.
-10. Auto-merge (ff), ready-only, or hold — size gate first (~≤400 changed
-    lines excl. generated/lock files = small):
+10. Auto-merge (ff), ready-only, or hold — first, the PR must carry a
+    `/code-review` summary comment (a "could not run" note is not evidence:
+    keep it draft as a P1 until the user runs it by hand or decides to
+    proceed without it); then the size gate (~≤400 changed lines excl.
+    generated/lock files = small):
     - wording-only PRs (Japanese wording fixes: comments, test names, docs;
       no identifier/SQL/API-string/logic change) count as small at any size,
       only when *proven*: changed Go files identical to `main` with comments
@@ -70,5 +73,6 @@ Escalate instead of deciding:
   2-round disagreements.
 
 Final report:
-- PR URL, files changed, validation evidence, review verdicts per round,
+- PR URL, files changed, validation evidence, review verdicts per round
+  (say explicitly if `/code-review` did not run, and why),
   rejected findings with reasons, worktree path.
