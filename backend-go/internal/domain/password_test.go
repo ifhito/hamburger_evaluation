@@ -202,31 +202,3 @@ func TestValidatePasswordCharKindPosition(t *testing.T) {
 		})
 	}
 }
-
-// TestValidatePasswordConfirmation は、確認欄の一致の判定(登録とプロフィールの更新が共有する)を固定する。
-func TestValidatePasswordConfirmation(t *testing.T) {
-	const msg = "Password confirmation doesn't match Password"
-	str := func(s string) *string { return &s }
-	tests := []struct {
-		name         string
-		password     string
-		confirmation *string
-		want         []string
-	}{
-		{"確認欄がない(nil)ときは、確認を求めていないので、問題なし", "Password1!", nil, nil},
-		{"確認欄がパスワードと一致すれば、問題なし", "Password1!", str("Password1!"), nil},
-		{"確認欄がパスワードと違えば、一致しないメッセージ", "Password1!", str("Password2!"), []string{msg}},
-		{"確認欄が空文字で、パスワードがあるときは、一致しない", "Password1!", str(""), []string{msg}},
-		{"どちらも空文字なら、一致している", "", str(""), nil},
-		{"パスワードが空で、確認欄が空でないときは、一致しない", "", str("x"), []string{msg}},
-		{"大文字小文字の違いも、一致しない", "Password1!", str("password1!"), []string{msg}},
-		{"末尾の空白の違いも、一致しない", "Password1!", str("Password1! "), []string{msg}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := domain.ValidatePasswordConfirmation(tt.password, tt.confirmation); !slices.Equal(got, tt.want) {
-				t.Errorf("ValidatePasswordConfirmation(%q, %v) = %v, want %v", tt.password, tt.confirmation, got, tt.want)
-			}
-		})
-	}
-}

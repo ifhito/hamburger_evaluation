@@ -42,7 +42,7 @@ var _ usecase.ReviewQuery = (*ReviewQuery)(nil)
 // 2 つ目の戻り値は、offset+limit 件より後ろにも一致する review があるか（has_more）である。
 func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error) {
 	params := sqlcgen.ListPublicReviewsParams{
-		PageLimit:  domain.PageFetchLimit(limit),
+		PageLimit:  limit + 1,
 		PageOffset: offset,
 	}
 	if filter.Rating != nil {
@@ -57,7 +57,7 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 	if err != nil {
 		return nil, false, fmt.Errorf("list reviews: %w", err)
 	}
-	rows, hasMore := domain.TrimPage(rows, limit)
+	rows, hasMore := trimPage(rows, limit)
 	reviews := make([]domain.ReviewDetail, 0, len(rows))
 	for _, row := range rows {
 		reviews = append(reviews, toReviewDetail(

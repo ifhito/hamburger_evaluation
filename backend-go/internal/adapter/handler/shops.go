@@ -4,6 +4,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -74,17 +76,36 @@ func viewerPtr(r *http.Request) *domain.User {
 	return nil
 }
 
-// pageParams は一覧 endpoint の page / per_page の query parameter を、domain の規則
-// （domain.ParsePageParams。空・省略は指定なし、範囲外の整数は丸め、整数でなければ validation の
-// エラー）で整数にする。形が合わない値があれば、その validation のメッセージ（両方不正なら page、
-// per_page の順で両方）を並べた 422 を書き込み済みで false を返すので、呼び出し側は何も書かずに
-// return する。件数の既定値・上限・丸め方は、ここにも usecase にも持たない（domain.PageBounds）。
+// integerPattern は、page / per_page が整数として正しい構文（符号は省略可、
+// あとは ASCII の数字だけ）であることを判定する。桁数は問わない。
+var integerPattern = regexp.MustCompile(`^[+-]?[0-9]+$`)
+
+// pageParams は一覧 endpoint の page / per_page の query parameter を整数として
+// パースする。空の値と省略は 0（デフォルトへのフォールバックを示す usecase の
+// マーカー）であり、エラーではない。桁あふれする整数を含め、`[+-]?[0-9]+` の形の
+// 値が整数である。int の範囲を超える整数は、Atoi が返す clamp 済みの値
+// （math.MaxInt / math.MinInt）をそのまま渡す（補正は usecase の clampPage が
+// 行う）。形が合わない値があれば、不正な引数のメッセージ（両方不正なら page、
+// per_page の順で両方）を並べた 422 を書き込み済みで false を返すので、呼び出し
+// 側は何も書かずに return する。
 func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok bool) {
-	q := r.URL.Query()
-	page, perPage, err := domain.ParsePageParams(q.Get("page"), q.Get("per_page"))
-	var vErr *domain.ValidationError
-	if errors.As(err, &vErr) {
-		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+	var msgs []string
+	parse := func(name, msg string) int {
+		raw := r.URL.Query().Get(name)
+		if raw == "" {
+			return 0
+		}
+		if !integerPattern.MatchString(raw) {
+			msgs = append(msgs, msg)
+			return 0
+		}
+		n, _ := strconv.Atoi(raw) // 構文は検証済みなので、エラーは範囲外だけである。そのとき Atoi は clamp 済みの値を返す
+		return n
+	}
+	page = parse("page", "Page must be an integer")
+	perPage = parse("per_page", "Per page must be an integer")
+	if len(msgs) > 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: msgs})
 		return 0, 0, false
 	}
 	return page, perPage, true

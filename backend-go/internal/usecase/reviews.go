@@ -95,11 +95,11 @@ func NewReviews(query ReviewQuery, uow UnitOfWork, recalc *BurgerStatsRecalculat
 }
 
 // List は、filter で絞り込んだ公開 review フィードを返す。ページネーションは
-// domain.PageBounds に従い、Shops.List と同じフォールバック規則で行う。viewer（nil = 匿名）は
+// clampPage に従い、Shops.List と同じフォールバック規則で行う。viewer（nil = 匿名）は
 // 絞り込みには関与せず、各 review の CanEdit の設定だけに使う。2 つ目の戻り値は、
 // 次のページがあるか（has_more）である。
 func (s *Reviews) List(ctx context.Context, viewer *domain.User, filter ReviewListFilter, page, perPage int) ([]domain.ReviewDetail, bool, error) {
-	limit, offset := domain.PageBounds(page, perPage)
+	limit, offset := clampPage(page, perPage)
 	reviews, hasMore, err := s.query.ListReviews(ctx, filter, limit, offset)
 	if err != nil {
 		return nil, false, fmt.Errorf("list reviews: %w", err)
