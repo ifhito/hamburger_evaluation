@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロフィールの編集(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="me">
+<main class="wrap page" style="position:relative">
+  <!-- state: default / error(API のエラー)/ delete(退会の確認)/ forbidden(他人のプロフィール) -->
+  <div class="editcol">
+    <a class="back" href="#" data-en="← Back to profile">← プロフィールに戻る</a>
+    <h1 data-en="Edit profile">プロフィールを編集</h1>
+
+    <div data-only="forbidden">
+      <section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">このプロフィールは編集できません</b><p class="msg">You can't edit this profile.</p></div></section>
+      <div style="margin-top:24px"><a class="textlink" href="#">← プロフィールに戻る</a></div>
+    </div>
+
+    <form class="form" data-only="default error delete">
+      <div data-only="error"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">保存できませんでした</b><ul><li>・Bio is too long (maximum is 500 characters)</li><li>・Email is invalid</li></ul></div></section></div>
+      <div class="field"><label class="label" for="username" data-en="Username">ユーザー名</label><input class="input" id="username" value="alice" autocomplete="username"></div>
+      <div class="field"><span class="label" id="bio-l" data-en="Bio">自己紹介</span><div class="input area" id="bio" role="textbox" aria-multiline="true" aria-labelledby="bio-l" data-only="default delete">新宿でお昼にハンバーガーを探しています。厚めのパティと、たっぷりのチーズが好きです。</div><div class="input area" id="bio" role="textbox" aria-multiline="true" aria-labelledby="bio-l" data-only="error">(500 文字を超える、長い自己紹介の見本)新宿でお昼にハンバーガーを探しています。厚めのパティと、たっぷりのチーズが好きです。…</div><span class="counter" data-only="default delete">44 / 500</span><span class="counter" data-only="error">512 / 500</span></div>
+      <div class="field"><label class="label" for="email" data-en="Email">メールアドレス</label><input class="input" id="email" type="email" data-only="default delete" value="alice@example.com" autocomplete="email"><input class="input" id="email" type="email" data-only="error" value="alice@example" autocomplete="email"></div>
+      <div class="field"><label class="label" for="pw" data-en="New password (leave blank to keep the current one)">新しいパスワード(変えないときは、空のまま)</label><input class="input" id="pw" type="password" autocomplete="new-password"><span class="hint">8〜72 バイト(半角の英数字と記号は 1 文字 1 バイト、日本語は 3 バイト)で、半角の英字・数字・記号を、それぞれ 1 文字以上。</span></div>
+      <div class="field"><label class="label" for="pw2" data-en="Confirm new password">新しいパスワード(確認)</label><input class="input" id="pw2" type="password" autocomplete="new-password"></div>
+      <div class="actions-row"><button type="button" class="btn primary wide" data-en="Save changes">変更を保存する</button><button type="button" class="btn ghost" data-en="Cancel">キャンセル</button></div>
+    </form>
+
+    <div data-only="default error delete">
+      <div class="divider"></div>
+      <section class="danger-zone">
+        <h2 data-en="Delete account">アカウントの削除</h2>
+        <p data-en="This cannot be undone.">この操作は、元に戻せません。</p>
+        <button type="button" class="btn danger" data-en="Delete account">アカウントを削除</button>
+      </section>
+    </div>
+    <aside class="memo"><b>実装メモ</b><ul>
+      <li>・この画面を出すのは、backend が返す(<code>can_edit</code>)ときだけ。他人のプロフィールの編集ページを開いたときは、フォームを出さず、「編集できません」だけを出す(forbidden の見本)。</li>
+      <li>・自己紹介の文字数の上限(いまは 500 文字)は backend だけが判定し、超えたときは、API の文言をそのまま出す(error の見本)。カウンターを出すなら、上限を <code>GET /meta</code> に足して、そこから取る(いまの <code>/meta</code> にはない。frontend に 500 を書かない)。この見本の「44 / 500」は仮の数字。</li>
+      <li>・パスワードの説明文の「8〜72 バイト」は、いまの frontend に書き写した数字(backend の <code>MinPasswordBytes</code>・<code>MaxPasswordBytes</code> と、手で合わせている)。規則の複製なので、上限を <code>GET /meta</code> から取る形にする案。</li>
+      <li>・変えた項目だけを送る。何も変えていなければ、送らずにプロフィールへ戻る。パスワードが空のときは、変えない。</li>
+      <li>・削除の確認は、いまのアプリでは、ブラウザ標準の確認(<code>window.confirm</code>)。見た目を揃えるために、レビューの削除と同じ形のダイアログにする案(delete の見本)。</li>
+    </ul></aside>
+  </div>
+</main>
+<div class="scrim" data-only="delete"></div>
+<div class="dialog" data-only="delete" role="alertdialog" aria-modal="true" aria-labelledby="dlg-t">
+  <h2 id="dlg-t">アカウントを削除しますか?</h2>
+  <p>この操作は、元に戻せません。</p>
+  <div class="actions-row"><button type="button" class="btn ghost">キャンセル</button><button type="button" class="btn danger-solid">削除する</button></div>
+</div>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

@@ -11,10 +11,11 @@
 </head>
 <body data-active="shops">
 <main class="wrap page">
-  <div class="page-head"><h1 data-en="Shops">ショップ</h1><span class="count" data-en="6 shops">6 件</span></div>
+  <div class="page-head"><h1 data-en="Shops">ショップ</h1><span class="count" data-only="default admin" data-en="6 shops">6 件</span><span class="count" data-only="out" data-en="5 shops">5 件</span></div>
   <div class="toolbar">
     <input class="input search" placeholder="店名で探す" data-en-ph="Search by shop name" aria-label="店名で探す">
-    <button class="btn primary" data-en="Add a shop">ショップを追加</button>
+    <button class="btn ghost" data-only="admin" data-en="Moderate shops">ショップを管理</button>
+    <button class="btn primary" data-only="default admin" data-en="Add a shop">ショップを追加</button>
   </div>
   <div class="grid shops">
     <article class="poster">
@@ -25,7 +26,7 @@
       <div class="photo pphoto" style="--a:#d6b08a;--b:#a5714a"><span class="photo-label" data-en="Photo">写真</span></div>
       <div class="pinfo"><h2 class="name">Shake Shack 渋谷</h2><p class="meta"><span class="burger" data-size="md" data-score="4.2"></span><b>4.2</b><span data-en="3 reviews">3 件のレビュー</span></p></div>
     </article>
-    <article class="poster">
+    <article class="poster" data-only="default admin">
       <div class="photo pphoto" style="--a:#c9d3b0;--b:#8fa06b"><span class="photo-label" data-en="Photo">写真</span><span class="chip"><span data-en="Pending review">審査待ち</span></span></div>
       <div class="pinfo"><h2 class="name">バーガースタンド 下北沢</h2><p class="meta"><span class="burger" data-size="md" data-score="0" data-decor></span><span data-en="No reviews yet">まだレビューがありません</span></p></div>
     </article>
@@ -42,6 +43,7 @@
       <div class="pinfo"><h2 class="name">グリルバーガー 吉祥寺</h2><p class="meta"><span class="burger" data-size="md" data-score="4.0"></span><b>4.0</b><span data-en="1 review">1 件のレビュー</span></p></div>
     </article>
   </div>
+  <aside class="memo"><b>実装メモ</b><ul><li>・「ショップを追加」は、サインインしている人に出す(API の項目ではなく、サインインの状態で決める。追加の操作そのものも、API がサインインを求める)。</li><li>・「ショップを管理」は、backend が返す(<code>can_moderate</code>。<code>GET /me</code>)人だけに出す。frontend は、管理者かどうかを自分で決めない。</li><li>・並ぶショップは、API が絞って返す(サインインしていない人は、公開中だけ。サインインした人は、公開中と、自分が作ったもの(審査待ち・却下)。管理者は、すべて)。「審査待ち」などの札は、返された状態をそのまま出す。誰に何が見えるかの全体は、「見え方の一覧」を参照。</li></ul></aside>
 </main>
 <script src="rating-icons.js"></script>
 <script src="mock.js"></script>

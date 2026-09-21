@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ショップの管理(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="shops" data-user="admin">
+<main class="wrap page">
+  <!-- state: default(すべて)/ reject(却下の理由を書く)/ error(却下に失敗)/ empty(審査待ちなし) -->
+  <div class="page-head"><h1 data-en="Shop moderation">ショップの管理</h1><span class="count" data-only="default reject error" data-en="4 shops">4 件</span><span class="count" data-only="empty" data-en="0 shops">0 件</span></div>
+  <div class="seg" role="group" aria-label="絞り込み">
+    <button class="step on" data-only="default" aria-pressed="true" data-en="All">すべて</button><button class="step" data-only="reject error empty" aria-pressed="false" data-en="All">すべて</button>
+    <button class="step" data-only="default" data-en="Pending">審査待ち</button><button class="step on" data-only="reject error empty" aria-pressed="true" data-en="Pending">審査待ち</button>
+    <button class="step" data-en="Active">公開中</button>
+    <button class="step" data-en="Rejected">却下</button>
+  </div>
+
+  <div data-only="error"><section class="alert" role="alert" style="margin-bottom:16px"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">却下できませんでした</b><p class="msg">Failed to reject the shop.</p></div></section></div>
+
+  <!-- 審査待ち: 承認も却下も出る(can_approve も can_reject も true) -->
+  <article class="arow" data-only="default reject error">
+    <div class="arow-head"><h2 class="name">バーガースタンド 下北沢</h2><span class="chip" data-en="Pending">審査待ち</span></div>
+    <p class="arow-meta" data-en="Created by alice">作った人: alice</p>
+    <div class="reject-form" data-only="reject error">
+      <div class="field"><span class="label" id="note-l" data-en="Rejection reason">却下の理由 <span class="optional" data-en="(optional)">(任意)</span></span><div class="input area short" id="note" role="textbox" aria-multiline="true" aria-labelledby="note-l"><span class="ph" data-en="e.g. The shop name does not match a real shop.">例: ショップの名前が、実際のお店と一致しません。</span></div></div>
+      <div class="arow-actions"><button type="button" class="btn dark" data-en="Confirm reject">却下を確定する</button><button type="button" class="btn ghost" data-en="Cancel">キャンセル</button></div>
+    </div>
+    <div class="arow-actions" data-only="default"><button type="button" class="btn ghost" data-en="Edit">編集</button><button type="button" class="btn primary" data-en="Approve">承認する</button><button type="button" class="btn ghost" data-en="Reject">却下する</button></div>
+  </article>
+
+  <!-- 公開中: 承認は出ない(can_approve が false)。却下は出る -->
+  <article class="arow" data-only="default">
+    <div class="arow-head"><h2 class="name">J.S. BURGERS CAFE 新宿</h2><span class="chip accent" data-en="Active">公開中</span></div>
+    <p class="arow-meta" data-en="Created by alice">作った人: alice</p>
+    <div class="arow-actions"><button type="button" class="btn ghost" data-en="Edit">編集</button><button type="button" class="btn ghost" data-en="Reject">却下する</button></div>
+  </article>
+
+  <!-- 却下: 承認は出る(やり直し)。却下は出ない(can_reject が false)。理由を出す -->
+  <article class="arow" data-only="default">
+    <div class="arow-head"><h2 class="name">ビッグバーガー 池袋</h2><span class="chip" data-en="Rejected">却下</span></div>
+    <p class="arow-meta" data-en="Created by bob">作った人: bob</p>
+    <div class="arow-note"><b data-en="Reason:">理由:</b><span data-en="The shop name does not match a real shop.">ショップの名前が、実際のお店と一致しません。</span></div>
+    <div class="arow-actions"><button type="button" class="btn ghost" data-en="Edit">編集</button><button type="button" class="btn primary" data-en="Approve">承認する</button></div>
+  </article>
+
+  <article class="arow" data-only="default">
+    <div class="arow-head"><h2 class="name">バーガーラボ 中目黒</h2><span class="chip accent" data-en="Active">公開中</span></div>
+    <p class="arow-meta" data-en="Created by charlie">作った人: charlie</p>
+    <div class="arow-actions"><button type="button" class="btn ghost" data-en="Edit">編集</button><button type="button" class="btn ghost" data-en="Reject">却下する</button></div>
+  </article>
+
+  <section class="panel" data-only="empty"><span class="burger" data-size="lg" data-score="0" data-decor></span><h2 class="state-title">審査待ちはありません</h2><p class="state-sub">新しい申請が来ると、ここに並びます。</p></section>
+
+  <aside class="memo"><b>実装メモ</b><ul>
+    <li>・この画面に入れるのは、backend が返す(<code>can_moderate</code>。<code>GET /me</code>)人だけ。サインインしていない人は、サインイン画面へ、サインインしていても管理者でない人は、ショップの一覧へ戻す(いまのアプリと同じ。専用の「権限がありません」の画面は出さない)。</li>
+    <li>・「承認する」を出すかは <code>can_approve</code>(公開中のショップでは <code>false</code>)、「却下する」を出すかは <code>can_reject</code>(却下済みのショップでは <code>false</code>)。どちらも、ショップごとに backend が返す。frontend は、状態(公開中・却下)から自分で決めない。</li>
+    <li>・却下の理由は任意。却下済みのショップには、理由を出す。「却下を確定する」は、黒い面のボタン(赤にしない: 赤は、削除とエラーだけ)。</li>
+    <li>・ステータスの札(審査待ち・公開中・却下)は、状態を文字で出し、色だけで区別しない。絞り込みは、選んでいるものが黒い面に白い文字。</li>
+    <li>・エラーの <code>Failed to reject the shop.</code> は、API が文言を返さなかったときの画面側の文言(いまは英語)。</li>
+  </ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>
