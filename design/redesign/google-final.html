@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google ログインの見た目: 決定した最終の並び</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="google-login.css">
+</head>
+<body data-no-header>
+<main class="gsheet">
+  <h1>Google ログインの見た目: 決定した最終の並び</h1>
+  <p class="lead">利用者が決めた(2026-09-21): <b>ボタン G2</b>(ライト・高さ 44px・角丸 8px・全幅)、<b>文言 T2</b>(日本語「Google で続ける」/ 英語「Continue with Google」。サインインも登録も同じ)、<b>置き場所 P3</b>(サインインの画面はフォームの下・「または」の区切りつき。新規登録の画面はフォームの上)。「G」の 4 色と、ボタンの色は、Google のブランドで決まっている例外で、黄色の面には置かない。比べた案の記録は <a href="google-login.html">google-login.html</a>。</p>
+
+  <h2>サインイン・新規登録</h2>
+  <div class="gframes">
+    <div class="gframe"><iframe src="signin.html?embed=1" style="height:570px" title="サインイン"></iframe><p class="gcap"><b>サインイン</b>: Google は、フォームの下</p></div>
+    <div class="gframe"><iframe src="signup.html?embed=1" style="height:820px" title="新規登録"></iframe><p class="gcap"><b>新規登録</b>: Google は、フォームの上</p></div>
+    <div class="gframe"><iframe src="signin.html?embed=1&state=oauth" style="height:706px" title="サインイン(アプリの接続の途中)"></iframe><p class="gcap"><b>サインイン(アプリの接続の途中)</b>: Google でサインインしても、許可の画面へ戻る</p></div>
+  </div>
+
+  <h2>Google の失敗の画面</h2>
+  <div class="gframes">
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=exists" style="height:428px" title="同じメールのアカウントがある"></iframe><p class="gcap"><b>同じメールのアカウントがある</b>(409)</p></div>
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=exists-oauth" style="height:586px" title="同じ + 元の画面に戻れる"></iframe><p class="gcap"><b>同じ + 元の画面に戻れる</b>(アプリの接続の途中から)</p></div>
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=failed" style="height:406px" title="失敗"></iframe><p class="gcap"><b>失敗・キャンセル</b>(400)。「もう一度」は、Google のボタン(文言は T2)</p></div>
+  </div>
+
+  <h2>プロフィールの Google 欄</h2>
+  <div class="gframes">
+    <div class="gframe"><iframe src="google-profile.html?embed=1&state=none&active=me" style="height:760px" title="未連携"></iframe><p class="gcap"><b>未連携</b></p></div>
+    <div class="gframe"><iframe src="google-profile.html?embed=1&state=connected&active=me" style="height:760px" title="連携済み"></iframe><p class="gcap"><b>連携済み</b>(Google のメールと、解除)</p></div>
+    <div class="gframe"><iframe src="google-profile.html?embed=1&state=cannot&active=me" style="height:760px" title="解除できない"></iframe><p class="gcap"><b>解除できない</b>(パスワードなし)</p></div>
+  </div>
+</main>
+</body>
+</html>
