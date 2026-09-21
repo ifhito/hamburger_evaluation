@@ -205,26 +205,19 @@ func (s *Server) withIssuer(location string) string {
 	return u.String()
 }
 
-// AuthorizeRequestView は、利用者に許可を尋ねる画面に出す、認可の要求の内容である。
-type AuthorizeRequestView struct {
-	ClientID   string
-	ClientName string
-	Scopes     []string
-}
-
 // DescribeAuthorizeRequest は、認可の要求を検証して、画面に出す内容を返す。アプリへ結果を戻せない不正は、
 // (wrap された)domain.ErrOAuthAuthorizeRequestInvalid を返す。戻せる不正(範囲の誤りなど)は、
 // 許可を尋ねても意味がないので、同じエラーで返す。
-func (s *Server) DescribeAuthorizeRequest(ctx context.Context, params url.Values) (AuthorizeRequestView, error) {
+func (s *Server) DescribeAuthorizeRequest(ctx context.Context, params url.Values) (usecase.AuthorizeRequestView, error) {
 	ar, err := s.parseAuthorize(ctx, params)
 	if err != nil {
-		return AuthorizeRequestView{}, invalidRequest(err)
+		return usecase.AuthorizeRequestView{}, invalidRequest(err)
 	}
 	name := ar.GetClient().GetID()
 	if c, cerr := s.store.clients.resolve(ctx, name); cerr == nil {
 		name = c.Name
 	}
-	return AuthorizeRequestView{ClientID: ar.GetClient().GetID(), ClientName: name, Scopes: ar.GetRequestedScopes()}, nil
+	return usecase.AuthorizeRequestView{ClientID: ar.GetClient().GetID(), ClientName: name, Scopes: ar.GetRequestedScopes()}, nil
 }
 
 // IssueAuthorizationCode は、利用者(userID)が許可した(許可の記録が grantID の)認可の要求に、認可コードを
@@ -404,7 +397,10 @@ func (s *Server) IntrospectAccessToken(ctx context.Context, rawToken string) (do
 	}, nil
 }
 
-var _ usecase.OAuthTokenIntrospector = (*Server)(nil)
+var (
+	_ usecase.OAuthTokenIntrospector = (*Server)(nil)
+	_ usecase.OAuthAuthorizer        = (*Server)(nil)
+)
 
 // logServerError は、保存先の障害を、運用の調査のためにログに残す(トークン・コード・鍵は含まれない)。
 func (s *Server) logServerError(err error) {

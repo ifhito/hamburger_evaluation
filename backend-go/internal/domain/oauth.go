@@ -95,16 +95,16 @@ func (e *InsufficientScopeError) Error() string {
 // Is は errors.Is(err, ErrOAuthInsufficientScope) を成り立たせる。
 func (e *InsufficientScopeError) Is(target error) bool { return target == ErrOAuthInsufficientScope }
 
-// OAuthScope は、許可の範囲の名前と、同意画面に出す説明である。説明は利用者が読む日本語で、
-// 画面に出す文言の判断は domain が持つ(frontend は写さずに、API から受け取って表示する)。
+// OAuthScope は、許可の範囲の名前と、同意画面に出す説明である。説明は、利用者が画面で読む文言で、
+// 画面(frontend)が英語なので英語で書く。文言は domain が持ち、frontend は写さずに、API から受け取って表示する。
 type OAuthScope struct {
 	Name        string
 	Description string
 }
 
 var oauthScopes = []OAuthScope{
-	{Name: OAuthScopeRead, Description: "ショップ・レビュー・プロフィールを読む"},
-	{Name: OAuthScopeWrite, Description: "あなたの名前で、レビューの投稿・編集・削除と、ショップの申請をする"},
+	{Name: OAuthScopeRead, Description: "View shops, reviews and profiles"},
+	{Name: OAuthScopeWrite, Description: "Post, edit and delete reviews, and submit shops, on your behalf"},
 }
 
 // OAuthScopes は、許可できる範囲の一覧を、同意画面に出す順番で返す。

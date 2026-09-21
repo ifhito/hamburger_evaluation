@@ -139,8 +139,11 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	}()
 
 	// OAuth の認可サーバーは、OAUTH_ISSUER を設定したときだけ有効になる(設定がなければ、窓口は登録されない)。
-	var oauth handler.OAuthEndpoints
+	var oauth *handler.OAuth
 	if cfg.OAuth.Enabled {
+		// 許可の記録の書き込みは、domain の書き込みオブジェクトを通し、読み取りは query を通す。
+		grantWrites := domain.NewOAuthGrants(repository.NewOAuthGrantRepository(pool))
+		grantQuery := query.NewOAuthGrantQuery(pool)
 		oauthServer, err := oauthserver.New(oauthserver.Config{
 			Issuer:        cfg.OAuth.Issuer,
 			Resource:      cfg.OAuth.Resource,
@@ -149,14 +152,18 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 			StaticClients: cfg.OAuth.StaticClients,
 		}, oauthserver.Deps{
 			Sessions: uow.NewOAuthTokenSessionStore(pool),
-			Grants:   query.NewOAuthGrantQuery(pool),
+			Grants:   grantQuery,
 			Users:    userQuery,
 			Fetcher:  oauthserver.NewHTTPMetadataFetcher(),
 		})
 		if err != nil {
 			return fmt.Errorf("oauth server: %w", err)
 		}
-		oauth = oauthServer
+		oauth = &handler.OAuth{
+			Endpoints: oauthServer,
+			Consents:  usecase.NewOAuthConsents(oauthServer, grantQuery, grantWrites),
+			Apps:      usecase.NewConnectedApps(grantQuery, grantWrites),
+		}
 	}
 
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles, oauth), ready)

@@ -18,6 +18,7 @@ import SigninPage from '../../domains/auth/pages/SigninPage'
 import SignoutPage from '../../domains/auth/pages/SignoutPage'
 import UserDetailPage from '../../domains/users/pages/UserDetailPage'
 import UserUpdatePage from '../../domains/users/pages/UserUpdatePage'
+import OAuthConsentPage from '../../domains/oauth/pages/OAuthConsentPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/shops" replace /> },
@@ -49,6 +50,8 @@ export const router = createBrowserRouter([
       { path: '/reviews/:id/edit', element: <ReviewEditPage /> },
       { path: '/signout', element: <SignoutPage /> },
       { path: '/users/:id/edit', element: <UserUpdatePage /> },
+      // AI アプリが、ログインと許可だけでつなぐための、許可を尋ねる画面(backend の認可の URL から渡される)
+      { path: '/oauth/authorize', element: <OAuthConsentPage /> },
     ],
   },
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/oauthserver"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 func TestAuthorizationCodeFlow(t *testing.T) {
@@ -280,7 +281,7 @@ func TestAuthorizeRequestErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := oauthserver.AuthorizeRequestView{ClientID: staticClientID, ClientName: "Dev App", Scopes: []string{domain.OAuthScopeRead, domain.OAuthScopeWrite}}
+		want := usecase.AuthorizeRequestView{ClientID: staticClientID, ClientName: "Dev App", Scopes: []string{domain.OAuthScopeRead, domain.OAuthScopeWrite}}
 		if view.ClientID != want.ClientID || view.ClientName != want.ClientName || strings.Join(view.Scopes, " ") != strings.Join(want.Scopes, " ") {
 			t.Errorf("view = %+v, want %+v", view, want)
 		}
@@ -307,6 +308,13 @@ func TestTokenExchangeErrors(t *testing.T) {
 		r := newRig(t)
 		code, _ := newCode(r)
 		wantError(t, r.exchange(staticClientID, staticRedirect, code, "wrong-verifier-0123456789-abcdefghijklmnopqrstuvwxyz"), http.StatusBadRequest, "invalid_grant")
+	})
+
+	t.Run("PKCE の verifier が違う交換を 1 回でもすると、正しい verifier でも、その認可コードは使えなくなる(推測を繰り返させない)", func(t *testing.T) {
+		r := newRig(t)
+		code, verifier := newCode(r)
+		wantError(t, r.exchange(staticClientID, staticRedirect, code, "wrong-verifier-0123456789-abcdefghijklmnopqrstuvwxyz"), http.StatusBadRequest, "invalid_grant")
+		wantError(t, r.exchange(staticClientID, staticRedirect, code, verifier), http.StatusBadRequest, "invalid_grant")
 	})
 
 	t.Run("PKCE の verifier を付けずに交換しようとすると、トークンを発行せずに断る", func(t *testing.T) {

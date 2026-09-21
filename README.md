@@ -104,6 +104,10 @@ pnpm run storybook
 - `GET /oauth/authorize`
 - `POST /oauth/token`
 - `POST /oauth/revoke`
+- `GET /oauth/authorize/request`
+- `POST /oauth/authorize/decision`
+- `GET /oauth/grants`
+- `DELETE /oauth/grants/:id`
 - `GET /shops`
 - `POST /shops`
 - `GET /shops/:id`

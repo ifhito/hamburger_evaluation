@@ -10,6 +10,7 @@ import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
 import { ShareLinkButton } from "../components/ShareLinkButton";
+import { ConnectedApps } from "../../oauth/components/ConnectedApps";
 import styles from "./userDetail.module.css";
 
 export default function UserDetailPage() {
@@ -61,6 +62,9 @@ export default function UserDetailPage() {
           </div>
         </div>
       )}
+
+      {/* 許可したアプリの一覧は、本人のプロフィールにだけ出す(本人かどうかは backend が返す canEdit で決める) */}
+      {user?.canEdit && authUser && <ConnectedApps viewerId={authUser.id} />}
 
       <h2 className={styles.reviewsHeading}>{t("users.detail.reviewsHeading")}</h2>
       {reviewsError && <ErrorMessage message={t("users.detail.reviewsLoadError")} />}
