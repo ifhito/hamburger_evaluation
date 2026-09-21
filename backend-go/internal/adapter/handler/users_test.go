@@ -84,7 +84,7 @@ func newUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(string) st
 	shopRepo := &shopStoreFake{}
 	router := handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
 		reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-		usersUsecase(repo, hasherFake{}), nil)
+		usersUsecase(repo, hasherFake{}), nil, nil)
 	token := func(id string) string {
 		t.Helper()
 		tok, err := codec.Issue(id)
@@ -639,7 +639,7 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	router := handler.NewRouter(conn, auth, signups,
 		usecase.NewShops(query.NewShopQuery(conn), domain.NewShops(repository.NewShopRepository(conn))),
 		usecase.NewReviews(query.NewReviewQuery(conn), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), unitOfWork, recalc, hasher), nil)
+		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), unitOfWork, recalc, hasher), nil, nil)
 	return conn, &mailedRouter{Handler: router, mailer: mailer}
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uowtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -480,6 +481,50 @@ func TestUsersDelete(t *testing.T) {
 		}
 		if discarded != usersViewer.ID {
 			t.Errorf("discarded id = %s, want %s", discarded, usersViewer.ID)
+		}
+	})
+}
+
+// TestUsersDeleteRevokesOAuthGrants は、退会が、そのユーザーが AI アプリに許可したすべての許可(と、発行済みの
+// トークン)の取り消しを、論理削除と同じトランザクションで行うことを固定する。退会したユーザーの記録が、
+// あとから使われる余地を残さないため。
+func TestUsersDeleteRevokesOAuthGrants(t *testing.T) {
+	newUsersWith := func(repo domain.UserRepository, unit *uowtest.UoW) *usecase.Users {
+		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
+		return usecase.NewUsers(query, domain.NewUsers(repo), unit, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), fakeHasher{})
+	}
+	discardOK := &fakeUserRepo{discard: func(context.Context, string) error { return nil }}
+
+	t.Run("本人が退会すると、論理削除と同じトランザクションで、自分の許可をすべて取り消す", func(t *testing.T) {
+		grants := &uowtest.GrantRevocations{}
+		unit := &uowtest.UoW{Users: discardOK, Grants: grants}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersViewer.ID); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(grants.UserIDs, []string{usersViewer.ID}) || unit.Commits != 1 {
+			t.Errorf("取り消した利用者 = %v, commits = %d, want [%s] と 1", grants.UserIDs, unit.Commits, usersViewer.ID)
+		}
+	})
+
+	t.Run("許可の取り消しに失敗したときは、退会も確定せず、トランザクションを取り消してエラーを返す", func(t *testing.T) {
+		grants := &uowtest.GrantRevocations{Err: errors.New("database is down")}
+		unit := &uowtest.UoW{Users: discardOK, Grants: grants}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersViewer.ID); err == nil {
+			t.Fatal("エラーにならなかった")
+		}
+		if unit.Commits != 0 || unit.Rollbacks != 1 {
+			t.Errorf("commits = %d, rollbacks = %d, want 0 と 1", unit.Commits, unit.Rollbacks)
+		}
+	})
+
+	t.Run("他人の退会(拒否される)では、許可を取り消さない", func(t *testing.T) {
+		grants := &uowtest.GrantRevocations{}
+		unit := &uowtest.UoW{Users: discardOK, Grants: grants}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersOther.ID); !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("error = %v, want ErrForbidden", err)
+		}
+		if len(grants.UserIDs) != 0 {
+			t.Errorf("取り消した利用者 = %v, want なし", grants.UserIDs)
 		}
 	})
 }

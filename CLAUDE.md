@@ -194,10 +194,66 @@ cd backend-go
 TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=disable' go test ./db/...
 ```
 
+### OAuth の認可サーバー
+
+AI アプリ(MCP のクライアントなど)が、利用者のログインと許可だけでこのアプリにつなぐための、OAuth 2.1 の認可サーバー(`internal/adapter/oauthserver`。認可ライブラリは `github.com/ory/fosite`)。`OAUTH_ISSUER` を設定したときだけ有効で、設定しなければ、下の窓口は登録されない(404)。リモートの MCP(`/mcp`)は別の story で、ここは、そこが使う「許可の証(トークン)を発行し、確かめる」土台である。
+
+**流れ**(認可コード + PKCE)
+
+1. アプリが、利用者のブラウザで `GET /oauth/authorize?...`(`client_id`・`redirect_uri`・`scope`・`state`・`code_challenge`(S256)・`resource`)を開く。API は要求を検証し、問題がなければ、許可を尋ねる画面(frontend。`OAUTH_CONSENT_URL`)へ、同じ値のまま 303 で渡す。アプリへ結果を戻せない不正(未登録のアプリ・登録と違う戻り先)は、リダイレクトせずにエラーで返し、戻せる不正(PKCE がない・知らない範囲・宛先の誤り)は、`error` を付けてアプリへ戻す。
+2. 利用者がログイン済みの画面で許可すると、API が認可コードを発行し、アプリへ戻す(戻り先に `code`・`state`・`iss`(発行者。RFC 9207)を付ける)。
+3. アプリが `POST /oauth/token` で、認可コードと PKCE の `code_verifier` を、アクセストークン(と更新トークン)に交換する。切れたら、更新トークンで取り直す。
+4. 保護する側(`/mcp` など)は、`usecase.OAuthAccessTokens.Authenticate` で、`Authorization: Bearer` のトークンを確かめる(宛先・範囲・持ち主のユーザーの有効性)。
+
+**窓口**
+
+- `GET /.well-known/oauth-authorization-server` — 認可サーバーの情報(RFC 8414)。対応するのは、`code` と `refresh_token`、PKCE は `S256` だけ、アプリの認証は `none`(秘密の鍵を持たない公開クライアントだけ)、範囲は `hamburger:read` / `hamburger:write`。
+- `GET /oauth/authorize` — 認可の入口(上記 1)。
+- `POST /oauth/token` — トークンの発行(認可コードの交換・更新)。
+- `POST /oauth/revoke` — 取り消し(RFC 7009)。更新トークンを取り消すと、その認可から発行されたトークンがすべて使えなくなる。
+
+**ルール**(判断は `internal/domain/oauth*.go` だけが持つ)
+
+- 範囲: 読み取り(`hamburger:read`)と書き込み(`hamburger:write`)。指定がなければ読み取りだけ。要求が、すでに許可した範囲を超えたときだけ、許可を尋ね直す(`domain.OAuthConsentRequired`)。許可の記録(`oauth_grants`)は、利用者とアプリの組ごとに 1 行で、範囲は広がる方向にだけ更新する。
+- 有効期間: 認可コード 2 分、アクセストークン 15 分、更新トークン 30 日(業務のルールで、環境変数では変えない)。
+- トークンは不透明な文字列で、DB(`oauth_token_sessions`)には署名だけを保存し、文字列そのものは保存しない。取り消しは、記録を消す・無効にするので、すぐ効く。
+- 認可コードは 1 回だけ使える。再利用(並行した 2 回の使用を含む)を検知したら、その認可から発行されたトークンをすべて使えなくする。更新トークンは使うたびに入れ替え、入れ替え済みのものの再利用を検知したら、同じくその系列を全部使えなくする。判定と更新は 1 つの SQL 文で行う。 **認可コードを使用済みにしてから、トークンを保存するまで(更新トークンの入れ替えから、新しいトークンを保存するまでも同じ)は、1 つの DB トランザクション**にまとめる(認可ライブラリの `Transactional` の口。`usecase.OAuthTokenSessionStore`、実装は `adapter/uow`)。まとめないと、再利用を検知した別の要求が系列を取り消したあとに、先の交換が、まだ保存していなかったトークンを保存して、取り消したはずのトークンが有効なまま残る。まとめれば、認可コードの行のロックで、あとから来た要求は、先の交換が確定するまで待たされ、そのあとで取り消すので、保存されたトークンも取り消される。系列の取り消し(アクセストークンの削除と更新トークンの無効化)も、1 つの SQL 文で行い、失敗しても片方だけが反映されることはない。
+- 認可コードを発行するとき(`IssueAuthorizationCode`)は、許可の記録が、その利用者・そのアプリのものか、要求された範囲を許可済みかを、保存先から確かめる(`domain.OAuthGrant.Permits`)。別の許可の記録の id や、許可していない範囲を渡されても、認可コードは発行せず、確かめた範囲だけを付与する。
+- 持ち主が退会(論理削除)した利用者には、認可コードの交換でも更新でも、新しいトークンを発行しない(`invalid_grant`)。退会(`DELETE /users/:id`)は、同じトランザクションで、その利用者のすべての許可(と、発行済みのトークンの記録)を取り消す。アクセストークンの検証(`usecase.OAuthAccessTokens.Authenticate`)の判定の順は「宛先 → 持ち主が有効か → 範囲」で、退会済みの持ち主のトークンは、範囲に関係なく、常に無効(401 相当)になる。
+- 宛先(`resource`): トークンは、`OAUTH_RESOURCE_URL` の宛先だけに発行する(指定がなければその宛先、違えば `invalid_target`)。保護する側は、宛先が自分のトークンだけを受け付ける。
+- 戻り先: https、またはループバックの http だけを登録できる。照合は完全一致で、`127.0.0.1` と `[::1]` だけポート番号の違いを許す(`localhost` はポートまで完全一致)。独自スキーム(`myapp://`)は登録できない。
+- PKCE: `S256` だけ必須(`domain.ValidateOAuthPKCE`)。`state` も必須(ライブラリの既定)。
+- アプリの登録: 秘密の鍵を持たない公開クライアントだけ。**固定で登録**(`OAUTH_STATIC_CLIENTS`)するか、アプリが自分の説明を https の URL で公開する方式(CIMD。`client_id` がその URL)。CIMD の文書は、サーバーが取りに行くので、内部のサーバーへ向けさせる攻撃(SSRF)への対策を必ず守る: https だけ・標準のポートだけ・ホスト名だけ(IP アドレスの直接指定は不可)・接続の直前に、名前解決の結果が公開のアドレスかを確認(ループバック・プライベート・リンクローカルを断る)・リダイレクトを追わない・プロキシを使わない・待ち時間 5 秒・本文 64 KiB まで・種類は `application/json` だけ(`HTTPMetadataFetcher`)。文書の `client_id` が URL と違えば断り、許す使い方・範囲・宛先は、文書に何を書いても広がらない。取得した内容は 5 分覚える。
+
+**環境変数**(有効にしたのに足りない・不正なときは起動時に落ちる。値はログ・エラーに出さない)
+
+| 変数 | 必須 | 内容 |
+|---|---|---|
+| `OAUTH_ISSUER` | 任意(設定すると有効) | この API の公開 URL(例: `http://localhost:8080`)。認可サーバーの情報の `issuer` と、戻り先の `iss` になる |
+| `OAUTH_TOKEN_SECRET` | 有効なとき必須 | トークンの署名に使う秘密の鍵。**32 文字以上・秘密。ログ・コード・PR に書かない** |
+| `OAUTH_RESOURCE_URL` | 任意 | トークンの宛先。既定は `<OAUTH_ISSUER>/mcp` |
+| `OAUTH_CONSENT_URL` | 任意 | 許可を尋ねる画面の URL。既定は `<APP_BASE_URL>/oauth/authorize` |
+| `OAUTH_STATIC_CLIENTS` | 任意 | 固定で登録するアプリ。JSON の配列 `[{"id":"…","name":"…","redirect_uris":["…"]}]` |
+
+**主なクライアントとの相性**(公式ドキュメントで確認した内容。実機での確認は、`/mcp` ができてから行う)
+
+- Cursor: 固定のクライアント ID を設定する方式(動的登録・CIMD は使わない)。戻り先は `http://localhost:8787/callback` と `https://www.cursor.com/agents/mcp/oauth/callback` → `OAUTH_STATIC_CLIENTS` で足りる。
+- Claude Code: 既定は動的登録(DCR)で、認可サーバーが CIMD に対応していれば CIMD も使う。戻り先は `http://localhost:<ランダムなポート>/callback`。`--client-id` と `--callback-port` で固定すれば、固定で登録したアプリ(戻り先は `http://localhost:<そのポート>/callback`)でつなげる。
+- Claude(claude.ai・デスクトップのカスタムコネクタ): 動的登録を試み、詳細設定でクライアント ID を指定できる。戻り先は `https://claude.ai/api/mcp/auth_callback`(固定で登録できる)。
+- **動的登録(DCR。`POST /oauth/register`)は未対応**。どのクライアントにも、固定の登録か CIMD の道があること、誰でも登録できる窓口は表を増やし続ける悪用の余地があること、が理由。実機で必要と分かったら、別の PR で足す。
+
+**制限**: アプリの説明を取りに行く回数の制限(レート制限)は、まだない(SSRF の対策と、取得結果のキャッシュだけ)。
+
 ### エンドポイント
 
 **ヘルスチェック**
 - `GET /up` — ヘルスチェック (DB への ping)
+
+**OAuth の認可サーバー**(`OAUTH_ISSUER` を設定したときだけ。詳細は「OAuth の認可サーバー」)
+- `GET /.well-known/oauth-authorization-server` — 認可サーバーの情報(RFC 8414)
+- `GET /oauth/authorize` — 認可の入口。検証して、許可を尋ねる画面へ 303 で渡す
+- `POST /oauth/token` — 認可コード(PKCE つき)・更新トークンを、トークンに交換する
+- `POST /oauth/revoke` — トークンの取り消し(RFC 7009)
 
 **認証**
 - `POST /signup` — アカウントの作成を申し込み、確認メールを送る。**登録済みの email でも未登録の email でも、同じ 202 `{"message":"Confirmation email sent"}` を返す**(アカウント列挙の防止)。アカウントは、確認メールのリンクを開いて `POST /signup/confirm` を呼んで初めて作られる。検証は登録の有無に依存しないものだけで、違反は 422(username、email、password。email は形式(`net/mail` で解析でき、表示名などを含まないアドレスだけであること)を検証し、不正なら 422 `Email is invalid`。password は 8〜72 バイトで、半角英字・数字・記号をそれぞれ 1 文字以上含む。`PUT /users/:id` のパスワード変更にも同じ規則を適用する。password_confirmation は任意で、送った場合は password と不一致なら 422。規則の判定は backend の domain だけが持ち、frontend は説明文の表示と、サーバーの 422 メッセージの表示だけを行う)。「登録済み」を示すエラーは返さない
@@ -229,7 +285,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 **ユーザー**
 - `GET /users/:id` — ユーザーを 1 人取得 (認証は任意。存在しない・退会済み・UUID の正規形でない id は同一の 404。自己紹介文(応答のキーは `bio`。書かれていなければ空文字)は、誰が閲覧しても含む。email・admin は、本人が閲覧したときだけ含む。`can_edit`: 閲覧者がこのプロフィールを編集・削除できるか(domain の `Manages`。本人だけ `true`)を常に含む)
 - `PUT /users/:id` — ユーザーの更新 (要認証。本人のみ。usecase で判定。email を変更するときは、signup と同じ形式の検証を行う。自己紹介文(`bio`)は、送ったときだけ更新される(送らなければ変わらず、空文字を送ると消える)。上限は 500 文字で、超えると 422 `Bio is too long (maximum is 500 characters)`。応答にも `bio` を含む。新規登録では自己紹介文を設定できない(`POST /signup` の要求に含めても無視される))
-- `DELETE /users/:id` — ユーザーの削除 (要認証。本人のみ。usecase で判定)
+- `DELETE /users/:id` — ユーザーの削除 (要認証。本人のみ。usecase で判定。論理削除と、統計の再計算の依頼、AI アプリへの許可の取り消しを、1 つのトランザクションで行う)
 
 **管理者** (要認証。管理者のみ許可する判定は usecase で行う)
 - `GET /admin/shops` — モデレーション用のショップ一覧 (各ショップに `can_approve` / `can_reject`: 承認・却下の操作を画面が提示してよいか。domain の `Shop.CanBeApproved` / `CanBeRejected` が status から判断する。`PUT`・`approve`・`reject` の応答にも含まれる。frontend は status を比較してボタンを出さない)

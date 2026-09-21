@@ -17,6 +17,7 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/oauthserver"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
@@ -137,7 +138,28 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		}
 	}()
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles), ready)
+	// OAuth の認可サーバーは、OAUTH_ISSUER を設定したときだけ有効になる(設定がなければ、窓口は登録されない)。
+	var oauth handler.OAuthEndpoints
+	if cfg.OAuth.Enabled {
+		oauthServer, err := oauthserver.New(oauthserver.Config{
+			Issuer:        cfg.OAuth.Issuer,
+			Resource:      cfg.OAuth.Resource,
+			ConsentURL:    cfg.OAuth.ConsentURL,
+			Secret:        []byte(cfg.OAuth.Secret),
+			StaticClients: cfg.OAuth.StaticClients,
+		}, oauthserver.Deps{
+			Sessions: uow.NewOAuthTokenSessionStore(pool),
+			Grants:   query.NewOAuthGrantQuery(pool),
+			Users:    userQuery,
+			Fetcher:  oauthserver.NewHTTPMetadataFetcher(),
+		})
+		if err != nil {
+			return fmt.Errorf("oauth server: %w", err)
+		}
+		oauth = oauthServer
+	}
+
+	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles, oauth), ready)
 }
 
 // serve は、明示的な timeout を設定した http.Server（素の ListenAndServe は

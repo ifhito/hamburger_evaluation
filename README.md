@@ -100,6 +100,10 @@ pnpm run storybook
 - `POST /signup/confirm`
 - `POST /login`
 - `POST /logout`
+- `GET /.well-known/oauth-authorization-server`
+- `GET /oauth/authorize`
+- `POST /oauth/token`
+- `POST /oauth/revoke`
 - `GET /shops`
 - `POST /shops`
 - `GET /shops/:id`

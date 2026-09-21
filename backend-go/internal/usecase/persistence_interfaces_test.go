@@ -747,6 +747,8 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 			"CreateUserParams", "ProfileChanges",
 			"SignupVerificationRepository", "SignupVerifications", "SignupVerificationReceipt", "CreateSignupVerificationParams",
 			"MailDeliveryRepository", "MailDeliveries", "NewMailDeliveries", "CreateMailDeliveryParams",
+			"OAuthGrantRepository", "OAuthGrants", "NewOAuthGrants", "CreateOAuthGrantParams",
+			"OAuthTokenSessionRepository", "OAuthTokenSessions", "NewOAuthTokenSessions",
 		} {
 			if !slices.Contains(persistence, want) {
 				t.Errorf("永続化の識別子に %s が見つからない (見つかったもの: %v)", want, persistence)

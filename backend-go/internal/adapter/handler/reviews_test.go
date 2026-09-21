@@ -310,7 +310,7 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewStoreFake) (router http.Han
 	shopRepo := &shopStoreFake{}
 	router = handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
 		reviewsUsecase(repo, storage.NewDisk(photoDir, "/photos")),
-		usersUsecase(users, hasherFake{}), handler.PhotoFileServer(photoDir))
+		usersUsecase(users, hasherFake{}), handler.PhotoFileServer(photoDir), nil)
 	return router, photoDir, token(alice.ID), token(bob.ID), token(admin.ID)
 }
 

@@ -131,7 +131,8 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 // Delete は対象ユーザーのアカウントを論理削除する(削除日時を記録するだけで、行は消さない)。
 // 順序は、対象の取得(存在しなければ 404。本人でなくても同じ)、domain の本人管理ルール
 // (本人でなければ 403)、そして論理削除である。論理削除と、そのユーザーのレビューが付いている
-// すべてのバーガーの統計の再計算の依頼(バーガー ID の昇順に登録)は、1 つのトランザクションで行う。
+// すべてのバーガーの統計の再計算の依頼(バーガー ID の昇順に登録)と、そのユーザーが AI アプリに許可した
+// すべての許可の取り消し(発行済みのトークンも、使えなくなる)は、1 つのトランザクションで行う。
 //
 // ユーザーのレビュー自体は削除しない(レビューの削除日時は書き込まない)。画面から隠すのは、
 // 読み取りの側で、削除済みのユーザーのレビューを除いて行う。あとから行われる統計の再計算も、削除済みの
@@ -146,6 +147,9 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 	}
 	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		if err := tx.Users.Discard(ctx, targetID); err != nil {
+			return err
+		}
+		if err := tx.OAuthGrants.RevokeAll(ctx, targetID); err != nil {
 			return err
 		}
 		return s.recalc.RequestRecalculationReviewedBy(ctx, tx, targetID)

@@ -22,6 +22,16 @@ type route struct {
 	methodMiddleware map[string]func(http.Handler) http.Handler
 }
 
+// OAuthEndpoints は、OAuth の認可サーバーの HTTP の窓口である(実装は adapter/oauthserver)。
+// プロトコルの細部(認可・トークン・取り消しの要求の解釈と応答)は実装が担い、ここは URL と HTTP メソッドを
+// 結び付けるだけである。
+type OAuthEndpoints interface {
+	HandleMetadata(http.ResponseWriter, *http.Request)
+	HandleAuthorize(http.ResponseWriter, *http.Request)
+	HandleToken(http.ResponseWriter, *http.Request)
+	HandleRevoke(http.ResponseWriter, *http.Request)
+}
+
 // NewRouter は HTTP handler のツリーを構築する：stdlib の Go 1.22 の
 // method パターン mux を、グローバルな body cap の middleware で包んだもの
 // である。未知の route は 404、誤った method は 405 を返し、どちらも JSON の
@@ -29,13 +39,15 @@ type route struct {
 // GET /photos/ の配下で review の写真を配信する。mux に直接登録しており
 // （Go 1.22 の ServeMux は最も限定的なパターンを優先するので、登録順に関わらず
 // catch-all の "/" より優先される）、s3 モードでは nil で、写真の URL は
-// 代わりに bucket の公開ドメインを指す。
-func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler) http.Handler {
+// 代わりに bucket の公開ドメインを指す。oauth は nil でない場合（OAuth の認可サーバーが有効な
+// とき）、認可サーバーの情報・認可・トークン・取り消しの窓口を登録する。nil なら、これらは未登録で、
+// 404 になる。
+func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler, oauth OAuthEndpoints) http.Handler {
 	mux := http.NewServeMux()
 	if photoFiles != nil {
 		mux.Handle("GET /photos/", http.StripPrefix("/photos/", photoFiles))
 	}
-	registerRoutes(mux, []route{
+	registerRoutes(mux, append(oauthRoutes(oauth), []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(signups)}},
 		{path: "/signup/confirm", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignupConfirm(signups)}},
@@ -104,8 +116,23 @@ func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *u
 		{path: "/admin/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodPut: handleAdminUpdateShop(shops)}, middleware: RequireAuth(auth)},
 		{path: "/admin/shops/{id}/approve", methods: map[string]http.HandlerFunc{http.MethodPost: handleApproveShop(shops)}, middleware: RequireAuth(auth)},
 		{path: "/admin/shops/{id}/reject", methods: map[string]http.HandlerFunc{http.MethodPost: handleRejectShop(shops)}, middleware: RequireAuth(auth)},
-	})
+	}...))
 	return limitBody(mux)
+}
+
+// oauthRoutes は、OAuth の認可サーバーの route を返す。oauth が nil なら、何も返さない。
+// 認可の URL は、利用者のブラウザが開く(ログインの確認は、frontend の許可の画面で行う)ので、認証の
+// middleware は付けない。トークンと取り消しは、アプリが直接呼ぶ。
+func oauthRoutes(oauth OAuthEndpoints) []route {
+	if oauth == nil {
+		return nil
+	}
+	return []route{
+		{path: "/.well-known/oauth-authorization-server", methods: map[string]http.HandlerFunc{http.MethodGet: oauth.HandleMetadata}},
+		{path: "/oauth/authorize", methods: map[string]http.HandlerFunc{http.MethodGet: oauth.HandleAuthorize}},
+		{path: "/oauth/token", methods: map[string]http.HandlerFunc{http.MethodPost: oauth.HandleToken}},
+		{path: "/oauth/revoke", methods: map[string]http.HandlerFunc{http.MethodPost: oauth.HandleRevoke}},
+	}
 }
 
 // registerRoutes は、各 route の "METHOD path" パターン（method ごとの
