@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useCreateShop } from "../hooks/useShopMutations";
 import { useShopForm } from "../hooks/useShopForm";
 import { ApiError } from "../../../api/client/buildApiClient";
+import { useMeta } from "../../../api/meta";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -14,7 +15,8 @@ export default function ShopNewPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { create } = useCreateShop();
-  const { register, handleSubmit } = useShopForm();
+  const { register, handleSubmit, watch } = useShopForm();
+  const textLimits = useMeta().data?.text;
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,6 +44,7 @@ export default function ShopNewPage() {
           label={t("shops.new.name")}
           type="text"
           placeholder={t("shops.new.namePlaceholder")}
+          counter={{ value: watch("name"), max: textLimits?.shopNameMaxChars }}
           {...register("name")}
         />
         <div className={styles.actions}>

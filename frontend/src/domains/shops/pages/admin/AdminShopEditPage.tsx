@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAdminShops, useUpdateShop } from "../../hooks/useShopMutations";
 import { useShopForm } from "../../hooks/useShopForm";
 import { ApiError } from "../../../../api/client/buildApiClient";
+import { useMeta } from "../../../../api/meta";
 import { Button } from "../../../../components/Button";
 import { ErrorMessage } from "../../../../components/ErrorMessage";
 import { Input } from "../../../../components/Input";
@@ -20,7 +21,8 @@ export default function AdminShopEditPage() {
   const shop = shops?.find((s) => s.id === shopId);
 
   const { update } = useUpdateShop(shopId);
-  const { register, handleSubmit, reset } = useShopForm();
+  const { register, handleSubmit, reset, watch } = useShopForm();
+  const textLimits = useMeta().data?.text;
 
   useEffect(() => {
     if (shop) reset({ name: shop.name });
@@ -58,6 +60,7 @@ export default function AdminShopEditPage() {
           id="name"
           label={t("shops.new.name")}
           type="text"
+          counter={{ value: watch("name"), max: textLimits?.shopNameMaxChars }}
           {...register("name")}
         />
         <div className={styles.actions}>
