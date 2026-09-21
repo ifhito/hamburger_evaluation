@@ -170,7 +170,7 @@ func TestAuthLogin(t *testing.T) {
 	}
 
 	// 認証情報が signup と同じ規則（domain.ValidateCredentials）を満たさないときは、
-	// DB の検索も hash の比較も行わず、検証エラーを返す（Story #61）。
+	// DB の検索も hash の比較も行わず、検証エラーを返す。
 	// getByEmail を設定しない fakeUserQuery は、呼ばれると panic するので、検索されないことも固定される。
 	rejected := []struct {
 		name     string

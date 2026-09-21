@@ -130,13 +130,13 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (doma
 // （422）である。正の burgerID が優先され、shop に紐づく burger を指して
 // いなければならない（そうでなければ 404）。そうでない場合は、空白でない
 // burgerName が、insert と同じ transaction 内で、完全一致かつ trim されて
-// いない名前で shop の burger を find-or-create する（Rails parity、
-// S6 P3-1）。どちらでもない場合は validation の失敗（422）であり、黙って
+// いない名前で shop の burger を探し、なければ作る（Rails parity）。
+// どちらでもない場合は validation の失敗（422）であり、黙って
 // デフォルトを使うことは決してない。レスポンスの detail は、viewer と、
 // 存在確認のために解決した burger から組み立てる。再取得はしない。バーガー名の経路でのバーガーの
 // 作成、レビューの登録、統計の再計算は、1 つの UnitOfWork(まとめて 1 つのトランザクションにする範囲)の
 // 中で行うので、どの段階で失敗しても、レビューのない作りかけのバーガーが残ることはない。nil でない
-// upload（handler で validate 済み/正規化済み、S10）は、insert の前に新しい
+// upload（handler で validate 済み/正規化済み）は、insert の前に新しい
 // ランダムな key で保存される。その後 insert が失敗した場合は、アップロード
 // したばかりの blob を best-effort で削除するので、リクエストより長く残る
 // 孤立ファイルはない。
@@ -207,10 +207,10 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 // Update は review の rating と comment を編集する。load（存在しない review、
 // discard 済みの review、author が discard 済みの user である review は
 // いずれも 404）、domain の所有権ルール（403。
-// issue #14 AC3、admin でも通らない）、content の validation（422）、
+// admin でも通らない）、content の validation（422）、
 // そしてカラム限定の書き込みの順で行う。保存された行は load した detail に
 // マージされるので、レスポンスは再取得なしで author、burger、stats を持つ。
-// nil でない upload（S10）は写真を置き換える。新しい blob を先に保存し、
+// nil でない upload は写真を置き換える。新しい blob を先に保存し、
 // 続いて content と photo_key を「1 つの」transaction で切り替え（失敗しても
 // content だけが key なしで commit されることは決してない）、その DB の成功の
 // 後にはじめて古い blob を best-effort で削除する。
@@ -265,7 +265,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rat
 // Delete は review を soft delete する。load（404）、domain の所有権ルール
 // （403、Update と同様に author のみ）、そしてカラム限定の discard の順で
 // 行い、hard DELETE は決して行わない。写真の blob があれば、discard が
-// 成功した後に best-effort で削除される（S10）。
+// 成功した後に best-effort で削除される。
 func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id string) error {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
