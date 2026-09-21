@@ -115,6 +115,8 @@ func (m *MCPServer) ProtectedResourceMetadataPath() string { return m.metadataPa
 type mcpPrincipal struct {
 	user   domain.User
 	scopes []string
+	// lang は、この要求の Accept-Language から決めた、ツールの失敗の文言の言語である。
+	lang domain.Lang
 }
 
 type mcpPrincipalKeyType struct{}
@@ -245,7 +247,7 @@ func (m *MCPServer) HandleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.As(err, &scopeErr):
 		w.Header().Set("WWW-Authenticate", m.challenge("insufficient_scope", strings.Join(scopeErr.Missing, " ")))
-		writeJSON(w, http.StatusForbidden, errorResponse{Error: "Insufficient scope: " + strings.Join(scopeErr.Missing, " ")})
+		writeError(w, r, http.StatusForbidden, apiMsg(keyInsufficientScope, strings.Join(scopeErr.Missing, " ")))
 		return
 	default:
 		// 保存先などの障害。トークンは決してログに出さない。
@@ -253,7 +255,7 @@ func (m *MCPServer) HandleMCP(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w)
 		return
 	}
-	m.mcp.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpPrincipalKey, mcpPrincipal{user: viewer, scopes: access.Scopes})))
+	m.mcp.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpPrincipalKey, mcpPrincipal{user: viewer, scopes: access.Scopes, lang: langOf(r)})))
 }
 
 // mcpInstructions は、MCP のクライアント(AI)に、接続の最初に渡す説明である。レビューの本文などは、
@@ -272,5 +274,5 @@ func (m *MCPServer) serverFor(r *http.Request) *mcp.Server {
 		log.Printf("mcp: no authenticated principal in context (route missing authentication?)")
 		return nil
 	}
-	return m.newToolServer(principal.user, principal.scopes)
+	return m.newToolServer(principal.user, principal.scopes, principal.lang)
 }

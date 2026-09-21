@@ -2,8 +2,8 @@ package handler
 
 import "github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 
-// このファイルは、handler が返す 4xx の文言(見つからない・権限・認証・入力の形・写真)のカタログ(英語・
-// 日本語)である。検証の失敗(422)の文言は、domain のカタログ(domain/messages.go)にある。英語は、API の
+// このファイルは、handler が返す 4xx の文言(見つからない・権限・認証・リクエストの形・写真・クエリの誤り、
+// Google のサインインの案内、OAuth の許可の画面、MCP の範囲の不足)のカタログ(英語・日本語)である。検証の失敗(422)の文言は、domain のカタログ(domain/messages.go)にある。英語は、API の
 // 文言の契約なので、一字一句、変えない。日本語は、デザイン(design/redesign)の語調と用語にそろえる
 // (です・ます調の短い文。ログインでなく「サインイン」)。キーを足したら、英語と日本語の両方を書く
 // (構造テスト messages_test.go が強制する)。
@@ -38,6 +38,18 @@ const (
 	keyUserIDInvalid      = "param.user_id_invalid"
 	keyPageNotInteger     = "param.page_not_integer"
 	keyPerPageNotInteger  = "param.per_page_not_integer"
+
+	keyOAuthApproveRequired = "oauth.approve_required"
+	keyOAuthRequestInvalid  = "oauth.request_invalid"
+	keyOAuthScopeInvalid    = "oauth.scope_invalid"
+	keyInsufficientScope    = "mcp.insufficient_scope"
+
+	keyGoogleSignInFailed  = "google.sign_in_failed"
+	keyGoogleCodeInvalid   = "google.code_invalid"
+	keyGoogleAccountExists = "google.account_exists"
+	keyGoogleIdentityTaken = "google.identity_taken"
+	keyGoogleAlreadyLinked = "google.already_linked"
+	keyGoogleCannotUnlink  = "google.cannot_unlink"
 )
 
 var catalog = map[string]domain.Entry{
@@ -67,6 +79,20 @@ var catalog = map[string]domain.Entry{
 	keyUserIDInvalid:      {EN: "User id must be a valid UUID", JA: "ユーザーの ID の形式が正しくありません"},
 	keyPageNotInteger:     {EN: "Page must be an integer", JA: "ページは、整数で指定してください"},
 	keyPerPageNotInteger:  {EN: "Per page must be an integer", JA: "1 ページの件数は、整数で指定してください"},
+
+	keyOAuthApproveRequired: {EN: "Approve is required", JA: "許可するか、許可しないかを指定してください"},
+	// 要求が不正な理由は、OAuth の仕様に沿った診断の文(英語。アプリの作り手が読む)なので、日本語の文言には、
+	// 「詳細」として、そのまま添える。
+	keyOAuthRequestInvalid: {EN: "%s", JA: "このアプリからの許可の要求が正しくありません。詳細: %s"},
+	keyOAuthScopeInvalid:   {EN: "%s", JA: "要求された許可の範囲が正しくありません。詳細: %s"},
+	keyInsufficientScope:   {EN: "Insufficient scope: %s", JA: "許可の範囲が足りません: %s"},
+
+	keyGoogleSignInFailed:  {EN: "Google sign-in failed. Please try again.", JA: "Google でのサインインに失敗しました。もう一度お試しください。"},
+	keyGoogleCodeInvalid:   {EN: "The Google sign-in link is invalid or has expired. Please try again.", JA: "Google のサインインのリンクが、無効か期限切れです。もう一度お試しください。"},
+	keyGoogleAccountExists: {EN: "An account with this email address already exists. Sign in with your password, then connect Google from your profile.", JA: "このメールアドレスのアカウントが、すでにあります。パスワードでサインインして、プロフィールから Google を連携してください。"},
+	keyGoogleIdentityTaken: {EN: "This Google account is already connected to another account.", JA: "この Google アカウントは、ほかのアカウントに連携済みです。"},
+	keyGoogleAlreadyLinked: {EN: "Your account is already connected to a Google account. Disconnect it first.", JA: "このアカウントは、すでに Google アカウントに連携しています。先に、連携を解除してください。"},
+	keyGoogleCannotUnlink:  {EN: "Google is your only way to sign in. Add a password before disconnecting it.", JA: "Google が、サインインできる唯一の方法です。パスワードを追加してから、連携を解除してください。"},
 }
 
 // apiMessage は、handler が返す文言を、言語に依らない形(キー + 引数)で表す。domain の検証の文言
@@ -92,20 +118,27 @@ func text(l domain.Lang, m apiMessage) string {
 }
 
 var (
-	msgRouteNotFound      = apiMsg(keyRouteNotFound)
-	msgUnauthorized       = apiMsg(keyUnauthorized)
-	msgInvalidCredentials = apiMsg(keyInvalidCredentials)
-	msgInvalidJSON        = apiMsg(keyInvalidJSON)
-	msgInvalidBody        = apiMsg(keyInvalidBody)
-	msgBodyTooLarge       = apiMsg(keyBodyTooLarge)
-	msgInvalidMultipart   = apiMsg(keyInvalidMultipart)
-	msgDuplicatePhoto     = apiMsg(keyDuplicatePhoto)
-	msgFieldTooLarge      = apiMsg(keyFieldTooLarge)
-	msgMethodNotAllowed   = apiMsg(keyMethodNotAllowed)
-	msgRatingNotInteger   = apiMsg(keyRatingNotInteger)
-	msgShopIDInvalid      = apiMsg(keyShopIDInvalid)
-	msgBurgerIDInvalid    = apiMsg(keyBurgerIDInvalid)
-	msgUserIDInvalid      = apiMsg(keyUserIDInvalid)
-	msgPageNotInteger     = apiMsg(keyPageNotInteger)
-	msgPerPageNotInteger  = apiMsg(keyPerPageNotInteger)
+	msgRouteNotFound        = apiMsg(keyRouteNotFound)
+	msgUnauthorized         = apiMsg(keyUnauthorized)
+	msgInvalidCredentials   = apiMsg(keyInvalidCredentials)
+	msgInvalidJSON          = apiMsg(keyInvalidJSON)
+	msgInvalidBody          = apiMsg(keyInvalidBody)
+	msgBodyTooLarge         = apiMsg(keyBodyTooLarge)
+	msgInvalidMultipart     = apiMsg(keyInvalidMultipart)
+	msgDuplicatePhoto       = apiMsg(keyDuplicatePhoto)
+	msgFieldTooLarge        = apiMsg(keyFieldTooLarge)
+	msgMethodNotAllowed     = apiMsg(keyMethodNotAllowed)
+	msgRatingNotInteger     = apiMsg(keyRatingNotInteger)
+	msgShopIDInvalid        = apiMsg(keyShopIDInvalid)
+	msgBurgerIDInvalid      = apiMsg(keyBurgerIDInvalid)
+	msgUserIDInvalid        = apiMsg(keyUserIDInvalid)
+	msgPageNotInteger       = apiMsg(keyPageNotInteger)
+	msgPerPageNotInteger    = apiMsg(keyPerPageNotInteger)
+	msgGoogleSignInFailed   = apiMsg(keyGoogleSignInFailed)
+	msgGoogleCodeInvalid    = apiMsg(keyGoogleCodeInvalid)
+	msgGoogleAccountExists  = apiMsg(keyGoogleAccountExists)
+	msgGoogleIdentityTaken  = apiMsg(keyGoogleIdentityTaken)
+	msgGoogleAlreadyLinked  = apiMsg(keyGoogleAlreadyLinked)
+	msgGoogleCannotUnlink   = apiMsg(keyGoogleCannotUnlink)
+	msgOAuthApproveRequired = apiMsg(keyOAuthApproveRequired)
 )

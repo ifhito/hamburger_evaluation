@@ -22,17 +22,6 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// 画面(SPA)へ渡す、手続きの結果の文言である。文言は API が決め、frontend は、返されたものをそのまま出す。
-// 原因の詳細(検証のどこで失敗したか)は、どれにも含めない。
-const (
-	googleSignInFailedMessage  = "Google sign-in failed. Please try again."
-	googleCodeInvalidMessage   = "The Google sign-in link is invalid or has expired. Please try again."
-	googleAccountExistsMessage = "An account with this email address already exists. Sign in with your password, then connect Google from your profile."
-	googleIdentityTakenMessage = "This Google account is already connected to another account."
-	googleAlreadyLinkedMessage = "Your account is already connected to a Google account. Disconnect it first."
-	googleCannotUnlinkMessage  = "Google is your only way to sign in. Add a password before disconnecting it."
-)
-
 // googleFlowCookiePrefix は、1 回のサインインの手続きの間だけ持ち回る値を入れる cookie の名前の前置きである。
 // **手続きごとに別の cookie**(名前に state のハッシュを付ける)にするので、複数のタブで手続きを並行しても、互いを
 // 上書きせず、使い終わった手続きの cookie だけを消せる(Path も、戻りの要求だけに絞れる)。
@@ -363,7 +352,7 @@ func (g *GoogleLogin) HandleExchange(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, domain.ErrLoginHandoffInvalid) {
 			g.cookie.clearBinder(w, req.Code)
-			writeJSON(w, http.StatusBadRequest, errorsResponse{Errors: []string{googleCodeInvalidMessage}})
+			writeErrorList(w, r, http.StatusBadRequest, msgGoogleCodeInvalid)
 			return
 		}
 		log.Printf("google login: exchange: %v", err)
@@ -371,8 +360,12 @@ func (g *GoogleLogin) HandleExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.cookie.clearBinder(w, req.Code) // コードは使い切った
-	fail := func(status int, message string) {
-		writeJSON(w, status, googleFailureResponse{Errors: []string{message}, ReturnTo: res.ReturnTo})
+	// 文言は API が決め、frontend は、返されたものをそのまま出す(利用者の言語で)。原因の詳細(検証のどこで
+	// 失敗したか)は、どれにも含めない。
+	fail := func(status int, m apiMessage) {
+		writeErrorListWith(w, r, status, func(texts []string) any {
+			return googleFailureResponse{Errors: texts, ReturnTo: res.ReturnTo}
+		}, m)
 	}
 	switch res.Outcome {
 	case domain.OutcomeSignedIn:
@@ -380,13 +373,13 @@ func (g *GoogleLogin) HandleExchange(w http.ResponseWriter, r *http.Request) {
 	case domain.OutcomeLinked:
 		writeJSON(w, http.StatusOK, googleLinkedResponse{Linked: true, ReturnTo: res.ReturnTo})
 	case domain.OutcomeAccountExists:
-		fail(http.StatusConflict, googleAccountExistsMessage)
+		fail(http.StatusConflict, msgGoogleAccountExists)
 	case domain.OutcomeIdentityTaken:
-		fail(http.StatusConflict, googleIdentityTakenMessage)
+		fail(http.StatusConflict, msgGoogleIdentityTaken)
 	case domain.OutcomeAlreadyLinked:
-		fail(http.StatusConflict, googleAlreadyLinkedMessage)
+		fail(http.StatusConflict, msgGoogleAlreadyLinked)
 	default:
-		fail(http.StatusBadRequest, googleSignInFailedMessage)
+		fail(http.StatusBadRequest, msgGoogleSignInFailed)
 	}
 }
 
@@ -470,7 +463,7 @@ func (g *GoogleLogin) HandleUnlinkGoogle(w http.ResponseWriter, r *http.Request)
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, domain.ErrCannotUnlinkIdentity):
-		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{googleCannotUnlinkMessage}})
+		writeErrorList(w, r, http.StatusUnprocessableEntity, msgGoogleCannotUnlink)
 	case errors.Is(err, domain.ErrIdentityNotFound):
 		writeError(w, r, http.StatusNotFound, msgRouteNotFound)
 	default:
