@@ -69,32 +69,6 @@ func (q *Queries) DiscardUserIdentity(ctx context.Context, arg DiscardUserIdenti
 	return result.RowsAffected(), nil
 }
 
-const getActiveUserByEmailIgnoreCase = `-- name: GetActiveUserByEmailIgnoreCase :one
-SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
-WHERE lower(email) = lower($1) AND discarded_at IS NULL
-ORDER BY created_at
-LIMIT 1
-`
-
-// 外部のサービスでの新規登録のとき、同じメールのアカウントがすでにあるかを調べる。大文字小文字は
-// 区別しない(「Alice@」と「alice@」を別のアカウントとして作らないため)。退会済みは含めない。
-func (q *Queries) GetActiveUserByEmailIgnoreCase(ctx context.Context, lower string) (User, error) {
-	row := q.db.QueryRow(ctx, getActiveUserByEmailIgnoreCase, lower)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Username,
-		&i.Bio,
-		&i.PasswordDigest,
-		&i.Admin,
-		&i.DiscardedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getUserIdentityByProviderUserID = `-- name: GetUserIdentityByProviderUserID :one
 SELECT id, user_id, provider, provider_user_id, email, created_at FROM user_identities
 WHERE provider = $1 AND provider_user_id = $2

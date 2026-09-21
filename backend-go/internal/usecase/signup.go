@@ -142,7 +142,9 @@ func (s *Signups) Request(ctx context.Context, input SignupInput) error {
 	}
 	s.discardExpired(ctx)
 
-	_, err = s.query.GetActiveUserByEmail(ctx, input.Email)
+	// 「登録済みか」は、メールの一意性(lower(email))と同じく、大文字小文字を区別せずに調べる。完全一致で調べると、
+	// 大文字小文字だけが違うメールで確認メールが送られ、確認のときに一意の索引に違反して失敗する。
+	_, err = s.query.GetActiveUserByEmailIgnoreCase(ctx, input.Email)
 	switch {
 	case err == nil:
 		s.mailer.SendAlreadyRegistered(AlreadyRegisteredNotice{

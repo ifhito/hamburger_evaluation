@@ -96,14 +96,14 @@ func (m *recordingMailer) SendAlreadyRegistered(n usecase.AlreadyRegisteredNotic
 func (m *recordingMailer) total() int { return len(m.confirmations) + len(m.notices) }
 
 var notRegistered = &fakeUserQuery{
-	getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
-		return usecase.UserCredentials{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
+	getByEmailIgnoreCase: func(context.Context, string) (domain.User, error) {
+		return domain.User{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
 	},
 }
 
 var alreadyRegistered = &fakeUserQuery{
-	getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
-		return usecase.UserCredentials{User: domain.User{ID: uid.N(7), Username: "alice", Email: "a@example.com"}, PasswordDigest: "digest(existing)"}, nil
+	getByEmailIgnoreCase: func(context.Context, string) (domain.User, error) {
+		return domain.User{ID: uid.N(7), Username: "alice", Email: "a@example.com"}, nil
 	},
 }
 
@@ -374,8 +374,8 @@ func TestSignupsRequest(t *testing.T) {
 
 	t.Run("email の検索に失敗したら、確認待ちも作らず、メールも頼まず、エラーを返す", func(t *testing.T) {
 		queryErr := errors.New("connection lost")
-		query := &fakeUserQuery{getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
-			return usecase.UserCredentials{}, queryErr
+		query := &fakeUserQuery{getByEmailIgnoreCase: func(context.Context, string) (domain.User, error) {
+			return domain.User{}, queryErr
 		}}
 		mailer := &recordingMailer{}
 		err := newSignups(query, &fakeSignupRepo{}, &recordingHasher{}, mailer, fakeIssuer{}, testSignupConfig).Request(context.Background(), validSignup)

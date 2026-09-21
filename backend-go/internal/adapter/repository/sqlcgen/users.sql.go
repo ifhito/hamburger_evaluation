@@ -85,6 +85,32 @@ func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User,
 	return i, err
 }
 
+const getActiveUserByEmailIgnoreCase = `-- name: GetActiveUserByEmailIgnoreCase :one
+SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
+WHERE lower(email) = lower($1) AND discarded_at IS NULL
+ORDER BY created_at
+LIMIT 1
+`
+
+// メールの一意性は lower(email) で守られているので、「登録済みか」の確認(signup・外部のサービスでの新規登録)は、
+// 大文字小文字を区別せずに調べる(「Alice@」と「alice@」を別のアカウントとして扱わないため)。退会済みは含めない。
+func (q *Queries) GetActiveUserByEmailIgnoreCase(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getActiveUserByEmailIgnoreCase, lower)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.Bio,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getActiveUserByID = `-- name: GetActiveUserByID :one
 SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
 WHERE id = $1 AND discarded_at IS NULL

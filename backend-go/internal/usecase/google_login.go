@@ -37,20 +37,14 @@ type GoogleProvider interface {
 	Complete(ctx context.Context, code string, secrets GoogleFlowSecrets) (domain.ExternalIdentity, error)
 }
 
-// IdentityQuery は、外部のサービスのアカウントとの結び付きなどを読む、読み取り専用の窓口である。書き込みの
-// メソッドは置かない(書き込みは domain.UserIdentities を通す)。
+// IdentityQuery は、外部のサービスのアカウントとの結び付きを読む、読み取り専用の窓口である(利用者の読み取りは
+// UserQuery に置く)。書き込みのメソッドは置かない(書き込みは domain.UserIdentities を通す)。
 type IdentityQuery interface {
 	// GetIdentityByProviderUserID は、provider の subject に結び付いた記録を返す。なければ(wrap された)
 	// domain.ErrIdentityNotFound を返す。
 	GetIdentityByProviderUserID(ctx context.Context, provider, subject string) (domain.UserIdentity, error)
 	// ListIdentitiesByUser は、利用者に結び付いた記録を、結び付けた順に返す。
 	ListIdentitiesByUser(ctx context.Context, userID string) ([]domain.UserIdentity, error)
-	// GetActiveUserByEmailIgnoreCase は、メールが(大文字小文字を区別せずに)一致する、退会していない利用者を返す。
-	// なければ(wrap された)domain.ErrUserNotFound を返す。
-	GetActiveUserByEmailIgnoreCase(ctx context.Context, email string) (domain.User, error)
-	// GetActiveUserHasPassword は、退会していない利用者が、パスワードでサインインできるかを返す。
-	// 利用者がいなければ(wrap された)domain.ErrUserNotFound を返す。
-	GetActiveUserHasPassword(ctx context.Context, userID string) (bool, error)
 }
 
 // LoginHandoffQuery は、画面へ渡すコードの中身を読む、読み取り専用の窓口である。UnitOfWork の中では、
@@ -208,7 +202,7 @@ func (g *GoogleLogins) signIn(ctx context.Context, ident domain.ExternalIdentity
 	}
 
 	// 結び付きがない: 同じメールの利用者がいれば、自動では結び付けない(他人のアカウントへの侵入を防ぐ)。
-	if _, err := g.query.GetActiveUserByEmailIgnoreCase(ctx, ident.Email); err == nil {
+	if _, err := g.users.GetActiveUserByEmailIgnoreCase(ctx, ident.Email); err == nil {
 		return domain.OutcomeAccountExists, ""
 	} else if !errors.Is(err, domain.ErrUserNotFound) {
 		log.Printf("google login: get user by email: %v", err)
@@ -328,7 +322,7 @@ func (g *GoogleLogins) ListIdentities(ctx context.Context, viewer domain.User) (
 	if err != nil {
 		return nil, fmt.Errorf("list identities: %w", err)
 	}
-	hasPassword, err := g.query.GetActiveUserHasPassword(ctx, viewer.ID)
+	hasPassword, err := g.users.GetActiveUserHasPassword(ctx, viewer.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list identities: has password: %w", err)
 	}
@@ -359,7 +353,7 @@ func (g *GoogleLogins) Unlink(ctx context.Context, viewer domain.User, provider 
 	if !found {
 		return fmt.Errorf("unlink identity: %w", domain.ErrIdentityNotFound)
 	}
-	hasPassword, err := g.query.GetActiveUserHasPassword(ctx, viewer.ID)
+	hasPassword, err := g.users.GetActiveUserHasPassword(ctx, viewer.ID)
 	if err != nil {
 		return fmt.Errorf("unlink identity: has password: %w", err)
 	}

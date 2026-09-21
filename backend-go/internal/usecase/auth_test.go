@@ -16,8 +16,10 @@ import (
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeUserQuery struct {
-	getByEmail func(ctx context.Context, email string) (usecase.UserCredentials, error)
-	getByID    func(ctx context.Context, id string) (domain.User, error)
+	getByEmail           func(ctx context.Context, email string) (usecase.UserCredentials, error)
+	getByEmailIgnoreCase func(ctx context.Context, email string) (domain.User, error)
+	getByID              func(ctx context.Context, id string) (domain.User, error)
+	hasPassword          func(ctx context.Context, id string) (bool, error)
 }
 
 func (f *fakeUserQuery) GetActiveUserByEmail(ctx context.Context, email string) (usecase.UserCredentials, error) {
@@ -25,6 +27,20 @@ func (f *fakeUserQuery) GetActiveUserByEmail(ctx context.Context, email string) 
 		panic("unexpected GetActiveUserByEmail call")
 	}
 	return f.getByEmail(ctx, email)
+}
+
+func (f *fakeUserQuery) GetActiveUserByEmailIgnoreCase(ctx context.Context, email string) (domain.User, error) {
+	if f.getByEmailIgnoreCase == nil {
+		panic("unexpected GetActiveUserByEmailIgnoreCase call")
+	}
+	return f.getByEmailIgnoreCase(ctx, email)
+}
+
+func (f *fakeUserQuery) GetActiveUserHasPassword(ctx context.Context, id string) (bool, error) {
+	if f.hasPassword == nil {
+		panic("unexpected GetActiveUserHasPassword call")
+	}
+	return f.hasPassword(ctx, id)
 }
 
 func (f *fakeUserQuery) GetActiveUserByID(ctx context.Context, id string) (domain.User, error) {

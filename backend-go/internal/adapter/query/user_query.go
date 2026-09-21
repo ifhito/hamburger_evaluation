@@ -41,6 +41,32 @@ func (r *UserQuery) GetActiveUserByEmail(ctx context.Context, email string) (use
 	return usecase.UserCredentials{User: rowmap.User(row), PasswordDigest: row.PasswordDigest.String}, nil
 }
 
+// GetActiveUserByEmailIgnoreCase は、メールが(大文字小文字を区別せずに)一致する、退会していない user を返す。
+// 該当がなければ domain.ErrUserNotFound を返す。
+func (r *UserQuery) GetActiveUserByEmailIgnoreCase(ctx context.Context, email string) (domain.User, error) {
+	row, err := r.q.GetActiveUserByEmailIgnoreCase(ctx, email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, fmt.Errorf("get active user by email (ignore case): %w", domain.ErrUserNotFound)
+		}
+		return domain.User{}, fmt.Errorf("get active user by email (ignore case): %w", err)
+	}
+	return rowmap.User(row), nil
+}
+
+// GetActiveUserHasPassword は、退会していない user が、パスワードでサインインできるか(digest があるか)を返す。
+// 該当がなければ domain.ErrUserNotFound を返す。
+func (r *UserQuery) GetActiveUserHasPassword(ctx context.Context, id string) (bool, error) {
+	row, err := r.q.GetActiveUserByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, fmt.Errorf("get active user has password: %w", domain.ErrUserNotFound)
+		}
+		return false, fmt.Errorf("get active user has password: %w", err)
+	}
+	return row.PasswordDigest.Valid, nil
+}
+
 // GetActiveUserByID は、指定された id を持つ discard されていない user を
 // 返す。または domain.ErrUserNotFound を返す。
 func (r *UserQuery) GetActiveUserByID(ctx context.Context, id string) (domain.User, error) {
