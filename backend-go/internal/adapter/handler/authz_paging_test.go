@@ -31,7 +31,7 @@ func decodeJSONArray(t *testing.T, body []byte) []map[string]any {
 }
 
 // TestGetShopCanReview は GET /shops/{id} の can_review が、domain の reviewable ルール
-// （匿名は false）どおりに返ることを固定する（S24 AC3）。
+// （匿名は false）どおりに返ることを固定する。
 func TestGetShopCanReview(t *testing.T) {
 	repo := seedShops(uid.N(1)) // alice(1) は pending な shop 2 の creator。admin は id 2
 	repo.shops = append(repo.shops, domain.ShopDetail{
@@ -67,7 +67,7 @@ func TestGetShopCanReview(t *testing.T) {
 
 // TestReviewCanEdit は /reviews 系の can_edit が、domain の所有権ルール（author だけ。
 // admin にも例外なし。匿名は false）どおりに、詳細・一覧・作成・更新のレスポンスに
-// 返ることを固定する（S24 AC1）。
+// 返ることを固定する。
 func TestReviewCanEdit(t *testing.T) {
 	repo := seedReviewWorld(uid.N(1))
 	router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, repo)
@@ -168,7 +168,7 @@ var hasMoreCases = []hasMoreCase{
 }
 
 // TestListShopsHasMore は GET /shops が次のページの有無をレスポンスヘッダー X-Has-More で
-// 返すことを固定する（S24 AC4）。本文は従来どおりの配列である。
+// 返すことを固定する。本文は従来どおりの配列である。
 func TestListShopsHasMore(t *testing.T) {
 	for _, tt := range hasMoreCases {
 		t.Run(tt.name, func(t *testing.T) {
@@ -196,7 +196,7 @@ func TestListShopsHasMore(t *testing.T) {
 }
 
 // TestListReviewsHasMore は GET /reviews が次のページの有無をレスポンスヘッダー X-Has-More で
-// 返すことを固定する（S24 AC4）。本文は従来どおりの配列である。
+// 返すことを固定する。本文は従来どおりの配列である。
 func TestListReviewsHasMore(t *testing.T) {
 	for _, tt := range hasMoreCases {
 		t.Run(tt.name, func(t *testing.T) {

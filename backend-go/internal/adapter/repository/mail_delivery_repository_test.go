@@ -10,7 +10,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 )
 
-// TestMailDeliveryRepository は、メール送信の記録を実際の PostgreSQL に対して検証する（S16）。
+// TestMailDeliveryRepository は、メール送信の記録を実際の PostgreSQL に対して検証する。
 // TEST_DATABASE_URL がなければ、dbtest.New の内部で skip される。
 func TestMailDeliveryRepository(t *testing.T) {
 	if testing.Short() {

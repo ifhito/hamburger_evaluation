@@ -16,8 +16,7 @@ import (
 const userNotFoundMessage = "User not found"
 
 // userResponse は、PUT /users/{id} の、token を含まない user の JSON 形式である：
-// issue #16 の仕様（「user 形 + admin フラグ」、issue が引用する frontend の契約の
-// レスポンス形状）に従った {id, username, email, admin} に、自己紹介文（bio）を加えた {id, username, bio, email, admin} であり、
+// frontend の契約（「user の形 + admin フラグ」のレスポンスの形）に従った {id, username, email, admin} に、自己紹介文（bio）を加えた {id, username, bio, email, admin} であり、
 // authUserResponse から token を除いたものである。PUT は本人だけが成功する
 // ので、email と admin を常に含めてよい。他人にも返りうる GET の user は
 // userProfileResponse を使う。
@@ -85,7 +84,7 @@ func userIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
 // writeUserError は users の usecase のエラーを HTTP に対応させる：domain の
 // 自己管理の判断は 403、not-found の sentinel は 404（usecase は先に対象を
 // load してから所有者を検査するので、存在しない id は所有者でない者に対しても
-// 404 になる。これは issue #16 AC2 の find-then-authorize の順序であり、
+// 404 になる。これは「先に対象を読み込み、そのあとで権限を確かめる」順序であり、
 // 退役した Rails の controller が path の id を無視して current_user に対して
 // 動作していたのとは意図的に異なる）、validation は 422、それ以外は 500 である。
 func writeUserError(w http.ResponseWriter, op string, err error) {

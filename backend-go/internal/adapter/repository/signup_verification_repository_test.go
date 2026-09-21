@@ -34,7 +34,7 @@ func countRows(ctx context.Context, t *testing.T, conn *pgx.Conn, table string) 
 }
 
 // TestSignupVerificationRepository は、確認待ちの signup の書き込みを実際の PostgreSQL に対して
-// 検証する（S16）。TEST_DATABASE_URL がなければ、dbtest.New の内部で skip される。
+// 検証する。TEST_DATABASE_URL がなければ、dbtest.New の内部で skip される。
 func TestSignupVerificationRepository(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed repository test in short mode")

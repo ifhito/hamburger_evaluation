@@ -13,7 +13,7 @@ import (
 
 // TestMe は GET /me を扱う：有効なトークンは現在のユーザー(can_moderate つき)を 200 で返し、
 // 無効・期限切れ・欠落のトークンは 401 になる(frontend は、トークンの有効性を自分で判断せず、
-// この応答でログイン状態を復元する。S32)。
+// この応答でログイン状態を復元する)。
 func TestMe(t *testing.T) {
 	repo, auth, codec := newAuthKit()
 	alice := repo.seed("alice", "alice@example.com", "Password123!")
@@ -61,7 +61,7 @@ func TestMe(t *testing.T) {
 }
 
 // TestMeta は GET /meta を扱う：認証なしで、domain の rating の範囲を返し、キャッシュしてよい
-// ことを示す(frontend は範囲の定数を複製しない。S32)。
+// ことを示す(frontend は範囲の定数を複製しない)。
 func TestMeta(t *testing.T) {
 	_, auth, _ := newAuthKit()
 	rec := do(newTestRouterWith(t, okPinger, auth), http.MethodGet, "/meta", "", "")
@@ -81,7 +81,7 @@ func TestMeta(t *testing.T) {
 }
 
 // TestAuthResponsesCarryCanModerate は、login と signup の確認の応答も、GET /me と同じ
-// can_moderate を返すことを固定する(frontend は admin から権限を導かない。S32)。
+// can_moderate を返すことを固定する(frontend は admin から権限を導かない)。
 func TestAuthResponsesCarryCanModerate(t *testing.T) {
 	repo, auth, _ := newAuthKit()
 	repo.seed("alice", "alice@example.com", "Password123!")

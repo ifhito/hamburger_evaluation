@@ -214,7 +214,7 @@ func TestAsyncMailerSendDoesNotWait(t *testing.T) {
 }
 
 // TestAsyncMailerRecordsDeliveries は、送信の前に pending で記録し、結果を sent / failed で記録することを
-// 確かめる（S16 の送信の記録）。
+// 確かめる。
 func TestAsyncMailerRecordsDeliveries(t *testing.T) {
 	t.Run("送信の前に pending で記録され、送れたら sent・試行 1 回になる。種類・宛先・冪等キーが記録される", func(t *testing.T) {
 		repo := &fakeMailRepo{}

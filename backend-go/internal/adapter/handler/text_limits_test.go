@@ -34,8 +34,8 @@ func jsonString(t *testing.T, s string) string {
 	return string(b)
 }
 
-// TestReviewTextLimits は S21 の AC1・AC3・AC5 を、review の投稿と編集で、JSON と multipart の
-// 両方の経路について固定する。コメントは上限ちょうどなら 201/200、1 文字超えると 422 で、
+// TestReviewTextLimits は、review の投稿と編集で、JSON と multipart の
+// 両方の経路について、文字数の上限を固定する。コメントは上限ちょうどなら 201/200、1 文字超えると 422 で、
 // 422 のときは review も burger も増えない（永続化の前に検証される）。
 func TestReviewTextLimits(t *testing.T) {
 	over := tooLong("Comment", domain.MaxCommentChars)
@@ -146,7 +146,7 @@ func TestReviewTextLimits(t *testing.T) {
 	})
 }
 
-// TestShopTextLimits は S21 の AC2・AC5 を shop で固定する：投稿と管理者の名称変更は名前 100 文字、
+// TestShopTextLimits は、shop の文字数の上限を固定する：投稿と管理者の名称変更は名前 100 文字、
 // 却下は moderation note 500 文字まで。超えると 422 で、shop は増えず、変更もされない。
 func TestShopTextLimits(t *testing.T) {
 	nameOver := tooLong("Name", domain.MaxShopNameChars)
@@ -220,7 +220,7 @@ func TestShopTextLimits(t *testing.T) {
 	})
 }
 
-// TestUserTextLimits は S21 の AC2・AC5 を、サインアップと PUT /users/{id} で固定する：
+// TestUserTextLimits は、サインアップと PUT /users/{id} の文字数の上限を固定する：
 // ユーザー名は 50 文字、メールは 254 文字まで。超えると 422 で、ユーザーは作られず、変更もされない。
 func TestUserTextLimits(t *testing.T) {
 	longEmail := func(n int) string { return strings.Repeat("a", n-len("@example.com")) + "@example.com" }
@@ -288,7 +288,7 @@ func TestUserTextLimits(t *testing.T) {
 
 // TestTextLimitsIntegration は、本物の PostgreSQL・repository・router を通して、
 // 上限が Go のコードポイント数と PostgreSQL の char_length で同じに数えられること（絵文字 2,000 個の
-// コメントが保存できる）と、422 のとき DB に何も書かれないことを固定する（S21 AC3・AC5）。
+// コメントが保存できる）と、422 のとき DB に何も書かれないことを固定する。
 func TestTextLimitsIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed integration test in short mode")

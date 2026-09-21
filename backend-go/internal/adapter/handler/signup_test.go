@@ -191,7 +191,7 @@ func signupBody(username, email, password string) string {
 
 func confirmBody(token string) string { return fmt.Sprintf(`{"token":%q}`, token) }
 
-// TestSignupConfirmFlow は AC1・AC6 を扱う：signup は 202 で、users にはまだ作られず、確認メールが
+// TestSignupConfirmFlow は、登録から確認までの流れを扱う：signup は 202 で、users にはまだ作られず、確認メールが
 // 1 通届く。そのリンクのトークンで確認すると、従来の signup と同じ 201 の本文（user と token）が
 // 返り、そのトークンで保護されたルートを通れて、パスワードでログインもできる。
 func TestSignupConfirmFlow(t *testing.T) {
@@ -230,7 +230,7 @@ func TestSignupConfirmFlow(t *testing.T) {
 	}
 }
 
-// TestSignupResponsesAreIndistinguishable は AC2・AC4 を扱う：登録済みの email でも未登録の email
+// TestSignupResponsesAreIndistinguishable は、応答から登録の有無が分からないことを扱う：登録済みの email でも未登録の email
 // でも、signup の応答（ステータス・ヘッダー・本文）は 1 バイトも違わない。違うのは届くメール
 // だけで、登録済みには確認リンクのない通知が届く。検証エラーも登録の有無に依存しない。
 func TestSignupResponsesAreIndistinguishable(t *testing.T) {
@@ -292,7 +292,7 @@ func (h slowHasher) Compare(digest, password string) error {
 	return hasherFake{}.Compare(digest, password)
 }
 
-// TestSignupResponseTimeDoesNotRevealRegistration は AC3 を扱う：どの分岐でも bcrypt を行ってから分岐する
+// TestSignupResponseTimeDoesNotRevealRegistration は、応答時間からも登録の有無が分からないことを扱う：どの分岐でも bcrypt を行ってから分岐する
 // ので、登録済みと未登録の応答時間の差は、bcrypt 1 回分より十分に小さい。閾値は緩めにして、
 // 複数回の平均で比べる（フレーキーにしない）。
 func TestSignupResponseTimeDoesNotRevealRegistration(t *testing.T) {
@@ -329,7 +329,7 @@ func TestSignupResponseTimeDoesNotRevealRegistration(t *testing.T) {
 	}
 }
 
-// TestSignupResendWindow は AC5 を扱う：60 秒以内の再 signup は 202 だが、確認待ちを変えず、
+// TestSignupResendWindow は、再 signup の間隔を扱う：60 秒以内の再 signup は 202 だが、確認待ちを変えず、
 // メールも送らない。間隔を過ぎた再 signup は、最新の入力とトークンに置き換わり、古いトークンは無効になる。
 func TestSignupResendWindow(t *testing.T) {
 	kit := newSignupKit(t)
@@ -376,7 +376,7 @@ func TestSignupResendWindow(t *testing.T) {
 	}
 }
 
-// TestSignupConfirmRejections は AC7・AC8・AC12 を扱う：期限切れ・存在しない・改ざん・空のトークン、
+// TestSignupConfirmRejections は、拒否される確認を扱う：期限切れ・存在しない・改ざん・空のトークン、
 // 確認までの間に同じ email のユーザーが作られていた場合は、区別できない同一の 400 になる。
 // pending だけの email での login は、未登録と同じ 401 である。
 func TestSignupConfirmRejections(t *testing.T) {
@@ -439,7 +439,7 @@ func TestSignupConfirmRejections(t *testing.T) {
 	})
 }
 
-// TestSignupDoesNotLeakSecrets は AC9 を扱う：平文のトークンとパスワードは、ログにも、エラーの
+// TestSignupDoesNotLeakSecrets は、秘密が漏れないことを扱う：平文のトークンとパスワードは、ログにも、エラーの
 // 応答にも出ない。repository が失敗したときは、確認は 400 ではなく 500 になる（無効なトークンと区別する）。
 func TestSignupDoesNotLeakSecrets(t *testing.T) {
 	var logs bytes.Buffer
@@ -470,7 +470,7 @@ func TestSignupDoesNotLeakSecrets(t *testing.T) {
 }
 
 // TestSignupConfirmIntegration は、本物の PostgreSQL・repository・bcrypt・router を通して、signup の
-// 確認を一通り検証する（S16）：signup では users が作られず、確認待ちには平文のトークンもパスワードも
+// 確認を一通り検証する：signup では users が作られず、確認待ちには平文のトークンもパスワードも
 // 保存されない。確認で users が作られ、確認待ちが消え、パスワードでログインできる。登録済みの email の
 // signup は、未登録と同一の応答になる。
 func TestSignupConfirmIntegration(t *testing.T) {
