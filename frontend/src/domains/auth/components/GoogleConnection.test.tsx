@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// VITE_API_BASE_URL は、既定(相対の /api。画面と同じオリジン)で確かめる。別のオリジンの絶対 URL が設定された環境でも、
+// テストの結果が変わらないように、import(API_BASE_URL の評価)より前に、固定する。
+import { vi } from "vitest";
+vi.hoisted(() => vi.stubEnv("VITE_API_BASE_URL", "/api"));
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { SWRConfig } from "swr";
 import "../../../lib/i18n";
