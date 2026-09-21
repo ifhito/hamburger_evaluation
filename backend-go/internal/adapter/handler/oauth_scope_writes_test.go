@@ -1,7 +1,9 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"testing"
 
@@ -11,11 +13,7 @@ import (
 // TestOAuthScopeWritesMark は、許可の画面の API と接続済みアプリの一覧が、範囲ごとに「書き込みを伴うか」の印(writes)を
 // 返すこと(hamburger:write だけが true)を確かめる。
 func TestOAuthScopeWritesMark(t *testing.T) {
-	type scope struct {
-		Name   string `json:"name"`
-		Writes *bool  `json:"writes"`
-	}
-	marks := func(t *testing.T, scopes []scope) map[string]bool {
+	marks := func(t *testing.T, scopes []grantScopeJSON) map[string]bool {
 		t.Helper()
 		out := map[string]bool{}
 		for _, s := range scopes {
@@ -27,33 +25,34 @@ func TestOAuthScopeWritesMark(t *testing.T) {
 		}
 		return out
 	}
+	describe := func(t *testing.T, k *oauthKit, query string) []grantScopeJSON {
+		t.Helper()
+		rec := k.describe(k.alice, query)
+		var view struct {
+			Scopes []grantScopeJSON `json:"scopes"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil || rec.Code != http.StatusOK {
+			t.Fatalf("describe = %d %s (%v)", rec.Code, rec.Body, err)
+		}
+		return view.Scopes
+	}
 
 	t.Run("読み取りと書き込みを求める要求は、書き込みの範囲にだけ印が付き、許可したあとの一覧でも同じである", func(t *testing.T) {
 		k := newOAuthKit(t)
 		_, challenge := pkce()
 		q := authQuery(challenge, "scope", domain.OAuthScopeRead+" "+domain.OAuthScopeWrite)
-
-		rec := k.describe(k.alice, q)
-		var view struct {
-			Scopes []scope `json:"scopes"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil || rec.Code != http.StatusOK {
-			t.Fatalf("describe = %d %s (%v)", rec.Code, rec.Body, err)
-		}
 		want := map[string]bool{domain.OAuthScopeRead: false, domain.OAuthScopeWrite: true}
-		if got := marks(t, view.Scopes); !mapsEqual(got, want) {
+
+		if got := marks(t, describe(t, k, q)); !maps.Equal(got, want) {
 			t.Errorf("許可の画面の writes = %v, want %v", got, want)
 		}
 
 		redirectTo(t, k.decide(k.alice, q, true))
-		list := do(k.router, http.MethodGet, "/oauth/grants", "", k.bearer[k.alice])
-		var grants []struct {
-			Scopes []scope `json:"scopes"`
+		grants := k.grants(t, k.alice)
+		if len(grants) != 1 {
+			t.Fatalf("grants = %+v, want 1 件", grants)
 		}
-		if err := json.Unmarshal(list.Body.Bytes(), &grants); err != nil || list.Code != http.StatusOK || len(grants) != 1 {
-			t.Fatalf("grants = %d %s (%v)", list.Code, list.Body, err)
-		}
-		if got := marks(t, grants[0].Scopes); !mapsEqual(got, want) {
+		if got := marks(t, grants[0].Scopes); !maps.Equal(got, want) {
 			t.Errorf("接続済みアプリの writes = %v, want %v", got, want)
 		}
 	})
@@ -61,27 +60,24 @@ func TestOAuthScopeWritesMark(t *testing.T) {
 	t.Run("読み取りだけの要求は、印が false になる", func(t *testing.T) {
 		k := newOAuthKit(t)
 		_, challenge := pkce()
-		rec := k.describe(k.alice, authQuery(challenge))
-		var view struct {
-			Scopes []scope `json:"scopes"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil || rec.Code != http.StatusOK {
-			t.Fatalf("describe = %d %s (%v)", rec.Code, rec.Body, err)
-		}
-		if got := marks(t, view.Scopes); !mapsEqual(got, map[string]bool{domain.OAuthScopeRead: false}) {
+		if got := marks(t, describe(t, k, authQuery(challenge))); !maps.Equal(got, map[string]bool{domain.OAuthScopeRead: false}) {
 			t.Errorf("writes = %v, want read だけで false", got)
 		}
 	})
-}
 
-func mapsEqual(a, b map[string]bool) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for key, value := range a {
-		if other, ok := b[key]; !ok || other != value {
-			return false
+	t.Run("いまの定義にない範囲の名前が許可に残っていても、writes は false で返り、書き込みとは扱われない", func(t *testing.T) {
+		k := newOAuthKit(t)
+		if _, err := k.pool.Exec(context.Background(), `INSERT INTO oauth_grants (user_id, client_id, client_name, scopes)
+			VALUES ($1, 'legacy-app', 'Legacy App', ARRAY['hamburger:read', 'legacy:removed'])`, k.alice); err != nil {
+			t.Fatal(err)
 		}
-	}
-	return true
+		grants := k.grants(t, k.alice)
+		if len(grants) != 1 {
+			t.Fatalf("grants = %+v, want 1 件", grants)
+		}
+		want := map[string]bool{domain.OAuthScopeRead: false, "legacy:removed": false}
+		if got := marks(t, grants[0].Scopes); !maps.Equal(got, want) {
+			t.Errorf("writes = %v, want %v", got, want)
+		}
+	})
 }
