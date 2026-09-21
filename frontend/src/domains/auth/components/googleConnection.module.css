@@ -1,21 +1,66 @@
 .row {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 1rem;
-  background: #fff;
+  align-items: flex-start;
+  gap: 24px;
 }
 
-.email {
+.info {
+  min-width: 0;
+}
+
+.name {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.meta {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--ui-text-muted);
   overflow-wrap: anywhere;
 }
 
+/* 解除できない理由(サインインの方法が Google だけ)。API の判断(canUnlink)を伝える画面側の文言 */
+.reason {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--ui-surface-2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.alert {
+  margin-bottom: 16px;
+}
+
+.retry {
+  margin-top: 12px;
+}
+
+.notice {
+  font-size: 14px;
+  color: var(--ui-text);
+}
+
+.notice:not(:empty) {
+  margin-bottom: 12px;
+}
+
 .muted {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
+  color: var(--ui-text-muted);
+}
+
+@media (max-width: 720px) {
+  .row {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .row > button {
+    width: 100%;
+  }
 }

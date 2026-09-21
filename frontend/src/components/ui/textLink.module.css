@@ -1,0 +1,16 @@
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-family: var(--ui-font);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ui-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.textLink:focus-visible {
+  outline: 2px solid var(--ui-text);
+  outline-offset: 2px;
+}

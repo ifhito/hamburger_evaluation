@@ -1,9 +1,13 @@
 /* プロフィールに並べる、連携の欄(Google の連携・許可した AI アプリ)に共通の、欄と見出しの見た目 */
 .section {
-  margin-bottom: 2rem;
+  margin-bottom: 56px;
+  font-family: var(--ui-font);
+  color: var(--ui-text);
 }
 
 .heading {
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
+  margin-bottom: 16px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
 }

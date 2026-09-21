@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { useMeta } from "../../../api/meta";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
+import { Alert } from "../../../components/ui/Alert";
+import { Button } from "../../../components/ui/Button";
+import { Card } from "../../../components/ui/Card";
 import { authApi } from "../api/authApiClient";
 import { isNavigable } from "../../oauth/navigation";
 import { GOOGLE_PROVIDER, googleEnabled } from "../googleFlow";
@@ -16,9 +17,12 @@ import styles from "./googleConnection.module.css";
 // loaded の identity は、結び付いていればその内容、なければ null。
 type ConnectionState = { kind: "loading" } | { kind: "failed" } | { kind: "loaded"; identity: Identity | null };
 
+// 操作の失敗。見出しは、どの操作かに応じた画面の言葉、messages は、API が返した文言(なければ画面側の文言)。
+type ActionError = { title: string; messages: string[] };
+
 interface ViewProps {
   state: ConnectionState;
-  actionError: string[] | null;
+  actionError: ActionError | null;
   // 解除に成功したことの知らせ。
   disconnected: boolean;
   // 取得を取り直している間(失敗の表示の Retry を、処理中にする)。
@@ -36,41 +40,53 @@ function GoogleConnectionView({ state, actionError, disconnected, retrying, busy
   return (
     <section className={section.section}>
       <h2 className={section.heading}>{t("auth.google.profile.heading")}</h2>
-      {actionError && <ErrorMessage message={actionError} />}
+      {actionError && (
+        <div className={styles.alert}>
+          <Alert title={actionError.title} message={actionError.messages} />
+        </div>
+      )}
       {/* 知らせの領域は、知らせが出る前から画面に置く(あとから中身ごと挿入すると、スクリーンリーダーが読み上げないことがある) */}
-      <p role="status" className={styles.muted}>
+      <p role="status" className={styles.notice}>
         {disconnected ? t("auth.google.profile.disconnected") : ""}
       </p>
       {state.kind === "loading" && <p className={styles.muted}>{t("common.loading")}</p>}
       {state.kind === "failed" && (
-        <div className={styles.row}>
-          <ErrorMessage message={t("auth.google.profile.loadError")} />
-          <Button type="button" variant="secondary" isLoading={retrying} onClick={onRetry}>
-            {t("auth.google.profile.retry")}
-          </Button>
-        </div>
-      )}
-      {state.kind === "loaded" && identity && (
-        <div className={styles.row}>
-          <div>
-            {/* メールは Google が返した文字列なので、HTML として解釈せず、文字として描画する */}
-            <p className={styles.email}>{t("auth.google.profile.connectedAs", { email: identity.email })}</p>
-            {!identity.canUnlink && <p className={styles.muted}>{t("auth.google.profile.cannotUnlink")}</p>}
-          </div>
-          {identity.canUnlink && (
-            <Button type="button" variant="secondary" isLoading={busy === "disconnect"} onClick={onDisconnect}>
-              {t("auth.google.profile.disconnect")}
+        <>
+          <Alert title={t("auth.google.profile.loadErrorTitle")} message={t("auth.google.profile.loadError")} />
+          <div className={styles.retry}>
+            <Button type="button" variant="secondary" isLoading={retrying} onClick={onRetry}>
+              {t("auth.google.profile.retry")}
             </Button>
-          )}
-        </div>
+          </div>
+        </>
       )}
-      {state.kind === "loaded" && !identity && (
-        <div className={styles.row}>
-          <p className={styles.muted}>{t("auth.google.profile.notConnected")}</p>
-          <Button type="button" variant="secondary" isLoading={busy === "connect"} onClick={onConnect}>
-            {t("auth.google.profile.connect")}
-          </Button>
-        </div>
+      {state.kind === "loaded" && (
+        <Card>
+          <div className={styles.row}>
+            <div className={styles.info}>
+              <b className={styles.name}>{t("auth.google.profile.accountName")}</b>
+              {identity ? (
+                <>
+                  {/* メールは Google が返した文字列なので、HTML として解釈せず、文字として描画する */}
+                  <p className={styles.meta}>{t("auth.google.profile.connectedAs", { email: identity.email })}</p>
+                  {!identity.canUnlink && <p className={styles.reason}>{t("auth.google.profile.cannotUnlink")}</p>}
+                </>
+              ) : (
+                <p className={styles.meta}>{t("auth.google.profile.notConnected")}</p>
+              )}
+            </div>
+            {identity?.canUnlink && (
+              <Button type="button" variant="danger" isLoading={busy === "disconnect"} onClick={onDisconnect}>
+                {t("auth.google.profile.disconnect")}
+              </Button>
+            )}
+            {!identity && (
+              <Button type="button" variant="secondary" isLoading={busy === "connect"} onClick={onConnect}>
+                {t("auth.google.profile.connect")}
+              </Button>
+            )}
+          </div>
+        </Card>
       )}
     </section>
   );
@@ -91,7 +107,7 @@ export function GoogleConnection({
   const enabled = googleEnabled(useMeta().data);
   const { identities, error, isValidating, refresh, removeProvider } = useIdentities(viewerId, enabled);
   const [busy, setBusy] = useState<"connect" | "disconnect" | null>(null);
-  const [actionError, setActionError] = useState<string[] | null>(null);
+  const [actionError, setActionError] = useState<ActionError | null>(null);
   const [disconnected, setDisconnected] = useState(false);
 
   // Google の画面から「戻る」で戻ると、ブラウザが、画面の状態ごとページを復元する(bfcache)ことがある。移動する直前の
@@ -122,7 +138,10 @@ export function GoogleConnection({
       if (!isNavigable(redirectUrl)) throw new Error("unexpected redirect URL");
       navigateTo(redirectUrl);
     } catch (e) {
-      setActionError(e instanceof ApiError ? e.messages : [t("auth.google.profile.connectError")]);
+      setActionError({
+        title: t("auth.google.profile.connectErrorTitle"),
+        messages: e instanceof ApiError ? e.messages : [t("auth.google.profile.connectError")],
+      });
       setBusy(null);
     }
   };
@@ -136,7 +155,10 @@ export function GoogleConnection({
       await authApi.unlinkGoogle();
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 404)) {
-        setActionError(e instanceof ApiError ? e.messages : [t("auth.google.profile.disconnectError")]);
+        setActionError({
+          title: t("auth.google.profile.disconnectErrorTitle"),
+          messages: e instanceof ApiError ? e.messages : [t("auth.google.profile.disconnectError")],
+        });
         setBusy(null);
         return;
       }
@@ -144,7 +166,7 @@ export function GoogleConnection({
       // 取り直した一覧で確かめ、Google の連携が(取り直せなかったときも)残っていれば、解除できたとは言わない。
       const fresh = await refresh();
       if (!fresh || fresh.identities.some((i) => i.provider === GOOGLE_PROVIDER)) {
-        setActionError([t("auth.google.profile.disconnectError")]);
+        setActionError({ title: t("auth.google.profile.disconnectErrorTitle"), messages: [t("auth.google.profile.disconnectError")] });
       } else {
         setDisconnected(true);
       }

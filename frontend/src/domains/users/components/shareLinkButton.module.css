@@ -1,32 +1,31 @@
-.share {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.copied {
-  color: var(--color-success);
-  font-size: 0.875rem;
-}
-
 .manual {
+  order: 1;
+  flex: 1 0 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  width: 100%;
+  gap: 6px;
+  font-family: var(--ui-font);
 }
 
 .manualLabel {
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ui-text-muted);
 }
 
 .linkInput {
   width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  font-size: 0.875rem;
-  background: #fff;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--ui-control-border);
+  border-radius: 8px;
+  background: var(--ui-bg);
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--ui-text);
+}
+
+.linkInput:focus-visible {
+  outline: 2px solid var(--ui-text);
+  outline-offset: 2px;
 }
