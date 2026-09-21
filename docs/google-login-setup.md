@@ -133,7 +133,7 @@ cd frontend && docker compose up -d --build
 ## 本番に公開するとき
 
 - 公開の **https の URL**(例: `https://app.example.com/api/auth/google/callback`)を、「承認済みのリダイレクト URI」に足し、`GOOGLE_REDIRECT_URL` も、その値にします。`http` は使いません(起動時に断ります。cookie に Secure が付くのは、`https` のときです)。
-- **画面と API は、同じサイト(同じホスト。`/api` を API へ転送する構成)で公開します。** 手続きの cookie は、サインインを始めた画面(`/api/auth/google/start`、または結び付けの `POST /api/me/identities/google/link`)の応答で、そのブラウザに設定され、Google からの戻り(`GOOGLE_REDIRECT_URL`)で、同じホストへ送られます。戻り先のホストが、画面のホストと違うと、cookie が届かず、手続きは、失敗します。
+- **画面と API は、同じサイト(同じホスト。`/api` を API へ転送する構成)で公開します。** 手続きの cookie は、サインインを始めた画面(`/api/auth/google/start`、または結び付けの `POST /api/me/identities/google/link`)の応答で、そのブラウザに設定され、Google からの戻り(`GOOGLE_REDIRECT_URL`)で、同じホストへ送られます。cookie の Path は、戻り先(`…/api/auth/google/callback`)から `/auth/google/callback` を除いた `/api` になり、複数のタブで続けて始めても、先発の手続きが残ります。戻り先の path は、必ず `/auth/google/callback` で終わらせてください(そうでないと、手続きを 1 つしか持てません)。戻り先のホストが、画面のホストと違うと、cookie が届かず、手続きは、失敗します。
 - 公開ステータスを「本番」にすると、テストユーザー以外でも使えます。今回の 3 つのスコープだけなら、Google の審査は要りません。
 - 秘密の鍵は、環境変数か、ホスティング先の秘密の管理の仕組み(Secret Manager など)で渡します。定期的に作り直せるようにしておきます。
 

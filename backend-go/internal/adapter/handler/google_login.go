@@ -81,10 +81,7 @@ func NewGoogleLogin(logins *usecase.GoogleLogins, cfg GoogleLoginConfig) (*Googl
 	if err != nil {
 		return nil, errors.New("google login: derive cookie key")
 	}
-	path := redirect.Path
-	if path == "" {
-		path = "/"
-	}
+	path := googleFlowCookiePath(redirect.Path)
 	return &GoogleLogin{
 		logins:  logins,
 		appBase: strings.TrimRight(cfg.AppBaseURL, "/"),
@@ -102,10 +99,32 @@ func (g *GoogleLogin) LoginProviders() []string {
 
 // ---- 手続きの間の cookie ----
 
+// googleCallbackSuffix は、Google からの戻り先の path の末尾である(この API の /auth/google/callback)。
+const googleCallbackSuffix = "/auth/google/callback"
+
+// googleFlowCookiePath は、手続きの cookie の Path を、戻り先の path から決める。**開始(/auth/google/start・
+// /me/identities/google/link)と戻り(/auth/google/callback)の、すべての要求に、cookie が送られる**ように、
+// 戻り先から /auth/google/callback を除いた共通の親にする(例: 戻り先が /api/auth/google/callback なら /api、
+// API 専用のホストで /auth/google/callback なら /)。ブラウザは、Path が合わない要求には cookie を送らないので、
+// 戻り先の path だけに絞ると、開始の要求に、先発の手続きの cookie が届かず、後発が先発を上書きしてしまう。
+// 戻り先が /auth/google/callback で終わらないとき(想定外の設定)は、戻り先の path にする(手続きは 1 つだけ持てる)。
+func googleFlowCookiePath(redirectPath string) string {
+	if !strings.HasSuffix(redirectPath, googleCallbackSuffix) {
+		if redirectPath == "" {
+			return "/"
+		}
+		return redirectPath
+	}
+	if parent := strings.TrimSuffix(redirectPath, googleCallbackSuffix); parent != "" {
+		return parent
+	}
+	return "/"
+}
+
 // flowCookie は、進行中の手続き(state・nonce・PKCE の検証値・戻り先・結び付ける利用者)を、暗号化して cookie に
 // 封じる。1 つのブラウザが、複数のタブで続けて手続きを始めても、それぞれが残るように、手続きを最大
 // googleFlowMaxFlows 件まで、1 つの cookie に並べて持つ(state で取り出す)。HttpOnly(画面の JavaScript からは
-// 読めない)・SameSite=Lax(Google からの戻りの移動では付く)で、path を戻り先の path に限り、使い終わった手続きは
+// 読めない)・SameSite=Lax(Google からの戻りの移動では付く)で、path を API の入口(開始・結び付け・戻りの共通の親)に限り、使い終わった手続きは
 // 取り除き、空になったら cookie を消す。サーバー側にセッションは持たない。
 type flowCookie struct {
 	key    []byte

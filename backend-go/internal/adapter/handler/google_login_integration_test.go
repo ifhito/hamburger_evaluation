@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -34,8 +35,11 @@ import (
 const (
 	googleTestClientID     = "google-test-client"
 	googleTestClientSecret = "google-test-secret-value" // テスト用の使い捨ての値(本物の秘密ではない)
-	googleTestRedirect     = "http://localhost:8080/auth/google/callback"
-	googleTestAppBase      = "http://localhost:5173"
+	// 画面と同じサイト(画面の /api の転送)を通る、本番と同じ形の戻り先。サーバーが見る path には、/api がない。
+	googleTestRedirect = "http://localhost:8080/api/auth/google/callback"
+	// browserAPIPrefix は、ブラウザから見た API の path の接頭辞である(転送が取り除く)。
+	browserAPIPrefix  = "/api"
+	googleTestAppBase = "http://localhost:5173"
 )
 
 // googleKit は、本物の PostgreSQL と、OpenID Connect の提供元の代役をつないで、Google でのサインインを
@@ -220,12 +224,40 @@ type pendingCallback struct {
 	callbackURL string
 }
 
+// cookieSentTo は、ブラウザが、この cookie を、サーバーが見る path(serverPath)への要求に付けるか(Path の一致。
+// RFC 6265 の path-match)を返す。ブラウザから見た path には、転送の接頭辞(/api)が付く。**Path が合わない要求には、
+// cookie は送られない**ので、たとえば、戻り先の path だけに絞った cookie は、開始の要求には付かない。
+func cookieSentTo(c *http.Cookie, serverPath string) bool {
+	requestPath := browserAPIPrefix + serverPath
+	cookiePath := c.Path
+	if cookiePath == "" {
+		cookiePath = "/"
+	}
+	if requestPath == cookiePath {
+		return true
+	}
+	if !strings.HasPrefix(requestPath, cookiePath) {
+		return false
+	}
+	return strings.HasSuffix(cookiePath, "/") || requestPath[len(cookiePath)] == '/'
+}
+
+func sendable(cookies []*http.Cookie, serverPath string) []*http.Cookie {
+	var out []*http.Cookie
+	for _, c := range cookies {
+		if cookieSentTo(c, serverPath) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // authorize は、手続きを始めて、代役の認可の画面で承認し、コールバックの直前まで進める(開始が Google へ送らなかった
 // ときは、callbackURL が空)。SetUser で選んだ利用者は、この時点で決まる。
 func (k *googleKit) authorize(t *testing.T, startQuery string, cookiesToSend ...*http.Cookie) pendingCallback {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/auth/google/start"+startQuery, nil)
-	for _, c := range cookiesToSend {
+	for _, c := range sendable(cookiesToSend, "/auth/google/start") {
 		req.AddCookie(c)
 	}
 	p := pendingCallback{start: httptest.NewRecorder()}
@@ -240,7 +272,7 @@ func (k *googleKit) authorize(t *testing.T, startQuery string, cookiesToSend ...
 	}
 	defer resp.Body.Close()
 	back, err := url.Parse(resp.Header.Get("Location"))
-	if err != nil || back.Path != "/auth/google/callback" {
+	if err != nil || back.Path != browserAPIPrefix+"/auth/google/callback" {
 		t.Fatalf("代役の認可の画面が、コールバックへ戻さなかった: %q", resp.Header.Get("Location"))
 	}
 	p.callbackURL = back.String()
@@ -263,9 +295,19 @@ func cookieFrom(rec *httptest.ResponseRecorder) *http.Cookie {
 
 // authorizeLink は、ログイン済みの利用者(userID)の、結び付けの手続きを、認証つきの POST で始め、返された Google の URL
 // へ移動して承認し、コールバックの直前まで進める。cookie は、POST の応答で、このブラウザに設定されたものである。
-func (k *googleKit) authorizeLink(t *testing.T, userID, body string) pendingCallback {
+func (k *googleKit) authorizeLink(t *testing.T, userID, body string, cookiesToSend ...*http.Cookie) pendingCallback {
 	t.Helper()
-	rec := do(k.router, http.MethodPost, "/me/identities/google/link", body, k.bearer(t, userID))
+	var reqBody io.Reader
+	if body != "" {
+		reqBody = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/me/identities/google/link", reqBody)
+	req.Header.Set("Authorization", k.bearer(t, userID))
+	for _, c := range sendable(cookiesToSend, "/me/identities/google/link") {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	k.router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("結び付けの開始 = %d: %s", rec.Code, rec.Body)
 	}
@@ -292,8 +334,8 @@ func (k *googleKit) callback(t *testing.T, p pendingCallback, cookies []*http.Co
 	back, _ := url.Parse(p.callbackURL)
 	q := back.Query()
 	o.query(q)
-	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback?"+q.Encode(), nil)
-	for _, c := range cookies {
+	req := httptest.NewRequest(http.MethodGet, "/auth/google/callback?"+q.Encode(), nil) // 転送が /api を取り除いた path
+	for _, c := range sendable(cookies, "/auth/google/callback") {
 		if c = o.cookie(c); c != nil {
 			req.AddCookie(c)
 		}
@@ -734,7 +776,7 @@ func TestGoogleSignIn(t *testing.T) {
 				flowCookie = c
 			}
 		}
-		if flowCookie == nil || !flowCookie.HttpOnly || flowCookie.SameSite != http.SameSiteLaxMode || flowCookie.Path != "/auth/google/callback" || flowCookie.MaxAge != 600 || flowCookie.Secure {
+		if flowCookie == nil || !flowCookie.HttpOnly || flowCookie.SameSite != http.SameSiteLaxMode || flowCookie.Path != browserAPIPrefix || flowCookie.MaxAge != 600 || flowCookie.Secure {
 			t.Fatalf("cookie = %+v", flowCookie)
 		}
 		authURL, _ := url.Parse(f.start.Header().Get("Location"))
@@ -783,6 +825,25 @@ func TestGoogleLinking(t *testing.T) {
 		signIn := decodeExchange(t, k.exchange(k.run(t, "").code))
 		if signIn.ID != k.alice || signIn.Token == "" {
 			t.Fatalf("結び付けた Google で、alice にサインインできない: %+v", signIn)
+		}
+	})
+
+	t.Run("2 つのタブで、続けて結び付けを始めても、両方の手続きが成功する(先発の手続きの cookie が、後発の開始の要求にも送られ、上書きされない)", func(t *testing.T) {
+		k := newGoogleKit(t)
+		jar := &browserJar{}
+		tab1 := k.authorizeLink(t, k.alice, `{"return_to":"/profile"}`, jar.cookies()...)
+		jar.update(tab1.start)
+		tab2 := k.authorizeLink(t, k.alice, `{"return_to":"/shops"}`, jar.cookies()...)
+		jar.update(tab2.start)
+
+		f1 := k.callback(t, tab1, jar.cookies(), plainRun())
+		jar.update(f1.callback)
+		f2 := k.callback(t, tab2, jar.cookies(), plainRun())
+		jar.update(f2.callback)
+		for i, f := range []flow{f1, f2} {
+			if b := decodeExchange(t, k.exchange(f.code)); !b.Linked {
+				t.Fatalf("%d 番目のタブの手続きが失敗した: %+v", i+1, b)
+			}
 		}
 	})
 
