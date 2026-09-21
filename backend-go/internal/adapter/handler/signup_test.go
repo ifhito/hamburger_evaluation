@@ -87,8 +87,9 @@ type signupRow struct {
 	expiresAt, lastSentAt              time.Time
 }
 
-// signupStoreFake は in-memory の domain.SignupVerificationRepository である。確認で作る
-// ユーザーは、users の fake（usecase.UserQuery と共有）に入るので、確認のあとにログインできる。
+// signupStoreFake は in-memory の domain.SignupVerificationRepository と、確認待ちの読み取りの
+// usecase.SignupVerificationQuery を兼ねる。確認で作るユーザーは、UnitOfWork の代役(uowtest.UoW)を
+// 通して users の fake（usecase.UserQuery と共有）に入るので、確認のあとにログインできる。
 // now を進めると、送信の間隔と有効期限の判定を、待たずに試せる。
 type signupStoreFake struct {
 	users *userStoreFake
@@ -97,7 +98,10 @@ type signupStoreFake struct {
 	err   error
 }
 
-var _ domain.SignupVerificationRepository = (*signupStoreFake)(nil)
+var (
+	_ domain.SignupVerificationRepository = (*signupStoreFake)(nil)
+	_ usecase.SignupVerificationQuery     = (*signupStoreFake)(nil)
+)
 
 func newSignupStoreFake(users *userStoreFake) *signupStoreFake {
 	return &signupStoreFake{users: users, rows: map[string]*signupRow{}, now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
@@ -124,22 +128,51 @@ func (f *signupStoreFake) CreateSignupVerification(_ context.Context, p domain.C
 	return domain.SignupVerificationReceipt{Accepted: true, ID: id, Generation: generation}, nil
 }
 
-func (f *signupStoreFake) CreateUserFromSignupVerification(ctx context.Context, tokenHash string) (domain.User, error) {
+// find は、tokenHash に一致する、期限内の確認待ちの行を返す(なければ nil)。
+func (f *signupStoreFake) find(tokenHash string) *signupRow {
+	for _, row := range f.rows {
+		if row.tokenHash == tokenHash && row.expiresAt.After(f.now) {
+			return row
+		}
+	}
+	return nil
+}
+
+// LockSignupVerification は、期限内の確認待ちがあればロックできたものとして nil を返し、なければ
+// 使用済みなどと同じ ErrSignupTokenInvalid を返す(in-memory なので、実際のロックはしない)。
+func (f *signupStoreFake) LockSignupVerification(_ context.Context, tokenHash string) error {
 	if f.err != nil {
-		return domain.User{}, f.err
+		return f.err
+	}
+	if f.find(tokenHash) == nil {
+		return domain.ErrSignupTokenInvalid
+	}
+	return nil
+}
+
+// GetSignupVerificationByTokenHash は、usecase.SignupVerificationQuery(確認待ちの読み取り)の実装である。
+func (f *signupStoreFake) GetSignupVerificationByTokenHash(_ context.Context, tokenHash string) (domain.PendingSignup, error) {
+	if f.err != nil {
+		return domain.PendingSignup{}, f.err
+	}
+	row := f.find(tokenHash)
+	if row == nil {
+		return domain.PendingSignup{}, domain.ErrSignupTokenInvalid
+	}
+	return domain.PendingSignup{ID: row.id, Email: row.email, Username: row.username, PasswordDigest: row.digest}, nil
+}
+
+// DiscardSignupVerification は、id の確認待ちの行を削除する。
+func (f *signupStoreFake) DiscardSignupVerification(_ context.Context, id string) error {
+	if f.err != nil {
+		return f.err
 	}
 	for key, row := range f.rows {
-		if row.tokenHash != tokenHash || !row.expiresAt.After(f.now) {
-			continue
+		if row.id == id {
+			delete(f.rows, key)
 		}
-		user, err := f.users.CreateUser(ctx, domain.CreateUserParams{Username: row.username, Email: row.email, PasswordDigest: row.digest})
-		if err != nil {
-			return domain.User{}, err
-		}
-		delete(f.rows, key)
-		return user, nil
 	}
-	return domain.User{}, domain.ErrSignupTokenInvalid
+	return nil
 }
 
 func (f *signupStoreFake) DiscardExpiredSignupVerifications(_ context.Context, limit int) (int64, error) {
@@ -176,7 +209,8 @@ func newSignupKitWithHasher(t *testing.T, hasher usecase.PasswordHasher) *signup
 	store := newSignupStoreFake(users)
 	mailer := &mailRecorder{}
 	auth := usecase.NewAuth(users, hasher, codec, codec)
-	signups := usecase.NewSignups(users, domain.NewSignupVerifications(store), hasher, mailer, codec, testSignupConfig)
+	signups := usecase.NewSignups(users, domain.NewSignupVerifications(store),
+		&uowtest.UoW{Users: users, SignupVerifications: store, PendingSignups: store}, hasher, mailer, codec, testSignupConfig)
 	reviewRepo := newReviewStoreFake()
 	shopRepo := &shopStoreFake{}
 	router := handler.NewRouter(okPinger, auth, signups, usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),

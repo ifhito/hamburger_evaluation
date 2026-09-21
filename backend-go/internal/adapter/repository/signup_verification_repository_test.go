@@ -3,8 +3,8 @@ package repository_test
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -92,40 +92,36 @@ func TestSignupVerificationRepository(t *testing.T) {
 		if n := countRows(ctx, t, conn, "signup_verifications"); n != 1 {
 			t.Errorf("行数 = %d, want 1", n)
 		}
-		if _, err := repo.CreateUserFromSignupVerification(ctx, domain.HashSignupToken("first")); !errors.Is(err, domain.ErrSignupTokenInvalid) {
-			t.Errorf("古いトークンでの確認 error = %v, want %v", err, domain.ErrSignupTokenInvalid)
+		if err := repo.LockSignupVerification(ctx, domain.HashSignupToken("first")); !errors.Is(err, domain.ErrSignupTokenInvalid) {
+			t.Errorf("古いトークンでのロック error = %v, want %v", err, domain.ErrSignupTokenInvalid)
 		}
 	})
 
-	t.Run("有効なトークンで確認すると users が作られ、確認待ちは消え、再利用はできない", func(t *testing.T) {
+	t.Run("有効なトークンならロックでき、id を指定して削除すると、同じトークンはもう使えない", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewSignupVerificationRepository(conn)
-		if _, err := repo.CreateSignupVerification(ctx, signupParams("Alice@Example.com", "tok")); err != nil {
-			t.Fatalf("作成: %v", err)
+		receipt, err := repo.CreateSignupVerification(ctx, signupParams("Alice@Example.com", "tok"))
+		if err != nil || !receipt.Accepted {
+			t.Fatalf("作成 = (%+v, %v)", receipt, err)
 		}
-		user, err := repo.CreateUserFromSignupVerification(ctx, domain.HashSignupToken("tok"))
-		if err != nil {
-			t.Fatalf("確認 returned error: %v", err)
+		if err := repo.LockSignupVerification(ctx, domain.HashSignupToken("tok")); err != nil {
+			t.Fatalf("有効なトークンのロック error: %v", err)
 		}
-		if !domain.IsUUID(user.ID) || user.Username != "alice" || user.Email != "Alice@Example.com" || user.Admin {
-			t.Errorf("作られた user = %+v", user)
+		if n := countRows(ctx, t, conn, "signup_verifications"); n != 1 {
+			t.Errorf("ロックだけでは確認待ちは変わらない: %d 行, want 1", n)
 		}
-		var digest string
-		if err := conn.QueryRow(ctx, "SELECT password_digest FROM users WHERE id = $1", user.ID).Scan(&digest); err != nil || digest != "digest(tok)" {
-			t.Errorf("users の password_digest = %q (err %v), want digest(tok)", digest, err)
+		if err := repo.DiscardSignupVerification(ctx, receipt.ID); err != nil {
+			t.Fatalf("削除 error: %v", err)
 		}
 		if n := countRows(ctx, t, conn, "signup_verifications"); n != 0 {
-			t.Errorf("確認後の確認待ち = %d 行, want 0", n)
+			t.Errorf("削除後の確認待ち = %d 行, want 0", n)
 		}
-		if _, err := repo.CreateUserFromSignupVerification(ctx, domain.HashSignupToken("tok")); !errors.Is(err, domain.ErrSignupTokenInvalid) {
-			t.Errorf("再利用 error = %v, want %v", err, domain.ErrSignupTokenInvalid)
-		}
-		if n := countRows(ctx, t, conn, "users"); n != 1 {
-			t.Errorf("users = %d 行, want 1", n)
+		if err := repo.LockSignupVerification(ctx, domain.HashSignupToken("tok")); !errors.Is(err, domain.ErrSignupTokenInvalid) {
+			t.Errorf("削除後のロック error = %v, want %v（使用済みと同じ扱い）", err, domain.ErrSignupTokenInvalid)
 		}
 	})
 
-	t.Run("期限切れ・存在しないトークンは ErrSignupTokenInvalid で、何も書かれない", func(t *testing.T) {
+	t.Run("期限切れ・存在しないトークンのロックは ErrSignupTokenInvalid で、確認待ちは変わらない", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewSignupVerificationRepository(conn)
 		if _, err := repo.CreateSignupVerification(ctx, signupParams("alice@example.com", "tok")); err != nil {
@@ -139,34 +135,16 @@ func TestSignupVerificationRepository(t *testing.T) {
 			"存在しない": domain.HashSignupToken("unknown"),
 			"空":     domain.HashSignupToken(""),
 		} {
-			if _, err := repo.CreateUserFromSignupVerification(ctx, hash); !errors.Is(err, domain.ErrSignupTokenInvalid) {
+			if err := repo.LockSignupVerification(ctx, hash); !errors.Is(err, domain.ErrSignupTokenInvalid) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrSignupTokenInvalid)
 			}
 		}
-		if n := countRows(ctx, t, conn, "users"); n != 0 {
-			t.Errorf("users = %d 行, want 0", n)
+		if n := countRows(ctx, t, conn, "signup_verifications"); n != 1 {
+			t.Errorf("確認待ち = %d 行, want 1（ロックの失敗で行を消さない）", n)
 		}
 	})
 
-	t.Run("確認までの間に同じ email の users が作られていたら ErrEmailTaken で、users は重複しない", func(t *testing.T) {
-		conn, _ := dbtest.New(t)
-		repo := repository.NewSignupVerificationRepository(conn)
-		if _, err := repo.CreateSignupVerification(ctx, signupParams("alice@example.com", "tok")); err != nil {
-			t.Fatalf("作成: %v", err)
-		}
-		if _, err := conn.Exec(ctx,
-			"INSERT INTO users (email, username, password_digest) VALUES ('alice@example.com', 'other', 'other-digest')"); err != nil {
-			t.Fatalf("別経路で users を作る: %v", err)
-		}
-		if _, err := repo.CreateUserFromSignupVerification(ctx, domain.HashSignupToken("tok")); !errors.Is(err, domain.ErrEmailTaken) {
-			t.Fatalf("error = %v, want %v", err, domain.ErrEmailTaken)
-		}
-		if n := countRows(ctx, t, conn, "users"); n != 1 {
-			t.Errorf("users = %d 行, want 1（重複を作らない）", n)
-		}
-	})
-
-	t.Run("同じトークンでの並行する確認は、ちょうど 1 件だけ成功する", func(t *testing.T) {
+	t.Run("トランザクションの中でロックすると、同じ確認待ちのロックは、先のトランザクションが終わるまで待たされる", func(t *testing.T) {
 		_, url := dbtest.New(t)
 		pool, err := pgxpool.New(ctx, url)
 		if err != nil {
@@ -174,35 +152,49 @@ func TestSignupVerificationRepository(t *testing.T) {
 		}
 		defer pool.Close()
 		repo := repository.NewSignupVerificationRepository(pool)
-		if _, err := repo.CreateSignupVerification(ctx, signupParams("alice@example.com", "tok")); err != nil {
-			t.Fatalf("作成: %v", err)
+		receipt, err := repo.CreateSignupVerification(ctx, signupParams("alice@example.com", "tok"))
+		if err != nil || !receipt.Accepted {
+			t.Fatalf("作成 = (%+v, %v)", receipt, err)
 		}
-		const workers = 8
-		errs := make([]error, workers)
-		var wg sync.WaitGroup
-		for i := 0; i < workers; i++ {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
-				_, errs[i] = repo.CreateUserFromSignupVerification(ctx, domain.HashSignupToken("tok"))
-			}(i)
+		hash := domain.HashSignupToken("tok")
+
+		first, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatalf("先のトランザクションの開始: %v", err)
 		}
-		wg.Wait()
-		succeeded := 0
-		for _, err := range errs {
-			switch {
-			case err == nil:
-				succeeded++
-			case !errors.Is(err, domain.ErrSignupTokenInvalid):
-				t.Errorf("成功でも ErrSignupTokenInvalid でもない error: %v", err)
+		defer func() { _ = first.Rollback(ctx) }()
+		if err := repository.NewSignupVerificationRepository(first).LockSignupVerification(ctx, hash); err != nil {
+			t.Fatalf("先のロック error: %v", err)
+		}
+
+		second, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatalf("後のトランザクションの開始: %v", err)
+		}
+		defer func() { _ = second.Rollback(ctx) }()
+		done := make(chan error, 1)
+		go func() { done <- repository.NewSignupVerificationRepository(second).LockSignupVerification(ctx, hash) }()
+		select {
+		case err := <-done:
+			t.Fatalf("先のロックが残っているのに、後のロックが待たずに終わった: %v", err)
+		case <-time.After(300 * time.Millisecond):
+		}
+
+		// 先のトランザクションが確認待ちを削除して確定すると、待っていた側は、行が消えているのを見て、
+		// 使用済みと同じ結果になる。
+		if err := repository.NewSignupVerificationRepository(first).DiscardSignupVerification(ctx, receipt.ID); err != nil {
+			t.Fatalf("先のトランザクションでの削除: %v", err)
+		}
+		if err := first.Commit(ctx); err != nil {
+			t.Fatalf("先のトランザクションの確定: %v", err)
+		}
+		select {
+		case err := <-done:
+			if !errors.Is(err, domain.ErrSignupTokenInvalid) {
+				t.Errorf("待っていたロックの結果 = %v, want %v", err, domain.ErrSignupTokenInvalid)
 			}
-		}
-		if succeeded != 1 {
-			t.Errorf("成功した確認 = %d 件, want 1", succeeded)
-		}
-		var n int
-		if err := pool.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&n); err != nil || n != 1 {
-			t.Errorf("users = %d 行 (err %v), want 1", n, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("先のトランザクションが終わっても、待っていたロックが返らない")
 		}
 	})
 

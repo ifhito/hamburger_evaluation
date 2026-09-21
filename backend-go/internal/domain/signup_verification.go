@@ -68,6 +68,15 @@ type SignupVerificationReceipt struct {
 	Generation int
 }
 
+// PendingSignup は、確認待ちの signup の内容である。確認のときに、この内容でユーザーを作る。
+// パスワードはハッシュ化済みで、平文は保存していない。
+type PendingSignup struct {
+	ID             string
+	Email          string
+	Username       string
+	PasswordDigest string
+}
+
 // SignupVerificationRepository は、確認待ちの signup の書き込みの契約である。domain が
 // 宣言し、呼び出すのは domain のコード（書き込みオブジェクトの SignupVerifications）だけで、
 // usecase は呼ばない。書き込み専用で、読み取りのメソッドは置かない。
@@ -77,11 +86,15 @@ type SignupVerificationRepository interface {
 	// 以内なら何も変えず、Accepted=false を返す（メールを送らない合図）。判定と書き込みは
 	// 1 つの文で行うので、並行しても間隔は破られない。置き換えるたびに Generation が 1 増える。
 	CreateSignupVerification(ctx context.Context, params CreateSignupVerificationParams) (SignupVerificationReceipt, error)
-	// CreateUserFromSignupVerification は、tokenHash の確認待ちをロックし、その内容で
-	// users を作成し、確認待ちを削除する。すべて 1 つの transaction で行う。期限切れ・存在しない・
-	// 使用済みの確認待ちは（wrap された）ErrSignupTokenInvalid を返し、確認までの間に同じ email の
-	// users が作られていたときは（wrap された）ErrEmailTaken を返す（どちらの場合も何も書かない）。
-	CreateUserFromSignupVerification(ctx context.Context, tokenHash string) (User, error)
+	// LockSignupVerification は、tokenHash の期限内の確認待ちを排他ロックする(トランザクションの中で
+	// 呼ぶと、そのトランザクションが終わるまで、同じ行を扱うほかの処理は待たされる)。データは返さず、
+	// 行も変えない。期限切れ・存在しない・すでに使われた(削除された)ものは、(wrap された)
+	// ErrSignupTokenInvalid を返す。同じトークンでの並行する確認を、1 件ずつに直列にするために、
+	// 確認の手順の先頭で使う。
+	LockSignupVerification(ctx context.Context, tokenHash string) error
+	// DiscardSignupVerification は、id の確認待ちを削除する。確認が終わって、同じトークンで
+	// 再び確認できないようにするために使う。
+	DiscardSignupVerification(ctx context.Context, id string) error
 	// DiscardExpiredSignupVerifications は、期限切れの確認待ちを、最大 limit 件まで削除し、
 	// 削除した件数を返す。
 	DiscardExpiredSignupVerifications(ctx context.Context, limit int) (int64, error)
@@ -91,9 +104,11 @@ type SignupVerificationRepository interface {
 
 // SignupVerifications は、確認待ちの signup 集約の書き込みオブジェクトである。
 // SignupVerificationRepository を持つのはこの型だけで、usecase は repository に依存しない。
-// 確認（CreateUserFromSignupVerification）は、確認待ちと users の 2 つのテーブルを 1 つの
-// transaction で書くが、domain のコードとしては、確認待ちの集約の 1 つの書き込みである
-// （transaction を usecase に持ち上げるのは S17 で扱う）。
+// 確認(確認待ちのロック → 内容の読み取り → ユーザーの作成 → 確認待ちの削除)は、読み取りを
+// 途中にはさみ、確認待ちとユーザーの 2 つの集約を更新する手順なので、この型には置かない。
+// トランザクションを持つ usecase が、UnitOfWork(ここからここまでを 1 つのトランザクションにする
+// 範囲を指定する仕組み)の中で、この型の Lock・Discard と、ユーザーの書き込みオブジェクトを組み合わせて
+// 組み立てる。
 type SignupVerifications struct {
 	repo SignupVerificationRepository
 }
@@ -109,11 +124,16 @@ func (s *SignupVerifications) Create(ctx context.Context, params CreateSignupVer
 	return s.repo.CreateSignupVerification(ctx, params)
 }
 
-// Confirm は、平文の確認トークンで確認を完了し、作られたユーザーを返す。トークンの保存の形
-// への変換（HashSignupToken）はここで行うので、呼び出し側は平文を repository に渡さない。
-// 期限切れ・存在しない・使用済みのトークンは（wrap された）ErrSignupTokenInvalid を返す。
-func (s *SignupVerifications) Confirm(ctx context.Context, rawToken string) (User, error) {
-	return s.repo.CreateUserFromSignupVerification(ctx, HashSignupToken(rawToken))
+// Lock は、平文の確認トークンに対応する期限内の確認待ちを排他ロックする。トークンの保存の形
+// への変換(HashSignupToken)はここで行うので、呼び出し側は平文を repository に渡さない。
+// 期限切れ・存在しない・使用済みのトークンは、(wrap された)ErrSignupTokenInvalid を返す。
+func (s *SignupVerifications) Lock(ctx context.Context, rawToken string) error {
+	return s.repo.LockSignupVerification(ctx, HashSignupToken(rawToken))
+}
+
+// Discard は、id の確認待ちを削除する(確認が終わった確認待ちを、再利用できなくする)。
+func (s *SignupVerifications) Discard(ctx context.Context, id string) error {
+	return s.repo.DiscardSignupVerification(ctx, id)
 }
 
 // DiscardExpired は、期限切れの確認待ちを最大 limit 件まで削除する。

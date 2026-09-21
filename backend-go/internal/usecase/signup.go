@@ -39,6 +39,17 @@ type AlreadyRegisteredNotice struct {
 	IdempotencyKey string
 }
 
+// SignupVerificationQuery は、確認待ちの signup を読み取る、読み取り専用の窓口である。
+// UnitOfWork(まとめて 1 つのトランザクションにする範囲)の中では、そのトランザクションに結び付いた
+// 実装が渡されるので、同じトランザクションでロックした行を、そのまま読める。書き込みのメソッドは
+// 置かない(書き込みは domain.SignupVerifications を通す)。
+type SignupVerificationQuery interface {
+	// GetSignupVerificationByTokenHash は、tokenHash の期限内の確認待ちの内容を返す。
+	// 期限切れ・存在しない・すでに使われた(削除された)ものは、(wrap された)
+	// domain.ErrSignupTokenInvalid を返す。
+	GetSignupVerificationByTokenHash(ctx context.Context, tokenHash string) (domain.PendingSignup, error)
+}
+
 // Mailer は、signup に関するメールを出す契約である。メソッドは、ドメインの意図を表す。
 // メールの件名・本文・書式や、送信のプロバイダー（SMTP など）の形式・エラーは、実装が受け止め、
 // この契約の外へ出さない。実装は呼び出しを待たせない（非同期）ので、送信の成否・遅延は呼び出し側に
@@ -84,18 +95,21 @@ func (in SignupInput) validate() []string {
 
 // Signups は、メール確認つきの signup の use case を実装する。アカウントは、確認メールの
 // リンクを開いて初めて作られる。読み取りは query、書き込みは domain の書き込みオブジェクト
-// （domain.SignupVerifications）だけを通し、repository には依存しない。
+// （domain.SignupVerifications）だけを通し、repository には依存しない。確認(Confirm)は、
+// 確認待ちのロックからユーザーの作成までを 1 つのトランザクションにするので、UnitOfWork
+// (ここからここまでを 1 つのトランザクションにする範囲を指定する仕組み)の中で組み立てる。
 type Signups struct {
 	query         UserQuery
 	verifications *domain.SignupVerifications
+	uow           UnitOfWork
 	hasher        PasswordHasher
 	mailer        Mailer
 	issuer        TokenIssuer
 	cfg           SignupConfig
 }
 
-func NewSignups(query UserQuery, verifications *domain.SignupVerifications, hasher PasswordHasher, mailer Mailer, issuer TokenIssuer, cfg SignupConfig) *Signups {
-	return &Signups{query: query, verifications: verifications, hasher: hasher, mailer: mailer, issuer: issuer, cfg: cfg}
+func NewSignups(query UserQuery, verifications *domain.SignupVerifications, uow UnitOfWork, hasher PasswordHasher, mailer Mailer, issuer TokenIssuer, cfg SignupConfig) *Signups {
+	return &Signups{query: query, verifications: verifications, uow: uow, hasher: hasher, mailer: mailer, issuer: issuer, cfg: cfg}
 }
 
 // Request は signup の入力を検証し、確認メールを送る手配をする。**登録済みの email でも
@@ -159,8 +173,35 @@ func (s *Signups) Request(ctx context.Context, input SignupInput) error {
 // そのユーザーを返す（従来の signup の成功と同じ結果）。期限切れ・存在しない・改ざん・使用済みの
 // トークンは、確認までの間に同じ email のユーザーが作られていた場合も含め、すべて
 // domain.ErrSignupTokenInvalid になる（区別できない）。
+//
+// 手順は、1 つのトランザクションの中で「確認待ちをロックする → 内容を読む → ユーザーを作る →
+// 確認待ちを削除する」の順に行う。途中で失敗したら全体を取り消すので、ユーザーだけが作られる、
+// 確認待ちだけが消える、ということが起きない。先頭でロックするので、同じトークンでの並行する確認は
+// 1 件ずつに直列になり、2 件目は行が消えているのを見て ErrSignupTokenInvalid になる。
+// 途中に読み取りが入り、確認待ちとユーザーの 2 つの集約を更新するので、domain の Service ではなく、
+// トランザクションを持つ usecase が組み立てる。
 func (s *Signups) Confirm(ctx context.Context, rawToken string) (domain.User, string, error) {
-	user, err := s.verifications.Confirm(ctx, rawToken)
+	var user domain.User
+	err := s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
+		if err := tx.SignupVerifications.Lock(ctx, rawToken); err != nil {
+			return err
+		}
+		pending, err := tx.PendingSignups.GetSignupVerificationByTokenHash(ctx, domain.HashSignupToken(rawToken))
+		if err != nil {
+			return err
+		}
+		user, err = tx.Users.Create(ctx, domain.CreateUserParams{
+			Email:          pending.Email,
+			Username:       pending.Username,
+			PasswordDigest: pending.PasswordDigest,
+			// 新しいユーザーは決して admin にならない。昇格は signup の範囲外である。
+			Admin: false,
+		})
+		if err != nil {
+			return err
+		}
+		return tx.SignupVerifications.Discard(ctx, pending.ID)
+	})
 	if err != nil {
 		if errors.Is(err, domain.ErrEmailTaken) {
 			return domain.User{}, "", fmt.Errorf("confirm signup: %w", domain.ErrSignupTokenInvalid)

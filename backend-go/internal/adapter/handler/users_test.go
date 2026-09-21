@@ -631,9 +631,9 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
 	auth := usecase.NewAuth(userQuery, hasher, codec, codec)
 	mailer := &mailRecorder{}
-	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)),
-		hasher, mailer, codec, testSignupConfig)
 	unitOfWork := uow.New(conn)
+	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)),
+		unitOfWork, hasher, mailer, codec, testSignupConfig)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(conn, auth, signups,
 		usecase.NewShops(query.NewShopQuery(conn), domain.NewShops(repository.NewShopRepository(conn))),

@@ -30,10 +30,12 @@ type BurgerStatsQuery interface {
 // 書き込みは domain の書き込みオブジェクト(自分の集約の repository だけを持つ)を通し、usecase は
 // repository を直接扱わない。読み取りも同じトランザクションで行うので、書き込みの結果が見える。
 type Tx struct {
-	Reviews     *domain.Reviews
-	Users       *domain.Users
-	BurgerStats *domain.BurgerStats
-	Stats       BurgerStatsQuery
+	Reviews             *domain.Reviews
+	Users               *domain.Users
+	BurgerStats         *domain.BurgerStats
+	Stats               BurgerStatsQuery
+	SignupVerifications *domain.SignupVerifications
+	PendingSignups      SignupVerificationQuery
 }
 
 // UnitOfWork(作業のひとまとまり)は、「ここからここまでの書き込みと読み取りを、まとめて 1 つの

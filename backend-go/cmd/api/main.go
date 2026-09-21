@@ -86,9 +86,15 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 			log.Printf("mailer: close: %v", err)
 		}
 	}()
+	// レビューの保存とバーガーの統計の再計算、ユーザーの退会と統計の再計算、確認メールのリンクを開いたときの
+	// ユーザーの作成と確認待ちの削除は、それぞれ、全部成功したときだけ確定し、途中で失敗したら全部取り消す
+	// 必要がある。そのため usecase は、UnitOfWork(ここからここまでをまとめて 1 つのトランザクションにする
+	// 範囲を、usecase が指定する仕組み)の中でこれらを行う。
+	unitOfWork := uow.New(pool)
 	signups := usecase.NewSignups(
 		userQuery,
 		domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pool)),
+		unitOfWork,
 		infra.BcryptPasswordHasher{},
 		mailer,
 		jwtCodec,
@@ -111,11 +117,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	}
 
 	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)))
-	// レビューの保存とバーガーの統計の再計算、ユーザーの退会と統計の再計算は、両方成功したときだけ
-	// 確定し、途中で失敗したら両方取り消す必要がある。そのため usecase は、UnitOfWork(ここからここまでを
-	// まとめて 1 つのトランザクションにする範囲を、usecase が指定する仕組み)の中でこれらを行う。
 	// 統計の再計算役(BurgerStatsRecalculator)は、その手順を持ち、現在時刻を外から受け取る。
-	unitOfWork := uow.New(pool)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, photos)
 	users := usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, infra.BcryptPasswordHasher{})
