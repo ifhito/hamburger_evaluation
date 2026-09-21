@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/mail"
@@ -8,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
 const (
@@ -102,7 +106,35 @@ type Config struct {
 	// StatsWorkerMaxAttempts は、1 つの依頼を、失敗しながら再試行する上限の回数である。
 	// STATS_WORKER_MAX_ATTEMPTS、既定は 8。正の整数でなければ既定になる。
 	StatsWorkerMaxAttempts int
+	// OAuth は、OAuth の認可サーバー(AI アプリがログインと許可だけでつなぐための仕組み)の設定である。
+	// OAUTH_ISSUER を設定したときだけ有効になり、設定しなければ、認可サーバーの窓口は登録されない。
+	OAuth OAuthConfig
 }
+
+// OAuthConfig は、OAuth の認可サーバーの設定である。
+type OAuthConfig struct {
+	// Enabled は、認可サーバーを有効にするかである。OAUTH_ISSUER が設定されているときに true になる。
+	Enabled bool
+	// Issuer は、この API の公開 URL(発行者)である。OAUTH_ISSUER(例: "http://localhost:8080")。
+	// 末尾の "/" は取り除かれる。
+	Issuer string
+	// Resource は、発行するトークンの宛先(トークンを使えるサーバーの URL)である。OAUTH_RESOURCE_URL、
+	// 既定は Issuer + "/mcp"。
+	Resource string
+	// ConsentURL は、利用者に許可を尋ねる画面(frontend)の URL である。OAUTH_CONSENT_URL、
+	// 既定は APP_BASE_URL + "/oauth/authorize"。
+	ConsentURL string
+	// Secret は、トークンの署名に使う秘密の鍵である。OAUTH_TOKEN_SECRET、有効なときは必須で、
+	// 32 文字以上でなければならない。その値は決してハードコードしてはならず、ログにも出力してはならない。
+	Secret string
+	// StaticClients は、固定で登録するアプリである。OAUTH_STATIC_CLIENTS(JSON の配列。
+	// [{"id":"…","name":"…","redirect_uris":["…"]}])、省略できる。自分で説明を公開できないアプリや、
+	// ローカルでの確認用に使う。
+	StaticClients []domain.OAuthClient
+}
+
+// oauthSecretMinLength は、OAUTH_TOKEN_SECRET の最小の文字数である(署名の鍵として 32 バイト以上が必要)。
+const oauthSecretMinLength = 32
 
 // LoadConfig は getenv を通して設定を読み込む（通常は os.Getenv で、
 // テストのために注入される）。DATABASE_URL または JWT_SECRET がない場合、
@@ -183,7 +215,71 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	loadStatsWorkerConfig(getenv, &cfg)
+	if err := loadOAuthConfig(getenv, &cfg); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// loadOAuthConfig は、OAuth の認可サーバーの設定を読み込んで検証する。OAUTH_ISSUER がなければ無効で、
+// ほかの OAUTH_* は読まない。有効なのに設定が足りない・不正なときは fail-loud する。エラー
+// メッセージには変数名だけを含め、その値（特に OAUTH_TOKEN_SECRET）は決して含めない。
+func loadOAuthConfig(getenv func(string) string, cfg *Config) error {
+	issuer := strings.TrimRight(getenv("OAUTH_ISSUER"), "/")
+	if issuer == "" {
+		return nil
+	}
+	if err := requireHTTPURL("OAUTH_ISSUER", issuer); err != nil {
+		return err
+	}
+	oc := OAuthConfig{Enabled: true, Issuer: issuer, Secret: getenv("OAUTH_TOKEN_SECRET")}
+	if len(oc.Secret) < oauthSecretMinLength {
+		return fmt.Errorf("OAUTH_TOKEN_SECRET is required and must be at least %d characters when OAUTH_ISSUER is set", oauthSecretMinLength)
+	}
+	oc.Resource = getenv("OAUTH_RESOURCE_URL")
+	if oc.Resource == "" {
+		oc.Resource = issuer + "/mcp"
+	}
+	if err := requireHTTPURL("OAUTH_RESOURCE_URL", oc.Resource); err != nil {
+		return err
+	}
+	oc.ConsentURL = getenv("OAUTH_CONSENT_URL")
+	if oc.ConsentURL == "" {
+		oc.ConsentURL = cfg.AppBaseURL + "/oauth/authorize"
+	}
+	if err := requireHTTPURL("OAUTH_CONSENT_URL", oc.ConsentURL); err != nil {
+		return err
+	}
+	if raw := strings.TrimSpace(getenv("OAUTH_STATIC_CLIENTS")); raw != "" {
+		var entries []struct {
+			ID           string   `json:"id"`
+			Name         string   `json:"name"`
+			RedirectURIs []string `json:"redirect_uris"`
+		}
+		dec := json.NewDecoder(bytes.NewReader([]byte(raw)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&entries); err != nil {
+			return fmt.Errorf("OAUTH_STATIC_CLIENTS must be a JSON array of {id, name, redirect_uris}")
+		}
+		for _, e := range entries {
+			c := domain.OAuthClient{ID: e.ID, Name: e.Name, RedirectURIs: e.RedirectURIs}
+			if err := c.Validate(); err != nil {
+				return fmt.Errorf("OAUTH_STATIC_CLIENTS has an invalid client: %w", err)
+			}
+			oc.StaticClients = append(oc.StaticClients, c)
+		}
+	}
+	cfg.OAuth = oc
+	return nil
+}
+
+// requireHTTPURL は、name の値 raw が、クエリと断片のない http(s) の URL であることを確かめる。
+func requireHTTPURL(name, raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("%s must be an http(s) URL without query or fragment", name)
+	}
+	return nil
 }
 
 // loadStatsWorkerConfig は、統計の再計算のワーカーの設定を読み込む。統計の更新が少し遅れても、

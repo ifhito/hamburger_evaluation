@@ -3,6 +3,7 @@ package infra
 import (
 	"bytes"
 	"log/slog"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -195,7 +196,7 @@ func TestLoadConfig(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadConfig returned error: %v", err)
 			}
-			if want := withStatsWorkerDefaults(withMailConfig(tt.want)); got != want {
+			if want := withStatsWorkerDefaults(withMailConfig(tt.want)); !reflect.DeepEqual(got, want) {
 				t.Fatalf("LoadConfig = %+v, want %+v", got, want)
 			}
 		})
@@ -367,6 +368,82 @@ func TestLoadConfigStatsWorker(t *testing.T) {
 				if !strings.Contains(logs.String(), key) {
 					t.Errorf("警告のログに変数名 %s がない: %s", key, logs.String())
 				}
+			}
+		})
+	}
+}
+
+func TestLoadConfigOAuth(t *testing.T) {
+	const secret = "0123456789abcdef0123456789abcdef"
+	base := func(extra map[string]string) func(string) string {
+		env := map[string]string{"DATABASE_URL": "postgres://localhost/app", "JWT_SECRET": "test-only-secret"}
+		for k, v := range extra {
+			env[k] = v
+		}
+		return withMailEnv(env)
+	}
+
+	t.Run("OAUTH_ISSUER を設定しなければ、認可サーバーは無効で、ほかの OAUTH_* は読まない", func(t *testing.T) {
+		cfg, err := LoadConfig(base(map[string]string{"OAUTH_TOKEN_SECRET": "short", "OAUTH_STATIC_CLIENTS": "not json"}))
+		if err != nil || cfg.OAuth.Enabled {
+			t.Fatalf("cfg.OAuth = %+v, err = %v, want disabled without error", cfg.OAuth, err)
+		}
+	})
+
+	t.Run("発行者と秘密の鍵だけを設定すると、宛先と許可の画面の URL は既定値になる", func(t *testing.T) {
+		cfg, err := LoadConfig(base(map[string]string{"OAUTH_ISSUER": "http://localhost:8080/", "OAUTH_TOKEN_SECRET": secret}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := OAuthConfig{
+			Enabled: true, Issuer: "http://localhost:8080", Resource: "http://localhost:8080/mcp",
+			ConsentURL: "https://app.example.com/oauth/authorize", Secret: secret,
+		}
+		if cfg.OAuth.Enabled != want.Enabled || cfg.OAuth.Issuer != want.Issuer || cfg.OAuth.Resource != want.Resource ||
+			cfg.OAuth.ConsentURL != want.ConsentURL || cfg.OAuth.Secret != want.Secret || len(cfg.OAuth.StaticClients) != 0 {
+			t.Errorf("OAuth = %+v, want %+v", cfg.OAuth, want)
+		}
+	})
+
+	t.Run("宛先・許可の画面・固定のアプリを設定すると、その値が使われる", func(t *testing.T) {
+		cfg, err := LoadConfig(base(map[string]string{
+			"OAUTH_ISSUER": "https://api.example.com", "OAUTH_TOKEN_SECRET": secret,
+			"OAUTH_RESOURCE_URL": "https://api.example.com/mcp/v1", "OAUTH_CONSENT_URL": "https://app.example.com/consent",
+			"OAUTH_STATIC_CLIENTS": `[{"id":"dev-app","name":"Dev App","redirect_uris":["http://127.0.0.1/callback"]}]`,
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.OAuth.Resource != "https://api.example.com/mcp/v1" || cfg.OAuth.ConsentURL != "https://app.example.com/consent" {
+			t.Errorf("OAuth = %+v", cfg.OAuth)
+		}
+		if len(cfg.OAuth.StaticClients) != 1 || cfg.OAuth.StaticClients[0].ID != "dev-app" || cfg.OAuth.StaticClients[0].Name != "Dev App" {
+			t.Errorf("StaticClients = %+v", cfg.OAuth.StaticClients)
+		}
+	})
+
+	failures := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"秘密の鍵がないと、起動に失敗する", map[string]string{"OAUTH_ISSUER": "http://localhost:8080"}, "OAUTH_TOKEN_SECRET"},
+		{"秘密の鍵が 32 文字より短いと、起動に失敗する", map[string]string{"OAUTH_ISSUER": "http://localhost:8080", "OAUTH_TOKEN_SECRET": "short"}, "OAUTH_TOKEN_SECRET"},
+		{"発行者が URL でないと、起動に失敗する", map[string]string{"OAUTH_ISSUER": "localhost:8080", "OAUTH_TOKEN_SECRET": secret}, "OAUTH_ISSUER"},
+		{"宛先が URL でないと、起動に失敗する", map[string]string{"OAUTH_ISSUER": "http://localhost:8080", "OAUTH_TOKEN_SECRET": secret, "OAUTH_RESOURCE_URL": "mcp"}, "OAUTH_RESOURCE_URL"},
+		{"許可の画面の URL が不正だと、起動に失敗する", map[string]string{"OAUTH_ISSUER": "http://localhost:8080", "OAUTH_TOKEN_SECRET": secret, "OAUTH_CONSENT_URL": "ftp://x"}, "OAUTH_CONSENT_URL"},
+		{"固定のアプリが JSON でないと、起動に失敗する", map[string]string{"OAUTH_ISSUER": "http://localhost:8080", "OAUTH_TOKEN_SECRET": secret, "OAUTH_STATIC_CLIENTS": "nope"}, "OAUTH_STATIC_CLIENTS"},
+		{"固定のアプリに知らない項目があると、起動に失敗する", map[string]string{"OAUTH_ISSUER": "http://localhost:8080", "OAUTH_TOKEN_SECRET": secret, "OAUTH_STATIC_CLIENTS": `[{"id":"a","name":"a","redirect_uris":["https://a.example.com/cb"],"client_secret":"x"}]`}, "OAUTH_STATIC_CLIENTS"},
+		{"固定のアプリの戻り先が規則を満たさないと、起動に失敗する", map[string]string{"OAUTH_ISSUER": "http://localhost:8080", "OAUTH_TOKEN_SECRET": secret, "OAUTH_STATIC_CLIENTS": `[{"id":"a","name":"a","redirect_uris":["http://evil.example.com/cb"]}]`}, "OAUTH_STATIC_CLIENTS"},
+	}
+	for _, tt := range failures {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadConfig(base(tt.env))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want an error naming %s", err, tt.want)
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("エラーに秘密の鍵の値が含まれている: %v", err)
 			}
 		})
 	}
