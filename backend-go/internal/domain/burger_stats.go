@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -251,12 +252,15 @@ func NewRecalcFailure(failures int, cause error, now time.Time) RecalcFailure {
 	}
 	reason := ""
 	if cause != nil {
-		reason = cause.Error()
+		// NUL は PostgreSQL の text に入らず、記録そのものが失敗して待ち時間が進まなくなるので取り除く。
+		reason = strings.ReplaceAll(cause.Error(), "\x00", "")
 	}
-	if runes := []rune(reason); len(runes) > MaxRecalcFailureReasonChars {
-		reason = string(runes[:MaxRecalcFailureReasonChars])
+	// 文字数で切る。不正なバイト列は、rune への変換で U+FFFD になり、必ず有効な UTF-8 になる。
+	runes := []rune(reason)
+	if len(runes) > MaxRecalcFailureReasonChars {
+		runes = runes[:MaxRecalcFailureReasonChars]
 	}
-	return RecalcFailure{NextAttemptAt: now.Add(delay), Reason: reason}
+	return RecalcFailure{NextAttemptAt: now.Add(delay), Reason: string(runes)}
 }
 
 // ---- repository の契約(実装は adapter/repository) ----

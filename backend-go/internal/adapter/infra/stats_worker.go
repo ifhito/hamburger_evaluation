@@ -36,6 +36,7 @@ func StartStatsWorker(runner statsRunner, interval time.Duration) *StatsWorkerLo
 
 func (l *StatsWorkerLoop) run(ctx context.Context, runner statsRunner, interval time.Duration) {
 	defer close(l.done)
+	defer l.cancel()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {

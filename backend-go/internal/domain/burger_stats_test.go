@@ -1,8 +1,11 @@
 package domain_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
@@ -232,4 +235,71 @@ func TestBurgerStatsAverageRating(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewRecalcFailure は、再計算に失敗したときの、再試行の待ち時間と記録する理由を固定する。
+func TestNewRecalcFailure(t *testing.T) {
+	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	cause := errors.New("db down")
+
+	t.Run("失敗が続くごとに、待ち時間が 2 秒から倍になり、5 分で頭打ちになる", func(t *testing.T) {
+		tests := []struct {
+			failures int
+			want     time.Duration
+		}{
+			{1, 2 * time.Second},
+			{2, 4 * time.Second},
+			{3, 8 * time.Second},
+			{4, 16 * time.Second},
+			{7, 128 * time.Second},
+			{8, 256 * time.Second},
+			{9, 5 * time.Minute},
+			{20, 5 * time.Minute},
+			{21, 5 * time.Minute},
+			{1 << 30, 5 * time.Minute},
+		}
+		for _, tt := range tests {
+			got := domain.NewRecalcFailure(tt.failures, cause, now).NextAttemptAt.Sub(now)
+			if got != tt.want {
+				t.Errorf("失敗 %d 回目の待ち時間 = %v, want %v", tt.failures, got, tt.want)
+			}
+		}
+	})
+
+	t.Run("回数が 0 以下でも、待ち時間は上限を超えず、負にもならない", func(t *testing.T) {
+		for _, failures := range []int{0, -1} {
+			got := domain.NewRecalcFailure(failures, cause, now).NextAttemptAt.Sub(now)
+			if got <= 0 || got > 5*time.Minute {
+				t.Errorf("回数 %d の待ち時間 = %v, want 0 より大きく 5 分以下", failures, got)
+			}
+		}
+	})
+
+	t.Run("理由は原因のエラーの文言になり、原因がなければ空になる", func(t *testing.T) {
+		if got := domain.NewRecalcFailure(1, cause, now).Reason; got != "db down" {
+			t.Errorf("Reason = %q, want %q", got, "db down")
+		}
+		if got := domain.NewRecalcFailure(1, nil, now).Reason; got != "" {
+			t.Errorf("原因がないときの Reason = %q, want 空", got)
+		}
+	})
+
+	t.Run("長い理由は、バイト数ではなく文字数で上限に切り詰められる", func(t *testing.T) {
+		limit := domain.MaxRecalcFailureReasonChars
+		exact := strings.Repeat("あ", limit)
+		if got := domain.NewRecalcFailure(1, errors.New(exact), now).Reason; got != exact {
+			t.Errorf("上限ちょうどの理由が変わった(%d 文字 → %d 文字)", limit, utf8.RuneCountInString(got))
+		}
+		got := domain.NewRecalcFailure(1, errors.New(exact+"い"), now).Reason
+		if got != exact {
+			t.Errorf("上限を 1 文字超えた理由 = %d 文字, want 先頭の %d 文字", utf8.RuneCountInString(got), limit)
+		}
+	})
+
+	t.Run("NUL と不正なバイト列は、データベースに入れられる形に直される", func(t *testing.T) {
+		got := domain.NewRecalcFailure(1, errors.New("a\x00b\xffc"), now).Reason
+		if strings.Contains(got, "\x00") || !utf8.ValidString(got) {
+			t.Errorf("Reason = %q, want NUL を含まない有効な UTF-8", got)
+		}
+	})
 }
