@@ -282,7 +282,7 @@ frontend/src/
 ├── domains/      # auth、reviews、shops、users
 ├── api/          # API クライアント / HTTP 境界
 ├── states/       # グローバル state
-├── lib/          # 共通ユーティリティ (date、i18n、rating)
+├── lib/          # 共通ユーティリティ (date、i18n、rating、photoResize)
 └── components/   # 共通 UI コンポーネント
 ```
 
@@ -290,6 +290,12 @@ frontend/src/
 
 - ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる。
 - 開発時は Vite の proxy が `/api` を Go API へ転送する。転送先の既定は `http://host.docker.internal:8080` で、`VITE_API_PROXY_TARGET` で変更できる。レビュー写真の `/photos` も同じ転送先へ proxy される(本番の nginx にも `/photos/` がある)。
+
+### 写真の送信
+
+- 写真を選ぶ input の `accept` は、**JPEG・PNG・WebP だけ**にする。HEIC / HEIF を加えない: iPhone の Safari は、`accept` が JPEG・PNG・WebP だけのとき、写真を JPEG に変換して渡す(加えると、HEIC のまま渡り、backend は HEIC / HEIF を受け付けない)。
+- 送る前に、`useCreateReview` / `useUpdateReview` が `shrinkPhoto` を通す。長辺が上限(`GET /meta` の `photo.maxEdge`)を超える、またはファイルが `photo.maxBytes` を超えるときだけ、canvas で縮小した JPEG にする(向きは `createImageBitmap` の `imageOrientation: "from-image"` で画素に反映する)。**上限の値は frontend に書かない**(backend の値を使う)。
+- 縮小できないとき(ブラウザが画像を読み込めないなど)は、失敗にせず、元のファイルをそのまま送る。backend が受け付けるか、理由つきのメッセージ(422 の 4 種類。HEIC / HEIF は、対応しない理由つき)を返し、それを画面にそのまま出す。
 
 ### Frontend コマンド
 

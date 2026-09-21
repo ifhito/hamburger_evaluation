@@ -5,6 +5,8 @@ import { buildApiClient } from "./client/buildApiClient";
 // frontend は値を複製せず、これを表示・選択肢の生成に使う。
 export interface Meta {
   rating: { min: number; max: number };
+  // 写真の上限。maxEdge は長辺(ピクセル)、maxBytes はファイルの大きさ(バイト)。
+  photo: { maxEdge: number; maxBytes: number };
 }
 
 const metaApiClient = buildApiClient();
