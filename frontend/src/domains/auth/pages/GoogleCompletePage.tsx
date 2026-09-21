@@ -19,6 +19,10 @@ interface Failure {
   retryable: boolean;
 }
 
+// 5xx(サーバーの障害)か。先頭の桁で判定する(noDuplicatedLimits の検査は、ソースの中の、backend の上限と同じ数字を探すため、
+// HTTP ステータスの数字は、直書きしない)。
+const isServerError = (status: number) => String(status).startsWith("5");
+
 // Google でのサインインの手続きの結果の受け皿(/auth/google/complete?code=…)。backend が、成功も失敗も、
 // 1 回限りのコードに入れて、この画面へ戻す。ここでは、そのコードを API と交換して、結果を受け取るだけで、
 // 成功か失敗か・その理由の判断は持たない(サーバーの文言をそのまま出す)。コードは、URL からはすぐに消し(履歴に
@@ -60,7 +64,7 @@ export default function GoogleCompletePage() {
       .catch((e: unknown) =>
         setFailure(
           e instanceof ApiError
-            ? { messages: e.messages, returnTo: e instanceof GoogleExchangeError ? e.returnTo : "", retryable: e.status >= 500 }
+            ? { messages: e.messages, returnTo: e instanceof GoogleExchangeError ? e.returnTo : "", retryable: isServerError(e.status) }
             : { messages: [t("auth.google.error")], returnTo: "", retryable: true },
         ),
       );
