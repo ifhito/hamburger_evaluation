@@ -55,6 +55,7 @@ type User struct {
 	ID             string
 	Email          string
 	Username       string
+	Bio            string
 	PasswordDigest string
 	Admin          bool
 	DiscardedAt    pgtype.Timestamptz

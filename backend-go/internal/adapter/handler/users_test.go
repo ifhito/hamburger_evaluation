@@ -49,6 +49,9 @@ func (f *userStoreFake) UpdateUserProfile(_ context.Context, id string, changes 
 	if changes.Username != nil {
 		rec.user.Username = *changes.Username
 	}
+	if changes.Bio != nil {
+		rec.user.Bio = *changes.Bio
+	}
 	if changes.Email != nil {
 		rec.user.Email = *changes.Email
 	}
@@ -100,8 +103,8 @@ func newUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(string) st
 // viewer ごとの can_edit（編集・削除できるか）が常に付く。
 const (
 	publicUserKeys    = "id,username"
-	publicProfileKeys = "can_edit,id,username"
-	selfUserKeys      = "admin,can_edit,email,id,username"
+	publicProfileKeys = "bio,can_edit,id,username"
+	selfUserKeys      = "admin,bio,can_edit,email,id,username"
 )
 
 // userKeySet は JSON オブジェクトのキーをソートしてカンマで連結する。
@@ -389,12 +392,12 @@ func TestUpdateUser(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + uid.N(1) + `","username":"alice2","email":"alice@example.com","admin":false}`
+		want := `{"id":"` + uid.N(1) + `","username":"alice2","bio":"","email":"alice@example.com","admin":false}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
 		got := do(router, http.MethodGet, "/users/"+uid.N(1), "", "")
-		if got.Code != http.StatusOK || got.Body.String() != `{"id":"`+uid.N(1)+`","username":"alice2","can_edit":false}` {
+		if got.Code != http.StatusOK || got.Body.String() != `{"id":"`+uid.N(1)+`","username":"alice2","bio":"","can_edit":false}` {
 			t.Errorf("GET /users/1 = %d %s, want 200 with the new username reflected", got.Code, got.Body)
 		}
 	})
@@ -430,7 +433,7 @@ func TestUpdateUser(t *testing.T) {
 
 	t.Run("空の user オブジェクトと user キーなしは変更なしで 200 を返す", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
-		want := `{"id":"` + uid.N(1) + `","username":"alice","email":"alice@example.com","admin":false}`
+		want := `{"id":"` + uid.N(1) + `","username":"alice","bio":"","email":"alice@example.com","admin":false}`
 		for _, body := range []string{`{"user":{}}`, `{}`} {
 			rec := do(router, http.MethodPut, "/users/"+uid.N(1), body, aliceAuth)
 			if rec.Code != http.StatusOK || rec.Body.String() != want {
@@ -682,7 +685,7 @@ func TestUsersPasswordChangeIntegration(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
-	want := fmt.Sprintf(`{"id":%q,"username":"alice","email":"alice@example.com","admin":false}`, id)
+	want := fmt.Sprintf(`{"id":%q,"username":"alice","bio":"","email":"alice@example.com","admin":false}`, id)
 	if got := rec.Body.String(); got != want {
 		t.Errorf("update body = %s, want %s", got, want)
 	}
@@ -939,7 +942,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Errorf("GET /users/%s = %d %s, want 404 User not found", aliceID, rec.Code, rec.Body)
 	}
 	rec = do(router, http.MethodGet, "/users/"+bobID, "", "")
-	if want := fmt.Sprintf(`{"id":%q,"username":"bob","can_edit":false}`, bobID); rec.Code != http.StatusOK || rec.Body.String() != want {
+	if want := fmt.Sprintf(`{"id":%q,"username":"bob","bio":"","can_edit":false}`, bobID); rec.Code != http.StatusOK || rec.Body.String() != want {
 		t.Errorf("GET /users/%s = %d %s, want 200 %s", bobID, rec.Code, rec.Body, want)
 	}
 
