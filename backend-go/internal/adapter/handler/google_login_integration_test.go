@@ -525,6 +525,22 @@ func TestGoogleSignIn(t *testing.T) {
 		}
 	})
 
+	t.Run("表示名(name)がない Google アカウントでも、公開のユーザー名に、メールの一部(@ より前)を使わない", func(t *testing.T) {
+		k := newGoogleKit(t)
+		k.idp.SetUser(fakeoidc.User{Sub: "sub-noname", Email: "john.smith1985@gmail.example", EmailVerified: true, Name: ""})
+		body := decodeExchange(t, k.exchange(k.run(t, "").code))
+		if body.Token == "" {
+			t.Fatalf("サインインできなかった: %+v", body)
+		}
+		if strings.Contains(strings.ToLower(body.Username), "john") || strings.Contains(body.Username, "1985") || strings.Contains(body.Username, "@") {
+			t.Fatalf("ユーザー名 %q に、メールの一部が含まれている(email は本人にしか見せない)", body.Username)
+		}
+		var publicName string
+		if err := k.conn.QueryRow(context.Background(), `SELECT username FROM users WHERE email = 'john.smith1985@gmail.example'`).Scan(&publicName); err != nil || publicName != body.Username {
+			t.Fatalf("保存されたユーザー名 = %q(%v), 応答 = %q", publicName, err, body.Username)
+		}
+	})
+
 	t.Run("2 回目以降は、同じ利用者としてサインインし、新しい利用者は作られない", func(t *testing.T) {
 		k := newGoogleKit(t)
 		first := decodeExchange(t, k.exchange(k.run(t, "").code))
