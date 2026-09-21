@@ -7,6 +7,10 @@ import { resolveBurger, roundRating, type BurgerSize } from "./burgerShapes";
 const designJs = import.meta.glob<string>("../../../../design/redesign/rating-icons.js", { query: "?raw", import: "default", eager: true });
 const source = Object.values(designJs)[0];
 
+// CI では、デザインのファイルが無い(移動・改名された)ときは、飛ばさず失敗にする(飛ばすのは、frontend だけを取り出した環境のため)。
+const inCi = Boolean((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.CI);
+it.runIf(inCi)("CI では、デザインの見本のファイルが見つかる", () => expect(source).toBeTruthy());
+
 type DesignShape = { part: string; d: string; fill: { color: string; t?: number } | null; stroke: string; sw: number };
 type Design = {
   SIZE: typeof parts.size;

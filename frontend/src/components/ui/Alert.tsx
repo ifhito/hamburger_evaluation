@@ -16,7 +16,7 @@ export function Alert({ title, message }: Props) {
       <span className={styles.mark} aria-hidden="true">
         !
       </span>
-      <div>
+      <div className={styles.body}>
         {title && <b className={styles.title}>{title}</b>}
         {messages.length === 1 ? (
           <p className={styles.msg}>{messages[0]}</p>

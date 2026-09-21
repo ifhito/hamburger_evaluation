@@ -4,6 +4,7 @@
 }
 
 .rate {
+  font-family: var(--ui-font);
   display: inline-flex;
   align-items: center;
   gap: 12px;

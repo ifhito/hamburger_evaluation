@@ -29,7 +29,7 @@ const LOADING_LEVEL = 0.6
 export function Loading() {
   const { t } = useTranslation()
   return (
-    <section className={styles.panel} role="status" aria-busy="true">
+    <section className={styles.panel} role="status">
       <RatingBurgerIcon ratio={LOADING_LEVEL} size="lg" />
       <h2 className={styles.title}>{t('common.states.loading.title')}</h2>
       <p className={styles.sub}>{t('common.states.loading.description')}</p>

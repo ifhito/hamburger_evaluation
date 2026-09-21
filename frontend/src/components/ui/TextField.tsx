@@ -1,5 +1,6 @@
 import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react'
-import { CharCounter } from '../CharCounter'
+import { useTranslation } from 'react-i18next'
+import { countChars } from '../../lib/countChars'
 import styles from './field.module.css'
 
 interface Common {
@@ -17,6 +18,25 @@ function describedBy(id: string, hint: string | undefined, counter: Common['coun
   return [hint && `${id}-hint`, counter?.max !== undefined && `${id}-counter`].filter(Boolean).join(' ') || undefined
 }
 
+// 文字数「いまの文字数 / 上限」。上限を超えても入力も送信も止めない(判定は backend の 422)。超えている間は、色だけでなく
+// 「Too long」の文字でも知らせる。読み上げには、超えたときと戻ったときの 2 回だけ、見えない role="status" で伝える。
+function Counter({ id, value, max }: { id: string; value: string; max: number }) {
+  const { t } = useTranslation()
+  const count = countChars(value)
+  const over = count > max
+  return (
+    <div className={styles.counterRow}>
+      <span id={id} className={over ? `${styles.counter} ${styles.over}` : styles.counter}>
+        {count} / {max}
+        {over && ` ${t('common.charCounter.tooLong')}`}
+      </span>
+      <span role="status" className={styles.srOnly}>
+        {over ? t('common.charCounter.overAnnounce', { max }) : t('common.charCounter.withinAnnounce')}
+      </span>
+    </div>
+  )
+}
+
 function Frame({ id, label, optional, hint, counter, children }: Common & { children: React.ReactNode }) {
   return (
     <div className={styles.field}>
@@ -30,7 +50,7 @@ function Frame({ id, label, optional, hint, counter, children }: Common & { chil
           {hint}
         </span>
       )}
-      {counter && <CharCounter id={`${id}-counter`} value={counter.value} max={counter.max} />}
+      {counter?.max !== undefined && <Counter id={`${id}-counter`} value={counter.value} max={counter.max} />}
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import "../../lib/i18n";
 import { Alert } from "./Alert";
@@ -12,13 +13,19 @@ import { TextArea, TextField } from "./TextField";
 
 const html = (node: React.ReactElement) => renderToStaticMarkup(node);
 
+// CSS モジュールの class 名は「_名前_ハッシュ」。名前だけを取り出して、完全一致で比べる(danger が dangerSolid・offDanger に一致しないように)。
+const classNames = (markup: string) =>
+  (markup.match(/class="([^"]*)"/)?.[1] ?? "").split(" ").map((c) => c.replace(/^_(.+)_[0-9a-f]+$/, "$1"));
+// 水位の塗り分け(gradient)の id は描くたびに違うので、id とその参照を除いて、図形だけを比べる。
+const shapesOf = (markup: string) => markup.replace(/ id="[^"]*"/g, "").replace(/url\(#[^)]*\)/g, "url(#)");
+
 describe("Button", () => {
-  it("種類ごとに違う見た目の class を持ち、押せる状態では disabled でない", () => {
-    expect(html(<Button variant="primary">Save</Button>)).toMatch(/class="[^"]*primary/);
-    expect(html(<Button variant="secondary">Cancel</Button>)).toMatch(/class="[^"]*secondary/);
-    expect(html(<Button variant="danger">Delete</Button>)).toMatch(/class="[^"]*danger/);
-    expect(html(<Button variant="dangerSolid">Delete</Button>)).toMatch(/class="[^"]*dangerSolid/);
-    expect(html(<Button variant="dark">Confirm reject</Button>)).toMatch(/class="[^"]*dark/);
+  it("種類ごとに、別々の class を 1 つだけ持つ", () => {
+    expect(classNames(html(<Button>Save</Button>))).toEqual(["btn", "primary"]);
+    expect(classNames(html(<Button variant="secondary">Cancel</Button>))).toEqual(["btn", "secondary"]);
+    expect(classNames(html(<Button variant="danger">Delete</Button>))).toEqual(["btn", "danger"]);
+    expect(classNames(html(<Button variant="dangerSolid">Delete</Button>))).toEqual(["btn", "dangerSolid"]);
+    expect(classNames(html(<Button variant="dark">Confirm reject</Button>))).toEqual(["btn", "dark"]);
     expect(html(<Button>Save</Button>)).not.toContain("disabled");
   });
 
@@ -28,16 +35,26 @@ describe("Button", () => {
     expect(withLabel).toContain('aria-busy="true"');
     expect(withLabel).toContain("Posting…");
     expect(withLabel).not.toContain(">Post<");
-    expect(html(<Button isLoading>Post</Button>)).toContain("Loading…");
+    expect(html(<Button isLoading>Post</Button>)).toContain("Loading\u2026");
   });
 
-  it("無効のときは、灰色の面の class になり、押せない。削除の無効は、文字だけ赤の class になる", () => {
+  it("送信中は、フォームが有効(disabled={false})でも、押せない(二重送信を防ぐ)", () => {
+    const out = html(<Button isLoading disabled={false}>Post</Button>);
+    expect(out).toContain("disabled");
+    expect(classNames(out)).toEqual(["btn", "off"]);
+  });
+
+  it("無効のときは灰色の面(off)。削除の枠だけは、文字を赤のままにする(offDanger)。削除の確認は、灰色の面", () => {
     const off = html(<Button disabled>Post</Button>);
     expect(off).toContain("disabled");
-    expect(off).toMatch(/class="[^"]*off/);
-    expect(off).not.toMatch(/class="[^"]*primary/);
-    expect(html(<Button variant="danger" disabled>Delete</Button>)).toMatch(/class="[^"]*offDanger/);
-    expect(html(<Button variant="dangerSolid" disabled>Delete</Button>)).not.toMatch(/dangerSolid/);
+    expect(classNames(off)).toEqual(["btn", "off"]);
+    expect(classNames(html(<Button variant="danger" disabled>Delete</Button>))).toEqual(["btn", "offDanger"]);
+    expect(classNames(html(<Button variant="dangerSolid" disabled>Delete</Button>))).toEqual(["btn", "off"]);
+    expect(classNames(html(<Button variant="dark" disabled>Confirm reject</Button>))).toEqual(["btn", "off"]);
+  });
+
+  it("幅いっぱい(block)と、左右の余白を広げる(wide)は、種類に足される", () => {
+    expect(classNames(html(<Button block wide>Save</Button>))).toEqual(["btn", "primary", "block", "wide"]);
   });
 
   it("form の中でも、指定しない限り送信ボタンにならない(type=button)", () => {
@@ -48,15 +65,20 @@ describe("Button", () => {
 
 describe("Badge と Card", () => {
   it("札は、状態の文字を出し、見た目は outline と accent の 2 種類", () => {
-    expect(html(<Badge>Pending</Badge>)).not.toMatch(/accent/);
-    expect(html(<Badge tone="accent">Public</Badge>)).toMatch(/class="[^"]*accent/);
+    expect(classNames(html(<Badge>Pending</Badge>))).toEqual(["badge"]);
+    expect(classNames(html(<Badge tone="accent">Public</Badge>))).toEqual(["badge", "accent"]);
     expect(html(<Badge>Pending</Badge>)).toContain("Pending");
   });
 
   it("カードは、強調と余白なしを選べる", () => {
-    expect(html(<Card>x</Card>)).toMatch(/padded/);
-    expect(html(<Card padded={false}>x</Card>)).not.toMatch(/padded/);
-    expect(html(<Card current>x</Card>)).toMatch(/current/);
+    expect(classNames(html(<Card>x</Card>))).toEqual(["card", "padded"]);
+    expect(classNames(html(<Card padded={false}>x</Card>))).toEqual(["card"]);
+    expect(classNames(html(<Card current>x</Card>))).toEqual(["card", "current", "padded"]);
+  });
+
+  it("強調のカードは、色や枠だけでなく、aria-current でも「いまのもの」と伝える", () => {
+    expect(html(<Card current>x</Card>)).toContain('aria-current="true"');
+    expect(html(<Card>x</Card>)).not.toContain("aria-current");
   });
 });
 
@@ -77,17 +99,38 @@ describe("Alert", () => {
 });
 
 describe("TextField と TextArea", () => {
-  it("ラベルを入力欄に結び付け、説明と文字数のカウンターを aria-describedby で結び付ける", () => {
+  it("ラベルを入力欄に結び付け、説明と文字数のカウンターを aria-describedby で結び付け、指す id は実際にある", () => {
     const out = html(<TextField id="name" label="Name" hint="Shown to others" counter={{ value: "ab", max: 5 }} />);
     expect(out).toContain('for="name"');
     expect(out).toContain('aria-describedby="name-hint name-counter"');
+    expect(out).toContain('id="name-hint"');
+    expect(out).toContain('id="name-counter"');
     expect(out).toContain("2 / 5");
+  });
+
+  it("TextField は input、TextArea は textarea を出す", () => {
+    expect(html(<TextField id="a" label="A" />)).toContain("<input");
+    expect(html(<TextArea id="a" label="A" />)).toContain("<textarea");
   });
 
   it("上限が未取得(undefined)のときは、カウンターを出さず、結び付けもしない(値を推測しない)", () => {
     const out = html(<TextArea id="c" label="Comment" counter={{ value: "abc", max: undefined }} />);
     expect(out).not.toContain("/ ");
     expect(out).not.toContain("aria-describedby");
+  });
+
+  it("上限を超えたら、色だけでなく「Too long」の文字と、読み上げの文言でも知らせ、戻れば「収まっている」に戻る", () => {
+    const over = html(<TextField id="n" label="Name" counter={{ value: "abcdef", max: 5 }} />);
+    expect(over).toContain("6 / 5 Too long");
+    expect(over).toContain("Over the limit (maximum 5 characters)");
+    expect(classNames(over.match(/<span id="n-counter" class="[^"]*"/)![0].replace("<span id=\"n-counter\" ", "<x "))).toContain("over");
+    const within = html(<TextField id="n" label="Name" counter={{ value: "abc", max: 5 }} />);
+    expect(within).toContain("Within the limit");
+    expect(within).not.toContain("Too long");
+  });
+
+  it("文字数は、絵文字も日本語も 1 文字で数える(backend と同じ数え方)", () => {
+    expect(html(<TextField id="n" label="Name" counter={{ value: "\u{1F354}\u{1F354}\u3042\u3044", max: 5 }} />)).toContain("4 / 5");
   });
 
   it("任意の項目には、ラベルの隣に「任意」の説明を薄く出す", () => {
@@ -104,11 +147,13 @@ describe("空・読み込み中・見つからないときの画面", () => {
     expect(out).toContain("<svg");
   });
 
-  it("読み込み中は、role=status で読み上げ、灰色の帯は装飾として読み上げない", () => {
+  it("読み込み中は、role=status で文言を伝え、灰色の帯は装飾として読み上げない。aria-busy は付けない(状態の読み上げが止まる)", () => {
     const out = html(<Loading />);
     expect(out).toContain('role="status"');
-    expect(out).toContain("Grilling…");
+    expect(out).toContain("Grilling\u2026");
     expect(out).toContain("Just a moment");
+    expect(out).not.toContain("aria-busy");
+    expect(out).toMatch(/<div class="[^"]*skels[^"]*" aria-hidden="true">/);
   });
 
   it("見つからないときは、404 と文言と、操作(あれば)を出す", () => {
@@ -119,6 +164,8 @@ describe("空・読み込み中・見つからないときの画面", () => {
     expect(out).toContain("Back to shops");
   });
 });
+
+const svgOf = (markup: string) => shapesOf(markup.match(/<svg[\s\S]*<\/svg>/)![0]);
 
 describe("RatingBurger(表示)", () => {
   it("数字を必ず併記し、読み上げは「Rating 4.5 out of 5」の 1 つの画像として伝え、絵と数字を二重に読み上げない", () => {
@@ -135,20 +182,29 @@ describe("RatingBurger(表示)", () => {
     expect(html(<RatingBurger value={4} max={5} fractionDigits={1} />)).toContain(">4.0</b>");
   });
 
-  it("最大値は呼び出し側が渡した値(GET /meta)で決まり、最大値が違えば水位の割合も変わる", () => {
-    const gradients = (max: number) => html(<RatingBurger value={2} max={max} size="lg" />).match(/<linearGradient/g)?.length ?? 0;
-    expect(html(<RatingBurger value={3} max={3} size="lg" />)).not.toContain("linearGradient");
-    expect(gradients(4)).toBeGreaterThan(0);
+  it("水位は、数字と同じ丸めた値 ÷ 最大値で決まる(数字と水位がずれない)。最大値は呼び出し側が渡す(GET /meta)", () => {
+    expect(svgOf(html(<RatingBurger value={4.46} max={5} size="lg" />))).toBe(svgOf(html(<RatingBurgerIcon ratio={0.9} size="lg" />)));
+    expect(svgOf(html(<RatingBurger value={2} max={4} size="lg" />))).toBe(svgOf(html(<RatingBurgerIcon ratio={0.5} size="lg" />)));
     expect(html(<RatingBurger value={2} max={4} />)).toContain("out of 4");
   });
 
-  it("最大値が 0 以下でも例外にならず、空のバーガーになる", () => {
-    expect(() => html(<RatingBurger value={3} max={0} />)).not.toThrow();
+  it("最大値が 0 以下でも、例外にならず、空のバーガーと同じ絵になる", () => {
+    expect(svgOf(html(<RatingBurger value={3} max={0} size="lg" />))).toBe(svgOf(html(<RatingBurgerIcon ratio={0} size="lg" />)));
   });
 
-  it("評価が 0 のときは水位の途中で塗る部品がなく、最大のときも塗り分けがない", () => {
+  it("評価が 0 または最大のときは、水位の途中で塗る部品がなく、塗り分けがない", () => {
     expect(html(<RatingBurger value={0} max={5} size="lg" />)).not.toContain("linearGradient");
     expect(html(<RatingBurger value={5} max={5} size="lg" />)).not.toContain("linearGradient");
+  });
+
+  it("水位の途中の部品は、下から上へ塗り分け、参照する gradient の id が実際にある", () => {
+    const out = html(<RatingBurgerIcon ratio={0.55} size="lg" />);
+    expect(out).toContain('x1="0" y1="1" x2="0" y2="0"');
+    // 下から水位まで部品の色、その上は白(境目は同じ位置)
+    expect(out).toMatch(/<stop offset="0" stop-color="(#[0-9a-f]+)"><\/stop><stop offset="([\d.]+)" stop-color="\1"><\/stop><stop offset="\2" stop-color="#ffffff"><\/stop><stop offset="1" stop-color="#ffffff">/);
+    const refs = [...out.matchAll(/fill="url\(#([^)]+)\)"/g)].map((m) => m[1]);
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) expect(out).toContain(`<linearGradient id="${ref}"`);
   });
 
   it("絵だけの部品は、装飾として読み上げず、数字を持たない", () => {
@@ -165,26 +221,42 @@ describe("RatingBurger(表示)", () => {
   });
 });
 
+type ElProps = { children?: ReactNode; type?: string; value?: number; onChange?: () => void };
+const walk = (node: ReactNode, out: ReactElement<ElProps>[] = []) => {
+  if (Array.isArray(node)) node.forEach((n) => walk(n, out));
+  else if (isValidElement<ElProps>(node)) {
+    out.push(node);
+    walk(node.props.children, out);
+  }
+  return out;
+};
+
 describe("RatingInput(入力)", () => {
   const input = (props: Partial<React.ComponentProps<typeof RatingInput>> = {}) =>
     html(<RatingInput name="rating" label="Rating" value={3} onChange={() => {}} min={1} max={5} {...props} />);
+  const values = (markup: string) => [...markup.matchAll(/value="(\d+)"/g)].map((m) => m[1]);
 
-  it("最小〜最大の数字のラジオボタンを並べ、選んでいる値だけが checked になる", () => {
+  it("最小〜最大の数字のラジオボタンを並べ、選んでいる値だけが checked になり、その札だけが選択中の見た目(on)になる", () => {
     const out = input();
     expect(out.match(/type="radio"/g)?.length).toBe(5);
     expect(out.match(/checked=""/g)?.length).toBe(1);
-    expect(out).toMatch(/value="3"[^>]*checked=""|checked=""[^>]*value="3"/);
+    for (const label of out.split("<label").slice(1)) {
+      const isOn = classNames(`<label${label}`).includes("on");
+      expect(isOn, label).toBe(/value="3"/.test(label));
+      expect(/checked=""/.test(label), label).toBe(/value="3"/.test(label));
+    }
   });
 
-  it("ボタンの数は、渡された最小・最大(GET /meta)で決まる(frontend に評価の範囲を持たない)", () => {
-    expect(input({ min: 1, max: 7 }).match(/type="radio"/g)?.length).toBe(7);
-    expect(input({ min: 1, max: 3 }).match(/type="radio"/g)?.length).toBe(3);
+  it("ボタンの数と数字は、渡された最小・最大(GET /meta)で決まる(frontend に評価の範囲を持たない)", () => {
+    expect(values(input({ min: 1, max: 7 }))).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
+    expect(values(input({ min: 2, max: 5 }))).toEqual(["2", "3", "4", "5"]);
+    expect(values(input({ min: 1, max: 3 }))).toEqual(["1", "2", "3"]);
   });
 
   it("同じ name のラジオボタンの集まりで、ラベルを凡例(legend)として読み上げる", () => {
     const out = input();
     expect(out).toContain("<fieldset");
-    expect(out).toContain("<legend");
+    expect(out).toMatch(/<legend[^>]*>Rating<\/legend>/);
     expect(out.match(/name="rating"/g)?.length).toBe(5);
   });
 
@@ -194,10 +266,32 @@ describe("RatingInput(入力)", () => {
     expect(out).toContain("out of 5");
   });
 
-  it("まだ選んでいない(null)ときは、空のバーガーで、どのボタンも checked でなく、数字の場所は「–」", () => {
+  it("バーガーの水位は、選んだ値 ÷ 最大値。まだ選んでいない(null)ときは空", () => {
+    const iconOf = (ratio: number) => svgOf(html(<RatingBurgerIcon ratio={ratio} size="lg" />));
+    expect(svgOf(input({ value: 3 }))).toBe(iconOf(0.6));
+    expect(svgOf(input({ value: 3, min: 1, max: 7 }))).toBe(iconOf(3 / 7));
+    expect(svgOf(input({ value: null }))).toBe(iconOf(0));
+  });
+
+  it("まだ選んでいない(null)ときは、どのボタンも checked でなく、数字の場所は「–」", () => {
     const out = input({ value: null });
     expect(out).not.toContain("checked");
-    expect(out).toContain("<b>–</b>");
+    expect(out).toContain("<b>\u2013</b>");
+  });
+
+  it("数字のボタンを選ぶと、その数字で onChange が呼ばれる", () => {
+    const calls: number[] = [];
+    let tree: ReactNode = null;
+    const Probe = () => {
+      tree = RatingInput({ name: "rating", label: "Rating", value: 3, onChange: (v) => calls.push(v), min: 1, max: 5 });
+      return null;
+    };
+    html(<Probe />);
+    const radios = walk(tree).filter((e) => e.props.type === "radio");
+    expect(radios.map((r) => r.props.value)).toEqual([1, 2, 3, 4, 5]);
+    radios[3].props.onChange?.();
+    radios[0].props.onChange?.();
+    expect(calls).toEqual([4, 1]);
   });
 
   it("範囲(GET /meta)が取得できていない間は、何も出さない(値を推測しない)", () => {

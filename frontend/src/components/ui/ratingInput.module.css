@@ -1,5 +1,6 @@
 /* fieldset の枠は使わない(既定では、凡例が枠の線にまたがって置かれる)。ラベルは箱の上に置く */
 .pick {
+  font-family: var(--ui-font);
   min-width: 0;
   padding: 0;
   border: 0;
@@ -48,6 +49,7 @@
 
 .steps {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -71,6 +73,15 @@
   border-color: var(--ui-text);
   background: var(--ui-text);
   color: var(--ui-bg);
+}
+
+/* ハイコントラスト表示では、色の指定が上書きされて、選んだ数字が見分けられなくなる。システムの色で示す */
+@media (forced-colors: active) {
+  .on {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
 }
 
 /* 本物のラジオボタンは見えなくして、ボタンの見た目の label に任せる(キーボードの操作は、ラジオボタンのまま) */

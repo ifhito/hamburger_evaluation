@@ -11,16 +11,19 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   loadingLabel?: string
   // 幅いっぱいにする。
   block?: boolean
+  // 左右の余白を広げる(画面の主なボタン。デザインの .wide)。
+  wide?: boolean
 }
 
 // リデザインのボタン。無効・送信中は、灰色の面 + 薄い文字で、押せないことを見た目でも示す(削除の送信中は、文字だけ赤)。
-export function Button({ variant = 'primary', isLoading = false, loadingLabel, block = false, disabled, children, className, ...props }: Props) {
+export function Button({ variant = 'primary', isLoading = false, loadingLabel, block = false, wide = false, disabled, children, className, ...props }: Props) {
   const { t } = useTranslation()
-  const off = disabled ?? isLoading
+  const off = disabled || isLoading
   const cls = [
     styles.btn,
     off ? (variant === 'danger' ? styles.offDanger : styles.off) : styles[variant],
     block ? styles.block : '',
+    wide ? styles.wide : '',
     className ?? '',
   ]
     .filter(Boolean)

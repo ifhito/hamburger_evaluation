@@ -6,6 +6,10 @@ import globalsCss from "../../app/styles/globals.css?raw";
 const designCss = import.meta.glob<string>("../../../../design/redesign/mock.css", { query: "?raw", import: "default", eager: true });
 const design = Object.values(designCss)[0];
 
+// CI では、デザインのファイルが無い(移動・改名された)ときは、飛ばさず失敗にする(飛ばすのは、frontend だけを取り出した環境のため)。
+const inCi = Boolean((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.CI);
+it.runIf(inCi)("CI では、デザインの見本のファイルが見つかる", () => expect(design).toBeTruthy());
+
 const rootBlock = (css: string) => /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
 const variables = (css: string) => Object.fromEntries([...rootBlock(css).matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map(([, name, value]) => [name, value.trim()]));
 const own = variables(globalsCss);

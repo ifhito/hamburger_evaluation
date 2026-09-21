@@ -1,4 +1,5 @@
 .badge {
+  font-family: var(--ui-font);
   display: inline-flex;
   align-items: center;
   height: 28px;
