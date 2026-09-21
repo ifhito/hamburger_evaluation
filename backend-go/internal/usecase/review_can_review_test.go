@@ -34,7 +34,7 @@ func TestReviewsGetShopAndCanReview(t *testing.T) {
 			return domain.ShopDetail{Shop: shopsByID[id]}, nil
 		},
 		listShopReviews: func(context.Context, string) ([]domain.ShopReview, error) { return nil, nil },
-	}, domain.NewShops(&fakeShopRepo{}))
+	}, domain.NewShops(&fakeShopRepo{}), stubPhotoURLs{})
 
 	for _, tt := range []struct {
 		name     string
