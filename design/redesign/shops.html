@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ショップ一覧(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="shops">
+<main class="wrap page">
+  <div class="page-head"><h1 data-en="Shops">ショップ</h1><span class="count" data-en="6 shops">6 件</span></div>
+  <div class="toolbar">
+    <input class="input search" placeholder="店名で探す" data-en-ph="Search by shop name" aria-label="店名で探す">
+    <button class="btn primary" data-en="Add a shop">ショップを追加</button>
+  </div>
+  <div class="grid shops">
+    <article class="poster">
+      <div class="photo" style="--a:#5a3a22;--b:#1a120b"><span class="photo-label" data-en="Photo">写真</span></div>
+      <div class="shade"></div>
+      <div class="info"><h2 class="name">J.S. BURGERS CAFE 新宿</h2><p class="meta"><span class="star">★</span> <b>4.5</b> <span data-en="2 reviews">2 件のレビュー</span></p></div>
+    </article>
+    <article class="poster">
+      <div class="photo" style="--a:#4a3626;--b:#15100c"><span class="photo-label" data-en="Photo">写真</span></div>
+      <div class="shade"></div>
+      <div class="info"><h2 class="name">Shake Shack 渋谷</h2><p class="meta"><span class="star">★</span> <b>4.2</b> <span data-en="3 reviews">3 件のレビュー</span></p></div>
+    </article>
+    <article class="poster">
+      <div class="photo" style="--a:#33422e;--b:#10140e"><span class="photo-label" data-en="Photo">写真</span></div>
+      <div class="shade"></div>
+      <span class="chip"><span data-en="Pending review">審査待ち</span></span>
+      <div class="info"><h2 class="name">バーガースタンド 下北沢</h2><p class="meta"><span data-en="No reviews yet">まだレビューがありません</span></p></div>
+    </article>
+    <article class="poster">
+      <div class="photo" style="--a:#573024;--b:#1b0f0b"><span class="photo-label" data-en="Photo">写真</span></div>
+      <div class="shade"></div>
+      <div class="info"><h2 class="name">フレッシュネスバーガー 原宿</h2><p class="meta"><span class="star">★</span> <b>3.8</b> <span data-en="2 reviews">2 件のレビュー</span></p></div>
+    </article>
+    <article class="poster">
+      <div class="photo" style="--a:#4d4026;--b:#171209"><span class="photo-label" data-en="Photo">写真</span></div>
+      <div class="shade"></div>
+      <div class="info"><h2 class="name">バーガーラボ 中目黒</h2><p class="meta"><span class="star">★</span> <b>4.7</b> <span data-en="5 reviews">5 件のレビュー</span></p></div>
+    </article>
+    <article class="poster">
+      <div class="photo" style="--a:#3b2c2c;--b:#130e0e"><span class="photo-label" data-en="Photo">写真</span></div>
+      <div class="shade"></div>
+      <div class="info"><h2 class="name">グリルバーガー 吉祥寺</h2><p class="meta"><span class="star">★</span> <b>4.0</b> <span data-en="1 review">1 件のレビュー</span></p></div>
+    </article>
+  </div>
+</main>
+<script src="mock.js"></script>
+</body>
+</html>

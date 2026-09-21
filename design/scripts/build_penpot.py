@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import http.cookiejar
 import json
+import math
 import re
 import sys
 import urllib.request
@@ -116,8 +117,13 @@ def geom(x: float, y: float, w: float, h: float) -> dict:
 
 
 class Design:
-    def __init__(self, fb: FileBuilder, colors: dict[str, str], typos: dict[tuple, str], file_id: str) -> None:
+    def __init__(self, fb: FileBuilder, colors: dict[str, str], typos: dict[tuple, str], file_id: str,
+                 font: tuple[str, str] = ("sourcesanspro", "sourcesanspro"), weights: tuple[int, ...] = (400, 700), baseline: float = BASELINE, snap: bool = False) -> None:
+        # font は (Penpot のフォントの id, フォントの名前)、weights は使う太さ(CSS の太さは、いちばん近いものにする)、
+        # baseline は BASELINE と同じ意味の割合(フォントごとに、描かれた画像と見比べて決める)
         self.fb, self.colors, self.typos, self.file_id = fb, colors, typos, file_id
+        # snap は、長方形の位置と大きさを、整数の px に丸める(端が小数だと、Penpot の画像で、グラデーションの端に細い線が出るため)
+        self.font, self.weights, self.baseline, self.snap = font, weights, baseline, snap
 
     # ---- 部品(色・文字のスタイルへのひも付けを含む) ----
     def fill(self, hexcolor: str, opacity: float = 1) -> dict:
@@ -126,6 +132,24 @@ class Design:
         if ref:
             f["fillColorRefId"], f["fillColorRefFile"] = ref, self.file_id
         return f
+
+    @staticmethod
+    def gradient_fill(g: dict, w: float, h: float) -> dict:
+        """CSS の linear-gradient(角度と色の止まり位置)を、Penpot のグラデーションにする。位置は、図形の大きさに対する 0〜1。"""
+        t = math.radians(g["angle"])
+        dx, dy = math.sin(t), -math.cos(t)
+        length = abs(w * dx) + abs(h * dy)
+        r4 = lambda v: round(v, 4)
+        return {"fillColorGradient": {
+            "type": "linear", "startX": r4(0.5 - dx * length / (2 * w)), "startY": r4(0.5 - dy * length / (2 * h)),
+            "endX": r4(0.5 + dx * length / (2 * w)), "endY": r4(0.5 + dy * length / (2 * h)), "width": 1,
+            "stops": [{"color": st["color"], "opacity": round(st["opacity"], 3), "offset": round(st["offset"], 4)} for st in g["stops"]]},
+            "fillOpacity": 1}
+
+    @staticmethod
+    def snapped(x: float, y: float, w: float, h: float) -> tuple:
+        x1, y1, x2, y2 = round(x), round(y), round(x + w), round(y + h)
+        return x1, y1, x2 - x1, y2 - y1
 
     def add_obj(self, page: str, obj: dict) -> None:
         self.fb.add({"type": "add-obj", "id": obj["id"], "pageId": page, "parentId": obj["parentId"], "frameId": obj["frameId"], "obj": obj})
@@ -146,19 +170,19 @@ class Design:
         rad = [round(min(v, r), 2) for v in n["radius"]]
         obj = {
             "id": str(uuid.uuid4()), "name": name, "type": "rect", "parentId": parent, "frameId": frame,
-            "fills": [self.fill(n["fill"], n["fillOpacity"])] if n["fill"] else [],
+            "fills": [self.gradient_fill(n["gradient"], n["w"], n["h"])] if n.get("gradient") else ([self.fill(n["fill"], n["fillOpacity"])] if n["fill"] else []),
             "strokes": [{"strokeColor": n["stroke"]["color"], "strokeOpacity": round(n["stroke"]["opacity"], 3), "strokeWidth": n["stroke"]["w"], "strokeStyle": "solid", "strokeAlignment": "inner"}] if n["stroke"] else [],
             "r1": rad[0], "r2": rad[1], "r3": rad[2], "r4": rad[3],
-            **geom(ox + n["x"], oy + n["y"], n["w"], n["h"]),
+            **(geom(*self.snapped(ox + n["x"], oy + n["y"], n["w"], n["h"])) if self.snap else geom(ox + n["x"], oy + n["y"], n["w"], n["h"])),
         }
         self.add_obj(page, obj)
 
     def text(self, page: str, n: dict, ox: float, oy: float, frame: str, parent: str) -> None:
         s = n["style"]
-        weight = "700" if int(s["weight"]) >= 600 else "400"
+        weight = str(min(self.weights, key=lambda w: abs(w - int(s["weight"]))))
         run = {
-            "text": n["text"], "fontFamily": "sourcesanspro", "fontId": "sourcesanspro", "fontSize": str(round(s["size"], 1)).rstrip("0").rstrip("."),
-            "fontStyle": "normal", "fontVariantId": "700" if weight == "700" else "regular", "fontWeight": weight,
+            "text": n["text"], "fontFamily": self.font[1], "fontId": self.font[0], "fontSize": f"{round(s['size'], 1):g}",
+            "fontStyle": "normal", "fontVariantId": "regular" if weight == "400" else weight, "fontWeight": weight,
             "lineHeight": str(round((s["lineHeight"] or s["size"] * 1.2) / s["size"], 2)), "letterSpacing": str(round(s["letterSpacing"], 2)),
             "textDecoration": "underline" if s["underline"] else "none", "textTransform": "none", "fills": [self.fill(s["color"])],
         }
@@ -172,7 +196,7 @@ class Design:
         # 表示用の行の位置。Penpot は、これがないと文字を描かない(編集すると、Penpot が計算し直す)。y は行の上端ではなくベースライン
         lines = n.get("lines") or [{"text": n["text"], "x": n["x"], "y": n["y"], "w": n["w"], "h": n["h"]}]
         position = [{
-            "x": round(ox + ln["x"], 2), "y": round(oy + ln["y"] + ln["h"] * BASELINE, 2), "width": round(ln["w"], 2), "height": round(ln["h"], 2), "direction": "ltr",
+            "x": round(ox + ln["x"], 2), "y": round(oy + ln["y"] + ln["h"] * self.baseline, 2), "width": round(ln["w"], 2), "height": round(ln["h"], 2), "direction": "ltr",
             "fontFamily": run["fontFamily"], "fontId": run["fontId"], "fontSize": run["fontSize"], "fontStyle": "normal", "fontWeight": weight,
             "fontVariantId": run["fontVariantId"], "textDecoration": run["textDecoration"], "textTransform": "none", "letterSpacing": run["letterSpacing"],
             "fills": run["fills"], "text": ln["text"],

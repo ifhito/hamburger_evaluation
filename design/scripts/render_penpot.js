@@ -12,6 +12,8 @@ const PASSWORD = fs.readFileSync(process.env.PENPOT_PASSWORD_FILE, 'utf8').trim(
 const MAP = JSON.parse(fs.readFileSync(process.env.MAP_JSON, 'utf8'));
 const OUT = process.env.OUT || '/work/render';
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null; // 例: signin-pc,shops-mobile
+// CLIP=1 のとき、画面の枠だけを切り出した JPEG にする(リデザインのラフの画像用)。ビューアーで 100% にしたとき、枠の左上は (100, 124)
+const CLIP = process.env.CLIP === '1';
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
@@ -41,7 +43,8 @@ const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null; // 例: sign
     await page.waitForTimeout(2500);
     await page.keyboard.press('Shift+0'); // 表示を 100% にする
     await page.waitForTimeout(800);
-    await page.screenshot({ path: `${OUT}/${key}.png` });
+    if (CLIP) await page.screenshot({ path: `${OUT}/${key}.jpg`, type: 'jpeg', quality: Number(process.env.QUALITY || 80), clip: { x: 100, y: 124, width: Math.ceil(frame.width), height: Math.ceil(frame.height) } });
+    else await page.screenshot({ path: `${OUT}/${key}.png` });
     done.push(key);
     await page.close();
   }

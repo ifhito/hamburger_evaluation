@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>デザインの値(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { width: 1240px; padding: 40px; }
+  h2 { margin: 40px 0 16px; }
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .swatch-box { height: 80px; border: 1px solid var(--control-border); border-radius: 8px; }
+  .swatch p { margin-top: 8px; font-size: 14px; line-height: 1.5; }
+  .swatch b { font-weight: 700; }
+  .row { display: flex; gap: 16px; margin-bottom: 8px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+  .row .label { width: 560px; }
+  .row .ratio { width: 100px; font-weight: 700; }
+  .row .need { width: 160px; color: var(--text-muted); }
+  .row .ok { width: 60px; font-weight: 700; color: var(--accent); }
+  .type-row { display: flex; align-items: baseline; gap: 24px; margin-bottom: 16px; }
+  .type-row .spec { width: 140px; font-size: 14px; color: var(--text-muted); }
+  .samples { display: flex; gap: 48px; align-items: center; }
+  .focus-ring { padding: 2px; border: 2px solid var(--accent); border-radius: 10px; }
+  .tap { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--control-border); border-radius: 8px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>デザインの値(リデザインのラフ)</h1>
+<p class="muted" style="margin-top:8px">黒基調・マスタード黄 1 色・現代的なゴシック(Noto Sans JP)。値は案で、確認して調整する。</p>
+
+<h2>色</h2>
+<div class="swatches" id="swatches"></div>
+
+<h2>文字と背景のコントラスト(WCAG AA。実測)</h2>
+<div id="contrast"></div>
+
+<h2>文字のスタイル(Noto Sans JP)</h2>
+<div id="types"></div>
+
+<h2>キーボード操作の表示と、押せる大きさ</h2>
+<div class="samples">
+  <div class="focus-ring"><button class="btn ghost">選ばれているボタン</button></div>
+  <div class="tap">44</div>
+  <p class="muted" style="font-size:14px">黄色の 2px の枠(内側との間 2px)。押せる部分は 44px 以上。</p>
+</div>
+
+<script>
+const root = getComputedStyle(document.documentElement);
+const v = (n) => root.getPropertyValue(n).trim();
+const chan = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const lum = (h) => { const [r, g, b] = rgb(h).map(chan); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const hex2 = (n) => Math.round(n).toString(16).padStart(2, '0');
+// 写真が真っ白でも、暗い帯(不透明度 alpha の黒)を重ねたときの色 = 最悪ケースの背景
+const overWhite = (alpha) => '#' + hex2(255 * (1 - alpha)).repeat(3);
+
+const TOKENS = [
+  ['background', '--bg', 'ページの背景'],
+  ['surface', '--surface', 'カード・入力欄の背景'],
+  ['surface-2', '--surface-2', '選択中のカード・言語切替の選択中'],
+  ['border', '--border', '区切り線・カードの枠(飾り)'],
+  ['control-border', '--control-border', '入力欄・ボタンの枠(部品の境界)'],
+  ['text', '--text', '本文・見出し'],
+  ['text-muted', '--text-muted', '補足の文字(日付・件数)'],
+  ['text-on-photo-muted', '--text-on-photo-muted', '写真の上の補足の文字'],
+  ['accent', '--accent', '差し色(マスタード黄)。星・押せるボタン・リンク'],
+  ['on-accent', '--on-accent', '黄色い面の上の文字'],
+  ['star-empty', '--star-empty', '空の星'],
+];
+const tokens = TOKENS.map(([name, cssVar, usage]) => ({ name, cssVar, value: v(cssVar), usage }));
+document.getElementById('swatches').innerHTML = tokens.map((t) =>
+  `<div class="swatch"><div class="swatch-box" style="background:${t.value}"></div><p><b>${t.name}</b> ${t.value}</p><p class="muted">${t.usage}</p></div>`).join('');
+
+const SHADE = overWhite(0.8), CHIP = overWhite(0.72);
+const PAIRS = [
+  ['本文の文字 / ページの背景', '--text', v('--bg'), 4.5],
+  ['本文の文字 / カードの背景', '--text', v('--surface'), 4.5],
+  ['補足の文字 / ページの背景', '--text-muted', v('--bg'), 4.5],
+  ['補足の文字 / カードの背景', '--text-muted', v('--surface'), 4.5],
+  ['補足の文字 / 選択中のカードの背景', '--text-muted', v('--surface-2'), 4.5],
+  ['黄色の文字・リンク / ページの背景', '--accent', v('--bg'), 4.5],
+  ['黄色の文字・リンク / カードの背景', '--accent', v('--surface'), 4.5],
+  ['黄色の文字・リンク / 選択中のカードの背景', '--accent', v('--surface-2'), 4.5],
+  ['ボタンの文字(黒) / 黄色の面', '--on-accent', v('--accent'), 4.5],
+  ['星(黄) / ページの背景(図形は 3:1)', '--accent', v('--bg'), 3],
+  ['星(空) / ページの背景(図形は 3:1)', '--star-empty', v('--bg'), 3],
+  ['入力欄・ボタンの枠 / ページの背景(図形は 3:1)', '--control-border', v('--bg'), 3],
+  [`写真の上: 白い文字 / 暗い帯(最悪ケース ${SHADE})`, '--text', SHADE, 4.5],
+  [`写真の上: 補足の文字 / 暗い帯(最悪ケース ${SHADE})`, '--text-on-photo-muted', SHADE, 4.5],
+  [`写真の上: 黄色の星 / 暗い帯(最悪ケース ${SHADE})`, '--accent', SHADE, 4.5],
+  [`写真の上: 「審査待ち」の札の文字 / 札(最悪ケース ${CHIP})`, '--text', CHIP, 4.5],
+];
+const contrast = PAIRS.map(([label, fgVar, bg, need]) => {
+  const fg = v(fgVar);
+  const r = ratio(fg, bg);
+  return { label, fg, bg, ratio: Math.round(r * 100) / 100, need, pass: r >= need };
+});
+document.getElementById('contrast').innerHTML = contrast.map((c) =>
+  `<div class="row"><span class="label">${c.label}</span><span class="ratio">${c.ratio.toFixed(2)}:1</span><span class="need">${c.need} 以上</span><span class="ok">${c.pass ? '○' : '×'}</span></div>`).join('');
+
+const TYPES = [
+  ['32px / 700', 32, 700, 'ショップ  Shops'], ['28px / 700(モバイルの見出し)', 28, 700, 'ショップ  Shops'],
+  ['22px / 700', 22, 700, 'J.S. BURGERS CAFE 新宿'], ['20px / 700', 20, 700, 'レビュー  Reviews'],
+  ['16px / 400', 16, 400, 'チーズの量がちょうどよかった。'], ['14px / 500', 14, 500, 'ショップを追加  Add a shop'],
+  ['14px / 400', 14, 400, '2 件のレビュー · 2026年9月21日'], ['12px / 500', 12, 500, '審査待ち  Pending review'],
+];
+document.getElementById('types').innerHTML = TYPES.map(([spec, size, weight, sample]) =>
+  `<div class="type-row"><span class="spec">${spec}</span><span style="font-size:${size}px;font-weight:${weight};line-height:1.5">${sample}</span></div>`).join('');
+
+window.__tokens = tokens;
+window.__contrast = contrast;
+</script>
+</body>
+</html>
