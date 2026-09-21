@@ -219,6 +219,9 @@ func checkWriteObjectRules(sources map[string]string) (violations []string, writ
 			}
 		} else {
 			writeObjects++
+			if !strings.HasSuffix(name, "s") {
+				violations = append(violations, fmt.Sprintf("%s は名前が複数形(s で終わる)ではない (repository を持つ型は書き込みオブジェクトで、名前は集約の複数形にする。エンティティ・値オブジェクトは repository を持たない)", name))
+			}
 			want := strings.TrimSuffix(name, "s") + "Repository"
 			if h.fields != 1 || len(h.repos) != 1 || h.repos[0] != want {
 				violations = append(violations, fmt.Sprintf("%s は %s だけをちょうど 1 つ持たなければならない (書き込みオブジェクトは自分の集約の repository だけを持つ。他の集約に触れる手順は Service に置く)", name, want))
@@ -229,6 +232,180 @@ func checkWriteObjectRules(sources map[string]string) (violations []string, writ
 		}
 	}
 	return violations, writeObjects, services, nil
+}
+
+// usedIdents は n の中で参照されている識別子の名前を返す。フィールド名・セレクタの右辺
+// (x.Users の Users)・型や関数の宣言名は、参照ではないので数えない。
+func usedIdents(n ast.Node) map[string]bool {
+	used := map[string]bool{}
+	var walk func(ast.Node) bool
+	walk = func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.Ident:
+			used[x.Name] = true
+		case *ast.SelectorExpr:
+			ast.Inspect(x.X, walk)
+			return false
+		case *ast.Field:
+			ast.Inspect(x.Type, walk)
+			return false
+		case *ast.TypeSpec:
+			ast.Inspect(x.Type, walk)
+			return false
+		case *ast.FuncDecl:
+			if x.Recv != nil {
+				ast.Inspect(x.Recv, walk)
+			}
+			ast.Inspect(x.Type, walk)
+			if x.Body != nil {
+				ast.Inspect(x.Body, walk)
+			}
+			return false
+		}
+		return true
+	}
+	ast.Inspect(n, walk)
+	return used
+}
+
+// checkEntitiesIndependentOfPersistence は、domain の永続化の宣言(repository の interface、
+// 書き込みオブジェクトと Service、そのコンストラクタとメソッド、repository の interface のシグネチャ
+// だけが使う型)以外の宣言、つまりエンティティ・値オブジェクト・規則が、永続化の宣言を参照して
+// いないことを確かめ、違反の説明と、見つけた永続化の識別子(整列済み)を返す。
+// domain は集約ごとに 1 ファイルにまとめているので、この境界はファイルにもパッケージにも
+// 現れない。このテストで守る。
+//
+// repository の interface のシグネチャに現れる型のうち、永続化の宣言からしか参照されないもの
+// (CreateUserParams など)は、永続化の側に数える。エンティティ(User など)は、規則の側からも
+// 参照されるので、永続化の側には数えない。
+func checkEntitiesIndependentOfPersistence(sources map[string]string) (violations, persistence []string, err error) {
+	type decl struct {
+		label   string
+		defines []string
+		recv    string
+		node    ast.Node
+	}
+	var decls []decl
+	typeNames := map[string]bool{}
+	holders := map[string]bool{}
+	persist := map[string]bool{}
+	var signatureTypes []string
+	names := make([]string, 0, len(sources))
+	for name := range sources {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		f, perr := parser.ParseFile(token.NewFileSet(), name, sources[name], 0)
+		if perr != nil {
+			return nil, nil, perr
+		}
+		for _, d := range f.Decls {
+			switch d := d.(type) {
+			case *ast.GenDecl:
+				for _, spec := range d.Specs {
+					switch s := spec.(type) {
+					case *ast.TypeSpec:
+						typeNames[s.Name.Name] = true
+						decls = append(decls, decl{label: s.Name.Name, defines: []string{s.Name.Name}, node: s})
+						switch t := s.Type.(type) {
+						case *ast.InterfaceType:
+							if strings.HasSuffix(s.Name.Name, "Repository") {
+								persist[s.Name.Name] = true
+								for id := range usedIdents(t) {
+									signatureTypes = append(signatureTypes, id)
+								}
+							}
+						case *ast.StructType:
+							holds := strings.HasSuffix(s.Name.Name, "Service")
+							for _, field := range t.Fields.List {
+								typ := field.Type
+								if star, ok := typ.(*ast.StarExpr); ok {
+									typ = star.X
+								}
+								if id, ok := typ.(*ast.Ident); ok && strings.HasSuffix(id.Name, "Repository") {
+									holds = true
+								}
+							}
+							if holds {
+								holders[s.Name.Name] = true
+								persist[s.Name.Name] = true
+							}
+						}
+					case *ast.ValueSpec:
+						var defines []string
+						for _, id := range s.Names {
+							defines = append(defines, id.Name)
+						}
+						decls = append(decls, decl{label: strings.Join(defines, ", "), defines: defines, node: s})
+					}
+				}
+			case *ast.FuncDecl:
+				dc := decl{label: d.Name.Name, node: d}
+				if d.Recv != nil && len(d.Recv.List) == 1 {
+					recv := d.Recv.List[0].Type
+					if star, ok := recv.(*ast.StarExpr); ok {
+						recv = star.X
+					}
+					if id, ok := recv.(*ast.Ident); ok {
+						dc.recv = id.Name
+						dc.label = id.Name + "." + d.Name.Name
+					}
+				} else {
+					dc.defines = []string{d.Name.Name}
+				}
+				decls = append(decls, dc)
+			}
+		}
+	}
+	for h := range holders {
+		persist["New"+h] = true
+	}
+	isPersistence := func(d decl) bool {
+		if d.recv != "" {
+			return persist[d.recv]
+		}
+		return len(d.defines) > 0 && slices.ContainsFunc(d.defines, func(n string) bool { return persist[n] })
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, t := range signatureTypes {
+			if persist[t] || !typeNames[t] {
+				continue
+			}
+			only := true
+			for _, d := range decls {
+				if slices.Contains(d.defines, t) || !usedIdents(d.node)[t] {
+					continue
+				}
+				if !isPersistence(d) {
+					only = false
+					break
+				}
+			}
+			if only {
+				persist[t] = true
+				changed = true
+			}
+		}
+	}
+	for _, d := range decls {
+		if isPersistence(d) {
+			continue
+		}
+		used := usedIdents(d.node)
+		for id := range used {
+			if persist[id] {
+				violations = append(violations, fmt.Sprintf("%s は永続化の型 %s を参照している (エンティティ・値オブジェクト・規則は、repository の interface と書き込みオブジェクトに依存しない)", d.label, id))
+			}
+		}
+	}
+	slices.Sort(violations)
+	for id := range persist {
+		persistence = append(persistence, id)
+	}
+	slices.Sort(persistence)
+	return violations, persistence, nil
 }
 
 // checkNoRepositoryImport は、Go のソースが repository の実装パッケージ(adapter/repository。
@@ -274,6 +451,9 @@ func productionSources(t *testing.T, dir string) map[string]string {
 //   - repository の interface (*Repository。Create*/Update*/Discard*) は domain が宣言し、
 //     呼ぶのは domain のコードだけである(単一の集約の書き込みは集約ごとの書き込みオブジェクト、
 //     複数の集約を跨ぐ更新だけが Service)
+//   - domain は集約ごとに 1 ファイルで、エンティティ・repository の interface・書き込みオブジェクトが
+//     同居する。エンティティ・値オブジェクト・規則は、repository の interface と書き込みオブジェクトを
+//     参照しない(境界はファイルにもパッケージにも現れないので、このテストで守る)
 //   - usecase と domain は、adapter・HTTP・SQL ドライバを import しない。
 //     domain はさらに、標準ライブラリ以外(第三者・プロジェクト内)を import しない
 func TestPersistenceInterfaceNaming(t *testing.T) {
@@ -397,6 +577,32 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		}
 	})
 
+	t.Run("実際の domain のエンティティ・値オブジェクト・規則は永続化の型を参照しない", func(t *testing.T) {
+		v, persistence, err := checkEntitiesIndependentOfPersistence(productionSources(t, "../domain"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, msg := range v {
+			t.Error(msg)
+		}
+		// 空振りで通らないよう、永続化の側に数えるべき識別子が見つかることも確かめる。
+		// CreateUserParams と ProfileChanges は、repository の interface のシグネチャだけが使う型である。
+		for _, want := range []string{
+			"ShopRepository", "ReviewRepository", "UserRepository",
+			"Shops", "Reviews", "Users", "NewShops", "NewReviews", "NewUsers",
+			"CreateUserParams", "ProfileChanges",
+		} {
+			if !slices.Contains(persistence, want) {
+				t.Errorf("永続化の識別子に %s が見つからない (見つかったもの: %v)", want, persistence)
+			}
+		}
+		for _, entity := range []string{"User", "Shop", "Review", "ShopReviewBurger"} {
+			if slices.Contains(persistence, entity) {
+				t.Errorf("エンティティ %s が永続化の側に数えられている", entity)
+			}
+		}
+	})
+
 	cases := []struct {
 		name, src, want string // want は期待する違反の説明の一部 (空なら違反なし)
 	}{
@@ -462,10 +668,59 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		{"2 種類の repository を持つ Service は違反なし", "package p\ntype XYService struct {\n\tx XRepository\n\ty YRepository\n}", ""},
 		{"Service が repository 以外を持てば検出する", "package p\ntype XYService struct {\n\tx XRepository\n\ty YRepository\n\tn int\n}", "repository 以外のフィールド"},
 		{"repository を持たない通常の struct は対象外", "package p\ntype Shop struct{ Name string }", ""},
+		{"エンティティ(単数形の名前)が repository を持てば検出する", "package p\ntype X struct{ repo XRepository }", "名前が複数形"},
 	}
 	for _, tc := range writeObjectCases {
 		t.Run(tc.name, func(t *testing.T) {
 			v, _, _, err := checkWriteObjectRules(map[string]string{"src.go": tc.src})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(v, "\n"); (tc.want == "") != (got == "") || !strings.Contains(got, tc.want) {
+				t.Errorf("違反 = %q, 期待 = %q", got, tc.want)
+			}
+		})
+	}
+
+	entityCases := []struct {
+		name, src, want string
+	}{
+		{"永続化の宣言だけが参照する型と、エンティティの規則が別々なら違反なし", `package p
+type X struct{ N int }
+func (x X) Valid() bool { return x.N > 0 }
+type XParams struct{ N int }
+type XRepository interface{ CreateX(p XParams) (X, error) }
+type Xs struct{ repo XRepository }
+func NewXs(r XRepository) *Xs { return &Xs{repo: r} }
+func (s *Xs) Create(p XParams) (X, error) { return s.repo.CreateX(p) }`, ""},
+		{"エンティティのメソッドが repository を参照していれば検出する", `package p
+type X struct{}
+type XRepository interface{ CreateX() (X, error) }
+func (x X) Save(r XRepository) {}`, "X.Save は永続化の型 XRepository"},
+		{"規則の関数が書き込みオブジェクトを参照していれば検出する", `package p
+type X struct{}
+type XRepository interface{ CreateX() (X, error) }
+type Xs struct{ repo XRepository }
+func Validate(w *Xs) bool { return w != nil }`, "Validate は永続化の型 Xs"},
+		{"規則の関数が書き込みオブジェクトのコンストラクタを呼べば検出する", `package p
+type XRepository interface{ CreateX() }
+type Xs struct{ repo XRepository }
+func NewXs(r XRepository) *Xs { return &Xs{repo: r} }
+func Helper() { _ = NewXs(nil) }`, "Helper は永続化の型 NewXs"},
+		{"エンティティが永続化の形のパラメータ型を使っていれば、その型はエンティティ側になり違反なし", `package p
+type XParams struct{ N int }
+type X struct{ P XParams }
+type XRepository interface{ CreateX(p XParams) (X, error) }`, ""},
+		{"永続化の型と同じ名前のフィールドやセレクタは参照に数えない", `package p
+type XRepository interface{ CreateX() }
+type Xs struct{ repo XRepository }
+type Y struct{ Xs int }
+func (y Y) N() int { return y.Xs }`, ""},
+		{"永続化の宣言が無ければ何も検出しない", "package p\ntype X struct{ N int }\nfunc (x X) Valid() bool { return x.N > 0 }", ""},
+	}
+	for _, tc := range entityCases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, _, err := checkEntitiesIndependentOfPersistence(map[string]string{"src.go": tc.src})
 			if err != nil {
 				t.Fatal(err)
 			}

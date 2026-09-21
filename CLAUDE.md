@@ -56,7 +56,7 @@ hamburger_evaluation/
 backend-go/
 ├── cmd/api/main.go     # composition root: 設定、DB プール、配線、サーバ
 ├── internal/
-│   ├── domain/         # エンティティ、値オブジェクト、ドメインエラー、書き込みの契約(*Repository の interface と、それを持つ書き込みオブジェクト。複数の集約を跨ぐ更新だけ *Service)。標準ライブラリのみ
+│   ├── domain/         # エンティティ、値オブジェクト、ドメインエラー、書き込みの契約(*Repository の interface と、それを持つ書き込みオブジェクト。複数の集約を跨ぐ更新だけ *Service)。集約ごとに 1 ファイルにまとめ、エンティティが repository を参照しないことは構造検査で守る。標準ライブラリのみ
 │   ├── usecase/        # アプリケーションのユースケース + 読み取りの *Query(利用側で宣言)。repository には依存しない
 │   └── adapter/
 │       ├── handler/    # net/http のハンドラ、DTO、ルーティング、middleware

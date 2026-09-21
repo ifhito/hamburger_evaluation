@@ -7,6 +7,12 @@
 // 依存せず、書き込みをこの package のオブジェクトに任せる。実装は
 // adapter/repository が担う。
 //
+// ファイルは集約ごとに 1 つにまとめる（user.go、review.go、shop.go）。1 ファイルの中は
+// 「エンティティ・値オブジェクト・規則 → repository の interface（と、その引数だけに使う
+// パラメータ型）→ 書き込みオブジェクト」の順に並べる。エンティティ・値オブジェクト・規則は、
+// repository の interface と書き込みオブジェクトを参照しない。この境界はファイルにも
+// package にも現れないので、構造検査のテスト（usecase の TestPersistenceInterfaceNaming）で守る。
+//
 // 書き込みの置き場所は、更新が何個の集約に触れるかで決まる:
 //   - 1 つの集約だけを更新する書き込み: 集約ごとの書き込みオブジェクト（Shops、
 //     Reviews、Users）に置く。Service は作らない。
@@ -23,7 +29,8 @@
 //     repository を持つときだけ許す（検査で強制）。1 種類だけなら、その集約の書き込み
 //     オブジェクトに置く。
 //   - 書き込みオブジェクトは、自分の集約の *Repository だけを持つ（検査で強制）。
-//     他の集約の repository を持たない。他の集約に触れる手順は Service に置く。
+//     名前は集約の複数形にする（Shops なら ShopRepository。検査で強制）。他の集約の
+//     repository を持たない。他の集約に触れる手順は Service に置く。
 //   - 持つもの: 書き込みの操作（Create / Update / Discard に対応するもの）と、それに付随する
 //     業務の不変条件・状態遷移。持たないもの: 読み取り（usecase の *Query）、認可（誰が
 //     できるか。usecase かエンティティのメソッド）、HTTP・DTO・写真などの外部 I/O。
