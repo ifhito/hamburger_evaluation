@@ -8,16 +8,6 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// CreateUserParams は、新しいユーザーとして永続化するフィールドを保持する。
-// パスワードはハッシュ化済みの状態で渡される。repository が平文を目にする
-// ことはない。
-type CreateUserParams struct {
-	Username       string
-	Email          string
-	PasswordDigest string
-	Admin          bool
-}
-
 // UserCredentials は、ログインのチェックのために、domain のユーザーと
 // そのパスワードの digest を組にしたものである。digest は意図的に
 // domain.User 上には決して置かれない。
@@ -26,14 +16,17 @@ type UserCredentials struct {
 	PasswordDigest string
 }
 
-// UserRepository は auth 向けの consumer 側の永続化の契約である。
-// 実装は storage のエラーを domain のエラーに対応させる。
-// CreateUser は email の unique violation に対して（wrap された）
-// domain.ErrEmailTaken を返し、lookup は、active な（discard されていない）
-// ユーザーが一致しないとき domain.ErrUserNotFound を返す。
-type UserRepository interface {
-	CreateUser(ctx context.Context, params CreateUserParams) (domain.User, error)
+// UserQuery は、auth とユーザー管理の use case 向けの consumer 側の読み取りの
+// 契約である。実装は storage のエラーを domain のエラーに対応させ、active な
+// （discard されていない）ユーザーが一致しないとき（wrap された）
+// domain.ErrUserNotFound を返す。読み取り専用で、書き込みのメソッドは
+// 置かない（書き込みは domain.Users を通す）。
+type UserQuery interface {
+	// GetActiveUserByEmail は、指定された email の、discard されていない
+	// ユーザーを、そのパスワードの digest とともに返す。
 	GetActiveUserByEmail(ctx context.Context, email string) (UserCredentials, error)
+	// GetActiveUserByID は、指定された id の、discard されていないユーザーを
+	// 返す。
 	GetActiveUserByID(ctx context.Context, id int64) (domain.User, error)
 }
 
@@ -54,16 +47,19 @@ type TokenVerifier interface {
 }
 
 // Auth は signup、login、トークン認証の use case を実装する。
-// 認証に関する判断は HTTP handler ではなく、ここにある。
+// 認証に関する判断は HTTP handler ではなく、ここにある。読み取りは query、
+// 書き込みは domain の書き込みオブジェクト（domain.Users）だけを通し、repository には
+// 依存しない。
 type Auth struct {
-	users    UserRepository
+	query    UserQuery
+	users    *domain.Users
 	hasher   PasswordHasher
 	issuer   TokenIssuer
 	verifier TokenVerifier
 }
 
-func NewAuth(users UserRepository, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
-	return &Auth{users: users, hasher: hasher, issuer: issuer, verifier: verifier}
+func NewAuth(query UserQuery, users *domain.Users, hasher PasswordHasher, issuer TokenIssuer, verifier TokenVerifier) *Auth {
+	return &Auth{query: query, users: users, hasher: hasher, issuer: issuer, verifier: verifier}
 }
 
 // SignupInput は signup use case の入力である。PasswordConfirmation は
@@ -104,7 +100,7 @@ func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, stri
 	if err != nil {
 		return domain.User{}, "", fmt.Errorf("hash password: %w", err)
 	}
-	user, err := a.users.CreateUser(ctx, CreateUserParams{
+	user, err := a.users.Create(ctx, domain.CreateUserParams{
 		Username:       input.Username,
 		Email:          input.Email,
 		PasswordDigest: digest,
@@ -134,7 +130,7 @@ const dummyPasswordDigest = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJ
 // ともにそのユーザーを返す。未知の email と誤ったパスワードは、どちらも
 // domain.ErrInvalidCredentials を返す。
 func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, string, error) {
-	creds, err := a.users.GetActiveUserByEmail(ctx, email)
+	creds, err := a.query.GetActiveUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			// hash の比較を 1 回分あえて消費して、未知の email の経路が
@@ -164,7 +160,7 @@ func (a *Auth) AuthenticateToken(ctx context.Context, rawToken string) (domain.U
 	if err != nil {
 		return domain.User{}, domain.ErrUnauthenticated
 	}
-	user, err := a.users.GetActiveUserByID(ctx, userID)
+	user, err := a.query.GetActiveUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			return domain.User{}, domain.ErrUnauthenticated

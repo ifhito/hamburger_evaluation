@@ -1,5 +1,7 @@
 package domain
 
+import "context"
+
 // User は account の domain 表現である。password digest は意図的に含めない。
 // 認証情報が entity 上を流れることは決してなく、persistence/usecase の境界の
 // 内側にとどまる。
@@ -38,4 +40,83 @@ func (u User) ProfileFor(viewer *User) UserProfile {
 		p.Admin = &u.Admin
 	}
 	return p
+}
+
+// ---- repository の契約(実装は adapter/repository) ----
+
+// CreateUserParams は、新しいユーザーとして永続化するフィールドを保持する。
+// パスワードはハッシュ化済みの状態で渡される。repository が平文を目にする
+// ことはない。
+type CreateUserParams struct {
+	Username       string
+	Email          string
+	PasswordDigest string
+	Admin          bool
+}
+
+// ProfileChanges は、UserRepository.UpdateUserProfile の、任意のカラム限定の
+// プロフィール更新を保持する。nil のフィールドは変更されない。パスワードは、
+// CreateUserParams と同様にハッシュ化済みの状態で渡される。repository が平文を
+// 目にすることはない。
+type ProfileChanges struct {
+	Username       *string
+	Email          *string
+	PasswordDigest *string
+}
+
+// UserRepository は、ユーザーの書き込みの契約である。domain が宣言し、呼び出すのは
+// domain のコード（書き込みオブジェクトの Users）だけで、usecase は呼ばない
+// （読み取りは usecase の UserQuery）。実装は storage のエラーを domain のエラーに対応させる。
+// CreateUser と UpdateUserProfile は email の unique violation に対して
+// （wrap された）ErrEmailTaken を返し、UpdateUserProfile と DiscardUser は、
+// active な（discard されていない）ユーザーが一致しないとき（wrap された）
+// ErrUserNotFound を返す。書き込み専用で、読み取りのメソッドは置かない。
+type UserRepository interface {
+	// CreateUser は新しいユーザーを永続化して返す。
+	CreateUser(ctx context.Context, params CreateUserParams) (User, error)
+	// UpdateUserProfile は、id の、まだ kept なユーザーに changes の存在する
+	// フィールドを atomic に適用し、保存されたユーザーを返す。存在する
+	// フィールドがゼロ個なら単なる lookup になる
+	// （200 の no-op、Rails parity）。存在するフィールドがゼロ個のときの
+	// lookup は repository の実装の内部で行われる。変更が空でも
+	// UpdateUserProfile が呼ばれ、その戻り値が応答になる（Users は
+	// 読み取りのメソッドを repository に持たない）。
+	UpdateUserProfile(ctx context.Context, id int64, changes ProfileChanges) (User, error)
+	// DiscardUser はユーザーを soft delete し（hard DELETE は決して行わない）、
+	// 導出された burger の stats の整合性を保つ。
+	DiscardUser(ctx context.Context, id int64) error
+}
+
+// ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
+
+// Users はユーザー集約の書き込みオブジェクトである。UserRepository を持つのは
+// この型だけで、usecase は repository に依存せず、ユーザーの書き込みをここに任せる。
+// ユーザーだけを更新する書き込みは、Service ではなくこの型に置く（Service は複数の
+// 集約を跨ぐ更新だけに使う。domain/doc.go を参照）。現時点では repository の
+// 書き込みを 1 対 1 で包んでいる。ユーザーに関する domain の手順が増えたときは、
+// usecase ではここへ置く。
+type Users struct {
+	repo UserRepository
+}
+
+// NewUsers は repo を使う Users を返す。
+func NewUsers(repo UserRepository) *Users {
+	return &Users{repo: repo}
+}
+
+// Create は新しいユーザーを永続化して返す。email が使用済みなら
+// （wrap された）ErrEmailTaken を返す。
+func (s *Users) Create(ctx context.Context, params CreateUserParams) (User, error) {
+	return s.repo.CreateUser(ctx, params)
+}
+
+// UpdateProfile は、id の、まだ kept なユーザーに changes の存在するフィールドを
+// atomic に適用し、保存されたユーザーを返す。
+func (s *Users) UpdateProfile(ctx context.Context, id int64, changes ProfileChanges) (User, error) {
+	return s.repo.UpdateUserProfile(ctx, id, changes)
+}
+
+// Discard はユーザーを soft delete する。
+func (s *Users) Discard(ctx context.Context, id int64) error {
+	return s.repo.DiscardUser(ctx, id)
 }
