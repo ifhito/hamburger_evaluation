@@ -446,7 +446,7 @@ backend の「Google のアカウントでのサインイン」(上の Backend �
 
 - サインインと新規登録の画面に、「Sign in with Google」「Sign up with Google」のリンク(`GoogleSignIn`。ボタンの見た目)を出す。**`GET /meta` の `loginProviders` に `google` が含まれるときだけ**で、取得できていない間・空のときは何も出さない(`googleEnabled`)。リンクは、ブラウザが API の `${API_BASE_URL}/auth/google/start` へ移動する(`googleStartUrl`。fetch ではない)。ログインが必要な画面から送られてきたときは、その画面(ルーターの state の `from`)を `return_to` として渡す。
 - `/auth/google/complete`(`GoogleCompletePage`。**ゲスト専用ではなく公開の route**。成功するとログイン状態になるため): backend が、成功も失敗も、1 回限りのコードに入れて、この画面へ戻す。画面は、`code` を**最初に 1 回だけ**読み、URL からはすぐに消し(履歴に残さない)、`POST /auth/google/exchange` で交換する(StrictMode の二重実行でも 1 回)。サインインの成功は `signInWithResponse` でログイン状態にして、戻り先(backend が確かめたアプリの中のパス。空は `/reviews`)へ。重複・失敗・無効なコードは、API の文言(`ApiError.messages`)をそのまま出す。**ログインの証(JWT)は URL に載らない。**
-- 本人のプロフィールに、Google の連携(`GoogleConnection`。`canEdit` のときだけ、`loginProviders` に含まれるときだけ): `GET /me/identities` の内容を出し、「結び付ける」は `POST /me/identities/google/link` で開始のコードを受け取って `/auth/google/start?link_code=…` へ移動(戻り先はこのプロフィール)、「解除」は **API が返す `canUnlink` が true のときだけ**出す(解除してよいかの判断は backend の domain。false のときは理由の文言だけを出す)。
+- 本人のプロフィールに、Google の連携(`GoogleConnection`。`canEdit` のときだけ、`loginProviders` に含まれるときだけ): `GET /me/identities` の内容を出す。「結び付ける」は、**認証つきの `POST /me/identities/google/link`**(`authApi.startGoogleLink`)で、**このブラウザ**に手続きの cookie を設定して始め、返された Google の認可の URL(`redirectUrl`。http・https だけ移動する)へ移動する(戻り先はこのプロフィール)。**持ち運べる開始のコード(`link_code`)や開始の URL は使わない**(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに結び付ける攻撃を防ぐため)。この POST は、画面と同一オリジン(`/api` の転送)で出すので、応答の cookie が、そのまま保存され、Google からの戻りで送られる。「解除」は **API が返す `canUnlink` が true のときだけ**出す(解除してよいかの判断は backend の domain。false のときは理由の文言だけを出す)。
 - Google のロゴは `google-g.svg`(Google のブランドの決まりに沿ったマーク)。
 
 ### Frontend コマンド

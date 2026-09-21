@@ -13,16 +13,15 @@ export function googleEnabled(meta: Pick<Meta, "loginProviders"> | undefined): b
 
 // Google でのサインインの手続きを始める URL。ブラウザが、この URL へそのまま移動する(API が、Google の
 // 画面へ送る)。returnTo は、手続きのあとに戻る画面(アプリの中のパスだけ。それ以外は付けない。判断の本体は
-// backend の規則で、ここは付けるかどうかを決めるだけ)。linkCode は、ログイン済みの利用者が、Google アカウントを
-// 結び付けるときに、backend から受け取ったコードである。
+// backend の規則で、ここは付けるかどうかを決めるだけ)。結び付け(ログイン済みの利用者)は、この URL では始めない
+// (認証つきの POST で、そのブラウザに cookie が設定される。startGoogleLink)。
 export function googleStartUrl(
-  options: { returnTo?: string | null; linkCode?: string } = {},
+  options: { returnTo?: string | null } = {},
   base: string = API_BASE_URL,
 ): string {
   const params = new URLSearchParams();
   const returnTo = options.returnTo ? returnPathFrom({ from: options.returnTo }) : null;
   if (returnTo) params.set("return_to", returnTo);
-  if (options.linkCode) params.set("link_code", options.linkCode);
   const query = params.toString();
   return `${base.replace(/\/+$/, "")}/auth/google/start${query ? `?${query}` : ""}`;
 }
@@ -35,4 +34,15 @@ export function isGoogleSignIn(res: GoogleExchangeResponse): res is GoogleSigned
 // 結果の画面から戻る先。backend が確かめた戻り先(空は既定)を、もう一度アプリの中のパスかだけ確かめて使う。
 export function landingPath(returnTo: string, fallback: string): string {
   return returnPathFrom({ from: returnTo }) ?? fallback;
+}
+
+// backend が返した Google の認可の URL へ、ブラウザを移動してよいか(http・https だけ。javascript: などの
+// スキームだと、ページの中で任意のコードが動いてしまうため)。規則の判断ではなく、ページを開くときの安全のための確認。
+export function isNavigableUrl(target: string): boolean {
+  try {
+    const { protocol } = new URL(target);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
 }

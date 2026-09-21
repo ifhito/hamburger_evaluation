@@ -5,7 +5,7 @@ import { useMeta } from "../../../api/meta";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { authApi } from "../api/authApiClient";
-import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl } from "../googleFlow";
+import { GOOGLE_PROVIDER, googleEnabled, isNavigableUrl } from "../googleFlow";
 import { useIdentities } from "../hooks/useIdentities";
 import type { Identity } from "../types";
 import styles from "./googleConnection.module.css";
@@ -54,8 +54,8 @@ export function GoogleConnectionView({ identity, loadFailed, actionError, busy, 
 }
 
 // 本人のプロフィールに出す、Google アカウントの結び付けと解除。GET /meta が、Google を使えると返したときだけ出す
-// (使えない・取得できていない間は何も出さない)。結び付けは、API から 1 回限りのコードを受け取り、ブラウザが
-// Google の画面へ移動する(戻ってきたら、このプロフィールへ戻る)。
+// (使えない・取得できていない間は何も出さない)。結び付けは、認証つきの POST で、このブラウザに手続きの cookie を
+// 設定して始め、返された Google の URL へ、ブラウザが移動する(戻ってきたら、このプロフィールへ戻る)。
 export function GoogleConnection({ viewerId }: { viewerId: string }) {
   const { t } = useTranslation();
   const enabled = googleEnabled(useMeta().data);
@@ -70,8 +70,10 @@ export function GoogleConnection({ viewerId }: { viewerId: string }) {
     setBusy("connect");
     setActionError(null);
     try {
-      const { linkCode } = await authApi.startGoogleLink();
-      window.location.assign(googleStartUrl({ linkCode, returnTo: `/users/${viewerId}` }));
+      // 手続きの cookie は、この POST の応答で、このブラウザに設定される。返された Google の URL へ、同じブラウザで移動する。
+      const { redirectUrl } = await authApi.startGoogleLink(`/users/${viewerId}`);
+      if (!isNavigableUrl(redirectUrl)) throw new Error("unexpected redirect URL");
+      window.location.assign(redirectUrl);
     } catch (e) {
       setActionError(e instanceof ApiError ? e.messages : [t("auth.google.profile.connectError")]);
       setBusy(null);

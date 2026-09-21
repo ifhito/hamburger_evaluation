@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl, isGoogleSignIn, landingPath } from "./googleFlow";
+import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl, isGoogleSignIn, isNavigableUrl, landingPath } from "./googleFlow";
 import type { GoogleExchangeResponse } from "./types";
 
 describe("googleStartUrl(Google でのサインインを始める URL)", () => {
@@ -13,10 +13,9 @@ describe("googleStartUrl(Google でのサインインを始める URL)", () => {
     );
   });
 
-  it("結び付けの開始のコードを付けると、link_code として渡す", () => {
-    expect(googleStartUrl({ linkCode: "abc-123", returnTo: "/users/u1" }, "/api")).toBe(
-      "/api/auth/google/start?return_to=%2Fusers%2Fu1&link_code=abc-123",
-    );
+  it("開始の URL に、結び付けの開始のコード(link_code)は付けない(結び付けは、認証つきの POST で始める)", () => {
+    expect(googleStartUrl({ returnTo: "/users/u1" }, "/api")).not.toContain("link_code");
+    expect(googleStartUrl({ returnTo: "/users/u1" }, "/api")).toBe("/api/auth/google/start?return_to=%2Fusers%2Fu1");
   });
 
   it("アプリの外を指す戻り先(外部の URL・//host・バックスラッシュ)は、付けない", () => {
@@ -61,5 +60,15 @@ describe("googleEnabled(GET /meta が Google を使えると返しているか)"
   it("google が含まれているときだけ true", () => {
     expect(googleEnabled({ loginProviders: [GOOGLE_PROVIDER] })).toBe(true);
     expect(googleEnabled({ loginProviders: ["other", GOOGLE_PROVIDER] })).toBe(true);
+  });
+});
+
+describe("isNavigableUrl(Google の URL へ移動してよいか)", () => {
+  it("http・https の URL だけ移動してよい(javascript: などのスキーム・URL でない文字列は、移動しない)", () => {
+    expect(isNavigableUrl("https://accounts.google.com/o/oauth2/v2/auth?client_id=x")).toBe(true);
+    expect(isNavigableUrl("http://127.0.0.1:9000/authorize?x=1")).toBe(true);
+    for (const bad of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "file:///etc/passwd", "not a url", ""]) {
+      expect(isNavigableUrl(bad)).toBe(false);
+    }
   });
 });

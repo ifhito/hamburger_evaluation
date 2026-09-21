@@ -124,11 +124,19 @@ describe("authApi の Google でのサインイン", () => {
     expect((failed as ApiError).status).toBe(400);
   });
 
-  it("startGoogleLink は POST /me/identities/google/link で、開始のコードを camelCase で返す", async () => {
-    respondWith(200, { link_code: "link-1" });
-    expect(await authApi.startGoogleLink()).toEqual({ linkCode: "link-1" });
+  it("startGoogleLink は POST /me/identities/google/link で、戻り先を snake_case で送り、Google の URL(redirectUrl)を返す", async () => {
+    respondWith(200, { redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=s" });
+    expect(await authApi.startGoogleLink("/users/u1")).toEqual({ redirectUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=s" });
     expect(sent.method).toBe("post");
     expect(sent.url).toBe("/me/identities/google/link");
+    expect(sent.body).toEqual({ return_to: "/users/u1" });
+  });
+
+  it("startGoogleLink は、戻り先を省略すると、本文なしで送る(開始のコードは受け取らない)", async () => {
+    respondWith(200, { redirect_url: "https://accounts.google.com/x" });
+    const res = await authApi.startGoogleLink();
+    expect(sent.body).toBeUndefined();
+    expect(res).not.toHaveProperty("linkCode");
   });
 
   it("listIdentities は GET /me/identities で、結び付きの一覧を camelCase で返す", async () => {

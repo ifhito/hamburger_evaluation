@@ -37,9 +37,15 @@ export const authApi = {
     const res = await authApiClient.post<GoogleExchangeResponse>("/auth/google/exchange", { code });
     return res.data;
   },
-  // ログイン済みの利用者が、Google アカウントを結び付けるための、1 回だけ使える短命のコードを受け取る。
-  async startGoogleLink(): Promise<{ linkCode: string }> {
-    const res = await authApiClient.post<{ linkCode: string }>("/me/identities/google/link");
+  // ログイン済みの利用者が、Google アカウントを結び付ける手続きを、このブラウザで始める。応答の Set-Cookie で、
+  // このブラウザに手続きの cookie が設定され(同一オリジンの要求なので、そのまま保存される)、Google の認可の画面の
+  // URL(redirectUrl)が返る。画面は、その URL へ移動する(別のブラウザで開いても、cookie がないので失敗する)。
+  // returnTo は、手続きのあとに戻る画面(アプリの中のパス。省略できる)。
+  async startGoogleLink(returnTo?: string): Promise<{ redirectUrl: string }> {
+    const res = await authApiClient.post<{ redirectUrl: string }>(
+      "/me/identities/google/link",
+      returnTo ? { returnTo } : undefined,
+    );
     return res.data;
   },
   async listIdentities(): Promise<IdentitiesResponse> {
