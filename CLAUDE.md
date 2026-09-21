@@ -426,7 +426,7 @@ frontend/src/
 
 ### API の接続先
 
-- ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる。
+- ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる(別のオリジンの絶対 URL にすると、API は CORS に対応していないので、Google でのサインインは使えず、ボタンは出ない)。
 - 開発時は Vite の proxy が `/api` を Go API へ転送する。転送先の既定は `http://host.docker.internal:8080` で、`VITE_API_PROXY_TARGET` で変更できる。レビュー写真の `/photos` も同じ転送先へ proxy される(本番の nginx にも `/photos/` がある)。
 
 ### 写真の送信
@@ -450,7 +450,7 @@ backend の「Google のアカウントでのサインイン」(上の Backend �
 - `/auth/google/complete`(`GoogleCompletePage`。**ゲスト専用ではなく公開の route**。成功するとログイン状態になるため): backend が、成功も失敗も、1 回限りのコードに入れて、この画面へ戻す。画面は、`code` を**最初に 1 回だけ**読み、URL からはすぐに消し(履歴に残さない)、`POST /auth/google/exchange` で交換する(StrictMode の二重実行でも 1 回)。サインインの成功は `signInWithResponse` でログイン状態にして、戻り先(backend が確かめたアプリの中のパス。空は `/reviews`)へ。重複・失敗・無効なコードは、API の文言(`ApiError.messages`)をそのまま出し、「サインインへ戻る」は、失敗の応答が含める戻り先(`GoogleExchangeError.returnTo`。共有の `ApiError` ではなく、`exchangeGoogleCode` が本文から読む。backend が確かめたもの。許可の画面から来た利用者が、パスワードでサインインしたあと、そこへ戻れる)を、サインイン画面の state の `from` として渡す(画面は、戻り先を保存しない)。交換の要求は、同一オリジンなので、手続きを終えたブラウザの cookie(結び付けの値)が、そのまま付く(`withCredentials` は、明示のため。同一オリジンでは、なくても同じ)。失敗の本文の `return_to` は、interceptor が camelCase にして `ApiError.body` に持ち、`GoogleExchangeError` が読む。**交換が、サーバーの障害・通信の失敗で失敗したときは、backend がコードを消費しないので、コードをこの画面の state に持ったまま、「Try again」で、同じコードでもう一度交換する**(409・400 など、決まった失敗には出さない)。コードがない(URL から消したあとに、戻る操作でこの画面へ戻った)ときは、要求を送らない。画面を離れたあとに結果が返っても、勝手に移動させない。失敗の画面の導線(プロフィールへ / サインインへ)は、ログインの状態の復元(GET /me)が済んでから出す。**ログインの証(JWT)は URL に載らない。**
 - 本人のプロフィールに、Google の連携(`GoogleConnection`。`canEdit` のときだけ、`loginProviders` に含まれるときだけ): `GET /me/identities` の内容を出す。「結び付ける」は、**認証つきの `POST /me/identities/google/link`**(`authApi.startGoogleLink`)で、**このブラウザ**に手続きの cookie を設定して始め、返された Google の認可の URL(`redirectUrl`。http・https だけ移動する)へ移動する(戻り先はこのプロフィール)。**持ち運べる開始のコード(`link_code`)や開始の URL は使わない**(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに結び付ける攻撃を防ぐため)。この POST は、画面と同一オリジン(`/api` の転送)で出すので、応答の cookie が、そのまま保存され、Google からの戻りで送られる。「解除」は **API が返す `canUnlink` が true のときだけ**出す(解除してよいかの判断は backend の domain。false のときは理由の文言だけを出す)。
 - **Google の手続きの cookie は、同一オリジンの `/api` の道筋(`API_BASE_URL` が `/api` のような path)でだけ往復する**。`VITE_API_BASE_URL` を別のオリジンの絶対 URL にすると、cookie が保存・送信されず、Google でのサインインと結び付けは、毎回失敗する(API が CORS(資格情報つき)に対応していないので、その構成は対応しない。**画面は、API の根が別のオリジンの絶対 URL のとき、Google のボタンを出さない**(`googleEnabled`)。Google を使うときは、変えない)。backend は、`GOOGLE_REDIRECT_URL` が `APP_BASE_URL` と別のオリジンのとき・同じオリジンでも接頭辞(`/api`)がないときは、起動時に警告する(`Config.GoogleWarnings`。英語の `slog.Warn`。オリジンだけを出す。手元の設定は、`http://localhost:5173/api/auth/google/callback`)。
-- 一覧の取得に失敗したときは、エラーと「Retry」だけを出し、「未連携」とは表示しない(`ConnectionState`)。解除が済んだら(204。別のタブで、すでに解除済みの 404 も同じ)、再取得を待たずに、キャッシュから Google の連携を外し、「Google disconnected.」を出す(そのあとの再取得の成否は、解除の成否とは別)。「結び付ける」で Google へ移動したあと、bfcache で復元されたら、処理中を戻す(`pageshow`)。
+- 一覧の取得に失敗したときは、エラーと「Retry」だけを出し、「未連携」とは表示しない(`ConnectionState`)。解除が済んだら(204)、再取得を待たずに、キャッシュから Google の連携を外し、「Google disconnected.」を出す(そのあとの再取得の成否は、解除の成否とは別)。**解除が 404 のときは、別のタブで、すでに解除済みなのか、Google の機能が止まっているのか、区別できない**ので、一覧を取り直して確かめ、Google の連携がなければ「解除済み」として扱い、残っている(または、取り直せない)ときは、失敗を出す。一覧の取得の失敗は、自動では再取得せず(失敗の表示と Retry が、「読み込み中」に切り替わって消えるため)、Retry を押したときだけ取り直す。「結び付ける」で Google へ移動したあと、bfcache で復元されたら、処理中を戻す(`pageshow`)。
 - Google のロゴは `google-g.svg`(Google のブランドの決まりに沿ったマーク)。
 
 ### Frontend コマンド
