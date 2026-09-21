@@ -9,6 +9,9 @@
   --text: #111111;
   --text-muted: #5a5a55;
   --accent: #e9b824;
+  /* ロゴ専用の色(白い地の上は深い黄、暗い面の上は今の黄)。ロゴの線だけに使い、UI の部品には使わない(UI の黄は、面の塗りだけ) */
+  --logo-on-light: #b88f13;
+  --logo-on-dark: #e9b824;
   --on-accent: #111111;
   --danger: #b3261e;
   --danger-surface: #fdf0ef;
@@ -22,10 +25,12 @@ a { color: inherit; text-decoration: none; }
 .wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
 .muted { color: var(--text-muted); }
 
-/* ヘッダー。ロゴは文字だけ: Hamburger は太字、Evaluation は標準の太さで、黄色の面の上に黒で置く(黄色を文字の色にしない) */
+/* ヘッダー。ロゴは、黄色の 1 本の線の記号(レタスの波つきのバーガー)+ 文字「BurgerStack」(Burger は太字、Stack は標準の太さ、黒)。白い地の上の記号は、深い黄(--logo-on-light) */
 .bar { display: flex; align-items: center; gap: 24px; height: 64px; }
-.wordmark { display: flex; align-items: center; gap: 6px; margin-right: auto; font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
-.wm-pill { padding: 0 10px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-weight: 400; line-height: 30px; }
+.wordmark { display: flex; align-items: center; gap: 0.4em; margin-right: auto; font-size: 20px; letter-spacing: 0.01em; line-height: 1.5; white-space: nowrap; }
+.wm-mark { width: 38.4px; height: 32px; flex: none; overflow: visible; }
+.wm-a { font-weight: 700; }
+.wm-b { font-weight: 400; }
 .tabs { display: flex; gap: 4px; height: 64px; }
 .tab { position: relative; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: 14px; color: var(--text-muted); }
 .tab.active { color: var(--text); font-weight: 500; }
@@ -133,8 +138,8 @@ time { font-size: 14px; color: var(--text-muted); }
 
 @media (max-width: 720px) {
   .bar { flex-wrap: wrap; gap: 0; justify-content: space-between; height: auto; }
-  .wordmark { margin-right: 0; font-size: 18px; line-height: 56px; }
-  .wm-pill { line-height: 28px; }
+  .wordmark { margin-right: 0; font-size: 18px; }
+  .wm-mark { width: 33.6px; height: 28px; }
   .lang { order: 2; }
   .tabs { order: 3; width: 100%; height: 44px; gap: 0; justify-content: space-between; }
   .tab { padding: 0 8px; }

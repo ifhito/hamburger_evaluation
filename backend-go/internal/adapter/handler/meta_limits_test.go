@@ -17,6 +17,7 @@ var exposedInMeta = []string{
 	"MaxCommentChars", "MaxBurgerNameChars", "MaxShopNameChars",
 	"MaxUsernameChars", "MaxBioChars", "MaxModerationNoteChars",
 	"MinPasswordBytes", "MaxPasswordBytes",
+	"MaxPhotoBytes", "MaxPhotoEdge",
 }
 
 // notExposedInMeta は、GET /meta に出さない上限・下限の定数と、出さない理由である。
@@ -29,6 +30,7 @@ var notExposedInMeta = map[string]string{
 	"MaxOAuthRedirectURIs":        "外部のアプリが自分で知らせる戻り先の数の検査で、利用者の入力欄ではない",
 	"MaxOAuthURILength":           "外部のアプリが自分で知らせる URL の長さの検査で、利用者の入力欄ではない",
 	"MaxClientMetadataBytes":      "外部のアプリの説明ファイルを取り込むときの大きさの検査で、利用者の入力欄ではない",
+	"MaxPerPage":                  "一覧の 1 ページの件数の上限。frontend は per_page を送らず、続きがあるかを X-Has-More で知るだけなので、値を知る必要がない",
 }
 
 // domainLimitConstants は、domain パッケージ(テストを除く)で宣言された、Max / Min で始まる
