@@ -24,6 +24,8 @@ services:
         value: s3
       - key: STATS_WORKER_INTERVAL
         value: 1s
+      # Brevo を使う場合は送信元 IP の許可が要る(Phase 3 で判明)。
+      # Mailjet・Resend・MailerSend はドメイン認証だけで済む。
       # 以下は秘密か、デプロイ後に確定する値。ダッシュボードで入れる。
       - key: DATABASE_URL
         sync: false
