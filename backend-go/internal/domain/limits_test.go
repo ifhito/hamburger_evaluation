@@ -11,7 +11,7 @@ func errMessages(err error) []string {
 	if err == nil {
 		return nil
 	}
-	return err.(*ValidationError).Messages
+	return err.(*ValidationError).Texts(LangEN)
 }
 
 // limitCase は、1 つの検証関数の上限の境界を確かめる入力である。

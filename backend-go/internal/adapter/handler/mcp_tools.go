@@ -146,7 +146,7 @@ func toolError(op string, err error) (*mcp.CallToolResult, any, error) {
 	case errors.Is(err, domain.ErrUserNotFound):
 		return failure(userNotFoundMessage)
 	case errors.As(err, &vErr):
-		return failure(strings.Join(vErr.Messages, "; "))
+		return failure(strings.Join(vErr.Texts(domain.LangEN), "; "))
 	default:
 		log.Printf("mcp: %s: %v", op, err)
 		return failure("internal server error")

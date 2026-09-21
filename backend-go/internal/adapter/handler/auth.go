@@ -89,7 +89,7 @@ func handleSignup(signups *usecase.Signups) http.HandlerFunc {
 		if err != nil {
 			var vErr *domain.ValidationError
 			if errors.As(err, &vErr) {
-				writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+				writeValidation(w, r, vErr)
 				return
 			}
 			// wrap された usecase のエラーには password は含まれない。
@@ -138,7 +138,7 @@ func handleLogin(auth *usecase.Auth) http.HandlerFunc {
 		if err != nil {
 			var vErr *domain.ValidationError
 			if errors.As(err, &vErr) {
-				writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+				writeValidation(w, r, vErr)
 				return
 			}
 			if errors.Is(err, domain.ErrInvalidCredentials) {
