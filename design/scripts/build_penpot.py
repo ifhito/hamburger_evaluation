@@ -241,7 +241,7 @@ class Design:
             else:
                 fills = [self.fill(f["color"])]
             obj = {"id": str(uuid.uuid4()), "name": s["part"], "type": "path", "parentId": gid, "frameId": frame, "content": content, "fills": fills,
-                   "strokes": [{"strokeColor": s["stroke"], "strokeOpacity": 1, "strokeWidth": round(s["sw"] * k, 3), "strokeStyle": "solid", "strokeAlignment": "center"}],
+                   "strokes": [{"strokeColor": s["stroke"], "strokeOpacity": 1, "strokeWidth": round(s["sw"] * k, 3), "strokeStyle": "solid", "strokeAlignment": "center", **({"strokeCapStart": "round", "strokeCapEnd": "round"} if s.get("round") else {})}],
                    **geom(px(bx), py(by), bw * k, bh * k)}
             self.add_obj(page, obj)
 
