@@ -1,5 +1,5 @@
-// Command seed は開発用 database に idempotent な fixture データを投入する
-// （issue #17 R5）。admin ユーザー 1 人、一般ユーザー 3 人、承認済みの shop
+// Command seed は開発用 database に idempotent な fixture データを投入する。
+// admin ユーザー 1 人、一般ユーザー 3 人、承認済みの shop
 // 3 件と pending の shop 1 件、承認済みの shop ごとに burger 2 件、そして
 // 固定された review 群である。その後、アプリが使うのと同じ domain の
 // calculator で burger_stats を再計算するので、GET のレスポンスは整合する。
@@ -7,7 +7,7 @@
 // すべての fixture のパスワードは "Password123!" である（signup と同じ強度ルールを
 // 満たす）。これらはよく知られた開発用 fixture であり、secret ではない。
 // すでに存在する email のユーザーは変更しない（パスワードの digest も更新しない）ので、
-// S13 より前に seed 済みの DB では、作成時のパスワード（password123）のままである。
+// パスワードの強度ルールを入れる前に seed 済みの DB では、作成時のパスワード（password123）のままである。
 // docker compose で実行する：
 //
 //	docker compose run --rm migrate up

@@ -164,7 +164,7 @@ func headerWithoutDate(h http.Header) string {
 }
 
 // TestSignupMailDeliveryIntegration は、signup のメールの記録と冪等を、本物の DB・非同期の送信・SMTP の実装で
-// 確かめる（S16）。SMTP が動いていても落ちていても、応答は同じで、記録だけが sent / failed に分かれる。
+// 確かめる。SMTP が動いていても落ちていても、応答は同じで、記録だけが sent / failed に分かれる。
 func TestSignupMailDeliveryIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed integration test in short mode")

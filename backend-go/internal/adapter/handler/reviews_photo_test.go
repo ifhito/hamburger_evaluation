@@ -135,7 +135,7 @@ func createPhotoReview(t *testing.T, router http.Handler, auth string, photo []b
 	return id, *photoURL
 }
 
-// TestCreateReviewWithPhoto は S10 AC1 を扱う：約 2MB の JPEG を付けた
+// TestCreateReviewWithPhoto は、写真つきの投稿を扱う：約 2MB の JPEG を付けた
 // multipart の create は、null でない photo_url を伴う 201 を返し、正規化された
 // ファイルが disk 上に置かれ、detail エンドポイントが同じ photo_url を
 // そのまま返し、photo 自体が GET /photos/ の配下で配信される。
@@ -167,7 +167,7 @@ func TestCreateReviewWithPhoto(t *testing.T) {
 	}
 }
 
-// TestCreateReviewPhotoRejections は S10 AC3 を扱う：5MiB を超える画像は 422
+// TestCreateReviewPhotoRejections は、拒否される写真を扱う：5MiB を超える画像は 422
 // "too large" であり、JPEG のファイル名を持ち image/jpeg の content type が
 // 宣言された PDF は 422 "unsupported" である。判定するのは magic bytes であり、
 // 宣言では決してない。photo part の重複は不正な body（400）である。
@@ -244,7 +244,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 	})
 }
 
-// TestDeleteReviewWithPhoto は S10 AC4 を扱う：photo 付きの review を削除すると
+// TestDeleteReviewWithPhoto は、写真つきのレビューの削除を扱う：photo 付きの review を削除すると
 // 204 を返し、disk 上のファイルを best-effort で削除する。
 func TestDeleteReviewWithPhoto(t *testing.T) {
 	router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
@@ -263,12 +263,12 @@ func TestDeleteReviewWithPhoto(t *testing.T) {
 	}
 }
 
-// TestUpdateReviewPhoto は S10 AC5 と、通常の update では保持するというルールを
+// TestUpdateReviewPhoto は、写真の差し替えと、通常の update では保持するというルールを
 // 扱う：新しい photo を付けた multipart の update は photo_url と disk 上の
 // ファイルを入れ替え、一方 photo を含まない JSON の update は保存済みの
 // photo に手を触れない。
 func TestUpdateReviewPhoto(t *testing.T) {
-	t.Run("AC5 新しい photo は url とファイルを入れ替える", func(t *testing.T) {
+	t.Run("新しい写真を付けて更新すると、写真の URL とディスク上のファイルが入れ替わる", func(t *testing.T) {
 		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		id, oldURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 		oldPath := photoPath(t, photoDir, oldURL)
@@ -363,7 +363,7 @@ func TestPhotoDirectoryRequests(t *testing.T) {
 	}
 }
 
-// TestReviewBodyLimit は body の上限を Content-Type で固定する（S10、S21）：review の
+// TestReviewBodyLimit は body の上限を Content-Type で固定する：review の
 // 書き込み endpoint に対する multipart/form-data だけが 6 MiB まで受け付けられ（401 は、
 // request が認証なしで上限を通過したことを示す）、6 MiB を超えると 413 で拒否される。
 // JSON（Content-Type なしを含む）は、review の書き込みでもグローバルな 1 MiB のままで、

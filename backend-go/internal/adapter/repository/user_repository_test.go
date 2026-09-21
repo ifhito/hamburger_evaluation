@@ -75,7 +75,7 @@ func TestUserRepository(t *testing.T) {
 	})
 }
 
-// TestUserRepositoryManagement は、S8 の user 管理の永続化を検証する。
+// TestUserRepositoryManagement は、ユーザー管理の永続化を検証する。
 // 対象は、カラム単位でトランザクションを伴うプロフィール更新、
 // 同一トランザクション内での burger_stats の再計算を伴う soft delete、
 // そして、discard 済みの user の review をフィード、review の詳細、shop の

@@ -14,7 +14,7 @@ import (
 
 const testTimeout = 5 * time.Second
 
-// TestServeGracefulShutdown は AC4 をカバーする。server が ephemeral port で
+// TestServeGracefulShutdown は、終了要求を受けたときの正常終了を確かめる。server が ephemeral port で
 // 起動し、context が cancel された（SIGTERM の代わり）時点でリクエストが
 // in-flight であり、その in-flight のリクエストがそれでも完了し、serve が
 // serve goroutine を leak させずに nil を返す。
@@ -112,7 +112,7 @@ func TestServeGracefulShutdown(t *testing.T) {
 	}
 }
 
-// TestRunShutsDownCleanly は run() レベルで AC4 をカバーする。run は config、
+// TestRunShutsDownCleanly は、run() 全体での正常終了を確かめる。run は config、
 // pool、router を配線し、ephemeral port で /up を serve し（ここでは 503。
 // pool は到達不能なアドレスを指しており、pgxpool は遅延して接続する）、
 // context が cancel されたとき nil を返す。
@@ -133,7 +133,7 @@ func TestRunShutsDownCleanly(t *testing.T) {
 		PhotoStorage:       "disk",
 		PhotoDiskDir:       t.TempDir(),
 		PhotoPublicBaseURL: "/photos",
-		// 確認メールの設定（S16）。このテストはメールを送らないので、送信先は到達不能なままでよい。
+		// 確認メールの設定。このテストはメールを送らないので、送信先は到達不能なままでよい。
 		SMTPHost:     "127.0.0.1",
 		SMTPPort:     1,
 		SMTPSecurity: "none",

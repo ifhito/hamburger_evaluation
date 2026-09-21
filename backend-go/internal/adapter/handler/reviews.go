@@ -29,7 +29,7 @@ const burgerNotFoundMessage = "Burger not found"
 // {"review":{...}} ラッパーである（PUT は shop_id/burger_id/burger_name を
 // 無視する。review が別の burger に移ることはない）。POST では、burger は
 // burger_id で指定し、それがない場合は burger_name で指定する
-// （find-or-create、frontend の契約、S6 P3-1）。優先順位は usecase の判断
+// （なければ作る(find-or-create)、frontend の契約）。優先順位は usecase の判断
 // である。欠けているフィールドはゼロ値にデコードされ、rating、comment、
 // （burger_id もない場合の）burger_name は domain が拒否するので 400 では
 // なく Rails-parity の 422 になる。POST の shop_id は存在しない shop として
@@ -45,7 +45,7 @@ type reviewParamsRequest struct {
 }
 
 const (
-	// maxPhotoBytes は生の写真アップロードを 5 MiB に制限する（S10 AC3）。
+	// maxPhotoBytes は生の写真アップロードを 5 MiB に制限する。
 	// これより大きなアップロードは 413 ではなく 422 になる。グローバルな
 	// review の body cap の方が広い。
 	maxPhotoBytes int64 = 5 << 20
@@ -60,8 +60,8 @@ const photoTooLargeMessage = "Photo is too large (max 5MB)"
 
 const photoUnsupportedMessage = "Photo must be a JPEG, PNG, or WebP image"
 
-// multipartReviewForm は multipart/form-data の review 投稿（S10 の wire
-// 契約）のフラットなフィールドを保持する：reviewParamsRequest と同じ値に
+// multipartReviewForm は multipart/form-data の review 投稿（写真つきの投稿の
+// 通信の取り決め）のフラットなフィールドを保持する：reviewParamsRequest と同じ値に
 // 加え、処理済みの写真（photo part がない場合は nil）。
 type multipartReviewForm struct {
 	rating     int
@@ -73,7 +73,7 @@ type multipartReviewForm struct {
 }
 
 // isMultipart は request が multipart/form-data を宣言しているかどうかを
-// 返す（S10 の写真投稿の経路）。それ以外はすべて既存の JSON の経路にとどまる
+// 返す（写真つきの投稿の経路）。それ以外はすべて既存の JSON の経路にとどまる
 // （後方互換性）。
 func isMultipart(r *http.Request) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))

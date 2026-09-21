@@ -25,7 +25,7 @@ type route struct {
 // NewRouter は HTTP handler のツリーを構築する：stdlib の Go 1.22 の
 // method パターン mux を、グローバルな body cap の middleware で包んだもの
 // である。未知の route は 404、誤った method は 405 を返し、どちらも JSON の
-// エラー形式である。photoFiles は nil でない場合（disk への写真保存、S10）、
+// エラー形式である。photoFiles は nil でない場合（disk への写真保存）、
 // GET /photos/ の配下で review の写真を配信する。mux に直接登録しており
 // （Go 1.22 の ServeMux は最も限定的なパターンを優先するので、登録順に関わらず
 // catch-all の "/" より優先される）、s3 モードでは nil で、写真の URL は

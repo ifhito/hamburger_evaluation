@@ -45,7 +45,7 @@ func shopNames(shops []domain.Shop) []string {
 
 // TestShopQuery は、shop の読み取り（adapter/query の ShopQuery）を、
 // 共有の dbtest のスキャフォールドを通じて実際の PostgreSQL に対して検証する
-// （TEST_DATABASE_URL がなければスキップする）。issue #12 の AC1–AC3 と AC5 を
+// （TEST_DATABASE_URL がなければスキップする）。閲覧者ごとの一覧の見え方とキーワード検索を
 // SQL レベルで扱うほか、pagination、順序、両方の詳細クエリを扱う。
 func TestShopQuery(t *testing.T) {
 	if testing.Short() {
@@ -88,13 +88,13 @@ func TestShopQuery(t *testing.T) {
 		return shops
 	}
 
-	t.Run("AC1 匿名の viewer には active な shop だけが一覧に出る", func(t *testing.T) {
+	t.Run("匿名の閲覧者には、承認済みのショップだけが一覧に出る", func(t *testing.T) {
 		if got := shopIDs(list(t, anon, "", 100, 0)); !reflect.DeepEqual(got, activeIDs) {
 			t.Errorf("ids = %v, want %v", got, activeIDs)
 		}
 	})
 
-	t.Run("AC2 creator には自分の pending な shop が status 付きで追加で見える", func(t *testing.T) {
+	t.Run("作成者には、自分の承認待ちのショップが、状態つきで追加で見える", func(t *testing.T) {
 		shops := list(t, aliceVis, "", 100, 0)
 		want := sortedIDs(append([]string{alicePending}, activeIDs...)...)
 		if got := shopIDs(shops); !reflect.DeepEqual(got, want) {
@@ -107,7 +107,7 @@ func TestShopQuery(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 admin はすべての status の shop を見られる", func(t *testing.T) {
+	t.Run("管理者は、すべての状態のショップを見られる", func(t *testing.T) {
 		want := sortedIDs(append([]string{alicePending, golfRejected}, activeIDs...)...)
 		if got := shopIDs(list(t, adminVis, "", 100, 0)); !reflect.DeepEqual(got, want) {
 			t.Errorf("ids = %v, want %v", got, want)
@@ -166,32 +166,32 @@ func TestShopQuery(t *testing.T) {
 		}
 	})
 
-	t.Run("AC5 keyword は大文字小文字を区別しない部分一致になる", func(t *testing.T) {
+	t.Run("キーワードは、大文字小文字を区別しない部分一致になる", func(t *testing.T) {
 		want := sortedIDs(pctBeef, xBeef)
 		if got := shopIDs(list(t, anon, "bEEf", 100, 0)); !reflect.DeepEqual(got, want) {
 			t.Errorf("ids = %v, want %v", got, want)
 		}
 	})
 
-	t.Run("AC5 keyword 中のパーセントはリテラルとして一致する", func(t *testing.T) {
+	t.Run("キーワードの中のパーセント記号は、ワイルドカードではなく、その文字として一致する", func(t *testing.T) {
 		if got := shopNames(list(t, anon, "100%", 100, 0)); !reflect.DeepEqual(got, []string{"100% Beef"}) {
 			t.Errorf("names = %v, want [100%% Beef]", got)
 		}
 	})
 
-	t.Run("AC5 keyword 中のアンダースコアはリテラルとして一致する", func(t *testing.T) {
+	t.Run("キーワードの中のアンダースコアは、ワイルドカードではなく、その文字として一致する", func(t *testing.T) {
 		if got := shopNames(list(t, anon, "Under_", 100, 0)); !reflect.DeepEqual(got, []string{"Under_score"}) {
 			t.Errorf("names = %v, want [Under_score]", got)
 		}
 	})
 
-	t.Run("AC5 keyword 中のバックスラッシュはリテラルとして一致する", func(t *testing.T) {
+	t.Run("キーワードの中のバックスラッシュは、その文字として一致する", func(t *testing.T) {
 		if got := shopNames(list(t, anon, `\`, 100, 0)); !reflect.DeepEqual(got, []string{`Back\slash Cafe`}) {
 			t.Errorf(`names = %v, want [Back\slash Cafe]`, got)
 		}
 	})
 
-	t.Run("AC5 SQL injection を狙った keyword はエラーにならず、データも漏れない", func(t *testing.T) {
+	t.Run("SQL インジェクションを狙ったキーワードは、エラーにならず、データも漏れない", func(t *testing.T) {
 		if got := list(t, anon, `'; DROP TABLE shops;--`, 100, 0); len(got) != 0 {
 			t.Errorf("shops = %v, want empty", got)
 		}
@@ -234,7 +234,7 @@ func TestShopQuery(t *testing.T) {
 		}
 	})
 
-	t.Run("AC6 存在しない shop id は ErrShopNotFound になる", func(t *testing.T) {
+	t.Run("存在しないショップの id は ErrShopNotFound になる", func(t *testing.T) {
 		if _, err := shopQuery.GetShopWithCreator(ctx, uid.N(99999)); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}

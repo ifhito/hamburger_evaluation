@@ -41,8 +41,8 @@ func decodeError(t *testing.T, body []byte) string {
 	return resp.Error
 }
 
-// TestHealth は AC1（healthy な pinger -> 200 {"status":"ok"}）と AC2（失敗する
-// pinger -> 503 とエラーの形）を扱う。
+// TestHealth は、DB が正常なら 200 {"status":"ok"}、DB が失敗すると 503 とエラーの形を
+// 返すことを扱う。
 func TestHealth(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -51,13 +51,13 @@ func TestHealth(t *testing.T) {
 		wantBody   string // 完全一致させる body。空なら代わりにエラーの形を検証する
 	}{
 		{
-			name:       "AC1 DB が正常なら 200 ok を返す",
+			name:       "DB が正常なら 200 と ok を返す",
 			pinger:     okPinger,
 			wantStatus: http.StatusOK,
 			wantBody:   `{"status":"ok"}`,
 		},
 		{
-			name:       "AC2 DB が失敗すると 503 とエラーの形を返す",
+			name:       "DB が失敗すると 503 とエラーの形を返す",
 			pinger:     failPinger,
 			wantStatus: http.StatusServiceUnavailable,
 		},
@@ -126,7 +126,7 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 	}
 }
 
-// TestBodyLimit は AC3 を扱う：2 MiB の body を持つ POST は、エラーの JSON の
+// TestBodyLimit は、上限を超える body の扱いを確かめる：2 MiB の body を持つ POST は、エラーの JSON の
 // 形を伴う 413 になり、同じ client での後続の request は成功する。
 func TestBodyLimit(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(t, okPinger))

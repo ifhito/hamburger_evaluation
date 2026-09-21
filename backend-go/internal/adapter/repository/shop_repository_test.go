@@ -38,7 +38,7 @@ func readShopRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id string) s
 	return r
 }
 
-// TestShopModerationRepository は、S5 の投稿と moderation の永続化を、実際の
+// TestShopModerationRepository は、shop の投稿と moderation の永続化を、実際の
 // PostgreSQL に対して検証する。pending の shop の作成、moderation の update
 // （status・name のカラム単位の書き込み）、並行する更新を巻き戻さないこと、
 // そして存在しない id の扱いである。書き込みの結果は SQL で直接確かめる

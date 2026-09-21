@@ -71,7 +71,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		jwtCodec,
 	)
 
-	// signup はメール確認つきである（S16）。メールは非同期に送り（有界のキューと少数の worker）、
+	// signup はメール確認つきである。メールは非同期に送り（有界のキューと少数の worker）、
 	// 送信の失敗・遅延は signup の応答に影響しない。shutdown では、サーバーを止めたあとに
 	// キューを送り切ってから閉じる。
 	smtpMailer, err := infra.NewSMTPMailer(cfg)
@@ -95,7 +95,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		usecase.SignupConfig{BaseURL: cfg.AppBaseURL},
 	)
 
-	// Review 写真の storage（S10）：s3 モードでは S3 互換、それ以外では
+	// レビュー写真の保存先：s3 モードでは S3 互換、それ以外では
 	// ローカル disk であり、後者は API 自身も handler.PhotoFileServer を通して
 	// GET /photos/ 配下で配信する（dir は作業ディレクトリからの相対で
 	// 解決される。container は . を /app としてマウントする）。s3 モードでは

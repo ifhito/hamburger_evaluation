@@ -38,7 +38,7 @@ func readReviewRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id string)
 	return r
 }
 
-// TestReviewRepository は、S6 の review の書き込み（作成・カラム単位の更新・soft delete）を、
+// TestReviewRepository は、review の書き込み（作成・カラム単位の更新・soft delete）を、
 // 共有の dbtest のスキャフォールドを通じて実際の PostgreSQL に対して検証する
 // （TEST_DATABASE_URL がなければスキップする）。書き込みの結果は SQL で直接確かめる
 // （フィード・詳細・filter などの読み取りは adapter/query のテストが担う）。
@@ -294,7 +294,7 @@ func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.Review
 	return created
 }
 
-// TestReviewRepositoryPhotoKey は、S10 の photo_key の永続化を検証する。
+// TestReviewRepositoryPhotoKey は、写真の key(photo_key)の永続化を検証する。
 // CreateReview が key を保存し、UpdateReviewContentAndPhotoKey が、まだ kept な review の
 // content と key を一緒に入れ替える。書き込みの結果は SQL で直接確かめる（結合された読み取り
 // クエリが photo_key を返すことは、adapter/query のテストが担う）。

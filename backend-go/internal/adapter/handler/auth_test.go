@@ -277,7 +277,7 @@ func TestSignupErrors(t *testing.T) {
 	}
 }
 
-// TestLogin は AC3 を扱う：正しい認証情報はトークンを伴う 200 を返し、誤った
+// TestLogin はログインの結果を扱う：正しい認証情報はトークンを伴う 200 を返し、誤った
 // パスワードと未知の email はどちらも Rails parity の 401 を返す。
 func TestLogin(t *testing.T) {
 	tests := []struct {
@@ -288,12 +288,12 @@ func TestLogin(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name:       "AC3 正しい認証情報は token 付きで 200 を返す",
+			name:       "正しい認証情報でログインすると、トークンつきで 200 が返る",
 			body:       `{"email":"alice@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "AC3 誤ったパスワードは 401 を返す",
+			name:       "誤ったパスワードでログインすると 401 になる",
 			body:       `{"email":"alice@example.com","password":"Wrongpass1!"}`,
 			wantStatus: http.StatusUnauthorized,
 			wantBody:   `{"error":"Invalid email or password"}`,
@@ -354,7 +354,7 @@ func TestLogin(t *testing.T) {
 
 // TestLoginValidation は、認証情報が signup と同じ規則を満たさないとき、login が
 // 401 ではなく 422 {"errors":[...]}（signup と同じ形・同じメッセージ）を返し、
-// 規則を満たしたうえで誤っている場合だけ 401 になることを固定する（Story #61）。
+// 規則を満たしたうえで誤っている場合だけ 401 になることを固定する。
 func TestLoginValidation(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -390,7 +390,7 @@ func TestLoginValidation(t *testing.T) {
 	}
 }
 
-// TestRequireAuth は、保護された POST /logout ルートに対する AC4 と AC5 を
+// TestRequireAuth は、保護された POST /logout ルートの認証を
 // 扱う：トークンの欠落、Bearer 以外、改ざん、secret 違い、期限切れのトークン、
 // 未知のユーザーのトークン、discard 済みのユーザーのトークンは、いずれも
 // 正確な Rails parity の 401 body を返し、有効なトークンは通る。
@@ -421,7 +421,7 @@ func TestRequireAuth(t *testing.T) {
 		t.Fatalf("issue unknown-user token: %v", err)
 	}
 
-	// user_id が数値だった旧形式のトークン(S27 より前の発行形式)は、署名と期限が正しくても無効になる。
+	// user_id が数値だった旧形式のトークン(ID を UUID にする前の発行形式)は、署名と期限が正しくても無効になる。
 	legacyToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{"user_id": 1, "exp": time.Now().Add(time.Hour).Unix()}).SignedString([]byte(testJWTSecret))
 	if err != nil {
@@ -438,17 +438,17 @@ func TestRequireAuth(t *testing.T) {
 		{name: "小文字の bearer スキームは通る (RFC 6750)", authHeader: "bearer " + validToken, wantStatus: http.StatusOK},
 		{name: "大文字の BEARER スキームは通る (RFC 6750)", authHeader: "BEARER " + validToken, wantStatus: http.StatusOK},
 		{name: "スキームの後ろに余分な空白があっても通る (RFC 6750)", authHeader: "Bearer  " + validToken, wantStatus: http.StatusOK},
-		{name: "AC4 トークンなしは拒否される", authHeader: "", wantStatus: http.StatusUnauthorized},
-		{name: "AC4 Bearer 以外のスキームは拒否される", authHeader: "Token " + validToken, wantStatus: http.StatusUnauthorized},
+		{name: "トークンがないリクエストは拒否される", authHeader: "", wantStatus: http.StatusUnauthorized},
+		{name: "Bearer 以外の認証方式は拒否される", authHeader: "Token " + validToken, wantStatus: http.StatusUnauthorized},
 		{name: "Basic スキームは拒否される", authHeader: "Basic " + validToken, wantStatus: http.StatusUnauthorized},
 		{name: "スキームなしの生のトークンは拒否される", authHeader: validToken, wantStatus: http.StatusUnauthorized},
-		{name: "AC4 空の Bearer トークンは拒否される", authHeader: "Bearer ", wantStatus: http.StatusUnauthorized},
-		{name: "AC4 改ざんされたトークンは拒否される", authHeader: "Bearer " + validToken + "x", wantStatus: http.StatusUnauthorized},
-		{name: "AC4 別の secret で署名されたトークンは拒否される", authHeader: "Bearer " + wrongSecretToken, wantStatus: http.StatusUnauthorized},
-		{name: "AC4 期限切れのトークンは拒否される", authHeader: "Bearer " + expiredToken, wantStatus: http.StatusUnauthorized},
+		{name: "空の Bearer トークンは拒否される", authHeader: "Bearer ", wantStatus: http.StatusUnauthorized},
+		{name: "改ざんされたトークンは拒否される", authHeader: "Bearer " + validToken + "x", wantStatus: http.StatusUnauthorized},
+		{name: "別の秘密鍵で署名されたトークンは拒否される", authHeader: "Bearer " + wrongSecretToken, wantStatus: http.StatusUnauthorized},
+		{name: "期限切れのトークンは拒否される", authHeader: "Bearer " + expiredToken, wantStatus: http.StatusUnauthorized},
 		{name: "未知のユーザーのトークンは拒否される", authHeader: "Bearer " + unknownToken, wantStatus: http.StatusUnauthorized},
-		{name: "S27 user_id が数値の旧形式のトークンは拒否される", authHeader: "Bearer " + legacyToken, wantStatus: http.StatusUnauthorized},
-		{name: "AC5 discard 済みのユーザーのトークンは拒否される", authHeader: "Bearer " + discardedToken, wantStatus: http.StatusUnauthorized},
+		{name: "ユーザー ID が数値の旧形式のトークンは拒否される", authHeader: "Bearer " + legacyToken, wantStatus: http.StatusUnauthorized},
+		{name: "退会済み(discard 済み)のユーザーのトークンは拒否される", authHeader: "Bearer " + discardedToken, wantStatus: http.StatusUnauthorized},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -486,7 +486,7 @@ func TestRequireAuthInfraFailure(t *testing.T) {
 	}
 }
 
-// TestOptionalAuth は、probe handler を直接ラップして AC6 を扱う：トークンが
+// TestOptionalAuth は、probe handler を直接ラップして扱う：トークンが
 // ない、または無効な場合は 401 にならず匿名のまま続行し、有効なトークンは
 // viewer を request context に入れる。
 func TestOptionalAuth(t *testing.T) {
@@ -502,9 +502,9 @@ func TestOptionalAuth(t *testing.T) {
 		authHeader string
 		wantViewer bool
 	}{
-		{name: "AC6 トークンがなければ匿名のまま実行される", authHeader: "", wantViewer: false},
-		{name: "AC6 無効なトークンなら匿名のまま実行される", authHeader: "Bearer not-a-token", wantViewer: false},
-		{name: "AC6 有効なトークンなら viewer が得られる", authHeader: "Bearer " + token, wantViewer: true},
+		{name: "トークンがなければ、匿名のまま実行される", authHeader: "", wantViewer: false},
+		{name: "無効なトークンでも、匿名のまま実行される", authHeader: "Bearer not-a-token", wantViewer: false},
+		{name: "有効なトークンなら、閲覧者(viewer)が得られる", authHeader: "Bearer " + token, wantViewer: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

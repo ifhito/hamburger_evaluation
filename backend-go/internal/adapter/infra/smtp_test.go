@@ -38,7 +38,7 @@ func newSMTPTestMailer(t *testing.T, srv *smtptest.Server, security, user, pass 
 var testMail = mailMessage{To: "a@example.com", Subject: "Confirm your email address", Body: "Please confirm:\n\nhttps://app.example.com/signup/confirm?token=abc\n\n.line starting with a dot\n"}
 
 // TestSMTPMailerModes は、3 つの接続の方式（暗黙の TLS・STARTTLS・認証なし）で、メールが
-// 届くことを、プロセス内の SMTP サーバーで確認する（AC15）。
+// 届くことを、プロセス内の SMTP サーバーで確認する。
 func TestSMTPMailerModes(t *testing.T) {
 	serverTLS, roots := smtptest.NewCert(t)
 	tests := []struct {
