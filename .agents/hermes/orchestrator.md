@@ -18,9 +18,15 @@ Procedure:
    skill (概要 / 関連 Issue / 変更内容 / テスト / レビュー観点 / 備考).
    Report the URL.
 5. Review the PR diff (2–3 relevant lenses). In Claude Code sessions the
-   battery also includes the code-review and ponytail-review skills; from
-   Hermes, run the reviewer pass and note the others as pending.
-6. Verify (V1): send merged, deduped findings to the verifier. Verdicts:
+   battery also includes the code-review and ponytail-review skills;
+   `/code-review` is mandatory there: run it before `gh pr ready` and leave
+   its summary (or the reason it could not run) as a PR comment; name the
+   worktree path in its args (it reviews the calling session's directory
+   otherwise). From
+   Hermes, run the reviewer pass, note the others as pending, and ask the
+   user to run `/code-review` by hand before the PR goes ready.
+6. Verify (V1): send merged, deduped findings (including the unverified
+   `/code-review` findings) to the verifier. Verdicts:
    CONFIRMED / FALSE_POSITIVE / UNCERTAIN with evidence + autoFixSafe.
 7. Triage (V2):
    - auto-fix: CONFIRMED + autoFixSafe → implementer immediately

@@ -14,8 +14,9 @@ metadata:
 
 ## 概要
 
-このリポジトリの `reviewer`/`implementer` エージェントを使って、現在の
-ワーキングツリーに対するレビュー → 修正 → 再レビューのサイクルを自動化する。
+このリポジトリの `reviewer`/`implementer` エージェントと、Claude Code の
+`/code-review`(Skill の `code-review`)を使って、現在のワーキングツリーに
+対するレビュー → 修正 → 再レビューのサイクルを自動化する。
 ループは、Critical/Warning の指摘が出ないラウンドが来たとき、または
 3 ラウンド経過で止まる。
 
@@ -32,10 +33,28 @@ metadata:
 Agent ツールでループを手動再実装しないこと。ラウンド上限と指摘スキーマの
 単一の source of truth はワークフローである。
 
+## `/code-review` の扱い
+
+- Review の段階は、`reviewer` に加えて、**1 ラウンド目に `/code-review` を必ず 1 回**
+  走らせる(`origin/main` との差分が対象。重いので 2 ラウンド目以降は `reviewer` だけ)。
+  `reviewer` は Skill ツールを持たないので、ワークフローが、Skill を呼べる別のエージェントに
+  任せる。`reviewer` 自身は `/code-review` を呼ばない(二重に呼ばない)。
+- `/code-review` の結果は「未検証」と明記される。`reviewer` の指摘と同じ path:line は 1 つに
+  まとめ、**必ず V1(`verifier`)に通す**。V1 を通らずに修正へ進めない。
+- **対象のディレクトリに注意**: `/code-review` は、呼んだセッションの作業ディレクトリ(主ディレクトリ)の
+  差分を見る(実測)。**`git worktree` で作業しているときは、`args` に `worktree: <絶対パス>` を含める**
+  (例: `args: "worktree: /Users/hotake/Documents/he-xxx"`)。含めないと、別の木(主ディレクトリの
+  未コミットの変更)を黙ってレビューする。ワークフローは、結果の指摘のファイルが対象の差分に
+  含まれるかを確かめ、違えば「別の木をレビューした」として未実行と扱う。
+- `/code-review` が使えない・失敗したときは、黙って飛ばさない。結果の `codeReview` に
+  `{ ran: false, reason }`、`notices` に「code-review 未実行(理由)」が入る。
+
 ## ワークフローが返った後
 
 日本語で報告する。ユーザーに見せるのは、ユーザーの判断が必要なものだけ:
 
+0. **最初に `codeReview` を確認する**。`ran: false` なら、`notices` の内容(未実行の理由)を
+   利用者に伝え、**手動で `/code-review` を実行するよう促す**(結果の要約は PR のコメントに残す)。
 1. **まず `userDecisions` を提示する**。P1 → P2 → P3 の順で、それぞれを
    選択肢・推奨・影響を添えた 1 つの判断質問として示す。冒頭は最大 5 件、
    あふれた分は付録へ。P1 は作業をブロックする。

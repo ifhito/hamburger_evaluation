@@ -490,3 +490,6 @@ pnpm run test
 - 無関係な未追跡ファイルを含めない。
 - commit の前に `git diff --check` または `git diff --cached --check` を実行する。
 - PR ブランチを push した後、`gh` が使える場合は `gh pr view` で PR を確認する。
+- PR を ready にする前に、`/code-review` を実行し(未検証の指摘は再現を確かめて対応)、
+  結果の要約(または実行できなかった理由)を PR のコメントに残す。オーケストレーターを
+  通さない実装でも同じ。
