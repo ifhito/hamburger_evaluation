@@ -206,7 +206,9 @@ func CalculateBurgerStat(burgerID string, facts []ReviewFact, now time.Time) Bur
 }
 
 // 統計の再計算は、書き込みと同じトランザクションで「再計算の依頼」を登録しておき、
-// バックグラウンドのワーカーがあとから実行する。次の型と規則は、その依頼と失敗の扱いを表す。
+// バックグラウンドのワーカーがあとから実行する。依頼は、DB の表(burger_stats_recalc_requests)に
+// 溜まる待ち行列(順番待ちの列)で、ワーカーが取り出して処理し、終えた依頼を消す。次の型と規則は、
+// その依頼と失敗の扱いを表す。
 
 const (
 	// recalcRetryBaseDelay は、再計算に 1 回失敗したときの、次の再試行までの待ち時間である。
@@ -215,12 +217,14 @@ const (
 	// recalcRetryMaxDelay は、再試行までの待ち時間の上限である。
 	recalcRetryMaxDelay = 5 * time.Minute
 	// MaxRecalcFailureReasonChars は、記録する失敗の理由の文字数の上限(Unicode のコードポイント数)である。
-	// DB の CHECK 制約 burger_stats_dirty_last_error_max_length(000010_create_burger_stats_dirty)と
+	// DB の CHECK 制約 burger_stats_recalc_requests_last_error_max_length(000010_create_burger_stats_recalc_requests)と
 	// 同じ値でなければならない。食い違いは db/migrations_test.go が検出する。
 	MaxRecalcFailureReasonChars = 500
 )
 
-// RecalcRequest は、統計の再計算を待っているバーガー 1 件の依頼である。
+// RecalcRequest は、統計の再計算を待っているバーガー 1 件の依頼である(待ち行列の 1 件)。
+// レビューの書き込みや退会が、書き込みと同じトランザクションで登録し、ワーカーが取り出して
+// 統計を計算し直す。同じバーガーの依頼は、待ち行列に 1 件だけあり、書き込みが続いても 1 件にまとまる。
 type RecalcRequest struct {
 	BurgerID string
 	// Version は、依頼が登録されるたびに、時間をまたいで単調に増える番号である。再計算を終えて

@@ -121,7 +121,7 @@ func TestReviewWritesDeferStatsIntegration(t *testing.T) {
 		t.Fatalf("他人のレビューの DELETE = %d (body %s), want 403", rec.Code, rec.Body)
 	}
 	var requests int
-	if err := conn.QueryRow(ctx, `SELECT count(*) FROM burger_stats_dirty`).Scan(&requests); err != nil || requests != 0 {
+	if err := conn.QueryRow(ctx, `SELECT count(*) FROM burger_stats_recalc_requests`).Scan(&requests); err != nil || requests != 0 {
 		t.Errorf("拒否された書き込みのあとの再計算の依頼 = %d 件 (エラー %v), want 0 件", requests, err)
 	}
 }

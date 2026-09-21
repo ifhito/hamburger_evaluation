@@ -14,7 +14,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
-// TestBurgerStatRepositoryRecalcRequests は、統計の再計算の依頼(burger_stats_dirty)の登録・比較つきの
+// TestBurgerStatRepositoryRecalcRequests は、統計の再計算の依頼(burger_stats_recalc_requests)の登録・比較つきの
 // 削除・失敗の記録を、実際の PostgreSQL に対して検証する。比較つきの削除は、「取り出したときの
 // 番号(version)と今の番号が同じときだけ消す」削除で、再計算の最中に入った新しい依頼を消さないための
 // ものである。TEST_DATABASE_URL がなければ、dbtest.New の内部で skip される。
@@ -68,7 +68,7 @@ func TestBurgerStatRepositoryRecalcRequests(t *testing.T) {
 		if got.Attempts != 0 || got.NextAttemptAt != nil || got.LastError != nil {
 			t.Errorf("登録を重ねた後の依頼 = %+v, want 失敗の記録が消えている", got)
 		}
-		if n := countRows(ctx, t, conn, "burger_stats_dirty"); n != 1 {
+		if n := countRows(ctx, t, conn, "burger_stats_recalc_requests"); n != 1 {
 			t.Errorf("行数 = %d, want 1", n)
 		}
 	})
@@ -79,7 +79,7 @@ func TestBurgerStatRepositoryRecalcRequests(t *testing.T) {
 		if err := repo.CreateBurgerStatRecalcRequest(ctx, uid.N(999)); err == nil {
 			t.Fatal("存在しないバーガーの登録が成功した")
 		}
-		if n := countRows(ctx, t, conn, "burger_stats_dirty"); n != 0 {
+		if n := countRows(ctx, t, conn, "burger_stats_recalc_requests"); n != 0 {
 			t.Errorf("行数 = %d, want 0", n)
 		}
 	})

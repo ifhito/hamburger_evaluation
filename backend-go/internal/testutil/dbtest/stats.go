@@ -42,7 +42,7 @@ func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerI
 	return s, true
 }
 
-// StoredRecalcRequest は、テストで読み戻した再計算の依頼(burger_stats_dirty の行)である。
+// StoredRecalcRequest は、テストで読み戻した再計算の依頼(burger_stats_recalc_requests の行)である。
 type StoredRecalcRequest struct {
 	Version       int64
 	Attempts      int
@@ -55,7 +55,7 @@ func FetchRecalcRequest(ctx context.Context, t *testing.T, conn *pgx.Conn, burge
 	t.Helper()
 	var r StoredRecalcRequest
 	err := conn.QueryRow(ctx,
-		`SELECT version, attempts, next_attempt_at, last_error FROM burger_stats_dirty WHERE burger_id = $1`, burgerID,
+		`SELECT version, attempts, next_attempt_at, last_error FROM burger_stats_recalc_requests WHERE burger_id = $1`, burgerID,
 	).Scan(&r.Version, &r.Attempts, &r.NextAttemptAt, &r.LastError)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StoredRecalcRequest{}, false

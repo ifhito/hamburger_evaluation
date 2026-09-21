@@ -83,7 +83,7 @@ func (r *BurgerStatsQuery) ListReviewedBurgerIDsByUser(ctx context.Context, user
 // なしか now 以前で、失敗の回数が maxAttempts に達していないものが対象である(達したものは
 // 打ち切りで、行は残るが、ここには現れない)。再計算の時期が古い順(すぐのものが先)に並べる。
 func (r *BurgerStatsQuery) ListDueRecalcRequests(ctx context.Context, now time.Time, maxAttempts, batch int) ([]domain.RecalcRequest, error) {
-	rows, err := r.q.ListDueBurgerStatsDirty(ctx, sqlcgen.ListDueBurgerStatsDirtyParams{
+	rows, err := r.q.ListDueBurgerStatsRecalcRequests(ctx, sqlcgen.ListDueBurgerStatsRecalcRequestsParams{
 		MaxAttempts: int32(maxAttempts),
 		Now:         pgtype.Timestamptz{Time: now, Valid: true},
 		Batch:       int32(batch),

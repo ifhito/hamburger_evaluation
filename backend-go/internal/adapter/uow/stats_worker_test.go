@@ -158,7 +158,7 @@ func TestStatsWorkerDeferredRecalculation(t *testing.T) {
 			lastVersion = req.Version
 		}
 		var requests int
-		if err := conn.QueryRow(ctx, `SELECT count(*) FROM burger_stats_dirty WHERE burger_id = $1`, burger).Scan(&requests); err != nil || requests != 1 {
+		if err := conn.QueryRow(ctx, `SELECT count(*) FROM burger_stats_recalc_requests WHERE burger_id = $1`, burger).Scan(&requests); err != nil || requests != 1 {
 			t.Fatalf("依頼の行数 = %d (エラー %v), want 1", requests, err)
 		}
 

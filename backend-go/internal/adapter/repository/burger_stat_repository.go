@@ -54,10 +54,10 @@ func (r *BurgerStatRepository) UpdateBurgerStat(ctx context.Context, stat domain
 	return nil
 }
 
-// CreateBurgerStatRecalcRequest は、burger の統計の再計算を依頼する（MarkBurgerStatsDirty。
+// CreateBurgerStatRecalcRequest は、burger の統計の再計算を依頼する（UpsertBurgerStatsRecalcRequest。
 // すでに依頼があれば version を進めて、失敗の記録を消す）。
 func (r *BurgerStatRepository) CreateBurgerStatRecalcRequest(ctx context.Context, burgerID string) error {
-	if err := r.q.MarkBurgerStatsDirty(ctx, burgerID); err != nil {
+	if err := r.q.UpsertBurgerStatsRecalcRequest(ctx, burgerID); err != nil {
 		return fmt.Errorf("create burger stat recalc request: %w", err)
 	}
 	return nil
@@ -66,7 +66,7 @@ func (r *BurgerStatRepository) CreateBurgerStatRecalcRequest(ctx context.Context
 // DiscardBurgerStatRecalcRequest は、取り出したときの version と一致する依頼だけを消し、
 // 消せたかどうかを返す。
 func (r *BurgerStatRepository) DiscardBurgerStatRecalcRequest(ctx context.Context, burgerID string, version int64) (bool, error) {
-	n, err := r.q.DeleteBurgerStatsDirtyIfVersion(ctx, sqlcgen.DeleteBurgerStatsDirtyIfVersionParams{
+	n, err := r.q.DeleteBurgerStatsRecalcRequestIfVersion(ctx, sqlcgen.DeleteBurgerStatsRecalcRequestIfVersionParams{
 		BurgerID: burgerID,
 		Version:  version,
 	})
@@ -79,7 +79,7 @@ func (r *BurgerStatRepository) DiscardBurgerStatRecalcRequest(ctx context.Contex
 // UpdateBurgerStatRecalcFailure は、取り出したときの version と一致する依頼だけに、再計算の失敗を
 // 記録し、記録できたかどうかを返す。
 func (r *BurgerStatRepository) UpdateBurgerStatRecalcFailure(ctx context.Context, burgerID string, version int64, failure domain.RecalcFailure) (bool, error) {
-	n, err := r.q.RecordBurgerStatsDirtyFailure(ctx, sqlcgen.RecordBurgerStatsDirtyFailureParams{
+	n, err := r.q.RecordBurgerStatsRecalcRequestFailure(ctx, sqlcgen.RecordBurgerStatsRecalcRequestFailureParams{
 		BurgerID:      burgerID,
 		Version:       version,
 		NextAttemptAt: pgtype.Timestamptz{Time: failure.NextAttemptAt, Valid: true},

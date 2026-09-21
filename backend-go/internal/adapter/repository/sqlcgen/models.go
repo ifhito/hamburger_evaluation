@@ -24,7 +24,7 @@ type BurgerStat struct {
 	CalculatedAt  pgtype.Timestamptz
 }
 
-type BurgerStatsDirty struct {
+type BurgerStatsRecalcRequest struct {
 	BurgerID      string
 	Version       int64
 	Attempts      int32

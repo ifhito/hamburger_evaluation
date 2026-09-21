@@ -40,7 +40,7 @@ func TestBurgerStatsQueryListDueRecalcRequests(t *testing.T) {
 			ids[s.name] = id
 			byID[id] = s.name
 			if _, err := conn.Exec(ctx,
-				`INSERT INTO burger_stats_dirty (burger_id, attempts, next_attempt_at) VALUES ($1, $2, $3)`,
+				`INSERT INTO burger_stats_recalc_requests (burger_id, attempts, next_attempt_at) VALUES ($1, $2, $3)`,
 				id, s.attempts, s.next); err != nil {
 				t.Fatalf("依頼の登録 %s: %v", s.name, err)
 			}
