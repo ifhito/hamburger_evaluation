@@ -1,0 +1,85 @@
+# 結合テスト専用の、隔離した環境。開発用のスタック(:8080 / :5173 / :5433)には触れない。
+#   ・ネットワークはこの compose の中だけ。ホストにはポートを公開しない
+#   ・API は専用のポート 8112 で動かす（ネットワーク内から http://api:8112 でつなぐ）
+#   ・DB は使い捨て(tmpfs)。seed の開発用データを入れる
+# 実行は scripts/integration.sh を使う（JWT_SECRET を乱数で作り、終わったら片付ける）。
+name: he-s38
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: hamburger_evaluation_it
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hamburger_evaluation_it"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: migrate/migrate:v4.18.1
+    volumes:
+      - ../backend-go/db/migrations:/migrations:ro
+    command:
+      - "-path"
+      - "/migrations"
+      - "-database"
+      - "postgres://postgres:password@db:5432/hamburger_evaluation_it?sslmode=disable"
+      - "up"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  seed:
+    build: ../backend-go
+    image: he-s38-backend-go
+    command: ["go", "run", "./cmd/seed"]
+    environment:
+      DATABASE_URL: postgres://postgres:password@db:5432/hamburger_evaluation_it?sslmode=disable
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  api:
+    build: ../backend-go
+    image: he-s38-backend-go
+    command: ["/tmp/api"]
+    environment:
+      PORT: "8112"
+      DATABASE_URL: postgres://postgres:password@db:5432/hamburger_evaluation_it?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?scripts/integration.sh から実行してください}
+      # signup の確認メールはこのテストでは使わない。起動に必要な値だけ入れる（送信先はない）。
+      SMTP_HOST: localhost
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+      MAIL_FROM: noreply@example.com
+      APP_BASE_URL: http://localhost:5173
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8112/up"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  test:
+    image: golang:1.25
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go_mod_cache:/go/pkg/mod
+    environment:
+      HAMBURGER_IT_API_URL: http://api:8112
+    command: ["go", "test", "-tags", "integration", "-count=1", "-v", "./..."]
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  go_mod_cache:
