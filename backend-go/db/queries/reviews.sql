@@ -73,7 +73,7 @@ WHERE r.id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL;
 -- name: ListUserKeptReviewBurgerIDs :many
 -- user の kept な review が対象とする、重複を除いた burger。S8 の
 -- user discard に伴う統計再計算のために使う。burger_id 昇順の ORDER BY は
--- 欠かせない。recalculateBurgerStats は各 burger を FOR UPDATE でロックし、
+-- 欠かせない。統計の再計算（usecase の BurgerStatsRecalculator）は各 burger を FOR UPDATE でロックし、
 -- 複数の burger を扱う呼び出し元はすべて burger_id の昇順でロックしなければ
 -- ならない。そうすれば、burger の集合が重なってもデッドロックしない。
 SELECT DISTINCT burger_id FROM reviews

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"math"
 	"time"
 )
@@ -173,4 +174,75 @@ func clampFloat(value, low, high float64) float64 {
 		return high
 	}
 	return value
+}
+
+// BurgerStat は、burger 1 件の導出された統計(kept な review の件数・平均・加重スコア・
+// 信頼度)と、それを計算した時刻である。burger_stats の 1 行に保存される。
+type BurgerStat struct {
+	BurgerID      int64
+	ReviewCount   int64
+	AverageRating float64
+	WeightedScore float64
+	Confidence    float64
+	CalculatedAt  time.Time
+}
+
+// CalculateBurgerStat は、burger の kept な review の facts から、now 時点の統計を計算する。
+// 永続化には触れない純粋な計算で、facts がゼロ件のときはゼロの統計になる
+// （Rails BurgerScore.empty）。CalculatedAt は、スコアの計算に使った now そのものである。
+func CalculateBurgerStat(burgerID int64, facts []ReviewFact, now time.Time) BurgerStat {
+	score := CalculateBurgerScore(facts, now)
+	return BurgerStat{
+		BurgerID:      burgerID,
+		ReviewCount:   int64(len(facts)),
+		AverageRating: AverageRating(facts),
+		WeightedScore: score.WeightedAverage,
+		Confidence:    score.Confidence,
+		CalculatedAt:  now,
+	}
+}
+
+// ---- repository の契約(実装は adapter/repository) ----
+
+// BurgerStatRepository は burger の統計の書き込みの契約である。domain が宣言し、呼び出すのは
+// domain のコード（書き込みオブジェクトの BurgerStats）だけで、usecase は呼ばない
+// （統計の元になる facts の読み取りは usecase の BurgerStatsQuery）。書き込み専用で、
+// 読み取りのメソッドは置かない。
+type BurgerStatRepository interface {
+	// LockBurgerStat は、burger の行を FOR UPDATE でロックし、burger ごとの統計の再計算を
+	// 直列化する。再計算は「全件を読んでから上書きする」処理なので、ロックがないと、並行する
+	// 2 つのトランザクションが、相手のコミット前の review が欠けた facts を読み、後の書き込みが
+	// 古い件数で統計を上書きする（lost update）。呼び出し側のトランザクションが終わるまで
+	// 保持される。トランザクションがすでに持っているロックの再取得は no-op である。
+	// 1 つのトランザクションで複数の burger をロックするときは、burger_id の昇順に呼ばなければ
+	// ならない（デッドロックの回避）。存在しない burger は、wrap されたエラーを返す。
+	// 値を返さず、行を変更もしない、書き込みの前段の排他制御である（読み取りではない）。
+	LockBurgerStat(ctx context.Context, burgerID int64) error
+	// UpdateBurgerStat は、burger_stats の行を stat の値で置き換える（行がなければ作る。upsert）。
+	UpdateBurgerStat(ctx context.Context, stat BurgerStat) error
+}
+
+// ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
+
+// BurgerStats は burger の統計の書き込みオブジェクトである。BurgerStatRepository を持つのは
+// この型だけで、usecase は repository に依存せず、統計の書き込みをここに任せる。統計の
+// 計算そのもの（CalculateBurgerStat）は純粋な規則で、facts の読み取りと、ロック・保存を
+// 組み合わせる再計算の手順は、トランザクションを持つ usecase が組み立てる。
+type BurgerStats struct {
+	repo BurgerStatRepository
+}
+
+// NewBurgerStats は repo を使う BurgerStats を返す。
+func NewBurgerStats(repo BurgerStatRepository) *BurgerStats {
+	return &BurgerStats{repo: repo}
+}
+
+// Lock は burger の統計の再計算を直列化するために、burger の行をロックする。
+func (s *BurgerStats) Lock(ctx context.Context, burgerID int64) error {
+	return s.repo.LockBurgerStat(ctx, burgerID)
+}
+
+// Save は、計算済みの統計を保存する（行がなければ作る）。
+func (s *BurgerStats) Save(ctx context.Context, stat BurgerStat) error {
+	return s.repo.UpdateBurgerStat(ctx, stat)
 }

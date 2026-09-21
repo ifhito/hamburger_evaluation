@@ -14,9 +14,11 @@ import (
 )
 
 // allowedPrefixes は、interface 名の接尾辞ごとに許されるメソッド名の接頭辞を表す。
+// Repository の Lock は、書き込みの前に行を排他ロックして直列化する操作である（burger の
+// 統計の再計算。値を返さず、行も変更しない、書き込みの前段の排他制御で、読み取りではない）。
 var allowedPrefixes = map[string][]string{
 	"Query":      {"Get", "List"},
-	"Repository": {"Create", "Update", "Discard"},
+	"Repository": {"Create", "Update", "Discard", "Lock"},
 }
 
 // checkNaming は、Go のソースに含まれる *Query / *Repository interface のメソッド名を
@@ -761,6 +763,8 @@ func TestPersistenceInterfaceNaming(t *testing.T) {
 		{"規約どおりなら違反なし", "package p\ntype XQuery interface{ GetX(); ListX() }\ntype XRepository interface{ CreateX(); UpdateX(); DiscardX() }", ""},
 		{"Repository に読み取りがあれば検出する", "package p\ntype XRepository interface{ CreateX(); GetX() }", "XRepository.GetX"},
 		{"Query に書き込みがあれば検出する", "package p\ntype XQuery interface{ GetX(); CreateX() }", "XQuery.CreateX"},
+		{"Repository の Lock は許す（書き込みの前段の排他制御）", "package p\ntype XRepository interface{ LockX(); UpdateX() }", ""},
+		{"Query に Lock があれば検出する", "package p\ntype XQuery interface{ GetX(); LockX() }", "XQuery.LockX"},
 		{"埋め込み interface は検出する", "package p\ntype XQuery interface{ GetX() }\ntype XRepository interface{ XQuery; CreateX() }", "XRepository"},
 		{"対象外の interface は無視する", "package p\ntype PasswordHasher interface{ Hash() }", ""},
 	}
@@ -982,6 +986,105 @@ func (y Y) N() int { return y.Xs }`, ""},
 			}
 			if got := strings.Join(v, "\n"); (tc.want == "") != (got == "") || !strings.Contains(got, tc.want) {
 				t.Errorf("違反 = %q, 期待 = %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// checkForbiddenSelectors は、Go のソースが、forbidden に挙げた "pkg.Name" の形の参照
+// （例: domain.CalculateBurgerStat、time.Now）を含まないことを確かめ、違反の説明を返す。
+// パッケージ名は識別子の名前で判定するので、フィールド（row.AverageRating など）には反応しない。
+func checkForbiddenSelectors(src string, forbidden []string) ([]string, error) {
+	f, err := parser.ParseFile(token.NewFileSet(), "src.go", src, 0)
+	if err != nil {
+		return nil, err
+	}
+	var violations []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if id, ok := sel.X.(*ast.Ident); ok {
+			if name := id.Name + "." + sel.Sel.Name; slices.Contains(forbidden, name) {
+				violations = append(violations, name+" を参照している")
+			}
+		}
+		return true
+	})
+	return violations, nil
+}
+
+// TestRecalculationLivesInUsecase は、統計の再計算の手順が usecase にあることを固定する（S17 AC1・AC5）。
+//   - adapter（repository・query・uow・handler）は、domain の統計の計算を呼ばない。adapter が持つのは、
+//     SQL の読み書きとトランザクションの管理だけである
+//   - 再計算に関わる usecase（unit_of_work.go・reviews.go・users.go）は、現在時刻を Clock から得て、
+//     time.Now を直接呼ばない（テストで時刻を固定できる）
+func TestRecalculationLivesInUsecase(t *testing.T) {
+	calcs := []string{"domain.CalculateBurgerScore", "domain.CalculateBurgerStat", "domain.AverageRating", "domain.ReviewerTrustScore"}
+	t.Run("実際の adapter は domain の統計の計算を呼ばない", func(t *testing.T) {
+		checked := 0
+		for _, dir := range []string{"../adapter/repository", "../adapter/query", "../adapter/uow", "../adapter/handler"} {
+			for name, src := range productionSources(t, dir) {
+				checked++
+				v, err := checkForbiddenSelectors(src, calcs)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				for _, msg := range v {
+					t.Errorf("%s: %s (再計算は usecase の BurgerStatsRecalculator が行う)", name, msg)
+				}
+			}
+		}
+		// 空振りで通らないよう、検査したファイルがあることも確かめる。
+		if checked < 10 {
+			t.Errorf("検査したファイルは %d 個しかない (10 個以上を期待)", checked)
+		}
+	})
+
+	// 再計算に関わる usecase(再計算の手順と、それを呼ぶ review・user の use case)だけを対象にする。
+	// signup の冪等キーの時間の窓(signup.go)は、別の時計(SignupConfig.Now)を持つ。
+	t.Run("再計算に関わる usecase は time.Now を直接呼ばない", func(t *testing.T) {
+		recalcFiles := map[string]bool{"unit_of_work.go": true, "reviews.go": true, "users.go": true}
+		checked := 0
+		for name, src := range productionSources(t, ".") {
+			if !recalcFiles[filepath.Base(name)] {
+				continue
+			}
+			checked++
+			v, err := checkForbiddenSelectors(src, []string{"time.Now"})
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			for _, msg := range v {
+				t.Errorf("%s: %s (現在時刻は usecase の Clock から得る)", name, msg)
+			}
+		}
+		if checked != len(recalcFiles) {
+			t.Errorf("検査したファイルは %d 個 (%d 個を期待)", checked, len(recalcFiles))
+		}
+	})
+
+	cases := []struct {
+		name, src, want string // want は期待する違反の説明の一部 (空なら違反なし)
+	}{
+		{"domain の計算の呼び出しを検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.CalculateBurgerScore(nil, t) }", "domain.CalculateBurgerScore"},
+		{"AverageRating の呼び出しを検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.AverageRating(nil) }", "domain.AverageRating"},
+		{"sqlc の行のフィールドは検出しない", "package p\nfunc f(row R) float64 { return row.AverageRating }", ""},
+		{"domain の型の参照は検出しない", "package p\nimport \"x/domain\"\nfunc f() domain.ReviewFact { return domain.ReviewFact{} }", ""},
+		{"time.Now の呼び出しを検出する", "package p\nimport \"time\"\nfunc f() { _ = time.Now() }", "time.Now"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := checkForbiddenSelectors(tc.src, append(calcs, "time.Now"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch {
+			case tc.want == "" && len(v) > 0:
+				t.Errorf("違反なしのはずが検出された: %v", v)
+			case tc.want != "" && !slices.ContainsFunc(v, func(m string) bool { return strings.Contains(m, tc.want) }):
+				t.Errorf("違反 %q が検出されなかった: %v", tc.want, v)
 			}
 		})
 	}

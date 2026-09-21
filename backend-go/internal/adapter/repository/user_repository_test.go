@@ -99,9 +99,9 @@ func TestUserRepositoryManagement(t *testing.T) {
 	}
 
 	// active な shop 1 つが 2 つの burger を提供している："shared" は victim と
-	// alice の両方が review し、"solo" は victim だけが review した。victim の
-	// discard 後、shared は alice の review だけに減り、solo は stats がゼロの
-	// 行にならなければならない。
+	// alice の両方が review し、"solo" は victim だけが review した。discard 後の
+	// stats の再計算と、読み取り経路の見え方は、トランザクションを持つ usecase の
+	// UnitOfWork のテスト（adapter/uow）が扱う。
 	shop := dbtest.InsertRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
@@ -194,10 +194,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("DiscardUser は user に discard 時刻を刻み、その user が review した burger の stats を再計算する", func(t *testing.T) {
-		if got := requireConsistentStats(ctx, t, conn, shared); got.ReviewCount != 2 {
-			t.Fatalf("shared stats before discard = %+v, want count 2", got)
-		}
+	t.Run("DiscardUser は user に discard 時刻を刻み、review には触れない", func(t *testing.T) {
 		if err := repo.DiscardUser(ctx, victim); err != nil {
 			t.Fatalf("DiscardUser returned error: %v", err)
 		}
@@ -217,18 +214,6 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 		if keptReviews != 2 {
 			t.Errorf("victim kept reviews = %d, want 2 (reviews must not be discarded)", keptReviews)
-		}
-		// shared は alice の review だけに減る。alice の review は
-		// 影響を受けない。
-		sharedStats := requireConsistentStats(ctx, t, conn, shared)
-		if sharedStats.ReviewCount != 1 || sharedStats.AverageRating != 4.0 {
-			t.Errorf("shared stats after discard = %+v, want only alice's rating 4", sharedStats)
-		}
-		// solo は、victim だけが review したので、ゼロの行になる。
-		soloStats := requireConsistentStats(ctx, t, conn, solo)
-		want := storedBurgerStats{ReviewCount: 0, AverageRating: 0.0, WeightedScore: 0.0, Confidence: 0.0, CalculatedAt: soloStats.CalculatedAt}
-		if soloStats != want {
-			t.Errorf("solo stats after discard = %+v, want the zero row", soloStats)
 		}
 	})
 

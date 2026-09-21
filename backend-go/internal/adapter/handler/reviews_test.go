@@ -172,9 +172,9 @@ func (f *reviewStoreFake) CreateReview(_ context.Context, review domain.Review) 
 	return review, nil
 }
 
-func (f *reviewStoreFake) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
+func (f *reviewStoreFake) CreateShopBurger(_ context.Context, shopID int64, burgerName string) (domain.ShopReviewBurger, error) {
 	if f.err != nil {
-		return domain.Review{}, domain.ShopReviewBurger{}, f.err
+		return domain.ShopReviewBurger{}, f.err
 	}
 	var burger domain.ShopReviewBurger
 	found := false
@@ -193,12 +193,7 @@ func (f *reviewStoreFake) CreateReviewForNamedBurger(ctx context.Context, shopID
 		f.burgers[next] = burger
 		f.links[shopID] = append(f.links[shopID], next)
 	}
-	review.BurgerID = burger.ID
-	created, err := f.CreateReview(ctx, review)
-	if err != nil {
-		return domain.Review{}, domain.ShopReviewBurger{}, err
-	}
-	return created, burger, nil
+	return burger, nil
 }
 
 func (f *reviewStoreFake) UpdateReviewContent(_ context.Context, id int64, rating int, comment string) (domain.Review, error) {
@@ -309,8 +304,8 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewStoreFake) (router http.Han
 	photoDir = t.TempDir()
 	shopRepo := &shopStoreFake{}
 	router = handler.NewRouter(okPinger, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
-		usecase.NewReviews(repo, domain.NewReviews(repo), storage.NewDisk(photoDir, "/photos")),
-		usecase.NewUsers(users, domain.NewUsers(users), hasherFake{}), handler.PhotoFileServer(photoDir))
+		reviewsUsecase(repo, storage.NewDisk(photoDir, "/photos")),
+		usersUsecase(users, hasherFake{}), handler.PhotoFileServer(photoDir))
 	return router, photoDir, token(alice.ID), token(bob.ID), token(admin.ID)
 }
 

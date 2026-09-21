@@ -18,6 +18,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uowtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -179,8 +180,8 @@ func newSignupKitWithHasher(t *testing.T, hasher usecase.PasswordHasher) *signup
 	reviewRepo := newReviewStoreFake()
 	shopRepo := &shopStoreFake{}
 	router := handler.NewRouter(okPinger, auth, signups, usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
-		usecase.NewReviews(reviewRepo, domain.NewReviews(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(users, domain.NewUsers(users), hasher), nil)
+		reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(users, domain.NewUsers(users), &uowtest.UoW{Users: users}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), hasher), nil)
 	return &signupKit{router: router, users: users, store: store, mailer: mailer}
 }
 

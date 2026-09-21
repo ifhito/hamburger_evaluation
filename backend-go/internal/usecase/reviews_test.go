@@ -58,11 +58,11 @@ func (f *fakeReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID in
 // である。未設定の振る舞いは panic するので、想定外の呼び出し、特にテスト対象の
 // フローの外での書き込みに対して、テストは fail-loud する。
 type fakeReviewRepo struct {
-	createReview               func(ctx context.Context, review domain.Review) (domain.Review, error)
-	createReviewForNamedBurger func(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error)
-	updateReviewContent        func(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
-	updateReviewContentAndKey  func(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error)
-	discardReview              func(ctx context.Context, id int64) error
+	createReview              func(ctx context.Context, review domain.Review) (domain.Review, error)
+	createShopBurger          func(ctx context.Context, shopID int64, burgerName string) (domain.ShopReviewBurger, error)
+	updateReviewContent       func(ctx context.Context, id int64, rating int, comment string) (domain.Review, error)
+	updateReviewContentAndKey func(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error)
+	discardReview             func(ctx context.Context, id int64) error
 }
 
 func (f *fakeReviewRepo) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
@@ -72,11 +72,11 @@ func (f *fakeReviewRepo) CreateReview(ctx context.Context, review domain.Review)
 	return f.createReview(ctx, review)
 }
 
-func (f *fakeReviewRepo) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
-	if f.createReviewForNamedBurger == nil {
-		panic("unexpected CreateReviewForNamedBurger call")
+func (f *fakeReviewRepo) CreateShopBurger(ctx context.Context, shopID int64, burgerName string) (domain.ShopReviewBurger, error) {
+	if f.createShopBurger == nil {
+		panic("unexpected CreateShopBurger call")
 	}
-	return f.createReviewForNamedBurger(ctx, shopID, burgerName, review)
+	return f.createShopBurger(ctx, shopID, burgerName)
 }
 
 func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error) {
@@ -325,13 +325,15 @@ func TestReviewsCreate(t *testing.T) {
 		var gotName string
 		var gotReview domain.Review
 		query := &fakeReviewQuery{getShop: getShop} // getShopBurger は未設定：呼び出しは panic する
-		// createReview は未設定：呼び出しは panic する
 		repo := &fakeReviewRepo{
-			createReviewForNamedBurger: func(_ context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
-				gotShopID, gotName, gotReview = shopID, burgerName, review
+			createShopBurger: func(_ context.Context, shopID int64, burgerName string) (domain.ShopReviewBurger, error) {
+				gotShopID, gotName = shopID, burgerName
+				return smash, nil
+			},
+			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
+				gotReview = review
 				review.ID = 44
-				review.BurgerID = smash.ID
-				return review, smash, nil
+				return review, nil
 			},
 		}
 		// name は trim されないまま repository に届く（Rails は決して
@@ -343,8 +345,8 @@ func TestReviewsCreate(t *testing.T) {
 		if gotShopID != activeShop.ID || gotName != " Smash " {
 			t.Errorf("repo got shop %d name %q, want %d %q", gotShopID, gotName, activeShop.ID, " Smash ")
 		}
-		if gotReview.AuthorID != bob.ID || gotReview.Rating != 4 {
-			t.Errorf("repo got review %+v, want author %s rating 4", gotReview, bob.ID)
+		if gotReview.AuthorID != bob.ID || gotReview.Rating != 4 || gotReview.BurgerID != smash.ID {
+			t.Errorf("repo got review %+v, want author %s rating 4 for the resolved burger %d", gotReview, bob.ID, smash.ID)
 		}
 		if got.ID != 44 || got.BurgerID != smash.ID {
 			t.Errorf("detail review = %+v, want id 44 for burger %d", got.Review, smash.ID)
@@ -356,7 +358,7 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("正の burger_id は burger_name より優先される", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
-		// createReviewForNamedBurger は未設定：呼び出しは panic する
+		// createShopBurger は未設定：呼び出しは panic する
 		repo := &fakeReviewRepo{
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 				review.ID = 45
@@ -391,7 +393,7 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("burger_name 経由では書き込みの前に内容を validate する", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop}
-		repo := &fakeReviewRepo{} // createReviewForNamedBurger は未設定：呼び出しは panic する
+		repo := &fakeReviewRepo{} // createShopBurger は未設定：呼び出しは panic する
 		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, 0, "Smash", 0, " ", nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {

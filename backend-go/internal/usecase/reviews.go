@@ -69,23 +69,25 @@ type ReviewListFilter struct {
 
 // Reviews は review の use case を実装する。公開フィードと詳細、および
 // author に限定された create/edit/delete であり、review ごとに任意で 1 枚の
-// 写真を photos 経由で保存する（S10）。読み取りは query、書き込みは domain の
-// 書き込みオブジェクト（domain.Reviews）だけを通し、repository には依存しない。
+// 写真を photos 経由で保存する（S10）。読み取りは query、書き込みは UnitOfWork の中で
+// domain の書き込みオブジェクトを通し、repository には依存しない。review の書き込みと
+// burger の統計の再計算は、1 つの UnitOfWork.Do（同一トランザクション）の中で組み立てる。
 type Reviews struct {
-	query   ReviewQuery
-	reviews *domain.Reviews
-	photos  PhotoStorage
+	query  ReviewQuery
+	uow    UnitOfWork
+	recalc *BurgerStatsRecalculator
+	photos PhotoStorage
 }
 
 // NewReviews は review の use case を配線する。photos は non-nil でなければ
 // ならない（本番では disk か S3、テストでは fake）。どのリクエスト経路も
 // それを dereference しうる（photoURL、deletePhotoBestEffort）ので、nil の
 // storage は、リクエストの途中で panic するのではなく、ここで fail-loud する。
-func NewReviews(query ReviewQuery, reviews *domain.Reviews, photos PhotoStorage) *Reviews {
+func NewReviews(query ReviewQuery, uow UnitOfWork, recalc *BurgerStatsRecalculator, photos PhotoStorage) *Reviews {
 	if photos == nil {
 		panic("usecase.NewReviews: nil PhotoStorage")
 	}
-	return &Reviews{query: query, reviews: reviews, photos: photos}
+	return &Reviews{query: query, uow: uow, recalc: recalc, photos: photos}
 }
 
 // List は、filter で絞り込んだ公開 review フィードを返す。ページネーションは
@@ -128,7 +130,9 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id int64) (domai
 // いない名前で shop の burger を find-or-create する（Rails parity、
 // S6 P3-1）。どちらでもない場合は validation の失敗（422）であり、黙って
 // デフォルトを使うことは決してない。レスポンスの detail は、viewer と、
-// 存在確認のために解決した burger から組み立てる。再取得はしない。nil でない
+// 存在確認のために解決した burger から組み立てる。再取得はしない。書き込み（名前の burger の
+// find-or-create を含む）と burger の統計の再計算は、1 つの UnitOfWork.Do の中で行うので、
+// どの段階で失敗しても、孤立した burger やリンクが commit されることはない。nil でない
 // upload（handler で validate 済み/正規化済み、S10）は、insert の前に新しい
 // ランダムな key で保存される。その後 insert が失敗した場合は、アップロード
 // したばかりの blob を best-effort で削除するので、リクエストより長く残る
@@ -159,11 +163,29 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 		return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
 	}
 	var created domain.Review
-	if burgerID > 0 {
-		created, err = s.reviews.Create(ctx, review)
-	} else {
-		created, burger, err = s.reviews.CreateForNamedBurger(ctx, shopID, burgerName, review)
-	}
+	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
+		if burgerID <= 0 {
+			// 名前の経路: burger をこのトランザクションの中で find-or-create する。
+			// 返る burger は、insert 前に保存されていた stats を持つ。
+			var err error
+			if burger, err = tx.Reviews.CreateShopBurger(ctx, shopID, burgerName); err != nil {
+				return err
+			}
+			review.BurgerID = burger.ID
+		}
+		// burger のロックは insert の「前」に取る。insert の FK チェックが burgers 行に
+		// KEY SHARE ロックを取り、その後でそれを FOR UPDATE に昇格させると、同時に走る
+		// 2 つの creator がデッドロックしうるからである。先に取っておけば、再計算の中の
+		// ロックは、コストのかからない再取得になる（行ロックはトランザクションが所有する）。
+		if err := tx.BurgerStats.Lock(ctx, review.BurgerID); err != nil {
+			return err
+		}
+		var err error
+		if created, err = tx.Reviews.Create(ctx, review); err != nil {
+			return err
+		}
+		return s.recalc.Recalculate(ctx, tx, created.BurgerID)
+	})
 	if err != nil {
 		s.deletePhotoBestEffort(ctx, review.PhotoKey)
 		return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
@@ -206,17 +228,29 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
 	var updated domain.Review
-	if newKey != nil {
-		if updated, err = s.reviews.UpdateContentAndPhotoKey(ctx, id, rating, comment, newKey); err != nil {
-			s.deletePhotoBestEffort(ctx, newKey)
-			return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
+	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
+		var err error
+		if newKey != nil {
+			updated, err = tx.Reviews.UpdateContentAndPhotoKey(ctx, id, rating, comment, newKey)
+		} else {
+			updated, err = tx.Reviews.UpdateContent(ctx, id, rating, comment)
 		}
+		if err != nil {
+			return err
+		}
+		return s.recalc.Recalculate(ctx, tx, updated.BurgerID)
+	})
+	if err != nil {
+		if newKey != nil {
+			s.deletePhotoBestEffort(ctx, newKey)
+		}
+		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
+	}
+	if newKey != nil {
 		// 古い blob が参照されなくなるのは、DB が新しい key を指すように
 		// なった今になってからである。それを失っても、漏れたファイルに
 		// なるだけで、review が壊れることはない。
 		s.deletePhotoBestEffort(ctx, detail.PhotoKey)
-	} else if updated, err = s.reviews.UpdateContent(ctx, id, rating, comment); err != nil {
-		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
 	detail.Review = updated
 	detail.PhotoURL = s.photoURL(updated.PhotoKey)
@@ -236,7 +270,13 @@ func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) erro
 	if !detail.CanBeModifiedBy(viewer) {
 		return domain.ErrForbidden
 	}
-	if err := s.reviews.Discard(ctx, id); err != nil {
+	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
+		if err := tx.Reviews.Discard(ctx, id); err != nil {
+			return err
+		}
+		return s.recalc.Recalculate(ctx, tx, detail.BurgerID)
+	})
+	if err != nil {
 		return fmt.Errorf("delete review: %w", err)
 	}
 	s.deletePhotoBestEffort(ctx, detail.PhotoKey)
