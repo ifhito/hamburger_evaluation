@@ -3,7 +3,7 @@ name: pr-self-review
 description: PR を準備するときに使う。人間に依頼する前にスコープを絞ったセルフレビューを実行する。
 allowed-tools: [Read, Grep, Glob, Bash(git status:*), Bash(git diff:*)]
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

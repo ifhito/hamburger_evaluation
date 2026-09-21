@@ -2,7 +2,7 @@
 name: review-fix
 description: 未コミットの変更を reviewer エージェントでレビューし、Critical/Warning の指摘を implementer エージェントで自動修正し、クリーンになるまで再レビューする。コミット前や、ユーザーが「レビューして直して」と頼んだときに使う。
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

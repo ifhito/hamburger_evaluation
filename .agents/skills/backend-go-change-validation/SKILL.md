@@ -3,7 +3,7 @@ name: backend-go-change-validation
 description: backend-go/ 配下の Go API の挙動が変わったときに使う。フォーマット、vet、ビルド、テストを検証する。
 allowed-tools: [Read, Grep, Glob, Bash(go:*), Bash(gofmt:*), Bash(sqlc:*), Bash(docker compose run:*)]
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

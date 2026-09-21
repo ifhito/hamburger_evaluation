@@ -271,14 +271,14 @@ func TestLoadConfigMail(t *testing.T) {
 			"SMTP_SECURITY": "tls",
 			"SMTP_USER":     "resend",
 			"SMTP_PASSWORD": "test-only-api-key",
-			"MAIL_FROM":     "Hamburger <noreply@example.com>",
+			"MAIL_FROM":     "BurgerStack <noreply@example.com>",
 			"APP_BASE_URL":  "http://localhost:5173/",
 		})
 		if err != nil {
 			t.Fatalf("LoadConfig returned error: %v", err)
 		}
 		if cfg.SMTPPort != 465 || cfg.SMTPSecurity != "tls" || cfg.SMTPUser != "resend" || cfg.SMTPPassword != "test-only-api-key" ||
-			cfg.MailFrom != "Hamburger <noreply@example.com>" || cfg.AppBaseURL != "http://localhost:5173" {
+			cfg.MailFrom != "BurgerStack <noreply@example.com>" || cfg.AppBaseURL != "http://localhost:5173" {
 			t.Errorf("読み込んだ値が違う: %+v", cfg)
 		}
 	})
