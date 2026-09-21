@@ -64,7 +64,7 @@ export default function UserDetailPage() {
         </div>
       )}
 
-      {/* 許可したアプリの一覧は、本人のプロフィールにだけ出す(本人かどうかは backend が返す canEdit で決める) */}
+      {/* Google の連携と、許可したアプリの一覧は、本人のプロフィールにだけ出す(本人かどうかは backend が返す canEdit で決める) */}
       {user?.canEdit && authUser && <GoogleConnection viewerId={authUser.id} />}
       {user?.canEdit && authUser && <ConnectedApps viewerId={authUser.id} />}
 
