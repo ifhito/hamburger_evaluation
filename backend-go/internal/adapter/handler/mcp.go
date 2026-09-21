@@ -41,6 +41,10 @@ type MCPConfig struct {
 	Resource string
 	// Issuer は、トークンを発行する認可サーバーの URL である。
 	Issuer string
+	// AllowedOrigins は、受け付ける Origin(ブラウザが要求に付ける要求元。"scheme://host[:port]")の一覧である。
+	// DNS の付け替え攻撃への対策として、Origin がある要求は、この一覧にあるものだけを通す。Origin のない要求
+	// (ブラウザ以外のクライアント)は、一覧に関係なく通す。domain.NormalizeOrigin で正規化して比べる。
+	AllowedOrigins []string
 }
 
 // MCPServer は、リモートの MCP サーバーである。認証は、OAuth のアクセストークン(宛先・持ち主・範囲の
@@ -57,6 +61,8 @@ type MCPServer struct {
 	metadataPath string
 	metadata     http.Handler
 	mcp          http.Handler
+	// allowedOrigins は、正規化した、受け付ける Origin の集合である。
+	allowedOrigins map[string]struct{}
 }
 
 // NewMCPServer は、リモートの MCP サーバーを組み立てる。cfg.Resource が、path を持つ絶対 URL でなければ、
@@ -70,7 +76,14 @@ func NewMCPServer(tokens *usecase.OAuthAccessTokens, shops *usecase.Shops, revie
 	for _, sc := range domain.OAuthScopes() {
 		scopes = append(scopes, sc.Name)
 	}
-	m := &MCPServer{tokens: tokens, shops: shops, reviews: reviews, users: users, cfg: cfg}
+	m := &MCPServer{tokens: tokens, shops: shops, reviews: reviews, users: users, cfg: cfg, allowedOrigins: map[string]struct{}{}}
+	for _, raw := range cfg.AllowedOrigins {
+		origin, err := domain.NormalizeOrigin(raw)
+		if err != nil {
+			return nil, fmt.Errorf("mcp allowed origin %q is invalid: %w", raw, err)
+		}
+		m.allowedOrigins[origin] = struct{}{}
+	}
 	m.metadataPath = protectedResourceMetadataRoot + resource.Path
 	m.metadataURL = resource.Scheme + "://" + resource.Host + m.metadataPath
 	m.metadata = auth.ProtectedResourceMetadataHandler(&oauthex.ProtectedResourceMetadata{
@@ -168,11 +181,39 @@ func (m *MCPServer) challenge(errCode, scope string) string {
 	return "Bearer " + strings.Join(parts, ", ")
 }
 
+// originAllowed は、要求の Origin ヘッダーを、受け付けてよいかを返す。ヘッダーがなければ、ブラウザ以外の
+// クライアント(Claude Code など)なので、受け付ける。あれば、正規化した値が、許可の一覧にある(scheme・host・
+// port が完全一致する)ときだけ受け付ける。ヘッダーが複数ある・空・"null"・不正な形は、受け付けない。
+func (m *MCPServer) originAllowed(r *http.Request) bool {
+	values := r.Header.Values("Origin")
+	if len(values) == 0 {
+		return true
+	}
+	if len(values) > 1 {
+		return false
+	}
+	origin, err := domain.NormalizeOrigin(values[0])
+	if err != nil {
+		return false
+	}
+	_, ok := m.allowedOrigins[origin]
+	return ok
+}
+
 // HandleMCP は、POST /mcp を処理する。認証(宛先 → 持ち主 → 範囲)を通った利用者にだけ、MCP のプロトコルを
 // 進める。認証の判断は usecase にあり、ここではそれを HTTP の応答(401・403)と WWW-Authenticate に
 // 写すだけである。範囲は、呼ぶツールごとに決まる(読み取りのツールは読み取り、書き込みのツールは書き込み)
 // ので、本文を先に読む(本文の大きさは、全体の上限で抑えられている)。
 func (m *MCPServer) HandleMCP(w http.ResponseWriter, r *http.Request) {
+	// Origin の検証は、認証より前に行う(MCP の仕様は、すべての接続で検証し、不正なら 403 とする)。DNS の
+	// 付け替え攻撃では、攻撃者のページが、利用者の手元のサーバーへ、ブラウザ経由で要求を送る。トークンを持たない
+	// 要求は、認証で 401 になるが、認証の前で断れば、トークンの確認にも、本文の読み取りにも進ませない。理由の
+	// 詳細は返さない。
+	if !m.originAllowed(r) {
+		log.Printf("mcp: rejected a request whose Origin is not allowed: %.100q", r.Header.Get("Origin"))
+		writeError(w, http.StatusForbidden, forbiddenMessage)
+		return
+	}
 	token, ok := bearerToken(r)
 	if !ok {
 		w.Header().Set("WWW-Authenticate", m.challenge("", ""))

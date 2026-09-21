@@ -87,7 +87,7 @@ func newMCPE2E(t *testing.T) *mcpE2E {
 	}
 	e.grants = domain.NewOAuthGrants(repository.NewOAuthGrantRepository(pool))
 	mcpServer, err := handler.NewMCPServer(usecase.NewOAuthAccessTokens(e.oauth, userQuery, e.resource), shops, reviews, users,
-		handler.MCPConfig{Resource: e.resource, Issuer: e.url})
+		handler.MCPConfig{Resource: e.resource, Issuer: e.url, AllowedOrigins: []string{e.url}})
 	if err != nil {
 		t.Fatalf("new mcp server: %v", err)
 	}

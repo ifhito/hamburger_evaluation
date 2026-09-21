@@ -165,7 +165,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		mcpServer, err := handler.NewMCPServer(
 			usecase.NewOAuthAccessTokens(oauthServer, userQuery, cfg.OAuth.Resource),
 			shops, reviews, users,
-			handler.MCPConfig{Resource: cfg.OAuth.Resource, Issuer: cfg.OAuth.Issuer},
+			handler.MCPConfig{Resource: cfg.OAuth.Resource, Issuer: cfg.OAuth.Issuer, AllowedOrigins: cfg.OAuth.MCPAllowedOrigins},
 		)
 		if err != nil {
 			return fmt.Errorf("mcp server: %w", err)

@@ -29,11 +29,14 @@ type fakeIntrospector struct {
 	mu     sync.Mutex
 	tokens map[string]domain.OAuthAccessToken
 	err    error
+	// calls は、トークンを確かめた回数である。認証より前に断る要求が、トークンの確認に進んでいないことを確かめる。
+	calls int
 }
 
 func (f *fakeIntrospector) IntrospectAccessToken(_ context.Context, raw string) (domain.OAuthAccessToken, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
 	if f.err != nil {
 		return domain.OAuthAccessToken{}, f.err
 	}
@@ -93,7 +96,7 @@ func newMCPKit(t *testing.T) *mcpKit {
 	reviews := reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos"))
 	usersUC := usersUsecase(users, hasherFake{})
 	mcpServer, err := handler.NewMCPServer(usecase.NewOAuthAccessTokens(k.introspect, users, k.resource), shops, reviews, usersUC,
-		handler.MCPConfig{Resource: k.resource, Issuer: k.issuer})
+		handler.MCPConfig{Resource: k.resource, Issuer: k.issuer, AllowedOrigins: []string{k.url, trustedOrigin, portedOrigin}})
 	if err != nil {
 		t.Fatalf("new mcp server: %v", err)
 	}
@@ -124,8 +127,37 @@ const (
 	writeScope = domain.OAuthScopeWrite
 )
 
+// テストで許可する、サーバー自身の Origin のほかの Origin である(実際には接続しない)。trustedOrigin は既定の
+// ポート(443)、portedOrigin は 844 番のポートを持つ。どちらも、後ろに文字を足した別の Origin(前方一致で
+// 通ってしまうもの)を、不許可の例として作れる形にしている。
+const (
+	trustedOrigin = "https://trusted.example"
+	portedOrigin  = "https://ports.example:844"
+)
+
 // rpc は、token つきの生の JSON-RPC の要求を /mcp に送り、応答と本文を返す。token が空なら、ヘッダーを付けない。
+// Origin ヘッダーは付けない(ブラウザ以外のクライアント)。
 func (k *mcpKit) rpc(t *testing.T, token, body string) (*http.Response, string) {
+	t.Helper()
+	return k.rpcWith(t, token, body, nil, "")
+}
+
+// rpcWith は rpc の派生で、ヘッダー(headers)と、Host(host。空なら既定)を指定できる。値が空文字のヘッダーは、
+// 空の値のまま送る。同じ名前のヘッダーを複数付けるときは、rpcRequest で作った要求に Header.Add して、do で送る。
+func (k *mcpKit) rpcWith(t *testing.T, token, body string, headers map[string]string, host string) (*http.Response, string) {
+	t.Helper()
+	req := k.rpcRequest(t, token, body)
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
+	if host != "" {
+		req.Host = host
+	}
+	return k.do(t, req)
+}
+
+// rpcRequest は、/mcp への JSON-RPC の要求(送る前のもの)を作る。
+func (k *mcpKit) rpcRequest(t *testing.T, token, body string) *http.Request {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, k.resource, strings.NewReader(body))
 	if err != nil {
@@ -136,6 +168,11 @@ func (k *mcpKit) rpc(t *testing.T, token, body string) (*http.Response, string) 
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	return req
+}
+
+func (k *mcpKit) do(t *testing.T, req *http.Request) (*http.Response, string) {
+	t.Helper()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("post /mcp: %v", err)
@@ -379,6 +416,145 @@ func TestMCPAuthentication(t *testing.T) {
 	})
 }
 
+// ---- Origin の検証(DNS の付け替え攻撃への対策) ----
+
+// forbiddenBody は、Origin を断るときの、決まった本文である(理由の詳細は返さない)。
+const forbiddenBody = `{"error":"Forbidden"}`
+
+func TestMCPOriginValidation(t *testing.T) {
+	t.Run("Origin がない要求(ブラウザ以外のクライアント)は、許可の一覧に関係なく通る", func(t *testing.T) {
+		k := newMCPKit(t)
+		if resp, body := k.rpc(t, k.token(k.alice, readScope), rpcToolsList); resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body %s)", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("許可の一覧にある Origin は通る(大文字小文字と、既定のポートの書き方の違いは、同じ Origin として扱う)", func(t *testing.T) {
+		k := newMCPKit(t)
+		for _, origin := range []string{k.url, trustedOrigin, portedOrigin, "HTTPS://Trusted.Example", "https://trusted.example:443", strings.ToUpper(k.url)} {
+			token := k.token(k.alice, readScope)
+			resp, body := k.rpcWith(t, token, rpcToolsList, map[string]string{"Origin": origin}, "")
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("Origin %q: status = %d, want 200 (body %s)", origin, resp.StatusCode, body)
+			}
+		}
+	})
+
+	// 許可の一覧は、サーバー自身の Origin(k.url = http://127.0.0.1:<port>)と、trustedOrigin、portedOrigin である。
+	// 前方一致・部分一致の実装を見逃さないよう、許可した Origin の「後ろに文字を足したもの」と「前を切り取ったもの」を含める。
+	rejected := func(k *mcpKit) map[string]string {
+		port := strings.TrimPrefix(k.url, "http://127.0.0.1:")
+		return map[string]string{
+			"許可にない別のサイト":                         "http://evil.example",
+			"ホストは同じで、ポートが違う(サーバー自身)":             "http://127.0.0.1:1" + port,
+			"ホストは同じで、scheme が違う(サーバー自身)":         "https://127.0.0.1:" + port,
+			"サーバー自身の Origin の、ポートを 1 桁切ったもの":     k.url[:len(k.url)-1],
+			"許可した Origin の後ろに、ホストを足したもの(前方一致)":   trustedOrigin + ".evil.example",
+			"許可した Origin の前に、文字を足したホスト":          "https://evil-trusted.example",
+			"許可した Origin の、ホストを切ったもの(部分一致)":      "https://trusted.exam",
+			"許可した Origin の、ポートの後ろに桁を足したもの(前方一致)": portedOrigin + "0",
+			"許可した Origin の、ポートが違うもの":             "https://ports.example:845",
+			"許可した Origin の、ポートを省いたもの(443 になる)":   "https://ports.example",
+			"scheme が違う(許可した外部の Origin)":         "http://trusted.example",
+			"許可した Origin に、path を足したもの":          trustedOrigin + "/path",
+			"許可した Origin に、末尾のスラッシュを足したもの":       trustedOrigin + "/",
+			"null(要求元を明かさないブラウザが送る値)":            "null",
+			"空の値":        "",
+			"ワイルドカード":    "*",
+			"scheme がない": "trusted.example",
+			"拡張機能などの、http(s) 以外の Origin":      "chrome-extension://abcdefghijklmnop",
+			"利用者情報を含む":                        "https://user@trusted.example",
+			"複数の Origin をカンマで並べたもの(許可 + 不許可)": trustedOrigin + ", http://evil.example",
+		}
+	}
+
+	t.Run("許可にない Origin は 403 で、固定の本文だけが返り、トークンの確認にも、ツールの実行にも進まない", func(t *testing.T) {
+		k := newMCPKit(t)
+		for name, origin := range rejected(k) {
+			// 有効なトークンで、書き込みのツールを呼ぶ(通してしまえば、レビューが書き込まれる)。
+			token := k.token(k.alice, readScope, writeScope)
+			before := k.introspect.calls
+			args := fmt.Sprintf(`{"shop_id":%q,"burger_id":%q,"rating":4,"comment":"断られるはず"}`, activeShopID, cheeseBurgerID)
+			resp, body := k.rpcWith(t, token, rpcToolCall("create_review", args), map[string]string{"Origin": origin}, "")
+			if resp.StatusCode != http.StatusForbidden || body != forbiddenBody {
+				t.Errorf("%s (Origin %q): status = %d, body = %q, want 403 %s", name, origin, resp.StatusCode, body, forbiddenBody)
+			}
+			if resp.Header.Get("WWW-Authenticate") != "" {
+				t.Errorf("%s: WWW-Authenticate = %q, want none (the request is refused before authentication)", name, resp.Header.Get("WWW-Authenticate"))
+			}
+			if k.introspect.calls != before {
+				t.Errorf("%s: the token was checked (%d calls), want the request refused before authentication", name, k.introspect.calls-before)
+			}
+			if n := len(k.reviews.reviews); n != 0 {
+				t.Fatalf("%s: reviews stored = %d, want 0: a refused Origin must never reach the tools", name, n)
+			}
+		}
+	})
+
+	t.Run("トークンがない要求も、Origin が不正なら、401 ではなく 403 になる(認証より前に断る)", func(t *testing.T) {
+		k := newMCPKit(t)
+		resp, body := k.rpcWith(t, "", rpcToolsList, map[string]string{"Origin": "http://evil.example"}, "")
+		if resp.StatusCode != http.StatusForbidden || body != forbiddenBody {
+			t.Fatalf("status = %d, body = %q, want 403 %s", resp.StatusCode, body, forbiddenBody)
+		}
+		// 許可された Origin なら、認証に進み、トークンがないことで 401 になる。
+		resp, _ = k.rpcWith(t, "", rpcToolsList, map[string]string{"Origin": k.url}, "")
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("allowed Origin without a token: status = %d, want 401", resp.StatusCode)
+		}
+	})
+
+	t.Run("Origin のヘッダーが複数あるときは、すべてが許可の一覧にあっても、断る", func(t *testing.T) {
+		k := newMCPKit(t)
+		req := k.rpcRequest(t, k.token(k.alice, readScope), rpcToolsList)
+		req.Header.Add("Origin", k.url)
+		req.Header.Add("Origin", k.url)
+		if resp, body := k.do(t, req); resp.StatusCode != http.StatusForbidden || body != forbiddenBody {
+			t.Errorf("status = %d, body = %q, want 403 %s", resp.StatusCode, body, forbiddenBody)
+		}
+	})
+
+	t.Run("DNS の付け替え攻撃: Host は正しく、Origin が別のブラウザの要求は 403 になる", func(t *testing.T) {
+		k := newMCPKit(t)
+		token := k.token(k.alice, readScope)
+		before := k.introspect.calls
+		resp, body := k.rpcWith(t, token, rpcToolsList, map[string]string{"Origin": "http://rebind.evil.example:8080"}, strings.TrimPrefix(k.url, "http://"))
+		if resp.StatusCode != http.StatusForbidden || body != forbiddenBody || k.introspect.calls != before {
+			t.Errorf("status = %d, body = %q, token checks = %d, want 403 %s before any token check", resp.StatusCode, body, k.introspect.calls-before, forbiddenBody)
+		}
+	})
+
+	t.Run("DNS の付け替え攻撃: 攻撃者の名前が、サーバーの手元のアドレスに向いたとき(Host も Origin も攻撃者の名前)も 403 になる", func(t *testing.T) {
+		k := newMCPKit(t)
+		token := k.token(k.alice, readScope)
+		before := k.introspect.calls
+		resp, body := k.rpcWith(t, token, rpcToolsList, map[string]string{"Origin": "http://rebind.evil.example:8080"}, "rebind.evil.example:8080")
+		if resp.StatusCode != http.StatusForbidden || body != forbiddenBody || k.introspect.calls != before {
+			t.Errorf("status = %d, body = %q, token checks = %d, want 403 %s before any token check", resp.StatusCode, body, k.introspect.calls-before, forbiddenBody)
+		}
+	})
+
+	t.Run("CORS のヘッダーは返さない(ブラウザの中の別の Origin のクライアントには、対応しない)", func(t *testing.T) {
+		k := newMCPKit(t)
+		token := k.token(k.alice, readScope)
+		resp, _ := k.rpcWith(t, token, rpcToolsList, map[string]string{"Origin": trustedOrigin}, "")
+		for name := range resp.Header {
+			if strings.HasPrefix(strings.ToLower(name), "access-control-") {
+				t.Errorf("response header %s = %q, want no CORS header", name, resp.Header.Get(name))
+			}
+		}
+		// 別の Origin のページからの、ブラウザの事前確認(preflight)は承認しない(承認すると、ブラウザは本要求を送る)。
+		req, _ := http.NewRequest(http.MethodOptions, k.resource, nil)
+		req.Header.Set("Origin", trustedOrigin)
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		req.Header.Set("Access-Control-Request-Headers", "authorization, content-type")
+		pre, _ := k.do(t, req)
+		if pre.StatusCode < 400 || pre.Header.Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("preflight = %d with Access-Control-Allow-Origin %q, want a refusal without CORS approval", pre.StatusCode, pre.Header.Get("Access-Control-Allow-Origin"))
+		}
+	})
+}
+
 // ---- 保護されたリソースの情報・配線 ----
 
 func TestMCPProtectedResourceMetadata(t *testing.T) {
@@ -415,6 +591,15 @@ func TestMCPRoutesExistOnlyWhenEnabled(t *testing.T) {
 		rec := do(router, http.MethodPost, path, `{}`, "")
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("POST %s = %d, want 404 while the MCP server is disabled", path, rec.Code)
+		}
+	}
+}
+
+func TestNewMCPServerRejectsAnUnusableAllowedOrigin(t *testing.T) {
+	for _, origin := range []string{"*", "null", "", "example.com", "https://example.com/path", "ftp://example.com"} {
+		cfg := handler.MCPConfig{Resource: "https://example.com/mcp", Issuer: "https://example.com", AllowedOrigins: []string{origin}}
+		if _, err := handler.NewMCPServer(nil, nil, nil, nil, cfg); err == nil {
+			t.Errorf("NewMCPServer(AllowedOrigins=[%q]) succeeded, want an error (wildcards and unusable values must be refused at startup)", origin)
 		}
 	}
 }
