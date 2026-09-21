@@ -283,7 +283,7 @@ frontend/src/
 ├── domains/      # auth、reviews、shops、users
 ├── api/          # API クライアント / HTTP 境界
 ├── states/       # グローバル state
-├── lib/          # 共通ユーティリティ (date、i18n、rating)
+├── lib/          # 共通ユーティリティ (date、i18n、rating、photoResize)
 └── components/   # 共通 UI コンポーネント
 ```
 
@@ -291,6 +291,12 @@ frontend/src/
 
 - ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる。
 - 開発時は Vite の proxy が `/api` を Go API へ転送する。転送先の既定は `http://host.docker.internal:8080` で、`VITE_API_PROXY_TARGET` で変更できる。レビュー写真の `/photos` も同じ転送先へ proxy される(本番の nginx にも `/photos/` がある)。
+
+### 写真の送信
+
+- 写真を選ぶ input の `accept` は、HEIC / HEIF も含める(`lib/photoResize.ts` の `PHOTO_ACCEPT`)。選びやすくするためのヒントで、受け付けるかどうかは backend が決める。
+- 送る前に、`useCreateReview` / `useUpdateReview` が `shrinkPhoto` を通す。長辺が上限(`GET /meta` の `photo.maxEdge`)を超える、またはファイルが `photo.maxBytes` を超えるときだけ、canvas で縮小した JPEG にする(向きは `createImageBitmap` の `imageOrientation: "from-image"` で画素に反映する)。**上限の値は frontend に書かない**(backend の値を使う)。
+- 縮小できないとき(HEIC を読み込めないブラウザなど)は、失敗にせず、元のファイルをそのまま送る。backend が JPEG に変換するか、理由つきのメッセージ(422 の 3 種類、混み合いの 503)を返し、それを画面にそのまま出す。
 
 ### Frontend コマンド
 

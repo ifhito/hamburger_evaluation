@@ -10,6 +10,7 @@ import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
+import { PHOTO_ACCEPT } from "../../../lib/photoResize";
 import { useRatingRange } from "../hooks/useRatingRange";
 import { RatingSelect } from "../../../components/RatingSelect";
 import { Textarea } from "../../../components/Textarea";
@@ -84,7 +85,7 @@ export default function ReviewNewPage() {
           <input
             id="photo"
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept={PHOTO_ACCEPT}
             onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
           />
         </div>
