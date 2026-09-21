@@ -17,6 +17,8 @@ export interface ShopDetail extends Shop {
   moderationNote: string | null;
   creator: ShopCreator | null;
   reviews: Review[];
+  // 閲覧者がこの shop にレビューを書けるか。backend が返す(匿名は false)。
+  canReview: boolean;
 }
 
 export interface AdminShop extends Shop {

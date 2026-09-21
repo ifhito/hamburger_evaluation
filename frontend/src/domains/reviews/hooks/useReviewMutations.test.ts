@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toCreateFormData, toUpdateFormData } from "./useReviewMutations";
+import { isReviewKey, toCreateFormData, toUpdateFormData } from "./useReviewMutations";
 
 const photo = new File(["x"], "burger.jpg", { type: "image/jpeg" });
 
@@ -36,5 +36,24 @@ describe("toUpdateFormData", () => {
     expect(form.get("comment")).toBe("更新");
     expect(form.has("shop_id")).toBe(false);
     expect(form.has("burger_name")).toBe(false);
+  });
+});
+
+describe("isReviewKey", () => {
+  it("一覧のキー(文字列)に一致する", () => {
+    expect(isReviewKey("/reviews")).toBe(true);
+    expect(isReviewKey("/reviews?page=1")).toBe(true);
+  });
+
+  it("詳細のキー(viewerId を含む配列)に一致する", () => {
+    expect(isReviewKey(["/reviews", 1, 3])).toBe(true);
+    expect(isReviewKey(["/reviews", 1, null])).toBe(true);
+  });
+
+  it("無関係なキーには一致しない", () => {
+    expect(isReviewKey("/shops")).toBe(false);
+    expect(isReviewKey(["/users", 1, 3])).toBe(false);
+    expect(isReviewKey(null)).toBe(false);
+    expect(isReviewKey(123)).toBe(false);
   });
 });

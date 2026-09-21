@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Navigate, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../auth/AuthProvider";
 import { useCreateReview } from "../hooks/useReviewMutations";
 import { useCreateReviewForm } from "../hooks/useReviewForm";
-import { useShops } from "../../shops/hooks/useShops";
+import { useShopDetail } from "../../shops/hooks/useShops";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
@@ -19,8 +20,10 @@ export default function ReviewNewPage() {
   const [searchParams] = useSearchParams();
   const shopId = Number(searchParams.get("shop_id"));
 
-  const { data: shops } = useShops();
-  const shopName = shops?.find((s) => s.id === shopId)?.name;
+  // ショップ名は、その shop 1 件を id で取得して表示する(一覧のページ送りに依存しない)
+  const { user, isLoading: authLoading } = useAuth();
+  const { data: shop } = useShopDetail(shopId, user?.id ?? null, { enabled: !authLoading });
+  const shopName = shop?.name;
 
   const { create } = useCreateReview();
   const { register, handleSubmit, setValue, watch } = useCreateReviewForm({ shopId });

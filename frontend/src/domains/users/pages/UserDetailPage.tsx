@@ -34,7 +34,6 @@ export default function UserDetailPage() {
     fetchNextPage,
     isFetchingNextPage,
   } = useReviews({ userId }, { enabled: isValidId });
-  const isOwner = authUser?.id === userId;
 
   return (
     <Layout title={user ? t("users.detail.namedProfile", { name: user.username }) : t("users.detail.profileTitle")}>
@@ -47,10 +46,10 @@ export default function UserDetailPage() {
         <div className={styles.profile}>
           <div className={styles.profileCard}>
             <h2 className={styles.username}>{user.username}</h2>
-            {/* email は API が本人の閲覧時だけ返す。isOwner ではなく API の返却有無で出し分ける */}
+            {/* email は API が本人の閲覧時だけ返す。閲覧者の比較ではなく、API の返却有無で出し分ける */}
             {user.email && <p className={styles.email}>{user.email}</p>}
           </div>
-          {isOwner && (
+          {user.canEdit && (
             <Link to={`/users/${userId}/edit`} className={styles.editLink}>
               {t("users.detail.editProfile")}
             </Link>

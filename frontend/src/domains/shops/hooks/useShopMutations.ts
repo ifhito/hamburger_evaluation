@@ -8,10 +8,11 @@ import type {
   ShopUpdateInput,
 } from "../api/types";
 
+// 一覧のキー(文字列 "/shops…"・"/admin/shops…")と、詳細のキー(["/shops", id, viewerId])の両方に一致する
 export function isShopKey(key: unknown): boolean {
   return (
-    typeof key === "string" &&
-    (key.startsWith("/shops") || key.startsWith("/admin/shops"))
+    (typeof key === "string" && (key.startsWith("/shops") || key.startsWith("/admin/shops"))) ||
+    (Array.isArray(key) && key[0] === "/shops")
   );
 }
 
