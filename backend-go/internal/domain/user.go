@@ -20,8 +20,7 @@ type User struct {
 func (u User) CanModerate() bool { return u.Admin }
 
 // Manages は、ユーザーが指定された id の account を管理（編集または削除）
-// してよいかどうかを返す。自分自身の管理のみ可能で、admin にも例外はない
-// （issue #16 R2/R3）。
+// してよいかどうかを返す。自分自身の管理のみ可能で、admin にも例外はない。
 func (u User) Manages(id string) bool { return u.ID == id }
 
 // UserProfile は、viewer から見えるユーザーのビューである。ID・ユーザー名・自己紹介文は

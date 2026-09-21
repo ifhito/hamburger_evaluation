@@ -62,6 +62,14 @@ integration: committing implementer work, pushing, and managing the draft PR.
     - **Size gate first**: measure the PR with `git diff main --shortstat`
       excluding generated/lock files (`sqlcgen/`, `go.sum`, lockfiles).
       **Small** = roughly ≤400 changed lines (insertions+deletions).
+      **Exception — wording-only PRs** (Japanese wording fixes: comments, test
+      names, docs; no identifier, SQL, API string or logic change) count as
+      small at any size, but only when the no-behavior-change claim is
+      *proven*: the changed Go files are identical to `main` once comments and
+      `t.Run` name literals are stripped from the syntax tree, the `go test
+      -json` pass list loses nothing except renamed tests (old → new mapping
+      in the PR body), CI is green, and there are no conflicts or unanswered
+      comments (user decision).
     - **Small + no P1/P2 pending** (P3-only or none): finish the branch —
       `gh pr ready`, then fast-forward main with
       `git push origin feat/<slug>:main` (a plain push: refused unless main

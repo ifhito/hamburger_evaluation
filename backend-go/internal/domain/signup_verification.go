@@ -93,7 +93,7 @@ type SignupVerificationRepository interface {
 // SignupVerificationRepository を持つのはこの型だけで、usecase は repository に依存しない。
 // 確認（CreateUserFromSignupVerification）は、確認待ちと users の 2 つのテーブルを 1 つの
 // transaction で書くが、domain のコードとしては、確認待ちの集約の 1 つの書き込みである
-// （transaction を usecase に持ち上げるのは S17 で扱う）。
+// （トランザクションの範囲を usecase が決める仕組みへの載せ替えは、別の作業で行う）。
 type SignupVerifications struct {
 	repo SignupVerificationRepository
 }
