@@ -212,7 +212,7 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - `POST /oauth/token` — トークンの発行(認可コードの交換・更新)。
 - `POST /oauth/revoke` — 取り消し(RFC 7009)。更新トークンを取り消すと、その認可から発行されたトークンがすべて使えなくなる。
 - `GET /oauth/authorize/request`・`POST /oauth/authorize/decision` — 許可の画面が使う API(要ログイン。上記 2)。要求がアプリへ結果を戻せない形で不正なときは 422 `{"error":"…"}`。
-- `GET /oauth/grants`・`DELETE /oauth/grants/{id}` — 利用者本人が許可したアプリの一覧(`id`・`client_id`・`client_name`・範囲と説明・`created_at`・`updated_at`。最近使ったものから順)と、取り消し(204)。取り消すと、そのアプリのトークンはすぐ使えなくなる。別の利用者の許可・存在しない許可・正規の形でない id は、区別できない同一の 404。プロフィール画面の「接続済みのアプリ」が使う。
+- `GET /oauth/grants`・`DELETE /oauth/grants/{id}` — 利用者本人が許可したアプリの一覧(`id`・`client_id`・`client_name`・範囲と説明・`created_at`・`updated_at`。最近使ったものから順)と、取り消し(204)。**一覧は、既存の一覧(`GET /shops`・`GET /reviews`)と同じ契約でページ送りする**: `page` / `per_page`(整数でなければ 422、範囲外は補正。1 ページの件数は backend が決める。既定 20 件・上限 100 件で、規則は共有の `clampPage`)、続きがあるかはレスポンスヘッダー `X-Has-More`(`true` / `false`)で返す。取り消すと、そのアプリのトークンはすぐ使えなくなる。別の利用者の許可・存在しない許可・正規の形でない id は、区別できない同一の 404。プロフィール画面の「接続済みのアプリ」が使う。
 
 **ルール**(判断は `internal/domain/oauth*.go` だけが持つ)
 
@@ -379,8 +379,9 @@ frontend/src/
 ### 許可を尋ねる画面と、接続済みのアプリ(`domains/oauth`)
 
 - `/oauth/authorize`(要ログイン): AI アプリが、ログインと許可だけでつなぐための画面。backend の `GET /oauth/authorize` から、同じクエリのまま 303 で渡される。未ログインなら、`ProtectedRoute` がログイン画面へ送り、ログイン後に、この画面へ(クエリごと)戻す。戻り先は、ルーターの遷移の state(`from`)に入れる。URL のパラメーターには入れない(外部のリンクから任意の戻り先を指定されるのを防ぐ。`returnPathFrom` は、このアプリの中のパスだけを返す)。
+- **画面の状態は、それを作った認可の要求(URL の query。`search`)に結び付ける**(`consentFlow.ts`)。同じ画面のまま query だけが変わったとき(履歴を戻る・進む)に、前のアプリの内容が残ったまま、新しいアプリへの許可を送ってしまうのを防ぐため: いまの URL のために作られた状態だけを見せ(それ以外は「確認中」で、ボタンも出ない)、許可・拒否として送るのは、いま画面に内容を見せている要求だけにする。URL が変わったら、前の取得は取り消し(`AbortController`)、遅れて返った応答は画面に届かない。
 - 画面は、`GET /oauth/authorize/request` の結果(アプリの名前・範囲と説明・`consentRequired`)を表示し、選択を `POST /oauth/authorize/decision` に送って、返ってきた `redirectTo`(アプリへの戻り先)へブラウザを移す。`consentRequired` が false(すでに許可済みの範囲に収まる)なら、尋ねずに許可を送る。**要求の検証・範囲の説明・尋ねる必要があるかの判断は、すべて backend が行い、frontend は表示と送信だけ**を行う(範囲の名前や説明を frontend に持たない)。アプリへの戻り先は、http(s) のときだけ開く(`isNavigable`。ページの中でコードが動くのを防ぐ確認)。
-- プロフィール(本人のときだけ。`canEdit`)に「Connected apps」を出す(`ConnectedApps`)。`GET /oauth/grants` の一覧と、`DELETE /oauth/grants/{id}` の取り消し(確認のあと)。OAuth の認可サーバーが無効な環境(API が 404)では、何も出さない。
+- プロフィール(本人のときだけ。`canEdit`)に「Connected apps」を出す(`ConnectedApps`)。`GET /oauth/grants` の一覧(ページ送り。`X-Has-More` があるときに「Load more」で続きを取る。既存の一覧と同じ `useInfinitePages`。キャッシュのキーには利用者の id を含める)と、`DELETE /oauth/grants/{id}` の取り消し(確認のあと。読み込み済みの全ページを取り直す)。OAuth の認可サーバーが無効な環境(API が 404)では、何も出さない。
 
 ### Frontend コマンド
 

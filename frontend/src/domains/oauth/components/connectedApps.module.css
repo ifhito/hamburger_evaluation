@@ -47,3 +47,7 @@
 .muted {
   color: var(--color-text-muted);
 }
+
+.loadMore {
+  margin-top: 0.75rem;
+}

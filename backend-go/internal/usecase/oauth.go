@@ -77,8 +77,9 @@ type OAuthGrantQuery interface {
 	// GetOAuthGrantByUserAndClient は、利用者とアプリの組の許可を返す。なければ、(wrap された)
 	// domain.ErrOAuthGrantNotFound を返す。
 	GetOAuthGrantByUserAndClient(ctx context.Context, userID, clientID string) (domain.OAuthGrant, error)
-	// ListOAuthGrantsByUser は、利用者が許可したアプリを、最近使ったものから順に返す。
-	ListOAuthGrantsByUser(ctx context.Context, userID string) ([]domain.OAuthGrant, error)
+	// ListOAuthGrantsByUser は、利用者が許可したアプリを、最近使ったものから順に、limit 件まで返す(offset 件を
+	// 飛ばす)。2 つ目の戻り値は、続き(次のページ)があるかである。
+	ListOAuthGrantsByUser(ctx context.Context, userID string, limit, offset int32) ([]domain.OAuthGrant, bool, error)
 }
 
 // AuthorizeRequestView は、利用者に許可を尋ねる画面に出す、認可の要求の内容である。
@@ -195,13 +196,16 @@ func NewConnectedApps(grants OAuthGrantQuery, writes *domain.OAuthGrants) *Conne
 	return &ConnectedApps{grants: grants, writes: writes}
 }
 
-// List は、利用者が許可したアプリを、最近使ったものから順に返す。
-func (a *ConnectedApps) List(ctx context.Context, userID string) ([]domain.OAuthGrant, error) {
-	grants, err := a.grants.ListOAuthGrantsByUser(ctx, userID)
+// List は、利用者が許可したアプリを、最近使ったものから順に、ページ送りで返す。1 ページの件数の規則は、
+// 既存の一覧(ショップ・レビュー)と同じ clampPage で、範囲外の page / perPage は、エラーにせず補正される
+// (page < 1 は 1、perPage < 1 は 20、perPage の上限は 100)。2 つ目の戻り値は、次のページがあるかである。
+func (a *ConnectedApps) List(ctx context.Context, userID string, page, perPage int) ([]domain.OAuthGrant, bool, error) {
+	limit, offset := clampPage(page, perPage)
+	grants, hasMore, err := a.grants.ListOAuthGrantsByUser(ctx, userID, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("list connected apps: %w", err)
+		return nil, false, fmt.Errorf("list connected apps: %w", err)
 	}
-	return grants, nil
+	return grants, hasMore, nil
 }
 
 // Revoke は、利用者本人の許可を取り消す。そのアプリのトークンは、すぐに使えなくなる。

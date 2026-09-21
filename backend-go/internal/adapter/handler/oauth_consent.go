@@ -134,14 +134,20 @@ type grantResponse struct {
 	UpdatedAt  time.Time            `json:"updated_at"`
 }
 
-// handleListOAuthGrants は GET /oauth/grants を処理する:閲覧者が許可したアプリの一覧を、最近使ったものから順に返す(200)。
+// handleListOAuthGrants は GET /oauth/grants を処理する:閲覧者が許可したアプリの一覧を、最近使ったものから順に、
+// ページ送りで返す(200)。page / per_page は、既存の一覧(GET /shops・GET /reviews)と同じ契約で、整数でなければ
+// 422、範囲外の整数は補正される。次のページがあるかは、レスポンスヘッダー X-Has-More(true / false)で返す。
 func handleListOAuthGrants(apps *usecase.ConnectedApps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)
 		if !ok {
 			return
 		}
-		grants, err := apps.List(r.Context(), viewer.ID)
+		page, perPage, ok := pageParams(w, r)
+		if !ok {
+			return
+		}
+		grants, hasMore, err := apps.List(r.Context(), viewer.ID, page, perPage)
 		if err != nil {
 			writeOAuthError(w, "list grants", err)
 			return
@@ -154,6 +160,7 @@ func handleListOAuthGrants(apps *usecase.ConnectedApps) http.HandlerFunc {
 			})
 		}
 		w.Header().Set("Cache-Control", "no-store")
+		setHasMore(w, hasMore)
 		writeJSON(w, http.StatusOK, out)
 	}
 }

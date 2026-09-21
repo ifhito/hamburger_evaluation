@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -478,4 +479,122 @@ func TestOAuthDecisionRecordsOnlyTheRequestedScopes(t *testing.T) {
 	if bobs := k.grants(t, k.bob); len(bobs) != 1 || len(bobs[0].Scopes) != 1 || bobs[0].Scopes[0].Name != domain.OAuthScopeRead {
 		t.Errorf("bob の許可 = %+v, want 読み取りだけ", bobs)
 	}
+}
+
+// 接続済みアプリの一覧は、既存の一覧(GET /shops・GET /reviews)と同じ契約でページ送りされる:
+// page / per_page(整数でなければ 422、範囲外は補正)、1 ページの件数は backend が決める(既定 20、上限 100)、
+// 続きがあるかはレスポンスヘッダー X-Has-More で返す。
+func TestOAuthGrantsListIsPaginated(t *testing.T) {
+	k := newOAuthKit(t)
+	ctx := context.Background()
+	// alice が 45 個のアプリを許可している(更新の新しい順に app-1, app-2, ...)。bob も 3 個許可している。
+	for user, n := range map[string]int{k.alice: 45, k.bob: 3} {
+		if _, err := k.pool.Exec(ctx, `INSERT INTO oauth_grants (user_id, client_id, client_name, scopes, created_at, updated_at)
+			SELECT $1::uuid, 'app-' || g, 'App ' || g, ARRAY['hamburger:read'], now() - (g || ' minutes')::interval, now() - (g || ' minutes')::interval
+			FROM generate_series(1, $2::int) AS g`, user, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	list := func(query string) (items []grantJSON, hasMore string, status int, body string) {
+		t.Helper()
+		rec := do(k.router, http.MethodGet, "/oauth/grants"+query, "", k.bearer[k.alice])
+		if rec.Code == http.StatusOK {
+			if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+				t.Fatalf("decode %q: %v", rec.Body.String(), err)
+			}
+		}
+		return items, rec.Header().Get("X-Has-More"), rec.Code, rec.Body.String()
+	}
+
+	t.Run("何も指定しなければ、1 ページ目の 20 件だけを返し、続きがあることを X-Has-More で伝える", func(t *testing.T) {
+		items, hasMore, status, _ := list("")
+		if status != http.StatusOK || len(items) != 20 || hasMore != "true" {
+			t.Fatalf("status = %d, %d 件, X-Has-More = %q, want 200 で 20 件、true", status, len(items), hasMore)
+		}
+		if items[0].ClientID != "app-1" || items[19].ClientID != "app-20" {
+			t.Errorf("並び = %s … %s, want 更新の新しい順(app-1 … app-20)", items[0].ClientID, items[19].ClientID)
+		}
+	})
+
+	t.Run("ページを進めると残りが取れ、最後のページの X-Has-More は false で、全ページを合わせると重複も欠落もない", func(t *testing.T) {
+		seen := map[string]bool{}
+		for page, want := range map[int]struct {
+			count   int
+			hasMore string
+		}{1: {20, "true"}, 2: {20, "true"}, 3: {5, "false"}, 4: {0, "false"}} {
+			items, hasMore, status, _ := list("?page=" + strconv.Itoa(page))
+			if status != http.StatusOK || len(items) != want.count || hasMore != want.hasMore {
+				t.Errorf("page %d: status = %d, %d 件, X-Has-More = %q, want %d 件、%s", page, status, len(items), hasMore, want.count, want.hasMore)
+			}
+			for _, it := range items {
+				if seen[it.ID] {
+					t.Errorf("page %d: %s が重複している", page, it.ID)
+				}
+				seen[it.ID] = true
+			}
+		}
+		if len(seen) != 45 {
+			t.Errorf("全ページの合計 = %d 件, want 45(bob の分は含まない)", len(seen))
+		}
+	})
+
+	t.Run("範囲を超えたページは、null ではなく空の配列と X-Has-More: false を返す", func(t *testing.T) {
+		_, hasMore, status, body := list("?page=999")
+		if status != http.StatusOK || hasMore != "false" || strings.TrimSpace(body) != "[]" {
+			t.Errorf("status = %d, X-Has-More = %q, body = %q", status, hasMore, body)
+		}
+	})
+
+	t.Run("1 ページの件数(per_page)は、上限(100)まで指定でき、範囲外の値は補正される", func(t *testing.T) {
+		for _, tt := range []struct {
+			query   string
+			count   int
+			hasMore string
+		}{
+			{"?per_page=100", 45, "false"},
+			{"?per_page=101", 45, "false"}, // 上限 100 に補正されるので、45 件は 1 ページに収まる
+			{"?per_page=5&page=9", 5, "false"},
+			{"?per_page=5&page=1", 5, "true"},
+			{"?per_page=0", 20, "true"}, // 0 以下は既定の 20 件
+			{"?per_page=-3", 20, "true"},
+			{"?page=0", 20, "true"}, // 1 未満のページは 1 ページ目
+		} {
+			items, hasMore, status, _ := list(tt.query)
+			if status != http.StatusOK || len(items) != tt.count || hasMore != tt.hasMore {
+				t.Errorf("%s: status = %d, %d 件, X-Has-More = %q, want %d 件、%s", tt.query, status, len(items), hasMore, tt.count, tt.hasMore)
+			}
+		}
+	})
+
+	t.Run("page・per_page が整数でなければ、既存の一覧と同じ 422 になる", func(t *testing.T) {
+		_, _, status, body := list("?page=abc&per_page=x")
+		if status != http.StatusUnprocessableEntity || body != `{"errors":["Page must be an integer","Per page must be an integer"]}` {
+			t.Errorf("status = %d, body = %s", status, body)
+		}
+	})
+
+	t.Run("取り消した許可は、どのページにも現れず、続きのページが 1 件ぶん詰まる", func(t *testing.T) {
+		items, _, _, _ := list("")
+		revoked := items[0].ID
+		if rec := do(k.router, http.MethodDelete, "/oauth/grants/"+revoked, "", k.bearer[k.alice]); rec.Code != http.StatusNoContent {
+			t.Fatalf("DELETE = %d %s", rec.Code, rec.Body.String())
+		}
+		total := 0
+		for page := 1; page <= 3; page++ {
+			got, hasMore, _, _ := list("?page=" + strconv.Itoa(page))
+			for _, it := range got {
+				if it.ID == revoked {
+					t.Errorf("取り消した許可が page %d に残っている", page)
+				}
+			}
+			total += len(got)
+			if want := page < 3; (hasMore == "true") != want {
+				t.Errorf("page %d の X-Has-More = %q", page, hasMore)
+			}
+		}
+		if total != 44 {
+			t.Errorf("取り消し後の合計 = %d 件, want 44", total)
+		}
+	})
 }

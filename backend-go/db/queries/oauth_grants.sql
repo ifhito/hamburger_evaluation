@@ -26,8 +26,10 @@ FROM oauth_grants
 WHERE user_id = @user_id AND client_id = @client_id;
 
 -- name: ListOAuthGrantsByUser :many
--- 利用者が許可したアプリを、最近使ったものから順に返す(同時刻は id で決める)。
+-- 利用者が許可したアプリを、最近使ったものから順に、ページ送りで返す(同時刻は id で決める)。
+-- 呼び出し側は、続きがあるかを知るために、1 ページの件数より 1 件多く取り出す。
 SELECT id, user_id, client_id, client_name, scopes, created_at, updated_at
 FROM oauth_grants
 WHERE user_id = @user_id
-ORDER BY updated_at DESC, id;
+ORDER BY updated_at DESC, id
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);

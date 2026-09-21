@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"reflect"
 	"testing"
@@ -43,6 +44,7 @@ func (f *fakeAuthorizer) DenyAuthorization(context.Context, url.Values) (string,
 // 1 つのメモリ上の表で満たすテスト用の実装である。
 type fakeGrantStore struct {
 	grants    []domain.OAuthGrant
+	listCalls [][2]int32 // 一覧の読み取りに渡された (limit, offset)
 	queryErr  error
 	createErr error
 	created   []domain.CreateOAuthGrantParams
@@ -62,9 +64,10 @@ func (f *fakeGrantStore) GetOAuthGrantByUserAndClient(_ context.Context, userID,
 	return domain.OAuthGrant{}, domain.ErrOAuthGrantNotFound
 }
 
-func (f *fakeGrantStore) ListOAuthGrantsByUser(_ context.Context, userID string) ([]domain.OAuthGrant, error) {
+func (f *fakeGrantStore) ListOAuthGrantsByUser(_ context.Context, userID string, limit, offset int32) ([]domain.OAuthGrant, bool, error) {
+	f.listCalls = append(f.listCalls, [2]int32{limit, offset})
 	if f.queryErr != nil {
-		return nil, f.queryErr
+		return nil, false, f.queryErr
 	}
 	var out []domain.OAuthGrant
 	for _, g := range f.grants {
@@ -72,7 +75,14 @@ func (f *fakeGrantStore) ListOAuthGrantsByUser(_ context.Context, userID string)
 			out = append(out, g)
 		}
 	}
-	return out, nil
+	if int(offset) >= len(out) {
+		return nil, false, nil
+	}
+	out = out[offset:]
+	if len(out) > int(limit) {
+		return out[:limit], true, nil
+	}
+	return out, false, nil
 }
 
 func (f *fakeGrantStore) CreateOAuthGrant(_ context.Context, p domain.CreateOAuthGrantParams) (string, error) {
@@ -247,15 +257,53 @@ func TestConnectedApps(t *testing.T) {
 
 	t.Run("許可したアプリの一覧は、その利用者の分だけを返す", func(t *testing.T) {
 		store := &fakeGrantStore{grants: []domain.OAuthGrant{{ID: "g1", UserID: "u1"}, {ID: "g2", UserID: "u2"}}}
-		got, err := usecase.NewConnectedApps(store, domain.NewOAuthGrants(store)).List(ctx, "u1")
-		if err != nil || len(got) != 1 || got[0].ID != "g1" {
-			t.Errorf("List = %+v, %v", got, err)
+		got, hasMore, err := usecase.NewConnectedApps(store, domain.NewOAuthGrants(store)).List(ctx, "u1", 1, 20)
+		if err != nil || len(got) != 1 || got[0].ID != "g1" || hasMore {
+			t.Errorf("List = %+v, %v, %v", got, hasMore, err)
+		}
+	})
+
+	t.Run("1 ページの件数と位置は、既存の一覧と同じ規則(既定 20 件、上限 100 件、1 未満のページは 1)で補正して読み取りに渡す", func(t *testing.T) {
+		for _, tt := range []struct {
+			name          string
+			page, perPage int
+			limit, offset int32
+		}{
+			{"省略(0)は、既定の 20 件で 1 ページ目", 0, 0, 20, 0},
+			{"2 ページ目", 2, 20, 20, 20},
+			{"件数の指定は、そのまま", 3, 50, 50, 100},
+			{"上限(100)を超える件数は、100 に補正される", 1, 1000, 100, 0},
+			{"負の値は、既定の件数と 1 ページ目になる", -5, -5, 20, 0},
+		} {
+			store := &fakeGrantStore{}
+			if _, _, err := usecase.NewConnectedApps(store, domain.NewOAuthGrants(store)).List(ctx, "u1", tt.page, tt.perPage); err != nil {
+				t.Fatalf("%s: %v", tt.name, err)
+			}
+			if !reflect.DeepEqual(store.listCalls, [][2]int32{{tt.limit, tt.offset}}) {
+				t.Errorf("%s: 読み取りに渡した (limit, offset) = %v, want [[%d %d]]", tt.name, store.listCalls, tt.limit, tt.offset)
+			}
+		}
+	})
+
+	t.Run("上限を超える件数があるときは、1 ページ目が上限で止まり、続きがあると返す", func(t *testing.T) {
+		store := &fakeGrantStore{}
+		for i := 0; i < 25; i++ {
+			store.grants = append(store.grants, domain.OAuthGrant{ID: fmt.Sprintf("g%02d", i), UserID: "u1"})
+		}
+		apps := usecase.NewConnectedApps(store, domain.NewOAuthGrants(store))
+		first, hasMore, err := apps.List(ctx, "u1", 1, 20)
+		if err != nil || len(first) != 20 || !hasMore {
+			t.Fatalf("1 ページ目 = %d 件, hasMore = %v, err = %v, want 20 件と true", len(first), hasMore, err)
+		}
+		second, hasMore, err := apps.List(ctx, "u1", 2, 20)
+		if err != nil || len(second) != 5 || hasMore || second[0].ID != "g20" {
+			t.Errorf("2 ページ目 = %d 件, hasMore = %v, err = %v, want 5 件(g20 から)と false", len(second), hasMore, err)
 		}
 	})
 
 	t.Run("一覧の読み取りが失敗したときは、エラーを返す", func(t *testing.T) {
 		store := &fakeGrantStore{queryErr: errors.New("database is down")}
-		if _, err := usecase.NewConnectedApps(store, domain.NewOAuthGrants(store)).List(ctx, "u1"); err == nil {
+		if _, _, err := usecase.NewConnectedApps(store, domain.NewOAuthGrants(store)).List(ctx, "u1", 1, 20); err == nil {
 			t.Error("エラーにならなかった")
 		}
 	})

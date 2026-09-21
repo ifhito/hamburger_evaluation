@@ -69,11 +69,19 @@ SELECT id, user_id, client_id, client_name, scopes, created_at, updated_at
 FROM oauth_grants
 WHERE user_id = $1
 ORDER BY updated_at DESC, id
+LIMIT $3 OFFSET $2
 `
 
-// 利用者が許可したアプリを、最近使ったものから順に返す(同時刻は id で決める)。
-func (q *Queries) ListOAuthGrantsByUser(ctx context.Context, userID string) ([]OauthGrant, error) {
-	rows, err := q.db.Query(ctx, listOAuthGrantsByUser, userID)
+type ListOAuthGrantsByUserParams struct {
+	UserID     string
+	PageOffset int32
+	PageLimit  int32
+}
+
+// 利用者が許可したアプリを、最近使ったものから順に、ページ送りで返す(同時刻は id で決める)。
+// 呼び出し側は、続きがあるかを知るために、1 ページの件数より 1 件多く取り出す。
+func (q *Queries) ListOAuthGrantsByUser(ctx context.Context, arg ListOAuthGrantsByUserParams) ([]OauthGrant, error) {
+	rows, err := q.db.Query(ctx, listOAuthGrantsByUser, arg.UserID, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}

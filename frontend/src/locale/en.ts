@@ -159,6 +159,7 @@ const en = {
       loading: "Loading\u2026",
       loadError: "Failed to load connected apps.",
       empty: "No apps are connected.",
+      loadMore: "Load more",
       connectedOn: "Connected on {{date}}",
       revoke: "Disconnect",
       revokeConfirm: "Disconnect {{name}}? It loses access right away.",

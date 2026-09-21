@@ -64,20 +64,42 @@ func TestOAuthGrantQuery(t *testing.T) {
 	})
 
 	t.Run("許可した一覧は、その利用者のものだけを、最近使ったものから順に返す", func(t *testing.T) {
-		got, err := q.ListOAuthGrantsByUser(ctx, alice)
+		got, hasMore, err := q.ListOAuthGrantsByUser(ctx, alice, 20, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(got) != 2 || got[0].ID != newer || got[1].ID != older {
-			t.Errorf("grants = %+v, want [%s %s]", got, newer, older)
+		if len(got) != 2 || got[0].ID != newer || got[1].ID != older || hasMore {
+			t.Errorf("grants = %+v, hasMore = %v, want [%s %s] と false", got, hasMore, newer, older)
+		}
+	})
+
+	t.Run("上限(limit)で止まって続きがあることを返し、offset で次のページの残りが取れる", func(t *testing.T) {
+		first, hasMore, err := q.ListOAuthGrantsByUser(ctx, alice, 1, 0)
+		if err != nil || len(first) != 1 || first[0].ID != newer || !hasMore {
+			t.Fatalf("1 ページ目 = %+v, hasMore = %v, err = %v, want [%s] と true", first, hasMore, err, newer)
+		}
+		second, hasMore, err := q.ListOAuthGrantsByUser(ctx, alice, 1, 1)
+		if err != nil || len(second) != 1 || second[0].ID != older || hasMore {
+			t.Fatalf("2 ページ目 = %+v, hasMore = %v, err = %v, want [%s] と false", second, hasMore, err, older)
+		}
+		beyond, hasMore, err := q.ListOAuthGrantsByUser(ctx, alice, 1, 2)
+		if err != nil || beyond == nil || len(beyond) != 0 || hasMore {
+			t.Errorf("範囲外 = %#v, hasMore = %v, err = %v, want 空で nil ではなく、false", beyond, hasMore, err)
+		}
+	})
+
+	t.Run("ちょうど limit 件のとき、続きはないと返す", func(t *testing.T) {
+		got, hasMore, err := q.ListOAuthGrantsByUser(ctx, alice, 2, 0)
+		if err != nil || len(got) != 2 || hasMore {
+			t.Errorf("grants = %+v, hasMore = %v, err = %v, want 2 件で false", got, hasMore, err)
 		}
 	})
 
 	t.Run("何も許可していない利用者の一覧は、nil ではなく空の一覧である", func(t *testing.T) {
 		dave := dbtest.InsertUserRow(ctx, t, conn, `INSERT INTO users (email, username, password_digest) VALUES ('d@example.com', 'dave', 'd') RETURNING id`)
-		got, err := q.ListOAuthGrantsByUser(ctx, dave)
-		if err != nil || got == nil || len(got) != 0 {
-			t.Errorf("grants = %#v, err = %v, want an empty non-nil slice", got, err)
+		got, hasMore, err := q.ListOAuthGrantsByUser(ctx, dave, 20, 0)
+		if err != nil || got == nil || len(got) != 0 || hasMore {
+			t.Errorf("grants = %#v, hasMore = %v, err = %v, want an empty non-nil slice and false", got, hasMore, err)
 		}
 	})
 }
