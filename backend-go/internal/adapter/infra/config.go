@@ -494,29 +494,42 @@ func loadGoogleConfig(getenv func(string) string, cfg *Config) error {
 }
 
 // GoogleWarnings は、設定は有効(LoadConfig を通る)でも、実際には Google でのサインインと結び付けが失敗しやすい組み合わせを、
-// 起動時のログに出す文言で返す(起動は止めない)。画面は、交換と結び付けの開始を、画面と同じオリジンの /api/… へ
-// 送る。GOOGLE_REDIRECT_URL が、APP_BASE_URL(画面)と別のオリジン(たとえば API に直接 http://localhost:8080/…)だと、
-// 戻りで設定する「交換の cookie」が、画面からの要求に届かず、毎回、失敗する(気づけない失敗になる)。
-// Google でのサインインが無効なとき・URL を読めないときは、何も返さない。値(URL)だけを出し、秘密は含めない。
+// 起動時のログに出す警告の文言で返す(起動は止めない。ログの文言なので、英語)。画面は、交換と結び付けの開始を、画面と
+// 同じオリジンの /api/… へ送る。GOOGLE_REDIRECT_URL が、(1)APP_BASE_URL(画面)と別のオリジン(たとえば API に直接
+// http://localhost:8080/…)、または、(2)同じオリジンでも、画面が API を呼ぶ接頭辞(既定は /api)を持たない(path が
+// /auth/google/callback だけ)と、戻りで設定する「交換の cookie」が、画面からの要求に届かず、毎回、失敗する。
+// Google でのサインインが無効なとき・URL を読めないときは、何も返さない。オリジン(scheme・host・port)だけを出し、
+// URL の利用者情報・path・query・秘密は含めない。オリジンは、domain.NormalizeOrigin で、既定のポートなどをそろえて比べる。
 func (c Config) GoogleWarnings() []string {
 	if !c.Google.Enabled {
 		return nil
 	}
 	redirect, err1 := url.Parse(c.Google.RedirectURL)
 	app, err2 := url.Parse(c.AppBaseURL)
-	if err1 != nil || err2 != nil || urlOrigin(redirect) == urlOrigin(app) {
+	if err1 != nil || err2 != nil {
 		return nil
 	}
-	return []string{fmt.Sprintf(
-		"GOOGLE_REDIRECT_URL (%s) は、APP_BASE_URL (%s) と別のオリジンです。画面から /api/… で呼ぶ交換の要求に cookie が届かず、"+
-			"Google でのサインインと結び付けが、毎回失敗します。戻り先は、画面のオリジンを通る形(例: %s/api/auth/google/callback)にし、"+
-			"Google Cloud の「承認済みのリダイレクト URI」も同じ値にしてください",
-		c.Google.RedirectURL, c.AppBaseURL, strings.TrimRight(c.AppBaseURL, "/"))}
-}
-
-// urlOrigin は、URL のオリジン(スキーム + ホスト + ポート。大文字小文字は区別しない)を返す。
-func urlOrigin(u *url.URL) string {
-	return strings.ToLower(u.Scheme + "://" + u.Host)
+	redirectOrigin, err1 := domain.NormalizeOrigin(redirect.Scheme + "://" + redirect.Host)
+	appOrigin, err2 := domain.NormalizeOrigin(app.Scheme + "://" + app.Host)
+	if err1 != nil || err2 != nil {
+		return nil
+	}
+	example := appOrigin + "/api" + googleRedirectPathSuffix
+	switch {
+	case redirectOrigin != appOrigin:
+		return []string{fmt.Sprintf(
+			"GOOGLE_REDIRECT_URL is on a different origin (%s) than APP_BASE_URL (%s): the exchange cookie set at the callback will not reach "+
+				"the screen's /api requests, so Google sign-in and linking will always fail. Use the screen's origin, for example %s, "+
+				"and register the same value as the authorized redirect URI in Google Cloud",
+			redirectOrigin, appOrigin, example)}
+	case redirect.Path == googleRedirectPathSuffix:
+		return []string{fmt.Sprintf(
+			"GOOGLE_REDIRECT_URL (origin %s) has no path prefix before %s: the screen calls the API under /api, so the exchange cookie "+
+				"(Path=/auth/google/exchange) will not reach POST /api/auth/google/exchange, and Google sign-in and linking will always fail "+
+				"(unless the screen calls the API without a prefix). Use, for example, %s, and register the same value in Google Cloud",
+			redirectOrigin, googleRedirectPathSuffix, example)}
+	}
+	return nil
 }
 
 // requireHTTPSOrLoopback は、name の値 raw が、https の URL か、ループバック(localhost・127.0.0.1・[::1])の

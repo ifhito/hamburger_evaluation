@@ -91,6 +91,7 @@ pnpm run build         # プロダクションビルド (型チェック込み)
 | `/reviews/:id/edit` | 要認証 | ReviewEditPage |
 | `/signup` | ゲストのみ | SignupPage(確認メールを送る) |
 | `/signup/confirm` | public | SignupConfirmPage(確認メールのリンクの受け皿。成功するとログイン状態になる) |
+| `/auth/google/complete` | public | GoogleCompletePage(Google でのサインインの結果の受け皿。1 回限りのコードを交換する。成功するとログイン状態になる) |
 | `/signin` | ゲストのみ | SigninPage |
 | `/signout` | 要認証 | SignoutPage |
 | `/users/:id` | public | UserDetailPage |

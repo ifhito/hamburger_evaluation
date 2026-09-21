@@ -270,7 +270,7 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 |---|---|---|
 | `GOOGLE_CLIENT_ID` | 任意(設定すると有効) | Google Cloud Console で作った OAuth クライアントの ID |
 | `GOOGLE_CLIENT_SECRET` | 有効なとき必須 | そのクライアントの秘密の鍵。**秘密。ログ・コード・PR・チャットに書かない。`.env` は Git に入れない** |
-| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:5173/api/auth/google/callback`。**画面の `/api` を通る形**にする。API に直接戻すと、画面が呼ぶ `/api/auth/google/exchange` に、交換の cookie が届かず、毎回失敗する)。**https、または開発用のループバックの http だけ**(起動時に断る。`APP_BASE_URL` も、有効なときは同じ制約)。画面と同じサイト(同じホスト)にして、手続きの cookie が届くようにする |
+| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:5173/api/auth/google/callback`。**画面の `/api` を通る形**にする。API に直接戻すと、画面が呼ぶ `/api/auth/google/exchange` に、交換の cookie が届かず、毎回失敗する)。**https、または開発用のループバックの http だけ**(起動時に断る。`APP_BASE_URL` も、有効なときは同じ制約)。画面と同じオリジンにして(画面の `/api` を通る形)、手続きの cookie が届くようにする |
 | `GOOGLE_OIDC_ISSUER` | 任意 | OpenID Connect の提供元。既定は `https://accounts.google.com`。テスト・隔離した確認で、代役に向けるためだけにある。https か、ループバック(`localhost`・`127.0.0.1`・`[::1]`)の http だけ許す。**本番では設定しない** |
 
 ### リモートの MCP サーバー(`/mcp`)

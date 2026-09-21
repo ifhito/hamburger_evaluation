@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -45,7 +46,7 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 	for _, w := range cfg.GoogleWarnings() {
-		log.Printf("config: warning: %s", w)
+		slog.Warn("suspicious google login setting", "detail", w)
 	}
 	if err := run(ctx, cfg, nil); err != nil {
 		log.Fatalf("server: %v", err)
