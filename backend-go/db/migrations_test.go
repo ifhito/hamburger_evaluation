@@ -3,13 +3,16 @@ package db_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 )
 
@@ -95,6 +98,28 @@ func TestMigrationsAcceptance(t *testing.T) {
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3)",
 			email, "ac4-second", "digest")
 		assertPgError(t, err, "23505", "users_email_key")
+	})
+
+	// S21 AC7：上限ちょうどは入り、1 文字超えると CHECK 制約違反になる。
+	// 数え方はコードポイント数（日本語・絵文字も 1 文字）。
+	t.Run("S21 AC7 文字数の上限を超える値は CHECK 制約違反になる", func(t *testing.T) {
+		assertTextLimits(ctx, t, conn)
+	})
+
+	// S21 AC9：DB の CHECK の上限の値が、domain の定数と食い違っていない。
+	t.Run("S21 AC9 CHECK の上限が domain の定数と一致する", func(t *testing.T) {
+		got := checkLimits(ctx, t, conn)
+		want := map[string]int{
+			"reviews_comment_max_length":       domain.MaxCommentChars,
+			"burgers_name_max_length":          domain.MaxBurgerNameChars,
+			"shops_name_max_length":            domain.MaxShopNameChars,
+			"shops_moderation_note_max_length": domain.MaxModerationNoteChars,
+			"users_username_max_length":        domain.MaxUsernameChars,
+			"users_email_max_length":           domain.MaxEmailChars,
+		}
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("CHECK の上限が domain の定数と違う:\n got %v\nwant %v", got, want)
+		}
 	})
 
 	// AC2：すべての migration を down すると空の database に戻る。
@@ -206,6 +231,12 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops_burgers/shops_burgers_burger_id_fkey/f",
 		"reviews/reviews_pkey/p",
 		"reviews/reviews_rating_check/c",
+		"reviews/reviews_comment_max_length/c",
+		"burgers/burgers_name_max_length/c",
+		"shops/shops_name_max_length/c",
+		"shops/shops_moderation_note_max_length/c",
+		"users/users_username_max_length/c",
+		"users/users_email_max_length/c",
 		"reviews/reviews_user_id_fkey/f",
 		"reviews/reviews_burger_id_fkey/f",
 		"burger_stats/burger_stats_burger_id_key/u",
@@ -262,4 +293,85 @@ func assertPgError(t *testing.T, err error, wantCode, wantConstraint string) {
 		t.Fatalf("expected SQLSTATE %s on constraint %s, got SQLSTATE %s on constraint %q: %v",
 			wantCode, wantConstraint, pgErr.Code, pgErr.ConstraintName, pgErr)
 	}
+}
+
+// textLimitCase は、1 つの列の上限の検証に使う。insert は、値を $1 に受け取り、
+// ほかの必須の列を埋めた INSERT 文である。
+type textLimitCase struct {
+	name       string
+	limit      int
+	constraint string
+	insert     string
+}
+
+var textLimitCases = []textLimitCase{
+	{"reviews.comment", domain.MaxCommentChars, "reviews_comment_max_length",
+		"INSERT INTO reviews (rating, comment, user_id, burger_id) VALUES (3, $1, (SELECT id FROM users ORDER BY created_at LIMIT 1), (SELECT min(id) FROM burgers))"},
+	{"burgers.name", domain.MaxBurgerNameChars, "burgers_name_max_length",
+		"INSERT INTO burgers (name) VALUES ($1)"},
+	{"shops.name", domain.MaxShopNameChars, "shops_name_max_length",
+		"INSERT INTO shops (name, status) VALUES ($1, 0)"},
+	{"shops.moderation_note", domain.MaxModerationNoteChars, "shops_moderation_note_max_length",
+		"INSERT INTO shops (name, status, moderation_note) VALUES ('note-shop', 2, $1)"},
+	{"users.username", domain.MaxUsernameChars, "users_username_max_length",
+		"INSERT INTO users (email, username, password_digest) VALUES ('u' || md5(random()::text) || '@example.com', $1, 'digest')"},
+	{"users.email", domain.MaxEmailChars, "users_email_max_length",
+		"INSERT INTO users (email, username, password_digest) VALUES ($1, 'limit-user', 'digest')"},
+}
+
+// assertTextLimits は、各列で「上限ちょうど（マルチバイトを含む）は入る」「1 文字超えると
+// 制約違反」を確かめる。reviews の insert が参照する user と burger は、事前に用意する。
+func assertTextLimits(ctx context.Context, t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	if _, err := conn.Exec(ctx, "INSERT INTO users (email, username, password_digest) VALUES ('seed-limit@example.com', 'seed', 'digest')"); err != nil {
+		t.Fatalf("insert seed user: %v", err)
+	}
+	if _, err := conn.Exec(ctx, "INSERT INTO burgers (name) VALUES ('seed burger')"); err != nil {
+		t.Fatalf("insert seed burger: %v", err)
+	}
+	for _, tc := range textLimitCases {
+		// users.email は unique なので、値そのものを変えて入れる。上限ちょうどの値は日本語 1 文字
+		// (3 バイト)を含めて、バイト数ではなく文字数で数えられることも確かめる。
+		exact := strings.Repeat("あ", tc.limit-1) + "a"
+		over := strings.Repeat("あ", tc.limit) + "a"
+		if tc.name == "users.email" {
+			exact = strings.Repeat("a", tc.limit-len("@example.com")) + "@example.com"
+			over = "b" + exact
+		}
+		if _, err := conn.Exec(ctx, tc.insert, exact); err != nil {
+			t.Errorf("%s: 上限ちょうど（%d 文字）が入らない: %v", tc.name, tc.limit, err)
+		}
+		_, err := conn.Exec(ctx, tc.insert, over)
+		assertPgError(t, err, "23514", tc.constraint)
+	}
+}
+
+var checkLimitPattern = regexp.MustCompile(`char_length\(.*\) <= (\d+)`)
+
+// checkLimits は、*_max_length の CHECK 制約の名前と、その上限の値を返す。
+func checkLimits(ctx context.Context, t *testing.T, conn *pgx.Conn) map[string]int {
+	t.Helper()
+	rows, err := conn.Query(ctx,
+		"SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND contype = 'c' AND conname LIKE '%\\_max\\_length'")
+	if err != nil {
+		t.Fatalf("query max_length constraints: %v", err)
+	}
+	defer rows.Close()
+	limits := map[string]int{}
+	for rows.Next() {
+		var name, def string
+		if err := rows.Scan(&name, &def); err != nil {
+			t.Fatalf("scan constraint: %v", err)
+		}
+		m := checkLimitPattern.FindStringSubmatch(def)
+		if m == nil {
+			t.Fatalf("constraint %s の定義から上限を読み取れない: %s", name, def)
+		}
+		n, _ := strconv.Atoi(m[1])
+		limits[name] = n
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate constraints: %v", err)
+	}
+	return limits
 }

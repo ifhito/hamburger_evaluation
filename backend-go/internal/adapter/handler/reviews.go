@@ -51,7 +51,8 @@ const (
 	maxPhotoBytes int64 = 5 << 20
 	// maxMultipartTextBytes は multipart の review 投稿の各 text フィールドを
 	// 制限する。写真の cap に比べれば小さいが、現実的なコメントには十分な
-	// 余裕がある（JSON の経路は body の上限だけで制限される）。
+	// 余裕がある（コメントの文字数の上限は domain の検証が 422 で判定し、
+	// これはその外側の、暴走した入力を止めるためのガードである）。
 	maxMultipartTextBytes int64 = 64 << 10
 )
 

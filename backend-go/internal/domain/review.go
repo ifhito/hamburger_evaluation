@@ -21,6 +21,12 @@ type Review struct {
 	CreatedAt time.Time
 }
 
+// MaxCommentChars はレビューのコメントの文字数の上限（Unicode のコードポイント数）である。
+// DB の CHECK 制約 reviews_comment_max_length（000005_create_reviews）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
+const MaxCommentChars = 2000
+
 // ValidateReviewContent は、書き込み可能な review の属性に対して Rails の
 // validation を強制する。rating は 1..5 の整数でなければならず、comment は
 // 存在しなければならない。失敗した場合は、Rails の full message そのままを
@@ -32,6 +38,8 @@ func ValidateReviewContent(rating int, comment string) error {
 	}
 	if strings.TrimSpace(comment) == "" {
 		messages = append(messages, "Comment can't be blank")
+	} else if exceedsChars(comment, MaxCommentChars) {
+		messages = append(messages, tooLongMessage("Comment", MaxCommentChars))
 	}
 	if len(messages) > 0 {
 		return &ValidationError{Messages: messages}
@@ -39,14 +47,23 @@ func ValidateReviewContent(rating int, comment string) error {
 	return nil
 }
 
+// MaxBurgerNameChars はバーガー名の文字数の上限（Unicode のコードポイント数）である。
+// DB の CHECK 制約 burgers_name_max_length（000003_create_burgers）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、該当する CREATE TABLE の CHECK の両方を直す
+// （実運用に入ったあとは、新しいマイグレーションで直す）。
+const MaxBurgerNameChars = 100
+
 // ValidateBurgerName は、burger_name による review 投稿の経路に対して Rails の
 // Burger name の presence ルールを強制する。空またはホワイトスペースのみの
 // 名前は拒否される。（Rails は空の名前に対して rescue されない RecordInvalid
 // で応答するが、ここでは適切な validation failure とする。fail loud で 422
-// を返す。）
+// を返す。）名前が MaxBurgerNameChars 文字を超えるときも拒否される。
 func ValidateBurgerName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return &ValidationError{Messages: []string{"Burger name can't be blank"}}
+	}
+	if exceedsChars(name, MaxBurgerNameChars) {
+		return &ValidationError{Messages: []string{tooLongMessage("Burger name", MaxBurgerNameChars)}}
 	}
 	return nil
 }

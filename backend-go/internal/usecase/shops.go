@@ -157,9 +157,13 @@ func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (doma
 
 // Reject は、任意の moderation note つきで shop を reject し、公開の一覧から
 // 隠す。admin でない viewer には、lookup の前に domain.ErrForbidden を返す。
+// note が上限を超えるときは、lookup の前に *domain.ValidationError（422）を返す。
 func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *string) (domain.ShopDetail, error) {
 	if !viewer.Admin {
 		return domain.ShopDetail{}, domain.ErrForbidden
+	}
+	if err := domain.ValidateModerationNote(note); err != nil {
+		return domain.ShopDetail{}, err
 	}
 	return s.moderate(ctx, id, func(shop domain.Shop) domain.Shop {
 		return shop.Reject(note)
