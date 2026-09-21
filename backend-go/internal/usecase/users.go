@@ -43,6 +43,7 @@ func (s *Users) Get(ctx context.Context, viewer *domain.User, id string) (domain
 // Rails の strong params に合わせた部分更新である。
 type UpdateUserInput struct {
 	Username             *string
+	Bio                  *string
 	Email                *string
 	Password             *string
 	PasswordConfirmation *string
@@ -58,7 +59,7 @@ func (in UpdateUserInput) passwordPresent() bool {
 }
 
 // validate は Rails parity の full message を返す。valid なら空である。
-// メッセージは username、email（domain.ValidateEmail）、password
+// メッセージは username、自己紹介文（domain.ValidateBio。送られたときだけ判定する）、email（domain.ValidateEmail）、password
 // （domain.ValidatePassword）、confirmation の順に並ぶ。email を送らない入力（nil）、
 // 現在の値と同じ email を送る入力、パスワードを変更しない入力（nil と ""）には、
 // それぞれの規則を適用しない。email の形式の規則は、新しく設定するときだけ判定する
@@ -68,6 +69,9 @@ func (in UpdateUserInput) validate(currentEmail string) []string {
 	var msgs []string
 	if in.Username != nil {
 		msgs = append(msgs, domain.ValidateUsername(*in.Username)...)
+	}
+	if in.Bio != nil {
+		msgs = append(msgs, domain.ValidateBio(*in.Bio)...)
 	}
 	if in.Email != nil && *in.Email != currentEmail {
 		msgs = append(msgs, domain.ValidateEmail(*in.Email)...)
@@ -106,7 +110,7 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 	if msgs := input.validate(target.Email); len(msgs) > 0 {
 		return domain.User{}, &domain.ValidationError{Messages: msgs}
 	}
-	changes := domain.ProfileChanges{Username: input.Username, Email: input.Email}
+	changes := domain.ProfileChanges{Username: input.Username, Bio: input.Bio, Email: input.Email}
 	if input.passwordPresent() {
 		digest, err := s.hasher.Hash(*input.Password)
 		if err != nil {

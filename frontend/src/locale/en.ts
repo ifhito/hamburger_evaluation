@@ -97,6 +97,7 @@ const en = {
     edit: {
       title: "Edit Review",
       loading: "Loading\u2026",
+      forbidden: "You can't edit this review.",
       comment: "Comment",
       submit: "Save Changes",
       cancel: "Cancel",
@@ -112,6 +113,9 @@ const en = {
       reviewsLoadError: "Failed to load reviews.",
       loadMore: "Load more",
       editProfile: "Edit Profile",
+      copyLink: "Copy link",
+      linkCopied: "Link copied",
+      copyLinkManually: "Copying failed. Select the link below and copy it.",
       reviewsHeading: "Reviews",
       noReviews: "No reviews yet.",
       viewLink: "View \u2192",
@@ -119,6 +123,7 @@ const en = {
     update: {
       title: "Edit Profile",
       username: "Username",
+      bio: "Bio",
       email: "Email",
       newPassword: "New Password (leave blank to keep current)",
       confirmPassword: "Confirm New Password",

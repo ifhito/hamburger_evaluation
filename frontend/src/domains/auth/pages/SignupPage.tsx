@@ -47,7 +47,7 @@ export default function SignupPage() {
 
   return (
     <Layout title={t("auth.signup.title")}>
-      <form onSubmit={(e) => void onSubmit(e)} className={styles.form}>
+      <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
         {serverError && <ErrorMessage message={serverError} />}
         <Input
           id="username"

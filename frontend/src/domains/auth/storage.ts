@@ -1,17 +1,9 @@
 export const getToken = (): string | null => localStorage.getItem("token");
 export const setToken = (token: string): void =>
   localStorage.setItem("token", token);
-export const removeToken = (): void => localStorage.removeItem("token");
-
-export const getStoredUser = (): unknown => {
-  const raw = localStorage.getItem("auth_user");
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+// 以前は、ログイン中のユーザーも保存していた(auth_user)。ユーザーは、起動時に GET /me で
+// backend から取り直すので、もう保存しない。残っている古い値は、トークンを消すときに一緒に消す。
+export const removeToken = (): void => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("auth_user");
 };
-export const setStoredUser = (user: unknown): void =>
-  localStorage.setItem("auth_user", JSON.stringify(user));
-export const removeStoredUser = (): void => localStorage.removeItem("auth_user");

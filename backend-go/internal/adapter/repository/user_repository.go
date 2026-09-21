@@ -62,7 +62,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, params domain.CreateUse
 // ことはない）。指定されたフィールドがゼロ個の場合は、現在の user を単純に
 // 参照するだけである（200 の no-op、Rails parity）。
 func (r *UserRepository) UpdateUserProfile(ctx context.Context, id string, changes domain.ProfileChanges) (domain.User, error) {
-	if changes.Username == nil && changes.Email == nil && changes.PasswordDigest == nil {
+	if changes.Username == nil && changes.Bio == nil && changes.Email == nil && changes.PasswordDigest == nil {
 		return r.activeUserByID(ctx, id)
 	}
 	var row sqlcgen.User
@@ -72,6 +72,12 @@ func (r *UserRepository) UpdateUserProfile(ctx context.Context, id string, chang
 			row, err = q.UpdateUserUsername(ctx, sqlcgen.UpdateUserUsernameParams{ID: id, Username: *changes.Username})
 			if err != nil {
 				return fmt.Errorf("update user profile: username: %w", mapUserWriteError(err))
+			}
+		}
+		if changes.Bio != nil {
+			row, err = q.UpdateUserBio(ctx, sqlcgen.UpdateUserBioParams{ID: id, Bio: *changes.Bio})
+			if err != nil {
+				return fmt.Errorf("update user profile: bio: %w", mapUserWriteError(err))
 			}
 		}
 		if changes.Email != nil {

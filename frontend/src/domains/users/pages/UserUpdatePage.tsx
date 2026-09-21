@@ -9,10 +9,11 @@ import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
+import { Textarea } from "../../../components/Textarea";
 import styles from "./userUpdate.module.css";
 
 // 編集フォーム本体。編集してよい(backend の canEdit が true の)ときだけ、UserUpdatePage が表示する。
-function UserUpdateForm({ id }: { id: string }) {
+function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user: authUser, logout, refreshUser } = useAuth();
@@ -20,6 +21,7 @@ function UserUpdateForm({ id }: { id: string }) {
   const { destroy } = useDeleteUser();
 
   const [username, setUsername] = useState(authUser?.username ?? "");
+  const [bio, setBio] = useState(initialBio);
   const [email, setEmail] = useState(authUser?.email ?? "");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
@@ -32,6 +34,9 @@ function UserUpdateForm({ id }: { id: string }) {
     setServerError(null);
     const data: Record<string, string> = {};
     if (username !== authUser?.username) data.username = username;
+    // 自己紹介文の上限などの規則は backend だけが判定し、違反はサーバーの 422 のメッセージで表示する。
+    // 空文字も「書いた内容を消す」操作なので、そのまま送る
+    if (bio !== initialBio) data.bio = bio;
     if (email !== authUser?.email) data.email = email;
     if (password) {
       // 空のときは変更しない。規則の判定は backend だけが持ち、違反はサーバーの 422 のメッセージで表示する
@@ -45,12 +50,7 @@ function UserUpdateForm({ id }: { id: string }) {
     setIsUpdating(true);
     try {
       const updated = await update(data);
-      refreshUser({
-        id: updated.id,
-        username: updated.username,
-        email: updated.email,
-        admin: updated.admin,
-      });
+      refreshUser({ username: updated.username, email: updated.email });
       void navigate(`/users/${id}`);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("users.update.updateError")]);
@@ -75,7 +75,7 @@ function UserUpdateForm({ id }: { id: string }) {
 
   return (
     <Layout title={t("users.update.title")}>
-      <form onSubmit={(e) => void handleUpdate(e)} className={styles.form}>
+      <form onSubmit={(e) => void handleUpdate(e)} className={styles.form} noValidate>
         {serverError && <ErrorMessage message={serverError} />}
         <Input
           id="username"
@@ -83,6 +83,13 @@ function UserUpdateForm({ id }: { id: string }) {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoComplete="username"
+        />
+        <Textarea
+          id="bio"
+          label={t("users.update.bio")}
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          rows={5}
         />
         <Input
           id="email"
@@ -167,5 +174,5 @@ export default function UserUpdatePage() {
       </Layout>
     );
   }
-  return <UserUpdateForm id={profile.id} />;
+  return <UserUpdateForm id={profile.id} initialBio={profile.bio} />;
 }

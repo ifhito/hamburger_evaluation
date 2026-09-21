@@ -41,6 +41,13 @@ GO_REPOSITORY_TYPE_RE = re.compile(r"^type\s+(\w*Repository)\b", re.M)
 GO_REPOSITORY_REF_RE = re.compile(r"\b(\w+)\.(\w*Repository)\b")
 GO_REPO_CALL_RE = re.compile(r"\.repo\.[A-Z]")
 GO_DOT_IMPORT_RE = re.compile(r'^\s*(?:import\s+)?\.\s+"')
+# テスト名・コメントに story・受け入れ条件・issue の番号を書かない(story を知らない人にも伝わる書き方にする)。
+# 追加した行だけを検査し、既存の行は対象外にする。TODO(#123) の追跡用の番号は許す(`issue #` などの形だけを拾う)。
+# `S3`(オブジェクトストレージ)のような誤検出を避けるため、`S<数字>` 単独は対象にしない。
+STORY_REF_RE = re.compile(r"\bAC[0-9]+\b|Story\s*#?[0-9]+|[Ss]tory\s*S[0-9]+|\bS[0-9]{1,2}\s+AC[0-9]+|issue\s*#[0-9]+|PR\s*#[0-9]+")
+TEST_FILE_SUFFIXES = ("_test.go", ".test.ts", ".test.tsx")
+CODE_FILE_SUFFIXES = (".go", ".ts", ".tsx")
+HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 OUT_OF_SCOPE_STAGED_PREFIXES = ("plans/", "memory/", "plan/")
 OUT_OF_SCOPE_STAGED_FILES = {"SETUP.md"}
 FRONTEND_BUILD_ESCALATION_PREFIXES = (
@@ -124,6 +131,50 @@ def go_interfaces(text: str):
             depth += {"{": 1, "}": -1}.get(text[i], 0)
             i += 1
         yield match.group(1), text[match.end() : i - 1], text[: match.start()].count("\n") + 1
+
+
+def added_lines(path: str) -> list[tuple[int, str]]:
+    """path の追加された行(行番号, 本文)を返す。未追跡のファイルは全行を返す。"""
+    file = ROOT / path
+    if not file.is_file():
+        return []
+    tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "--", path], cwd=ROOT, capture_output=True).returncode == 0
+    if not tracked:
+        return list(enumerate(file.read_text(encoding="utf-8", errors="replace").splitlines(), start=1))
+    diff = capture(["git", "diff", "-U0", "HEAD", "--", path])
+    lines: list[tuple[int, str]] = []
+    current = 0
+    for line in diff.splitlines():
+        hunk = HUNK_RE.match(line)
+        if hunk:
+            current = int(hunk.group(1))
+        elif line.startswith("+") and not line.startswith("+++"):
+            lines.append((current, line[1:]))
+            current += 1
+    return lines
+
+
+def readability_violations(paths: list[str]) -> list[str]:
+    """追加した行のテスト名・コメントにある story・受け入れ条件・issue の番号を返す。
+
+    テストファイルは追加行のすべて(テスト名の文字列とコメント)を、本番のコード(.go / .ts / .tsx)は
+    追加行のコメント部分だけを検査する。
+    """
+    violations: list[str] = []
+    for path in paths:
+        is_test = path.endswith(TEST_FILE_SUFFIXES)
+        if not (is_test or path.endswith(CODE_FILE_SUFFIXES)):
+            continue
+        for number, text in added_lines(path):
+            target = text
+            if not is_test:
+                if "//" not in text and not text.lstrip().startswith(("/*", "*")):
+                    continue
+                target = text.split("//", 1)[1] if "//" in text else text
+            match = STORY_REF_RE.search(target)
+            if match:
+                violations.append(f"{path}:{number}: 「{match.group(0)}」 {text.strip()[:100]}")
+    return violations
 
 
 def go_query_repository_violations(paths: list[str]) -> list[str]:
@@ -224,6 +275,18 @@ def main() -> int:
             "and are called only by domain code; usecase reads via *Query (Get*/List* only) and writes via domain write objects (per-aggregate; *Service only for cross-aggregate updates)."
         )
         failures.append("go query/repository split sensor failed")
+
+    readability = readability_violations(paths)
+    if readability:
+        print("Test names / comments added in this change contain story, acceptance-criteria or issue numbers:")
+        for violation in readability:
+            print(f"- {violation}")
+        print(
+            "Write test names and comments so that a reader who does not know the story understands them: "
+            "no numbers such as AC1 / Story #12 / issue #12 (they belong in the issue and PR only), "
+            "and state 'situation -> result'. See 「読む人に伝わる書き方」 in .agents/skills/backend-go-boundaries."
+        )
+        failures.append("readable test names/comments sensor failed")
 
     if run(["git", "diff", "--check"]) != 0:
         failures.append("git diff --check failed")

@@ -45,6 +45,10 @@ own.
 - **Language of code text**: write comments, Go doc comments, and test names
   in Japanese (see "コード内の文章は日本語で書く" in `backend-go-boundaries`).
   Go doc comments start with the identifier name (`// ShopRepository は…`).
+  Write test names and comments so a reader who does not know the story
+  understands them: no story / acceptance-criteria / issue numbers (`AC1`,
+  `S24`, `#123`), test names as "situation → result", no unexplained English
+  jargon inside Japanese sentences.
   Keep in English: identifiers, API error messages and JSON keys, log
   messages, compiler/tool directives (`//go:build`, `//nolint`,
   `// Code generated`), and sqlc `-- name: Xxx :one` annotations (never alter

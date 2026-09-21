@@ -17,23 +17,24 @@ const userNotFoundMessage = "User not found"
 
 // userResponse は、PUT /users/{id} の、token を含まない user の JSON 形式である：
 // issue #16 の仕様（「user 形 + admin フラグ」、issue が引用する frontend の契約の
-// レスポンス形状）に従った {id, username, email, admin} であり、
+// レスポンス形状）に従った {id, username, email, admin} に、自己紹介文（bio）を加えた {id, username, bio, email, admin} であり、
 // authUserResponse から token を除いたものである。PUT は本人だけが成功する
 // ので、email と admin を常に含めてよい。他人にも返りうる GET の user は
 // userProfileResponse を使う。
 type userResponse struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
+	Bio      string `json:"bio"`
 	Email    string `json:"email"`
 	Admin    bool   `json:"admin"`
 }
 
 func newUserResponse(user domain.User) userResponse {
-	return userResponse{ID: user.ID, Username: user.Username, Email: user.Email, Admin: user.Admin}
+	return userResponse{ID: user.ID, Username: user.Username, Bio: user.Bio, Email: user.Email, Admin: user.Admin}
 }
 
 // userProfileResponse は、GET /users/{id} の user の JSON 形式である。公開ビューは
-// {id, username} で、本人が閲覧したときだけ {id, username, email, admin} になる。
+// {id, username, bio} で、本人が閲覧したときだけ {id, username, bio, email, admin} になる。
 // Email と Admin は pointer + omitempty で、他人・匿名では nil としてキーごと
 // 省かれる（null にはならない）。admin=false は非 nil の pointer なので、本人
 // ビューでは "admin":false として出力される。CanEdit は、viewer がこのプロフィールを
@@ -41,6 +42,7 @@ func newUserResponse(user domain.User) userResponse {
 type userProfileResponse struct {
 	ID       string  `json:"id"`
 	Username string  `json:"username"`
+	Bio      string  `json:"bio"`
 	Email    *string `json:"email,omitempty"`
 	Admin    *bool   `json:"admin,omitempty"`
 	CanEdit  bool    `json:"can_edit"`
@@ -49,7 +51,7 @@ type userProfileResponse struct {
 // newUserProfileResponse は domain.UserProfile を JSON 形式に写すだけである。
 // 何を見せるかの判断は domain（User.ProfileFor）が済ませている。
 func newUserProfileResponse(profile domain.UserProfile) userProfileResponse {
-	return userProfileResponse{ID: profile.ID, Username: profile.Username, Email: profile.Email, Admin: profile.Admin, CanEdit: profile.CanEdit}
+	return userProfileResponse{ID: profile.ID, Username: profile.Username, Bio: profile.Bio, Email: profile.Email, Admin: profile.Admin, CanEdit: profile.CanEdit}
 }
 
 // updateUserRequest は PUT /users/{id} の {"user":{...}} ラッパーである。
@@ -60,6 +62,7 @@ func newUserProfileResponse(profile domain.UserProfile) userProfileResponse {
 type updateUserRequest struct {
 	User struct {
 		Username             *string `json:"username"`
+		Bio                  *string `json:"bio"`
 		Email                *string `json:"email"`
 		Password             *string `json:"password"`
 		PasswordConfirmation *string `json:"password_confirmation"`
@@ -138,6 +141,7 @@ func handleUpdateUser(users *usecase.Users) http.HandlerFunc {
 		}
 		updated, err := users.Update(r.Context(), viewer, id, usecase.UpdateUserInput{
 			Username:             req.User.Username,
+			Bio:                  req.User.Bio,
 			Email:                req.User.Email,
 			Password:             req.User.Password,
 			PasswordConfirmation: req.User.PasswordConfirmation,

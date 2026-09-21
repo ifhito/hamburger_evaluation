@@ -37,6 +37,9 @@ Boundaries (from `backend-go-boundaries` / `frontend-spa-boundaries` skills):
   (doc comments start with the identifier name); keep English for identifiers,
   API error messages/JSON keys, log messages, tool directives, and sqlc
   `-- name:` annotations (never alter those)
+- test names / comments must read without the story: no story/AC/issue
+  numbers (`AC1`, `S24`, `#123`), "situation → result" names, no unexplained
+  English jargon in Japanese sentences
 
 Output contract:
 1. result: done / blocked (with blocker)

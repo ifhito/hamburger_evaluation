@@ -143,7 +143,7 @@ frontend/src/components    shared UI components
 - 読み取りの `*Query` は usecase 側で宣言し、書き込みの `*Repository` は domain が宣言する。repository を呼べるのは domain のコードだけ(単一集約の書き込みは集約ごとの書き込みオブジェクト。`*Service` は集約を跨ぐ更新だけ)で、usecase は repository に依存しない(`.agents/skills/backend-go-boundaries`)。
 - ドメインのルールの判断は backend の `domain` だけが持つ。frontend は入力・説明・表示・サーバーのエラーの表示だけを行い、検証・権限の条件・定数・導出を複製しない(`.agents/skills/frontend-spa-boundaries`)。
 - sqlc の生成コードは手で編集せず、`db/queries/` を変更して再生成する。ドメインの形と DB の形は別々に設計する(`.agents/skills/db-design`)。
-- コード内の文章(コメント、Go の doc コメント、テスト名)は日本語で書く。PR の本文も日本語で、固定のセクション構成に従う(`.agents/skills/pr-template`)。
+- コード内の文章(コメント、Go の doc コメント、テスト名)は日本語で書き、story を知らない人にも伝わる書き方にする(story・受け入れ条件・issue の番号を書かない。`stop-sensors.py` が追加行を検出する)。PR の本文も日本語で、固定のセクション構成に従う(`.agents/skills/pr-template`)。
 - 既存の未追跡の `SETUP.md` と `plans/*.md` は、明示的に求められない限り commit してはならない。
 
 ## 8. 確認されたプログラム的チェック

@@ -222,3 +222,28 @@ func TestShopCanBeReviewedByViewer(t *testing.T) {
 		})
 	}
 }
+
+// TestShopModerationCapabilities は、承認・却下の操作を画面が提示してよいか(状態が変わる遷移か)を、
+// status ごとに固定する。frontend は status の比較でこれを再現しない(S32)。
+func TestShopModerationCapabilities(t *testing.T) {
+	tests := []struct {
+		status      domain.ShopStatus
+		wantApprove bool
+		wantReject  bool
+	}{
+		{domain.ShopStatusPending, true, true},
+		{domain.ShopStatusActive, false, true},
+		{domain.ShopStatusRejected, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.status), func(t *testing.T) {
+			shop := domain.Shop{Status: tt.status}
+			if got := shop.CanBeApproved(); got != tt.wantApprove {
+				t.Errorf("CanBeApproved() = %v, want %v", got, tt.wantApprove)
+			}
+			if got := shop.CanBeRejected(); got != tt.wantReject {
+				t.Errorf("CanBeRejected() = %v, want %v", got, tt.wantReject)
+			}
+		})
+	}
+}
