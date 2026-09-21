@@ -227,17 +227,25 @@ func TestUserTextLimits(t *testing.T) {
 	usernameOver := tooLong("Username", domain.MaxUsernameChars)
 	emailOver := tooLong("Email", domain.MaxEmailChars)
 
-	t.Run("サインアップ: 上限ちょうどは 201、超えると 422 でユーザーが作られない", func(t *testing.T) {
-		repo, router, _ := newSeededUsersRouter(t)
+	t.Run("サインアップ: 上限ちょうどは 202 で確認メールが頼まれ、確認するとユーザーができる。超えると 422 で確認待ちもメールもできない", func(t *testing.T) {
+		kit := newSignupKit(t)
 		signup := func(username, email string) (int, string) {
 			body := fmt.Sprintf(`{"username":%s,"email":%s,"password":"Password123!"}`, jsonString(t, username), jsonString(t, email))
-			rec := do(router, http.MethodPost, "/signup", body, "")
+			rec := do(kit.router, http.MethodPost, "/signup", body, "")
 			return rec.Code, rec.Body.String()
 		}
-		if code, body := signup(strings.Repeat("あ", domain.MaxUsernameChars), longEmail(domain.MaxEmailChars)); code != http.StatusCreated {
-			t.Fatalf("上限ちょうど: status = %d, want 201 (body %.200s)", code, body)
+		exactName, exactEmail := strings.Repeat("あ", domain.MaxUsernameChars), longEmail(domain.MaxEmailChars)
+		if code, body := signup(exactName, exactEmail); code != http.StatusAccepted || body != signupAcceptedBody {
+			t.Fatalf("上限ちょうど: status = %d, want 202 (body %.200s)", code, body)
 		}
-		before := len(repo.users)
+		if rec := do(kit.router, http.MethodPost, "/signup/confirm", confirmBody(kit.mailer.lastToken(t)), ""); rec.Code != http.StatusCreated {
+			t.Fatalf("上限ちょうどの確認: status = %d, want 201 (body %.200s)", rec.Code, rec.Body)
+		}
+		if len(kit.users.users) != 1 {
+			t.Fatalf("確認後のユーザー = %d 人, want 1", len(kit.users.users))
+		}
+		pendingBefore := len(kit.store.rows)
+		confirmationsBefore, _ := kit.mailer.counts()
 		if code, body := signup(strings.Repeat("あ", domain.MaxUsernameChars+1), "new1@example.com"); code != http.StatusUnprocessableEntity || body != usernameOver {
 			t.Errorf("ユーザー名の超過: status/body = %d %s, want 422 %s", code, body, usernameOver)
 		}
@@ -248,8 +256,8 @@ func TestUserTextLimits(t *testing.T) {
 		if code, body := signup(strings.Repeat("a", domain.MaxUsernameChars+1), longEmail(domain.MaxEmailChars+1)); code != http.StatusUnprocessableEntity || body != wantBoth {
 			t.Errorf("両方の超過: status/body = %d %s, want 422 %s", code, body, wantBoth)
 		}
-		if len(repo.users) != before {
-			t.Errorf("422 なのにユーザーが増えた: %d → %d", before, len(repo.users))
+		if confirmationsAfter, _ := kit.mailer.counts(); len(kit.store.rows) != pendingBefore || confirmationsAfter != confirmationsBefore {
+			t.Errorf("422 なのに確認待ち・確認メールが増えた: 確認待ち %d → %d、確認メール %d → %d", pendingBefore, len(kit.store.rows), confirmationsBefore, confirmationsAfter)
 		}
 	})
 

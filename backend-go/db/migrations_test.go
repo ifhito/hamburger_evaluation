@@ -141,6 +141,22 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23505", "users_email_key")
 	})
 
+	// S16（AC14）：確認待ちの signup の制約。トークンのハッシュは一意、email は大文字小文字を
+	// 区別せず一意で、必須の列は NOT NULL である。users のスキーマは変わらない。
+	t.Run("S16 signup_verifications の制約", func(t *testing.T) {
+		const insert = "INSERT INTO signup_verifications (email, username, password_digest, token_hash, expires_at) VALUES ($1, 'u', 'digest', $2, now() + interval '1 day')"
+		if _, err := conn.Exec(ctx, insert, "Pending@example.com", "hash-1"); err != nil {
+			t.Fatalf("insert first verification: %v", err)
+		}
+		_, err := conn.Exec(ctx, insert, "other@example.com", "hash-1")
+		assertPgError(t, err, "23505", "signup_verifications_token_hash_key")
+		_, err = conn.Exec(ctx, insert, "PENDING@example.com", "hash-2")
+		assertPgError(t, err, "23505", "idx_signup_verifications_email_lower")
+		_, err = conn.Exec(ctx,
+			"INSERT INTO signup_verifications (email, username, password_digest, token_hash) VALUES ('n@example.com', 'u', 'digest', 'hash-3')")
+		assertPgError(t, err, "23502", "")
+	})
+
 	// S21 AC7：上限ちょうどは入り、1 文字超えると CHECK 制約違反になる。
 	// 数え方はコードポイント数（日本語・絵文字も 1 文字）。
 	t.Run("S21 AC7 文字数の上限を超える値は CHECK 制約違反になる", func(t *testing.T) {
@@ -186,7 +202,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	t.Helper()
 
-	wantTables := []string{"burger_stats", "burgers", "reviews", "shops", "shops_burgers", "users"}
+	wantTables := []string{"burger_stats", "burgers", "mail_deliveries", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
 	gotTables := queryStrings(ctx, t, conn,
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
@@ -206,6 +222,17 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burgers/name/text/NO",
 		"burgers/created_at/timestamp with time zone/NO",
 		"burgers/updated_at/timestamp with time zone/NO",
+		// mail_deliveries は 000009（S16）で追加された。
+		"mail_deliveries/id/uuid/NO",
+		"mail_deliveries/kind/text/NO",
+		"mail_deliveries/recipient/text/NO",
+		"mail_deliveries/idempotency_key/text/NO",
+		"mail_deliveries/status/text/NO",
+		"mail_deliveries/failure_kind/text/YES",
+		"mail_deliveries/attempts/integer/NO",
+		"mail_deliveries/last_error/text/YES",
+		"mail_deliveries/created_at/timestamp with time zone/NO",
+		"mail_deliveries/sent_at/timestamp with time zone/YES",
 		"reviews/id/bigint/NO",
 		"reviews/rating/smallint/NO",
 		"reviews/comment/text/YES",
@@ -226,6 +253,16 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/updated_at/timestamp with time zone/NO",
 		"shops_burgers/shop_id/uuid/NO",
 		"shops_burgers/burger_id/uuid/NO",
+		// signup_verifications は 000008（S16）で追加された。
+		"signup_verifications/id/uuid/NO",
+		"signup_verifications/email/text/NO",
+		"signup_verifications/username/text/NO",
+		"signup_verifications/password_digest/text/NO",
+		"signup_verifications/token_hash/text/NO",
+		"signup_verifications/expires_at/timestamp with time zone/NO",
+		"signup_verifications/last_sent_at/timestamp with time zone/NO",
+		"signup_verifications/generation/integer/NO",
+		"signup_verifications/created_at/timestamp with time zone/NO",
 		"users/id/uuid/NO",
 		"users/email/text/NO",
 		"users/username/text/NO",
@@ -282,6 +319,14 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"reviews/reviews_burger_id_fkey/f",
 		"burger_stats/burger_stats_burger_id_key/u",
 		"burger_stats/burger_stats_burger_id_fkey/f",
+		"signup_verifications/signup_verifications_pkey/p",
+		"signup_verifications/signup_verifications_token_hash_key/u",
+		"signup_verifications/signup_verifications_generation_check/c",
+		"mail_deliveries/mail_deliveries_pkey/p",
+		"mail_deliveries/mail_deliveries_idempotency_key_key/u",
+		"mail_deliveries/mail_deliveries_kind_check/c",
+		"mail_deliveries/mail_deliveries_status_check/c",
+		"mail_deliveries/mail_deliveries_sent_at_check/c",
 	}
 	for _, want := range wantConstraints {
 		if !constraints[want] {
@@ -300,6 +345,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"idx_shops_burgers_burger_id",
 		"idx_reviews_user_id",
 		"idx_reviews_burger_id",
+		"idx_signup_verifications_email_lower",
+		"idx_signup_verifications_expires_at",
 	}
 	for _, want := range wantIndexes {
 		if !indexes[want] {
