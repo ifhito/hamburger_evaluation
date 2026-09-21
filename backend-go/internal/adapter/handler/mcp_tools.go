@@ -31,6 +31,10 @@ var mcpToolScopes = map[string]string{
 	"submit_shop":   domain.OAuthScopeWrite,
 }
 
+// toolResultTooLargeMessage は、結果が大きすぎるときの案内である。MCP のツールの説明・指示文と同じく、AI に渡す
+// 日本語で固定する(言語の切り替えの対象にしない)。
+const toolResultTooLargeMessage = "結果が大きすぎます。per_page を小さくして、もう一度呼んでください。"
+
 // maxToolResultBytes は、1 回のツールの結果の最大のバイト数である。一覧が大きすぎるときは、途中で切って
 // 壊れた JSON を返すのではなく、件数を減らして呼び直すよう、エラーで伝える。
 const maxToolResultBytes = 64 << 10
@@ -132,7 +136,7 @@ func success(v any) (*mcp.CallToolResult, any, error) {
 		return failure("internal server error")
 	}
 	if buf.Len() > maxToolResultBytes {
-		return failure("結果が大きすぎます。per_page を小さくして、もう一度呼んでください。")
+		return failure(toolResultTooLargeMessage)
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: strings.TrimSpace(buf.String())}}}, nil, nil
 }

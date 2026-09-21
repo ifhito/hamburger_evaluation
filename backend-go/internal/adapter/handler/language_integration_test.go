@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,25 +12,6 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/fakeoidc"
 )
-
-// exchangeIn は、コードを、Accept-Language つきで交換する(googleKit.exchange と同じ。手続きを終えたブラウザの
-// cookie を送る)。
-func (k *googleKit) exchangeIn(code, acceptLanguage string) *httptest.ResponseRecorder {
-	k.mu.Lock()
-	cookies := k.handoffs[code]
-	k.mu.Unlock()
-	body, _ := json.Marshal(map[string]string{"code": code})
-	req := httptest.NewRequest(http.MethodPost, "/auth/google/exchange", strings.NewReader(string(body)))
-	for _, c := range sendable(cookies, "/auth/google/exchange") {
-		req.AddCookie(c)
-	}
-	if acceptLanguage != "" {
-		req.Header.Set("Accept-Language", acceptLanguage)
-	}
-	rec := httptest.NewRecorder()
-	k.router.ServeHTTP(rec, req)
-	return rec
-}
 
 // TestGoogleLoginMessagesFollowAcceptLanguage は、Google のサインインの案内(画面がそのまま出す文言)が、
 // 交換の要求の Accept-Language の言語で返ることを、案内の種類ごとに確かめる。ヘッダーなしは、いまと同じ英語である。
@@ -55,7 +37,7 @@ func TestGoogleLoginMessagesFollowAcceptLanguage(t *testing.T) {
 	}
 	outcomes := []outcome{
 		{
-			name: "同じメールのアカウントがある", status: http.StatusConflict,
+			name: "同じメールのアカウントがあるとき", status: http.StatusConflict,
 			en: "An account with this email address already exists. Sign in with your password, then connect Google from your profile.",
 			ja: "このメールアドレスのアカウントが、すでにあります。パスワードでサインインして、プロフィールから Google を連携してください。",
 			attempt: func(t *testing.T, k *googleKit) string {
@@ -64,7 +46,7 @@ func TestGoogleLoginMessagesFollowAcceptLanguage(t *testing.T) {
 			},
 		},
 		{
-			name: "別の利用者に連携済みの Google アカウント", status: http.StatusConflict,
+			name: "別の利用者に連携済みの Google アカウントを結び付けようとしたとき", status: http.StatusConflict,
 			en:    "This Google account is already connected to another account.",
 			ja:    "この Google アカウントは、ほかのアカウントに連携済みです。",
 			setup: linkBob,
@@ -73,7 +55,7 @@ func TestGoogleLoginMessagesFollowAcceptLanguage(t *testing.T) {
 			},
 		},
 		{
-			name: "すでに Google に連携している", status: http.StatusConflict,
+			name: "すでに Google に連携している利用者が、別の Google を結び付けようとしたとき", status: http.StatusConflict,
 			en:    "Your account is already connected to a Google account. Disconnect it first.",
 			ja:    "このアカウントは、すでに Google アカウントに連携しています。先に、連携を解除してください。",
 			setup: linkBob,
@@ -83,7 +65,7 @@ func TestGoogleLoginMessagesFollowAcceptLanguage(t *testing.T) {
 			},
 		},
 		{
-			name: "手続きの失敗", status: http.StatusBadRequest,
+			name: "手続きが失敗したとき", status: http.StatusBadRequest,
 			en: "Google sign-in failed. Please try again.",
 			ja: "Google でのサインインに失敗しました。もう一度お試しください。",
 			attempt: func(t *testing.T, k *googleKit) string {
@@ -92,7 +74,7 @@ func TestGoogleLoginMessagesFollowAcceptLanguage(t *testing.T) {
 		},
 	}
 	for _, o := range outcomes {
-		t.Run(o.name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s、%d で、言語に合わせた案内を返す", o.name, o.status), func(t *testing.T) {
 			k := newGoogleKit(t)
 			if o.setup != nil {
 				o.setup(t, k)
@@ -110,7 +92,7 @@ func TestGoogleLoginMessagesFollowAcceptLanguage(t *testing.T) {
 		})
 	}
 
-	t.Run("無効なコード", func(t *testing.T) {
+	t.Run("存在しないコードを交換すると、400 で、言語に合わせた案内を返す", func(t *testing.T) {
 		k := newGoogleKit(t)
 		for header, want := range map[string]string{
 			"":   `{"errors":["The Google sign-in link is invalid or has expired. Please try again."]}`,
@@ -123,7 +105,7 @@ func TestGoogleLoginMessagesFollowAcceptLanguage(t *testing.T) {
 		}
 	})
 
-	t.Run("パスワードなしのアカウントの連携の解除", func(t *testing.T) {
+	t.Run("パスワードのない利用者が Google の連携を解除しようとすると、422 で、言語に合わせた案内を返す", func(t *testing.T) {
 		k := newGoogleKit(t)
 		auth := "Bearer " + decodeExchange(t, k.exchange(k.run(t, "").code)).Token
 		for header, want := range map[string]string{
@@ -145,10 +127,10 @@ func TestOAuthConsentMessagesFollowAcceptLanguage(t *testing.T) {
 	_, challenge := pkce()
 	k := newOAuthKit(t)
 
-	t.Run("approve がない", func(t *testing.T) {
+	t.Run("許可するかどうかが書かれていない決定を送ると、422 で、言語に合わせた案内を返す", func(t *testing.T) {
 		for header, want := range map[string]string{
 			"":   `{"errors":["Approve is required"]}`,
-			"ja": `{"errors":["許可するか、拒否するかを指定してください"]}`,
+			"ja": `{"errors":["許可するか、許可しないかを指定してください"]}`,
 		} {
 			rec := doWithLanguage(k.router, http.MethodPost, "/oauth/authorize/decision", `{"query":"`+authQuery(challenge)+`"}`, k.bearer[k.alice], header)
 			if rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != want {
@@ -158,14 +140,14 @@ func TestOAuthConsentMessagesFollowAcceptLanguage(t *testing.T) {
 	})
 
 	invalid := map[string]string{
-		"登録されていない戻り先": authQuery(challenge, "redirect_uri", "https://evil.example.com/callback"),
-		"知らないアプリ":     authQuery(challenge, "client_id", "unknown-app"),
-		"PKCE がない":    authQuery(challenge, "code_challenge", "", "code_challenge_method", ""),
-		"知らない範囲":      authQuery(challenge, "scope", "admin"),
-		"query が読めない": "a=%zz",
+		"登録されていない戻り先の要求":   authQuery(challenge, "redirect_uri", "https://evil.example.com/callback"),
+		"知らないアプリの要求":       authQuery(challenge, "client_id", "unknown-app"),
+		"PKCE がない":         authQuery(challenge, "code_challenge", "", "code_challenge_method", ""),
+		"知らない範囲を求める要求":     authQuery(challenge, "scope", "admin"),
+		"解釈できない query の要求": "a=%zz",
 	}
 	for name, query := range invalid {
-		t.Run(name, func(t *testing.T) {
+		t.Run(name+"を送ると、422 で、言語に合わせた理由が返る", func(t *testing.T) {
 			// 英語の応答(ヘッダーなし)は、いままでと同じ、診断の文字列そのまま。日本語は、その文字列を添える。
 			for _, call := range []struct {
 				name string
@@ -189,13 +171,13 @@ func TestOAuthConsentMessagesFollowAcceptLanguage(t *testing.T) {
 				var lead string
 				switch {
 				case strings.HasPrefix(en.Error, "oauth authorization request is invalid"):
-					lead = "このアプリからの許可の要求が正しくありません("
+					lead = "このアプリからの許可の要求が正しくありません。詳細: "
 				case strings.HasPrefix(en.Error, "oauth scope is invalid"):
-					lead = "要求された許可の範囲が正しくありません("
+					lead = "要求された許可の範囲が正しくありません。詳細: "
 				default:
 					t.Fatalf("%s 英語の診断が、いままでの文字列で始まらない: %q", call.name, en.Error)
 				}
-				wantJA, _ := json.Marshal(map[string]string{"error": lead + en.Error + ")"})
+				wantJA, _ := json.Marshal(map[string]string{"error": lead + en.Error})
 				if ja := call.do("ja"); ja.Code != http.StatusUnprocessableEntity || ja.Body.String() != string(wantJA) {
 					t.Errorf("%s ja: %d %s, want 422 %s", call.name, ja.Code, ja.Body, wantJA)
 				}

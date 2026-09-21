@@ -34,10 +34,6 @@ func TestCatalogStructure(t *testing.T) {
 // 生成 / 成功(200・201・202)以外の状態コードでの writeJSON の直接の呼び出し / http.Error / MCP のツールの失敗(failure)への
 // 文字列の直接の受け渡し。
 func TestErrorBodiesAreBuiltByTheHelpers(t *testing.T) {
-	toolFailureLiterals := map[string]bool{
-		`"internal server error"`: true,
-		`"結果が大きすぎます。per_page を小さくして、もう一度呼んでください。"`: true,
-	}
 	// 例外(ファイル → 理由)。ここにあるファイルは、対象の書き方を、丸ごと許す。
 	exempt := map[string]string{"respond.go": "本文を作る関数そのもの"}
 	fset := token.NewFileSet()
@@ -83,16 +79,83 @@ func TestErrorBodiesAreBuiltByTheHelpers(t *testing.T) {
 					if isHTTP(n.Fun, "Error") {
 						t.Errorf("%s: http.Error は使わない(本文が、言語の切り替えをすり抜ける)", fset.Position(n.Pos()))
 					}
-					// MCP のツールの失敗も同じ。文字列のリテラルは、次の 2 つだけ: 5xx 相当の固定の英語と、AI に渡す
-					// 説明と同じく日本語で書く、結果が大きすぎるときの案内。
-					if id, ok := n.Fun.(*ast.Ident); ok && id.Name == "failure" && len(n.Args) == 1 {
-						if lit, ok := n.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING && !toolFailureLiterals[lit.Value] {
-							t.Errorf("%s: failure に文字列を直接渡している(t.failMessage とカタログの文言を使う)", fset.Position(n.Pos()))
-						}
+					// MCP のツールの失敗も同じ。failure に渡してよいのは、カタログの文言を文字列にした text(...) と、
+					// 固定の英語 "internal server error"(5xx 相当)と、日本語で固定した toolResultTooLargeMessage だけ。
+					// 文字列の連結・Sprintf・変数は、どれも通さない。
+					if id, ok := n.Fun.(*ast.Ident); ok && id.Name == "failure" && len(n.Args) == 1 && !allowedFailureArg(n.Args[0]) {
+						t.Errorf("%s: failure に、カタログを通さない文言を渡している(t.failMessage とカタログの文言を使う)", fset.Position(n.Pos()))
 					}
 				}
 				return true
 			})
+		}
+	}
+}
+
+// allowedFailureArg は、MCP のツールの失敗(failure)に、直接渡してよい引数かを返す(カタログを通った文言だけ)。
+func allowedFailureArg(arg ast.Expr) bool {
+	switch a := arg.(type) {
+	case *ast.CallExpr:
+		if id, ok := a.Fun.(*ast.Ident); ok && id.Name == "text" {
+			return true
+		}
+		// 検証の失敗の文言(domain のカタログを、要求の言語で文字列にしたもの)を、つないだもの: strings.Join(x.Texts(...), …)
+		if sel, ok := a.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Join" && len(a.Args) == 2 {
+			if inner, ok := a.Args[0].(*ast.CallExpr); ok {
+				if isel, ok := inner.Fun.(*ast.SelectorExpr); ok && isel.Sel.Name == "Texts" {
+					return true
+				}
+			}
+		}
+		return false
+	case *ast.BasicLit:
+		return a.Kind == token.STRING && a.Value == `"internal server error"`
+	case *ast.Ident:
+		return a.Name == "toolResultTooLargeMessage"
+	}
+	return false
+}
+
+// TestMessageVariablesAreUsed は、`msgX = apiMsg(keyX)` と宣言した文言の変数が、コードのどこかで使われている
+// ことを確かめる(Go は、使われないパッケージの変数を咎めないので、使わなくなった文言が、カタログに残り続ける)。
+func TestMessageVariablesAreUsed(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := map[string]token.Pos{}
+	uses := map[string]int{}
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Files {
+			ast.Inspect(file, func(n ast.Node) bool {
+				if spec, ok := n.(*ast.ValueSpec); ok {
+					for i, name := range spec.Names {
+						if i < len(spec.Values) {
+							if call, ok := spec.Values[i].(*ast.CallExpr); ok {
+								if fn, ok := call.Fun.(*ast.Ident); ok && fn.Name == "apiMsg" {
+									declared[name.Name] = name.Pos()
+									continue
+								}
+							}
+						}
+					}
+					return true
+				}
+				if id, ok := n.(*ast.Ident); ok {
+					uses[id.Name]++
+				}
+				return true
+			})
+		}
+	}
+	if len(declared) == 0 {
+		t.Fatal("apiMsg の変数が 1 つも見つからない(検査が空振りしている)")
+	}
+	for name, pos := range declared {
+		// 宣言の名前も 1 回に数えているので、使われているなら、2 回以上ある。
+		if uses[name] < 2 {
+			t.Errorf("%s: %s が、どこでも使われていない(使わない文言は、変数もカタログも消す)", fset.Position(pos), name)
 		}
 	}
 }

@@ -86,6 +86,23 @@ func TestMCPErrorsFollowAcceptLanguage(t *testing.T) {
 		}
 	})
 
+	t.Run("ツールの入力が検証で断られると、その文言も、要求の言語で返る(複数あれば「; 」でつなぐ)", func(t *testing.T) {
+		args := `{"shop_id":"` + activeShopID + `","burger_id":"` + cheeseBurgerID + `","rating":0,"comment":""}`
+		for header, want := range map[string]string{
+			"":   "Rating must be in 1..5; Comment can't be blank",
+			"ja": "評価は 1〜5 の整数で指定してください; コメントを入力してください",
+		} {
+			headers := map[string]string{}
+			if header != "" {
+				headers["Accept-Language"] = header
+			}
+			resp, body := k.rpcWith(t, k.token(k.alice, writeScope), rpcToolCall("create_review", args), headers, "")
+			if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"isError":true`) || !strings.Contains(body, `"text":"`+want+`"`) {
+				t.Errorf("Accept-Language %q: status/body = %d %s, want 200 の失敗で、文言 %q", header, resp.StatusCode, body, want)
+			}
+		}
+	})
+
 	t.Run("範囲が足りないときの 403 の本文も、言語に従う(WWW-Authenticate は、プロトコルなので英語のまま)", func(t *testing.T) {
 		for header, want := range map[string]string{"": `{"error":"Insufficient scope: hamburger:write"}`, "ja": `{"error":"許可の範囲が足りません: hamburger:write"}`} {
 			headers := map[string]string{}

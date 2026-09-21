@@ -2,8 +2,8 @@ package handler
 
 import "github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 
-// このファイルは、handler が返す 4xx の文言(見つからない・権限・認証・入力の形・写真)のカタログ(英語・
-// 日本語)である。検証の失敗(422)の文言は、domain のカタログ(domain/messages.go)にある。英語は、API の
+// このファイルは、handler が返す 4xx の文言(見つからない・権限・認証・リクエストの形・写真・クエリの誤り、
+// Google のサインインの案内、OAuth の許可の画面、MCP の範囲の不足)のカタログ(英語・日本語)である。検証の失敗(422)の文言は、domain のカタログ(domain/messages.go)にある。英語は、API の
 // 文言の契約なので、一字一句、変えない。日本語は、デザイン(design/redesign)の語調と用語にそろえる
 // (です・ます調の短い文。ログインでなく「サインイン」)。キーを足したら、英語と日本語の両方を書く
 // (構造テスト messages_test.go が強制する)。
@@ -80,10 +80,11 @@ var catalog = map[string]domain.Entry{
 	keyPageNotInteger:     {EN: "Page must be an integer", JA: "ページは、整数で指定してください"},
 	keyPerPageNotInteger:  {EN: "Per page must be an integer", JA: "1 ページの件数は、整数で指定してください"},
 
-	keyOAuthApproveRequired: {EN: "Approve is required", JA: "許可するか、拒否するかを指定してください"},
-	// 要求が不正な理由は、OAuth の仕様に沿った診断の文(英語。アプリの作り手が読む)なので、日本語の文言には、そのまま添える。
-	keyOAuthRequestInvalid: {EN: "%s", JA: "このアプリからの許可の要求が正しくありません(%s)"},
-	keyOAuthScopeInvalid:   {EN: "%s", JA: "要求された許可の範囲が正しくありません(%s)"},
+	keyOAuthApproveRequired: {EN: "Approve is required", JA: "許可するか、許可しないかを指定してください"},
+	// 要求が不正な理由は、OAuth の仕様に沿った診断の文(英語。アプリの作り手が読む)なので、日本語の文言には、
+	// 「詳細」として、そのまま添える。
+	keyOAuthRequestInvalid: {EN: "%s", JA: "このアプリからの許可の要求が正しくありません。詳細: %s"},
+	keyOAuthScopeInvalid:   {EN: "%s", JA: "要求された許可の範囲が正しくありません。詳細: %s"},
 	keyInsufficientScope:   {EN: "Insufficient scope: %s", JA: "許可の範囲が足りません: %s"},
 
 	keyGoogleSignInFailed:  {EN: "Google sign-in failed. Please try again.", JA: "Google でのサインインに失敗しました。もう一度お試しください。"},

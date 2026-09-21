@@ -73,13 +73,7 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, m apiMessage
 
 // writeErrorList は、入力の誤り(422)を、リスト形式 {"errors":[...]} で、利用者の言語の文言で書き込む。
 func writeErrorList(w http.ResponseWriter, r *http.Request, status int, ms ...apiMessage) {
-	varyByLanguage(w)
-	l := langOf(r)
-	texts := make([]string, len(ms))
-	for i, m := range ms {
-		texts[i] = text(l, m)
-	}
-	writeJSON(w, status, errorsResponse{Errors: texts})
+	writeErrorListWith(w, r, status, func(texts []string) any { return errorsResponse{Errors: texts} }, ms...)
 }
 
 // writeErrorListWith は、writeErrorList と同じく、文言を利用者の言語にして {"errors":[...]} を書くが、本文に
