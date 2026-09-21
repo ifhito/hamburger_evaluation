@@ -14,8 +14,12 @@ export class ApiError extends Error {
   }
 }
 
+// API の URL の根(開発では、Vite のプロキシを通す "/api")。axios のほかに、ブラウザが API へ直接移動する
+// とき(Google のサインインの開始など)にも使う。
+export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "/api";
+
 export function buildApiClient(getToken?: () => string | null) {
-  const client = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api" });
+  const client = axios.create({ baseURL: API_BASE_URL });
 
   client.interceptors.request.use((config) => {
     const token = getToken?.();

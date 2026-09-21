@@ -41,3 +41,30 @@ export interface LoginRequest {
 
 // Go の authUserResponse: login と signup の確認は同じ本文を返す。
 export type LoginResponse = AuthUserResponse;
+
+// POST /auth/google/exchange の 200 の本文(サインインの成功)。ログインと同じ本文に、手続きのあとに戻る先が付く。
+// returnTo は、アプリの中のパス(backend が確かめたもの)で、空文字列は既定の画面を意味する。
+export interface GoogleSignedInResponse extends AuthUserResponse {
+  returnTo: string;
+}
+
+// POST /auth/google/exchange の 200 の本文(ログイン済みの利用者への、Google アカウントの結び付けの成功)。
+export interface GoogleLinkedResponse {
+  linked: true;
+  returnTo: string;
+}
+
+export type GoogleExchangeResponse = GoogleSignedInResponse | GoogleLinkedResponse;
+
+// 外部のサービス(Google など)のアカウントとの結び付き(GET /me/identities)。canUnlink は、解除してよいかで、
+// backend が判断する(解除するとサインインする方法がなくなるときは false)。
+export interface Identity {
+  provider: string;
+  email: string;
+  connectedAt: string;
+  canUnlink: boolean;
+}
+
+export interface IdentitiesResponse {
+  identities: Identity[];
+}
