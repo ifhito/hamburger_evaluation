@@ -14,7 +14,7 @@ const (
 )
 
 // paginationEndpoint は、pagination の共有テーブルを流し込む一覧 endpoint である。
-// setup は fake を配線した router と、repository の ListShops / ListReviews が
+// setup は fake を配線した router と、ShopQuery.ListShops / ReviewQuery.ListReviews が
 // 呼ばれた回数と最後の limit / offset を返す関数を用意する。どちらの endpoint も、
 // 匿名の viewer に見える項目がちょうど 1 件になるよう seed される。
 type paginationEndpoint struct {
@@ -72,7 +72,7 @@ var invalidIntegerValues = []struct{ name, raw string }{
 }
 
 // TestListPaginationInvalidInteger は GET /shops と GET /reviews が同じ入力表で、
-// 整数でない page / per_page を 422 で明示的に失敗させ、repository を一度も
+// 整数でない page / per_page を 422 で明示的に失敗させ、query を一度も
 // 呼ばないことを扱う。
 func TestListPaginationInvalidInteger(t *testing.T) {
 	type testCase struct{ name, query, wantBody string }
@@ -117,7 +117,7 @@ func TestListPaginationInvalidInteger(t *testing.T) {
 
 // TestListPaginationDefaultsAndClamp は GET /shops と GET /reviews が同じ入力表で、
 // 空・省略を既定値として、範囲外の整数（int を超える値を含む）を 422 にせず
-// usecase の補正に任せ、repository に渡る limit / offset が期待どおりであることを
+// usecase の補正に任せ、query に渡る limit / offset が期待どおりであることを
 // 扱う。各 endpoint の seed は匿名の viewer に 1 件だけ見せるので、offset が 0 を
 // 超えるなら本文は [] になり、0 なら 1 件が返る。
 func TestListPaginationDefaultsAndClamp(t *testing.T) {
@@ -176,7 +176,7 @@ func TestListPaginationDefaultsAndClamp(t *testing.T) {
 
 // TestListReviewsPaginationWithFilters は GET /reviews で page / per_page の
 // 422 が他の filter と併用しても返ること、そして filter も page も不正な場合は
-// 既存どおり filter の 422 が先に返ることを扱う。どちらも repository は
+// 既存どおり filter の 422 が先に返ることを扱う。どちらも query は
 // 呼ばれない。
 func TestListReviewsPaginationWithFilters(t *testing.T) {
 	tests := []struct {

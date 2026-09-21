@@ -10,10 +10,15 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 )
+
+// このファイルは adapter の DB 統合テストである。読み取りの adapter/query と
+// 書き込みの adapter/repository の両方を実 PostgreSQL で検証する（fixture を
+// 共有するため、外部テスト package の repository_test に置いている）。
 
 // insertRow は sql（id を RETURN する必要がある）で insert し、新しい id を
 // 返す。
@@ -51,8 +56,8 @@ func shopNames(shops []domain.Shop) []string {
 	return names
 }
 
-// TestShopRepository は、shop の読み取り repository を、共有の dbtest の
-// スキャフォールドを通じて実際の PostgreSQL に対して検証する
+// TestShopRepository は、shop の読み取り（adapter/query の ShopQuery）を、
+// 共有の dbtest のスキャフォールドを通じて実際の PostgreSQL に対して検証する
 // （TEST_DATABASE_URL がなければスキップする）。issue #12 の AC1–AC3 と AC5 を
 // SQL レベルで扱うほか、pagination、順序、両方の詳細クエリを扱う。
 func TestShopRepository(t *testing.T) {
@@ -61,7 +66,7 @@ func TestShopRepository(t *testing.T) {
 	}
 	ctx := context.Background()
 	conn, _ := dbtest.New(t)
-	repo := repository.NewShopRepository(conn)
+	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
 	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
@@ -89,7 +94,7 @@ func TestShopRepository(t *testing.T) {
 
 	list := func(t *testing.T, vis domain.ShopVisibility, keyword string, limit, offset int32) []domain.Shop {
 		t.Helper()
-		shops, err := repo.ListShops(ctx, vis, keyword, limit, offset)
+		shops, err := shopQuery.ListShops(ctx, vis, keyword, limit, offset)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -181,7 +186,7 @@ func TestShopRepository(t *testing.T) {
 	})
 
 	t.Run("GetShopWithCreator は creator と status を返す", func(t *testing.T) {
-		detail, err := repo.GetShopWithCreator(ctx, deltaDiner)
+		detail, err := shopQuery.GetShopWithCreator(ctx, deltaDiner)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}
@@ -198,7 +203,7 @@ func TestShopRepository(t *testing.T) {
 	})
 
 	t.Run("GetShopWithCreator は creator が null で moderation note がある shop をマッピングする", func(t *testing.T) {
-		detail, err := repo.GetShopWithCreator(ctx, golfRejected)
+		detail, err := shopQuery.GetShopWithCreator(ctx, golfRejected)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}
@@ -214,7 +219,7 @@ func TestShopRepository(t *testing.T) {
 	})
 
 	t.Run("AC6 存在しない shop id は ErrShopNotFound になる", func(t *testing.T) {
-		if _, err := repo.GetShopWithCreator(ctx, 99999); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := shopQuery.GetShopWithCreator(ctx, 99999); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
@@ -248,7 +253,7 @@ func TestShopRepository(t *testing.T) {
 			t.Fatalf("insert burger stats: %v", err)
 		}
 
-		reviews, err := repo.ListShopReviews(ctx, deltaDiner)
+		reviews, err := shopQuery.ListShopReviews(ctx, deltaDiner)
 		if err != nil {
 			t.Fatalf("ListShopReviews returned error: %v", err)
 		}
@@ -286,7 +291,7 @@ func TestShopRepository(t *testing.T) {
 			}
 		}
 
-		if got, err := repo.ListShopReviews(ctx, golfRejected); err != nil || len(got) != 0 {
+		if got, err := shopQuery.ListShopReviews(ctx, golfRejected); err != nil || len(got) != 0 {
 			t.Errorf("reviews of shop without burgers = %v, %v; want empty, nil", got, err)
 		}
 	})
@@ -303,6 +308,7 @@ func TestShopModerationRepository(t *testing.T) {
 	ctx := context.Background()
 	conn, _ := dbtest.New(t)
 	repo := repository.NewShopRepository(conn)
+	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
 	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
@@ -333,7 +339,7 @@ func TestShopModerationRepository(t *testing.T) {
 		if created.ID == 0 || created.Status != domain.ShopStatusPending || created.ModerationNote != nil {
 			t.Errorf("created = %+v, want generated id, pending, nil note", created)
 		}
-		detail, err := repo.GetShopWithCreator(ctx, created.ID)
+		detail, err := shopQuery.GetShopWithCreator(ctx, created.ID)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}
@@ -343,14 +349,14 @@ func TestShopModerationRepository(t *testing.T) {
 
 		// S4 の visibility のルールは、作成直後の shop でも成り立つ：
 		// creator には一覧に見え、匿名の viewer には見えない。
-		anonShops, err := repo.ListShops(ctx, anon, "Fresh Shack", 100, 0)
+		anonShops, err := shopQuery.ListShops(ctx, anon, "Fresh Shack", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
 		if len(anonShops) != 0 {
 			t.Errorf("anonymous list = %v, want empty", anonShops)
 		}
-		ownShops, err := repo.ListShops(ctx, aliceVis, "Fresh Shack", 100, 0)
+		ownShops, err := shopQuery.ListShops(ctx, aliceVis, "Fresh Shack", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -365,7 +371,7 @@ func TestShopModerationRepository(t *testing.T) {
 	})
 
 	t.Run("ListShopsForModeration は created_at 降順、次に id 降順に並べる", func(t *testing.T) {
-		shops, err := repo.ListShopsForModeration(ctx, nil)
+		shops, err := shopQuery.ListShopsForModeration(ctx, nil)
 		if err != nil {
 			t.Fatalf("ListShopsForModeration returned error: %v", err)
 		}
@@ -389,7 +395,7 @@ func TestShopModerationRepository(t *testing.T) {
 
 	t.Run("ListShopsForModeration は status で絞り込む", func(t *testing.T) {
 		status := domain.ShopStatusRejected
-		shops, err := repo.ListShopsForModeration(ctx, &status)
+		shops, err := shopQuery.ListShopsForModeration(ctx, &status)
 		if err != nil {
 			t.Fatalf("ListShopsForModeration returned error: %v", err)
 		}
@@ -399,7 +405,7 @@ func TestShopModerationRepository(t *testing.T) {
 	})
 
 	t.Run("UpdateShopStatus は approve と reject を永続化し、visibility に反映する", func(t *testing.T) {
-		detail, err := repo.GetShopWithCreator(ctx, newest)
+		detail, err := shopQuery.GetShopWithCreator(ctx, newest)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}
@@ -412,7 +418,7 @@ func TestShopModerationRepository(t *testing.T) {
 		if approved.Status != domain.ShopStatusActive || approved.ModerationNote != nil {
 			t.Errorf("approved = %+v, want active with nil note", approved)
 		}
-		anonShops, err := repo.ListShops(ctx, anon, "Newest", 100, 0)
+		anonShops, err := shopQuery.ListShops(ctx, anon, "Newest", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -429,14 +435,14 @@ func TestShopModerationRepository(t *testing.T) {
 		if rejected.Status != domain.ShopStatusRejected || rejected.ModerationNote == nil || *rejected.ModerationNote != note {
 			t.Errorf("rejected = %+v, want rejected with the note", rejected)
 		}
-		stored, err := repo.GetShopWithCreator(ctx, newest)
+		stored, err := shopQuery.GetShopWithCreator(ctx, newest)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}
 		if stored.Status != domain.ShopStatusRejected || stored.ModerationNote == nil || *stored.ModerationNote != note {
 			t.Errorf("stored = %+v, want the persisted rejection", stored.Shop)
 		}
-		anonShops, err = repo.ListShops(ctx, anon, "Newest", 100, 0)
+		anonShops, err = shopQuery.ListShops(ctx, anon, "Newest", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -452,7 +458,7 @@ func TestShopModerationRepository(t *testing.T) {
 		// 前にスナップショットを読んだ。旧来の行全体の書き込みは status を
 		// pending に戻して approve を巻き戻してしまうが、カラム単位の rename は
 		// status と note に手を付けてはならない。
-		stale, err := repo.GetShopWithCreator(ctx, shop)
+		stale, err := shopQuery.GetShopWithCreator(ctx, shop)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}
@@ -483,7 +489,7 @@ func TestShopModerationRepository(t *testing.T) {
 			t.Errorf("after stale status write = %+v, want kept name AND rejected with the note", rejected)
 		}
 
-		stored, err := repo.GetShopWithCreator(ctx, shop)
+		stored, err := shopQuery.GetShopWithCreator(ctx, shop)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}

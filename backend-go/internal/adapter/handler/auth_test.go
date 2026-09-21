@@ -30,24 +30,32 @@ func (hasherFake) Compare(digest, password string) error {
 	return nil
 }
 
-// fakeRecord は userRepoFake の中に保存されたユーザーである。
+// fakeRecord は userStoreFake の中に保存されたユーザーである。
 type fakeRecord struct {
 	user      domain.User
 	digest    string
 	discarded bool
 }
 
-// userRepoFake は in-memory の usecase.UserRepository である。err を設定すると
-// すべての操作がその err で失敗する（500 の経路を駆動する）。
-type userRepoFake struct {
+// userStoreFake は in-memory の usecase.UserQuery かつ domain.UserRepository
+// である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
+// よう 1 つの型に保つ（読み書きの分離は、usecase の Query の引数型と domain の
+// 書き込みオブジェクトの引数型がコンパイル時に保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
+// 駆動する）。
+type userStoreFake struct {
 	seq   int64
 	users map[int64]*fakeRecord
 	err   error
 }
 
-func newUserRepoFake() *userRepoFake { return &userRepoFake{users: map[int64]*fakeRecord{}} }
+var (
+	_ usecase.UserQuery     = (*userStoreFake)(nil)
+	_ domain.UserRepository = (*userStoreFake)(nil)
+)
 
-func (f *userRepoFake) CreateUser(_ context.Context, p usecase.CreateUserParams) (domain.User, error) {
+func newUserStoreFake() *userStoreFake { return &userStoreFake{users: map[int64]*fakeRecord{}} }
+
+func (f *userStoreFake) CreateUser(_ context.Context, p domain.CreateUserParams) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err
 	}
@@ -62,7 +70,7 @@ func (f *userRepoFake) CreateUser(_ context.Context, p usecase.CreateUserParams)
 	return user, nil
 }
 
-func (f *userRepoFake) GetActiveUserByEmail(_ context.Context, email string) (usecase.UserCredentials, error) {
+func (f *userStoreFake) GetActiveUserByEmail(_ context.Context, email string) (usecase.UserCredentials, error) {
 	if f.err != nil {
 		return usecase.UserCredentials{}, f.err
 	}
@@ -74,7 +82,7 @@ func (f *userRepoFake) GetActiveUserByEmail(_ context.Context, email string) (us
 	return usecase.UserCredentials{}, domain.ErrUserNotFound
 }
 
-func (f *userRepoFake) GetActiveUserByID(_ context.Context, id int64) (domain.User, error) {
+func (f *userStoreFake) GetActiveUserByID(_ context.Context, id int64) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err
 	}
@@ -86,8 +94,8 @@ func (f *userRepoFake) GetActiveUserByID(_ context.Context, id int64) (domain.Us
 
 // seed は、password に対する hasherFake の digest を持つ active なユーザーを
 // 保存する。
-func (f *userRepoFake) seed(username, email, password string) domain.User {
-	user, err := f.CreateUser(context.Background(), usecase.CreateUserParams{
+func (f *userStoreFake) seed(username, email, password string) domain.User {
+	user, err := f.CreateUser(context.Background(), domain.CreateUserParams{
 		Username:       username,
 		Email:          email,
 		PasswordDigest: "digest:" + password,
@@ -100,10 +108,10 @@ func (f *userRepoFake) seed(username, email, password string) domain.User {
 
 // newAuthKit は、in-memory の fake と本物の JWT codec の上に本物の auth
 // usecase を構築し、router レベルのテストに使える状態にする。
-func newAuthKit() (*userRepoFake, *usecase.Auth, *infra.JWTCodec) {
-	repo := newUserRepoFake()
+func newAuthKit() (*userStoreFake, *usecase.Auth, *infra.JWTCodec) {
+	repo := newUserStoreFake()
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	return repo, usecase.NewAuth(repo, hasherFake{}, codec, codec), codec
+	return repo, usecase.NewAuth(repo, domain.NewUsers(repo), hasherFake{}, codec, codec), codec
 }
 
 // newTestRouter は、db の health か routing の挙動だけを必要とするテスト向けの
@@ -120,9 +128,12 @@ func newTestRouter(t *testing.T, p handler.Pinger) http.Handler {
 // である。
 func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.Handler {
 	t.Helper()
-	return handler.NewRouter(p, auth, usecase.NewShops(&shopRepoFake{}),
-		usecase.NewReviews(newReviewRepoFake(), storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(newUserRepoFake(), hasherFake{}), nil)
+	reviewRepo := newReviewStoreFake()
+	users := newUserStoreFake()
+	shopRepo := &shopStoreFake{}
+	return handler.NewRouter(p, auth, usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
+		usecase.NewReviews(reviewRepo, domain.NewReviews(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(users, domain.NewUsers(users), hasherFake{}), nil)
 }
 
 // do は router に対して 1 件の request を in-process で実行し、recorder を
@@ -189,14 +200,14 @@ func TestSignupThenLogout(t *testing.T) {
 func TestSignupErrors(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(repo *userRepoFake)
+		setup      func(repo *userStoreFake)
 		body       string
 		wantStatus int
 		wantBody   string // 完全一致させる body。空なら status のみを検証する
 	}{
 		{
 			name:       "AC2 使用済みの email は 422 を返す",
-			setup:      func(repo *userRepoFake) { repo.seed("bob", "bob@example.com", "Password123!") },
+			setup:      func(repo *userStoreFake) { repo.seed("bob", "bob@example.com", "Password123!") },
 			body:       `{"username":"bob2","email":"bob@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusUnprocessableEntity,
 			wantBody:   `{"errors":["Email has already been taken"]}`,
@@ -267,7 +278,7 @@ func TestSignupErrors(t *testing.T) {
 		},
 		{
 			name:       "repository の失敗は 500 を返す",
-			setup:      func(repo *userRepoFake) { repo.err = io.ErrUnexpectedEOF },
+			setup:      func(repo *userStoreFake) { repo.err = io.ErrUnexpectedEOF },
 			body:       `{"username":"dan","email":"dan@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusInternalServerError,
 			wantBody:   `{"error":"internal server error"}`,
@@ -295,7 +306,7 @@ func TestSignupErrors(t *testing.T) {
 func TestLogin(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(repo *userRepoFake)
+		setup      func(repo *userStoreFake)
 		body       string
 		wantStatus int
 		wantBody   string
@@ -331,7 +342,7 @@ func TestLogin(t *testing.T) {
 		},
 		{
 			name:       "repository の失敗は 500 を返す",
-			setup:      func(repo *userRepoFake) { repo.err = io.ErrUnexpectedEOF },
+			setup:      func(repo *userStoreFake) { repo.err = io.ErrUnexpectedEOF },
 			body:       `{"email":"alice@example.com","password":"Password123!"}`,
 			wantStatus: http.StatusInternalServerError,
 			wantBody:   `{"error":"internal server error"}`,

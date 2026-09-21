@@ -16,14 +16,17 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// shopRepoFake は in-memory の usecase.ShopRepository である。可視性は
-// domain の記述子そのもの（vis.CanView）を通して適用されるので、そのルールを
-// ここで再実装してはいない。keyword のマッチングは単純な case-fold の
-// 部分文字列一致である（メタ文字のセマンティクスは repository の統合テストが
-// 扱う）。err を設定するとすべての操作が失敗する（500 の経路）。listCalls は
-// ListShops が呼ばれた回数、lastLimit / lastOffset は最後の呼び出しの引数である
-// （handler が usecase に渡した値と、呼ばれなかったことの検証用）。
-type shopRepoFake struct {
+// shopStoreFake は in-memory の usecase.ShopQuery かつ domain.ShopRepository
+// である。in-memory の fake は共有 DB の代役なので、読み書きで状態を共有する
+// よう 1 つの型に保つ（読み書きの分離は、usecase の Query の引数型と domain の
+// 書き込みオブジェクトの引数型がコンパイル時に保証する）。可視性は domain の記述子そのもの（vis.CanView）を通して適用
+// されるので、そのルールをここで再実装してはいない。keyword のマッチングは
+// 単純な case-fold の部分文字列一致である（メタ文字のセマンティクスは
+// repository の統合テストが扱う）。err を設定するとすべての操作が失敗する
+// （500 の経路）。listCalls は ListShops が呼ばれた回数、lastLimit /
+// lastOffset は最後の呼び出しの引数である（handler が usecase に渡した値と、
+// 呼ばれなかったことの検証用）。
+type shopStoreFake struct {
 	shops                 []domain.ShopDetail // Reviews は未設定。下の reviews 経由で提供される
 	reviews               map[int64][]domain.ShopReview
 	err                   error
@@ -31,7 +34,12 @@ type shopRepoFake struct {
 	lastLimit, lastOffset int32
 }
 
-func (f *shopRepoFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
+var (
+	_ usecase.ShopQuery     = (*shopStoreFake)(nil)
+	_ domain.ShopRepository = (*shopStoreFake)(nil)
+)
+
+func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
 	f.listCalls++
 	f.lastLimit, f.lastOffset = limit, offset
 	if f.err != nil {
@@ -58,7 +66,7 @@ func (f *shopRepoFake) ListShops(_ context.Context, vis domain.ShopVisibility, k
 	return out[lo:hi], nil
 }
 
-func (f *shopRepoFake) GetShopWithCreator(_ context.Context, id int64) (domain.ShopDetail, error) {
+func (f *shopStoreFake) GetShopWithCreator(_ context.Context, id int64) (domain.ShopDetail, error) {
 	if f.err != nil {
 		return domain.ShopDetail{}, f.err
 	}
@@ -70,7 +78,7 @@ func (f *shopRepoFake) GetShopWithCreator(_ context.Context, id int64) (domain.S
 	return domain.ShopDetail{}, domain.ErrShopNotFound
 }
 
-func (f *shopRepoFake) ListShopReviews(_ context.Context, shopID int64) ([]domain.ShopReview, error) {
+func (f *shopStoreFake) ListShopReviews(_ context.Context, shopID int64) ([]domain.ShopReview, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -79,7 +87,7 @@ func (f *shopRepoFake) ListShopReviews(_ context.Context, shopID int64) ([]domai
 
 // newShopsRouter は、auth kit と与えられた shop の fake で router を配線し、
 // 通常のユーザーと admin 用に発行した Bearer ヘッダーを返す。
-func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, aliceAuth, adminAuth string, aliceID int64) {
+func newShopsRouter(t *testing.T, repo *shopStoreFake) (router http.Handler, aliceAuth, adminAuth string, aliceID int64) {
 	t.Helper()
 	users, auth, codec := newAuthKit()
 	alice := users.seed("alice", "alice@example.com", "Password123!")
@@ -93,9 +101,10 @@ func newShopsRouter(t *testing.T, repo *shopRepoFake) (router http.Handler, alic
 	if err != nil {
 		t.Fatalf("issue admin token: %v", err)
 	}
-	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo),
-			usecase.NewReviews(newReviewRepoFake(), storage.NewDisk(t.TempDir(), "/photos")),
-			usecase.NewUsers(users, hasherFake{}), nil),
+	reviewRepo := newReviewStoreFake()
+	return handler.NewRouter(okPinger, auth, usecase.NewShops(repo, domain.NewShops(repo)),
+			usecase.NewReviews(reviewRepo, domain.NewReviews(reviewRepo), storage.NewDisk(t.TempDir(), "/photos")),
+			usecase.NewUsers(users, domain.NewUsers(users), hasherFake{}), nil),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID
 }
 
@@ -103,8 +112,8 @@ func shopPtr[T any](v T) *T { return &v }
 
 // seedShops は、active な shop 1 件、（creatorID が作成した）pending な shop
 // 1 件、rejected な shop 1 件を持つ fake を返す。
-func seedShops(creatorID int64) *shopRepoFake {
-	return &shopRepoFake{
+func seedShops(creatorID int64) *shopStoreFake {
+	return &shopStoreFake{
 		shops: []domain.ShopDetail{
 			{Shop: domain.Shop{ID: 1, Name: "Active Diner", Status: domain.ShopStatusActive}},
 			{
@@ -211,7 +220,7 @@ func TestListShopsParams(t *testing.T) {
 
 // TestListShopsRepoFailure：repository の失敗は 500 として表面化する。
 func TestListShopsRepoFailure(t *testing.T) {
-	router, _, _, _ := newShopsRouter(t, &shopRepoFake{err: io.ErrUnexpectedEOF})
+	router, _, _, _ := newShopsRouter(t, &shopStoreFake{err: io.ErrUnexpectedEOF})
 	rec := do(router, http.MethodGet, "/shops", "", "")
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusInternalServerError, rec.Body)
@@ -298,7 +307,7 @@ func TestGetShopVisibility(t *testing.T) {
 	}
 
 	t.Run("repository の失敗は 500 を返す", func(t *testing.T) {
-		failRouter, _, _, _ := newShopsRouter(t, &shopRepoFake{err: fmt.Errorf("db down")})
+		failRouter, _, _, _ := newShopsRouter(t, &shopStoreFake{err: fmt.Errorf("db down")})
 		rec := do(failRouter, http.MethodGet, "/shops/1", "", "")
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusInternalServerError, rec.Body)

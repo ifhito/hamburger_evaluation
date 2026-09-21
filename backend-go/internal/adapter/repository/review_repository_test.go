@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
@@ -39,6 +40,7 @@ func TestReviewRepository(t *testing.T) {
 	ctx := context.Background()
 	conn, _ := dbtest.New(t)
 	repo := repository.NewReviewRepository(conn)
+	reviewQuery := query.NewReviewQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
 	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
@@ -100,7 +102,7 @@ func TestReviewRepository(t *testing.T) {
 	insertRow(ctx, t, conn, insertReview, 2, "rejected only", alice, outcast, nil, t2)
 
 	t.Run("ListReviews は active な shop の burger に絞り込み、重複なしで新しい順に返す", func(t *testing.T) {
-		reviews, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
+		reviews, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -133,21 +135,21 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("ListReviews は順序付きフィードを pagination する", func(t *testing.T) {
-		page1, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 0)
+		page1, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if got, want := reviewIDs(page1), []int64{rTie2, rTie1}; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 1 = %v, want %v", got, want)
 		}
-		page2, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 2)
+		page2, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 2)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if got, want := reviewIDs(page2), []int64{rOld}; !reflect.DeepEqual(got, want) {
 			t.Errorf("page 2 = %v, want %v", got, want)
 		}
-		far, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 100)
+		far, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 2, 100)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -188,7 +190,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				reviews, err := repo.ListReviews(ctx, tt.filter, 100, 0)
+				reviews, err := reviewQuery.ListReviews(ctx, tt.filter, 100, 0)
 				if err != nil {
 					t.Fatalf("ListReviews returned error: %v", err)
 				}
@@ -227,14 +229,14 @@ func TestReviewRepository(t *testing.T) {
 		})
 
 		byShop := func(id int64) usecase.ReviewListFilter { return usecase.ReviewListFilter{ShopID: &id} }
-		got, err := repo.ListReviews(ctx, byShop(pending), 100, 0)
+		got, err := reviewQuery.ListReviews(ctx, byShop(pending), 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
 		if len(got) != 0 {
 			t.Errorf("pending shop filter = %v, want empty", reviewIDs(got))
 		}
-		got, err = repo.ListReviews(ctx, byShop(mixedActive), 100, 0)
+		got, err = reviewQuery.ListReviews(ctx, byShop(mixedActive), 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -244,7 +246,7 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("GetReview は author、burger、stats を join する", func(t *testing.T) {
-		got, err := repo.GetReview(ctx, rTie1)
+		got, err := reviewQuery.GetReview(ctx, rTie1)
 		if err != nil {
 			t.Fatalf("GetReview returned error: %v", err)
 		}
@@ -264,27 +266,27 @@ func TestReviewRepository(t *testing.T) {
 
 	t.Run("AC6 discard 済みの review と存在しない review は ErrReviewNotFound になる", func(t *testing.T) {
 		for name, id := range map[string]int64{"discarded": rDiscarded, "unknown": 99999} {
-			if _, err := repo.GetReview(ctx, id); !errors.Is(err, domain.ErrReviewNotFound) {
+			if _, err := reviewQuery.GetReview(ctx, id); !errors.Is(err, domain.ErrReviewNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrReviewNotFound)
 			}
 		}
 	})
 
 	t.Run("GetShop は shop 単体を返すか ErrShopNotFound を返す", func(t *testing.T) {
-		shop, err := repo.GetShop(ctx, pending)
+		shop, err := reviewQuery.GetShop(ctx, pending)
 		if err != nil {
 			t.Fatalf("GetShop returned error: %v", err)
 		}
 		if shop.ID != pending || shop.Status != domain.ShopStatusPending || shop.CreatorID == nil || *shop.CreatorID != alice {
 			t.Errorf("shop = %+v, want pending shop created by alice", shop)
 		}
-		if _, err := repo.GetShop(ctx, 99999); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := reviewQuery.GetShop(ctx, 99999); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
 
 	t.Run("GetShopBurger は shops_burgers の link を要求する", func(t *testing.T) {
-		burger, err := repo.GetShopBurger(ctx, active1, cheese)
+		burger, err := reviewQuery.GetShopBurger(ctx, active1, cheese)
 		if err != nil {
 			t.Fatalf("GetShopBurger returned error: %v", err)
 		}
@@ -293,7 +295,7 @@ func TestReviewRepository(t *testing.T) {
 			t.Errorf("burger = %+v, want %+v", burger, want)
 		}
 		// stats 行がない場合：ゼロ。
-		statless, err := repo.GetShopBurger(ctx, active1, plain)
+		statless, err := reviewQuery.GetShopBurger(ctx, active1, plain)
 		if err != nil {
 			t.Fatalf("GetShopBurger returned error: %v", err)
 		}
@@ -302,7 +304,7 @@ func TestReviewRepository(t *testing.T) {
 		}
 		// 別の shop に属する既存の burger と未知の burger は、区別できない。
 		for name, burgerID := range map[string]int64{"unlinked": hidden, "unknown": 99999} {
-			if _, err := repo.GetShopBurger(ctx, active1, burgerID); !errors.Is(err, domain.ErrBurgerNotFound) {
+			if _, err := reviewQuery.GetShopBurger(ctx, active1, burgerID); !errors.Is(err, domain.ErrBurgerNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrBurgerNotFound)
 			}
 		}
@@ -326,7 +328,7 @@ func TestReviewRepository(t *testing.T) {
 		if created.CreatedAt.IsZero() {
 			t.Error("CreatedAt is zero, want the DB timestamp")
 		}
-		if _, err := repo.GetReview(ctx, created.ID); err != nil {
+		if _, err := reviewQuery.GetReview(ctx, created.ID); err != nil {
 			t.Errorf("GetReview after create returned error: %v", err)
 		}
 		// 再度これを削除し、cheese の burger_stats を再 seed する（create が
@@ -350,7 +352,7 @@ func TestReviewRepository(t *testing.T) {
 			t.Errorf("CreatedAt = %v, want unchanged %v", updated.CreatedAt, t1)
 		}
 		// discarded_at には触れていない：review は依然として kept であり、GetReview で取得できる。
-		if _, err := repo.GetReview(ctx, rOld); err != nil {
+		if _, err := reviewQuery.GetReview(ctx, rOld); err != nil {
 			t.Errorf("GetReview after update returned error: %v", err)
 		}
 		// review を元に戻し、cheese の burger_stats を再 seed する（2 回の
@@ -374,10 +376,10 @@ func TestReviewRepository(t *testing.T) {
 		if err := repo.DiscardReview(ctx, victim); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}
-		if _, err := repo.GetReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := reviewQuery.GetReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("GetReview after discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		reviews, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
+		reviews, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -424,7 +426,7 @@ func TestReviewRepositoryListByUser(t *testing.T) {
 	}
 	ctx := context.Background()
 	conn, _ := dbtest.New(t)
-	repo := repository.NewReviewRepository(conn)
+	reviewQuery := query.NewReviewQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
 	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
@@ -473,7 +475,7 @@ func TestReviewRepositoryListByUser(t *testing.T) {
 
 	list := func(t *testing.T, filter usecase.ReviewListFilter, limit, offset int32) []int64 {
 		t.Helper()
-		reviews, err := repo.ListReviews(ctx, filter, limit, offset)
+		reviews, err := reviewQuery.ListReviews(ctx, filter, limit, offset)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -1025,6 +1027,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 	ctx := context.Background()
 	conn, _ := dbtest.New(t)
 	repo := repository.NewReviewRepository(conn)
+	reviewQuery := query.NewReviewQuery(conn)
 
 	alice := insertRow(ctx, t, conn,
 		`INSERT INTO users (email, username, password_digest) VALUES ($1, $2, 'x') RETURNING id`,
@@ -1049,14 +1052,14 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 	}
 
 	t.Run("読み取りクエリは photo_key を返す", func(t *testing.T) {
-		detail, err := repo.GetReview(ctx, created.ID)
+		detail, err := reviewQuery.GetReview(ctx, created.ID)
 		if err != nil {
 			t.Fatalf("GetReview returned error: %v", err)
 		}
 		if detail.PhotoKey == nil || *detail.PhotoKey != "reviews/abc.jpg" {
 			t.Errorf("detail PhotoKey = %v, want reviews/abc.jpg", detail.PhotoKey)
 		}
-		list, err := repo.ListReviews(ctx, usecase.ReviewListFilter{}, 10, 0)
+		list, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 10, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
@@ -1079,7 +1082,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		// commit された行は content と key の「両方」を持つ（1 つの
 		// トランザクションなので、key を伴わない content だけになることは
 		// 決してない）。
-		detail, err := repo.GetReview(ctx, created.ID)
+		detail, err := reviewQuery.GetReview(ctx, created.ID)
 		if err != nil {
 			t.Fatalf("GetReview after combined update returned error: %v", err)
 		}
