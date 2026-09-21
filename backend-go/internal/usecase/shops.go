@@ -103,7 +103,7 @@ func (s *Shops) Create(ctx context.Context, viewer domain.User, name string) (do
 // 何にも一致しない（Rails の where(status: unknown) と同様）。
 // admin でない viewer には domain.ErrForbidden を返す。
 func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string) ([]domain.ShopDetail, error) {
-	if !viewer.Admin {
+	if !viewer.CanModerate() {
 		return nil, domain.ErrForbidden
 	}
 	var filter *domain.ShopStatus
@@ -127,7 +127,7 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 // lookup の前に domain.ErrForbidden を返す。空白の name は
 // *ValidationError である。
 func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int64, name string) (domain.ShopDetail, error) {
-	if !viewer.Admin {
+	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
 	}
 	if err := domain.ValidateShopName(name); err != nil {
@@ -152,7 +152,7 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int6
 // 遷移）、公開して見えるようにする。admin でない viewer には、lookup の前に
 // domain.ErrForbidden を返す。
 func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (domain.ShopDetail, error) {
-	if !viewer.Admin {
+	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
 	}
 	return s.moderate(ctx, id, domain.Shop.Approve)
@@ -161,7 +161,7 @@ func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (doma
 // Reject は、任意の moderation note つきで shop を reject し、公開の一覧から
 // 隠す。admin でない viewer には、lookup の前に domain.ErrForbidden を返す。
 func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *string) (domain.ShopDetail, error) {
-	if !viewer.Admin {
+	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
 	}
 	return s.moderate(ctx, id, func(shop domain.Shop) domain.Shop {

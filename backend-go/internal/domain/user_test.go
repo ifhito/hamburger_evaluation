@@ -47,3 +47,14 @@ func TestUserProfileFor(t *testing.T) {
 		})
 	}
 }
+
+// TestUserCanModerate は、moderation の権限が admin だけにあることを固定する
+// (usecase の認可と、API が返す can_moderate が同じ値を使う。S32)。
+func TestUserCanModerate(t *testing.T) {
+	if !(domain.User{ID: uid.N(1), Admin: true}).CanModerate() {
+		t.Error("admin の CanModerate() = false, want true")
+	}
+	if (domain.User{ID: uid.N(2), Admin: false}).CanModerate() {
+		t.Error("一般のユーザーの CanModerate() = true, want false")
+	}
+}

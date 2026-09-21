@@ -25,24 +25,36 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+// currentUserResponse は、認証済みのユーザー自身の snake_case の表現である。signup・login・
+// GET /me で共通に返す。can_moderate は moderation（shop の承認・却下など）ができるかで、
+// backend の domain が判断する（frontend は admin から権限を導かない）。
+type currentUserResponse struct {
+	ID          string `json:"id"`
+	Username    string `json:"username"`
+	Email       string `json:"email"`
+	Admin       bool   `json:"admin"`
+	CanModerate bool   `json:"can_moderate"`
+}
+
+func newCurrentUserResponse(user domain.User) currentUserResponse {
+	return currentUserResponse{
+		ID:          user.ID,
+		Username:    user.Username,
+		Email:       user.Email,
+		Admin:       user.Admin,
+		CanModerate: user.CanModerate(),
+	}
+}
+
 // authUserResponse は、signup と login の成功時に返す snake_case の body で
 // あり、frontend の契約（domains/auth/types.ts の SignupResponse）に従う。
 type authUserResponse struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Admin    bool   `json:"admin"`
-	Token    string `json:"token"`
+	currentUserResponse
+	Token string `json:"token"`
 }
 
 func newAuthUserResponse(user domain.User, token string) authUserResponse {
-	return authUserResponse{
-		ID:       user.ID,
-		Username: user.Username,
-		Email:    user.Email,
-		Admin:    user.Admin,
-		Token:    token,
-	}
+	return authUserResponse{currentUserResponse: newCurrentUserResponse(user), Token: token}
 }
 
 // handleSignup は POST /signup を処理する：user と新しい token を伴う 201、
@@ -101,6 +113,17 @@ func handleLogin(auth *usecase.Auth) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, newAuthUserResponse(user, token))
 	}
+}
+
+// handleMe は RequireAuth の背後で GET /me を処理する：Bearer トークンから解決した現在の
+// ユーザー（200）。トークンが無効・期限切れなら RequireAuth が 401 を返す。frontend は、
+// トークンの有効性を自分で判断せず、起動時にこの応答でログイン状態を復元する。
+func handleMe(w http.ResponseWriter, r *http.Request) {
+	viewer, ok := requireViewer(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, newCurrentUserResponse(viewer))
 }
 
 type messageResponse struct {
