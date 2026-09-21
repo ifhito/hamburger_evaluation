@@ -270,7 +270,7 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 |---|---|---|
 | `GOOGLE_CLIENT_ID` | 任意(設定すると有効) | Google Cloud Console で作った OAuth クライアントの ID |
 | `GOOGLE_CLIENT_SECRET` | 有効なとき必須 | そのクライアントの秘密の鍵。**秘密。ログ・コード・PR・チャットに書かない。`.env` は Git に入れない** |
-| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:8080/auth/google/callback`)。**https、または開発用のループバックの http だけ**(起動時に断る。`APP_BASE_URL` も、有効なときは同じ制約)。画面と同じサイト(同じホスト)にして、手続きの cookie が届くようにする |
+| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:5173/api/auth/google/callback`。**画面の `/api` を通る形**にする。API に直接戻すと、画面が呼ぶ `/api/auth/google/exchange` に、交換の cookie が届かず、毎回失敗する)。**https、または開発用のループバックの http だけ**(起動時に断る。`APP_BASE_URL` も、有効なときは同じ制約)。画面と同じサイト(同じホスト)にして、手続きの cookie が届くようにする |
 | `GOOGLE_OIDC_ISSUER` | 任意 | OpenID Connect の提供元。既定は `https://accounts.google.com`。テスト・隔離した確認で、代役に向けるためだけにある。https か、ループバック(`localhost`・`127.0.0.1`・`[::1]`)の http だけ許す。**本番では設定しない** |
 
 ### リモートの MCP サーバー(`/mcp`)
@@ -447,8 +447,10 @@ frontend/src/
 backend の「Google のアカウントでのサインイン」(上の Backend の節)の、画面側。**判断は backend だけが持ち、frontend は、返された値と文言を出すだけ**。
 
 - サインインと新規登録の画面に、「Sign in with Google」「Sign up with Google」のリンク(`GoogleSignIn`。ボタンの見た目)を出す。**`GET /meta` の `loginProviders` に `google` が含まれるときだけ**で、取得できていない間・空のときは何も出さない(`googleEnabled`)。リンクは、ブラウザが API の `${API_BASE_URL}/auth/google/start` へ移動する(`googleStartUrl`。fetch ではない)。ログインが必要な画面から送られてきたときは、その画面(ルーターの state の `from`)を `return_to` として渡す。
-- `/auth/google/complete`(`GoogleCompletePage`。**ゲスト専用ではなく公開の route**。成功するとログイン状態になるため): backend が、成功も失敗も、1 回限りのコードに入れて、この画面へ戻す。画面は、`code` を**最初に 1 回だけ**読み、URL からはすぐに消し(履歴に残さない)、`POST /auth/google/exchange` で交換する(StrictMode の二重実行でも 1 回)。サインインの成功は `signInWithResponse` でログイン状態にして、戻り先(backend が確かめたアプリの中のパス。空は `/reviews`)へ。重複・失敗・無効なコードは、API の文言(`ApiError.messages`)をそのまま出す。**ログインの証(JWT)は URL に載らない。**
+- `/auth/google/complete`(`GoogleCompletePage`。**ゲスト専用ではなく公開の route**。成功するとログイン状態になるため): backend が、成功も失敗も、1 回限りのコードに入れて、この画面へ戻す。画面は、`code` を**最初に 1 回だけ**読み、URL からはすぐに消し(履歴に残さない)、`POST /auth/google/exchange` で交換する(StrictMode の二重実行でも 1 回)。サインインの成功は `signInWithResponse` でログイン状態にして、戻り先(backend が確かめたアプリの中のパス。空は `/reviews`)へ。重複・失敗・無効なコードは、API の文言(`ApiError.messages`)をそのまま出し、「サインインへ戻る」は、失敗の応答が含める戻り先(`ApiError.returnTo`。backend が確かめたもの。許可の画面から来た利用者が、パスワードでサインインしたあと、そこへ戻れる)を、サインイン画面の state の `from` として渡す(画面は、戻り先を保存しない)。交換の要求は、同一オリジンなので、手続きを終えたブラウザの cookie(結び付けの値)が、そのまま付く。**ログインの証(JWT)は URL に載らない。**
 - 本人のプロフィールに、Google の連携(`GoogleConnection`。`canEdit` のときだけ、`loginProviders` に含まれるときだけ): `GET /me/identities` の内容を出す。「結び付ける」は、**認証つきの `POST /me/identities/google/link`**(`authApi.startGoogleLink`)で、**このブラウザ**に手続きの cookie を設定して始め、返された Google の認可の URL(`redirectUrl`。http・https だけ移動する)へ移動する(戻り先はこのプロフィール)。**持ち運べる開始のコード(`link_code`)や開始の URL は使わない**(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに結び付ける攻撃を防ぐため)。この POST は、画面と同一オリジン(`/api` の転送)で出すので、応答の cookie が、そのまま保存され、Google からの戻りで送られる。「解除」は **API が返す `canUnlink` が true のときだけ**出す(解除してよいかの判断は backend の domain。false のときは理由の文言だけを出す)。
+- **Google の手続きの cookie は、同一サイトの `/api` の道筋(`API_BASE_URL` が `/api` のような path)でだけ往復する**。`VITE_API_BASE_URL` を別のオリジンの絶対 URL にすると、cookie が保存・送信されず(SameSite=Lax は、別のサイトからの XHR に cookie を付けない)、Google でのサインインと結び付けは、毎回失敗する(Google を使うときは、変えない)。
+- 一覧の取得に失敗したときは、エラーと「Retry」だけを出し、「未連携」とは表示しない(`ConnectionState`)。解除が済んだら、再取得を待たずに、キャッシュから Google の連携を外し、「Google disconnected.」を出す(そのあとの再取得の成否は、解除の成否とは別)。
 - Google のロゴは `google-g.svg`(Google のブランドの決まりに沿ったマーク)。
 
 ### Frontend コマンド
