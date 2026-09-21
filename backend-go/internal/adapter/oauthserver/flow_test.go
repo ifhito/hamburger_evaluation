@@ -310,6 +310,13 @@ func TestTokenExchangeErrors(t *testing.T) {
 		wantError(t, r.exchange(staticClientID, staticRedirect, code, "wrong-verifier-0123456789-abcdefghijklmnopqrstuvwxyz"), http.StatusBadRequest, "invalid_grant")
 	})
 
+	t.Run("PKCE の verifier が違う交換を 1 回でもすると、正しい verifier でも、その認可コードは使えなくなる(推測を繰り返させない)", func(t *testing.T) {
+		r := newRig(t)
+		code, verifier := newCode(r)
+		wantError(t, r.exchange(staticClientID, staticRedirect, code, "wrong-verifier-0123456789-abcdefghijklmnopqrstuvwxyz"), http.StatusBadRequest, "invalid_grant")
+		wantError(t, r.exchange(staticClientID, staticRedirect, code, verifier), http.StatusBadRequest, "invalid_grant")
+	})
+
 	t.Run("PKCE の verifier を付けずに交換しようとすると、トークンを発行せずに断る", func(t *testing.T) {
 		r := newRig(t)
 		code, _ := newCode(r)

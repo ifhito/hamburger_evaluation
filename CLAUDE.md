@@ -222,7 +222,7 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - 認可コードは 1 回だけ使える。再利用(並行した 2 回の使用を含む)を検知したら、その認可から発行されたトークンをすべて使えなくする。更新トークンは使うたびに入れ替え、入れ替え済みのものの再利用を検知したら、同じくその系列を全部使えなくする。判定と更新は 1 つの SQL 文で行う。
 - 宛先(`resource`): トークンは、`OAUTH_RESOURCE_URL` の宛先だけに発行する(指定がなければその宛先、違えば `invalid_target`)。保護する側は、宛先が自分のトークンだけを受け付ける。
 - 戻り先: https、またはループバックの http だけを登録できる。照合は完全一致で、`127.0.0.1` と `[::1]` だけポート番号の違いを許す(`localhost` はポートまで完全一致)。独自スキーム(`myapp://`)は登録できない。
-- PKCE: `S256` だけ必須(`domain.ValidateOAuthPKCE`)。`state` も必須(ライブラリの既定)。
+- PKCE: `S256` だけ必須(`domain.ValidateOAuthPKCE`)。`state` も必須(ライブラリの既定)。確認用の文字列(`code_verifier`)が違う交換を 1 回でも行うと、その認可コードは、正しい値でも使えなくなる(推測を繰り返させない。ライブラリの挙動)。
 - アプリの登録: 秘密の鍵を持たない公開クライアントだけ。**固定で登録**(`OAUTH_STATIC_CLIENTS`)するか、アプリが自分の説明を https の URL で公開する方式(CIMD。`client_id` がその URL)。CIMD の文書は、サーバーが取りに行くので、内部のサーバーへ向けさせる攻撃(SSRF)への対策を必ず守る: https だけ・標準のポートだけ・ホスト名だけ(IP アドレスの直接指定は不可)・接続の直前に、名前解決の結果が公開のアドレスかを確認(ループバック・プライベート・リンクローカルを断る)・リダイレクトを追わない・プロキシを使わない・待ち時間 5 秒・本文 64 KiB まで・種類は `application/json` だけ(`HTTPMetadataFetcher`)。文書の `client_id` が URL と違えば断り、許す使い方・範囲・宛先は、文書に何を書いても広がらない。取得した内容は 5 分覚える。
 
 **環境変数**(有効にしたのに足りない・不正なときは起動時に落ちる。値はログ・エラーに出さない)
@@ -356,7 +356,7 @@ shops   *──────* burgers  (shops_burgers 経由)
 ```text
 frontend/src/
 ├── app/          # router、provider、アプリシェル
-├── domains/      # auth、reviews、shops、users
+├── domains/      # auth、oauth、reviews、shops、users
 ├── api/          # API クライアント / HTTP 境界
 ├── states/       # グローバル state
 ├── lib/          # 共通ユーティリティ (date、i18n、rating、photoResize)
@@ -373,6 +373,12 @@ frontend/src/
 - 写真を選ぶ input の `accept` は、**JPEG・PNG・WebP だけ**にする。HEIC / HEIF を加えない: iPhone の Safari は、`accept` が JPEG・PNG・WebP だけのとき、写真を JPEG に変換して渡す(加えると、HEIC のまま渡り、backend は HEIC / HEIF を受け付けない)。
 - 送る前に、`useCreateReview` / `useUpdateReview` が `shrinkPhoto` を通す。長辺が上限(`GET /meta` の `photo.maxEdge`)を超える、またはファイルが `photo.maxBytes` を超えるときだけ、canvas で縮小した JPEG にする(向きは `createImageBitmap` の `imageOrientation: "from-image"` で画素に反映する)。**上限の値は frontend に書かない**(backend の値を使う)。
 - 縮小できないとき(ブラウザが画像を読み込めないなど)は、失敗にせず、元のファイルをそのまま送る。backend が受け付けるか、理由つきのメッセージ(422 の 4 種類。HEIC / HEIF は、対応しない理由つき)を返し、それを画面にそのまま出す。
+
+### 許可を尋ねる画面と、接続済みのアプリ(`domains/oauth`)
+
+- `/oauth/authorize`(要ログイン): AI アプリが、ログインと許可だけでつなぐための画面。backend の `GET /oauth/authorize` から、同じクエリのまま 303 で渡される。未ログインなら、`ProtectedRoute` がログイン画面へ送り、ログイン後に、この画面へ(クエリごと)戻す。戻り先は、ルーターの遷移の state(`from`)に入れる。URL のパラメーターには入れない(外部のリンクから任意の戻り先を指定されるのを防ぐ。`returnPathFrom` は、このアプリの中のパスだけを返す)。
+- 画面は、`GET /oauth/authorize/request` の結果(アプリの名前・範囲と説明・`consentRequired`)を表示し、選択を `POST /oauth/authorize/decision` に送って、返ってきた `redirectTo`(アプリへの戻り先)へブラウザを移す。`consentRequired` が false(すでに許可済みの範囲に収まる)なら、尋ねずに許可を送る。**要求の検証・範囲の説明・尋ねる必要があるかの判断は、すべて backend が行い、frontend は表示と送信だけ**を行う(範囲の名前や説明を frontend に持たない)。アプリへの戻り先は、http(s) のときだけ開く(`isNavigable`。ページの中でコードが動くのを防ぐ確認)。
+- プロフィール(本人のときだけ。`canEdit`)に「Connected apps」を出す(`ConnectedApps`)。`GET /oauth/grants` の一覧と、`DELETE /oauth/grants/{id}` の取り消し(確認のあと)。OAuth の認可サーバーが無効な環境(API が 404)では、何も出さない。
 
 ### Frontend コマンド
 
