@@ -28,19 +28,25 @@ const MaxEmailChars = 254
 // この規則の判定は domain だけが持ち、frontend は判定を持たない（サーバーの 422
 // メッセージの表示だけを行う）。
 func ValidateEmail(email string) []string {
+	return Texts(LangEN, EmailIssues(email))
+}
+
+// EmailIssues は、ValidateEmail の判定を、言語に依らない文言(Message)で返す。有効なら nil を返す。
+// 利用者の言語で返す経路(handler)は、こちらを使う。
+func EmailIssues(email string) []Message {
 	if email == "" {
-		return []string{"Email can't be blank"}
+		return []Message{Msg(keyEmailBlank)}
 	}
 	if exceedsChars(email, MaxEmailChars) {
-		return []string{tooLongMessage("Email", MaxEmailChars)}
+		return []Message{Msg(keyEmailTooLong, MaxEmailChars)}
 	}
 	for _, r := range email {
 		if !unicode.IsPrint(r) {
-			return []string{"Email is invalid"}
+			return []Message{Msg(keyEmailInvalid)}
 		}
 	}
 	if addr, err := mail.ParseAddress(email); err != nil || addr.Address != email {
-		return []string{"Email is invalid"}
+		return []Message{Msg(keyEmailInvalid)}
 	}
 	return nil
 }

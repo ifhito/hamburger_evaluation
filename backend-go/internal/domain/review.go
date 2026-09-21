@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -43,17 +42,17 @@ const MaxCommentChars = 2000
 // 存在しなければならない。失敗した場合は、Rails の full message そのままを
 // *ValidationError に入れて返し、rating のメッセージが先に来る。
 func ValidateReviewContent(rating int, comment string) error {
-	var messages []string
+	var issues []Message
 	if rating < MinRating || rating > MaxRating {
-		messages = append(messages, fmt.Sprintf("Rating must be in %d..%d", MinRating, MaxRating))
+		issues = append(issues, Msg(keyReviewRatingRange, MinRating, MaxRating))
 	}
 	if strings.TrimSpace(comment) == "" {
-		messages = append(messages, "Comment can't be blank")
+		issues = append(issues, Msg(keyCommentBlank))
 	} else if exceedsChars(comment, MaxCommentChars) {
-		messages = append(messages, tooLongMessage("Comment", MaxCommentChars))
+		issues = append(issues, Msg(keyCommentTooLong, MaxCommentChars))
 	}
-	if len(messages) > 0 {
-		return &ValidationError{Messages: messages}
+	if len(issues) > 0 {
+		return NewValidationError(issues...)
 	}
 	return nil
 }
@@ -71,10 +70,10 @@ const MaxBurgerNameChars = 100
 // を返す。）名前が MaxBurgerNameChars 文字を超えるときも拒否される。
 func ValidateBurgerName(name string) error {
 	if strings.TrimSpace(name) == "" {
-		return &ValidationError{Messages: []string{"Burger name can't be blank"}}
+		return NewValidationError(Msg(keyBurgerNameBlank))
 	}
 	if exceedsChars(name, MaxBurgerNameChars) {
-		return &ValidationError{Messages: []string{tooLongMessage("Burger name", MaxBurgerNameChars)}}
+		return NewValidationError(Msg(keyBurgerNameTooLong, MaxBurgerNameChars))
 	}
 	return nil
 }

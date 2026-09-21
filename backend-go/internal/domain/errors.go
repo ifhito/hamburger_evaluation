@@ -48,10 +48,27 @@ var (
 	ErrForbidden = errors.New("forbidden")
 )
 
-// ValidationError は、API parity のために Rails 形式の full validation
-// message（例："Username can't be blank"）を保持する。
+// ValidationError は、検証の失敗を保持する。Items は言語に依らない文言(Message)で、handler が、
+// 利用者の言語(Texts)で文字列にする。Messages は、同じ内容の英語の文言(API の文言の契約。Rails 形式の
+// full message。例:"Username can't be blank")で、ログや、言語を選ばない呼び出しに使う。
+// NewValidationError で作ると、両方がそろう。
 type ValidationError struct {
 	Messages []string
+	Items    []Message
+}
+
+// NewValidationError は、items から、Items と、その英語の文言 Messages がそろった *ValidationError を作る。
+func NewValidationError(items ...Message) *ValidationError {
+	return &ValidationError{Messages: Texts(LangEN, items), Items: items}
+}
+
+// Texts は、失敗の文言を l の言語の文字列で返す。Items がなければ(Messages だけで作られたものは)、
+// 英語の Messages を返す。
+func (e *ValidationError) Texts(l Lang) []string {
+	if len(e.Items) == 0 {
+		return e.Messages
+	}
+	return Texts(l, e.Items)
 }
 
 func (e *ValidationError) Error() string {

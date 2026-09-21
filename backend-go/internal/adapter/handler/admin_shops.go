@@ -84,7 +84,7 @@ func shopIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
 // HTTP に対応させる：認可（usecase で決定し、ここでは決して決めない）は
 // 403、存在しない shop は統一された 404、validation は 422、それ以外は
 // 500 である。
-func writeShopModerationError(w http.ResponseWriter, op string, err error) {
+func writeShopModerationError(w http.ResponseWriter, r *http.Request, op string, err error) {
 	var vErr *domain.ValidationError
 	switch {
 	case errors.Is(err, domain.ErrForbidden):
@@ -92,7 +92,7 @@ func writeShopModerationError(w http.ResponseWriter, op string, err error) {
 	case errors.Is(err, domain.ErrShopNotFound):
 		writeError(w, http.StatusNotFound, shopNotFoundMessage)
 	case errors.As(err, &vErr):
-		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+		writeValidation(w, r, vErr)
 	default:
 		log.Printf("shops: %s: %v", op, err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
@@ -113,7 +113,7 @@ func handleCreateShop(shops *usecase.Shops) http.HandlerFunc {
 		}
 		detail, err := shops.Create(r.Context(), viewer, req.Shop.Name)
 		if err != nil {
-			writeShopModerationError(w, "create", err)
+			writeShopModerationError(w, r, "create", err)
 			return
 		}
 		writeJSON(w, http.StatusCreated, newAdminShopResponse(detail))
@@ -130,7 +130,7 @@ func handleAdminListShops(shops *usecase.Shops) http.HandlerFunc {
 		}
 		list, err := shops.AdminList(r.Context(), viewer, r.URL.Query().Get("status"))
 		if err != nil {
-			writeShopModerationError(w, "admin list", err)
+			writeShopModerationError(w, r, "admin list", err)
 			return
 		}
 		resp := make([]adminShopResponse, 0, len(list)) // nil ではない：[] として marshal される
@@ -159,7 +159,7 @@ func handleAdminUpdateShop(shops *usecase.Shops) http.HandlerFunc {
 		}
 		detail, err := shops.AdminUpdateName(r.Context(), viewer, id, req.Shop.Name)
 		if err != nil {
-			writeShopModerationError(w, "admin update", err)
+			writeShopModerationError(w, r, "admin update", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newAdminShopResponse(detail))
@@ -180,7 +180,7 @@ func handleApproveShop(shops *usecase.Shops) http.HandlerFunc {
 		}
 		detail, err := shops.Approve(r.Context(), viewer, id)
 		if err != nil {
-			writeShopModerationError(w, "approve", err)
+			writeShopModerationError(w, r, "approve", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newAdminShopResponse(detail))
@@ -206,7 +206,7 @@ func handleRejectShop(shops *usecase.Shops) http.HandlerFunc {
 		}
 		detail, err := shops.Reject(r.Context(), viewer, id, req.ModerationNote)
 		if err != nil {
-			writeShopModerationError(w, "reject", err)
+			writeShopModerationError(w, r, "reject", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newAdminShopResponse(detail))

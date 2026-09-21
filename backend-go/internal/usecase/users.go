@@ -65,26 +65,26 @@ func (in UpdateUserInput) passwordPresent() bool {
 // それぞれの規則を適用しない。email の形式の規則は、新しく設定するときだけ判定する
 // （規則ができる前の、形式が合わない email を持つ既存ユーザーが、同じ値を含めた
 // 更新で 422 になって締め出されないため）。
-func (in UpdateUserInput) validate(currentEmail string) []string {
-	var msgs []string
+func (in UpdateUserInput) validate(currentEmail string) []domain.Message {
+	var issues []domain.Message
 	if in.Username != nil {
-		msgs = append(msgs, domain.ValidateUsername(*in.Username)...)
+		issues = append(issues, domain.UsernameIssues(*in.Username)...)
 	}
 	if in.Bio != nil {
-		msgs = append(msgs, domain.ValidateBio(*in.Bio)...)
+		issues = append(issues, domain.BioIssues(*in.Bio)...)
 	}
 	if in.Email != nil && *in.Email != currentEmail {
-		msgs = append(msgs, domain.ValidateEmail(*in.Email)...)
+		issues = append(issues, domain.EmailIssues(*in.Email)...)
 	}
 	if in.passwordPresent() {
-		msgs = append(msgs, domain.ValidatePassword(*in.Password)...)
+		issues = append(issues, domain.PasswordIssues(*in.Password)...)
 	}
 	password := ""
 	if in.Password != nil {
 		password = *in.Password
 	}
-	msgs = append(msgs, passwordConfirmationErrors(password, in.PasswordConfirmation)...)
-	return msgs
+	issues = append(issues, passwordConfirmationIssues(password, in.PasswordConfirmation)...)
+	return issues
 }
 
 // Update は、後述のチェック順序で、対象ユーザーのプロフィールを
@@ -103,8 +103,8 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 	if !viewer.Manages(target.ID) {
 		return domain.User{}, domain.ErrForbidden
 	}
-	if msgs := input.validate(target.Email); len(msgs) > 0 {
-		return domain.User{}, &domain.ValidationError{Messages: msgs}
+	if issues := input.validate(target.Email); len(issues) > 0 {
+		return domain.User{}, domain.NewValidationError(issues...)
 	}
 	changes := domain.ProfileChanges{Username: input.Username, Bio: input.Bio, Email: input.Email}
 	if input.passwordPresent() {
@@ -117,7 +117,7 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 	updated, err := s.users.UpdateProfile(ctx, targetID, changes)
 	if err != nil {
 		if errors.Is(err, domain.ErrEmailTaken) {
-			return domain.User{}, &domain.ValidationError{Messages: []string{"Email has already been taken"}}
+			return domain.User{}, domain.NewValidationError(domain.MsgEmailTaken)
 		}
 		return domain.User{}, fmt.Errorf("update user: %w", err)
 	}

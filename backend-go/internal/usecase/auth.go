@@ -81,8 +81,8 @@ const dummyPasswordDigest = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJ
 // アカウントがあるかは分からない。規則を満たしたうえで、未知の email と誤った
 // パスワードは、どちらも domain.ErrInvalidCredentials を返す。
 func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, string, error) {
-	if msgs := domain.ValidateCredentials(email, password); len(msgs) > 0 {
-		return domain.User{}, "", &domain.ValidationError{Messages: msgs}
+	if issues := domain.CredentialsIssues(email, password); len(issues) > 0 {
+		return domain.User{}, "", domain.NewValidationError(issues...)
 	}
 	creds, err := a.query.GetActiveUserByEmail(ctx, email)
 	if err != nil {

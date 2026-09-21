@@ -19,11 +19,16 @@ const MaxUsernameChars = 50
 // この規則の判定は domain だけが持つ。signup と、プロフィール更新（送られたときだけ）が
 // 同じ関数を通る。
 func ValidateUsername(username string) []string {
+	return Texts(LangEN, UsernameIssues(username))
+}
+
+// UsernameIssues は、ValidateUsername の判定を、言語に依らない文言(Message)で返す。有効なら nil を返す。
+func UsernameIssues(username string) []Message {
 	if username == "" {
-		return []string{"Username can't be blank"}
+		return []Message{Msg(keyUsernameBlank)}
 	}
 	if exceedsChars(username, MaxUsernameChars) {
-		return []string{tooLongMessage("Username", MaxUsernameChars)}
+		return []Message{Msg(keyUsernameTooLong, MaxUsernameChars)}
 	}
 	return nil
 }

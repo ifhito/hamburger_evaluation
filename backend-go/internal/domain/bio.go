@@ -16,8 +16,13 @@ const MaxBioChars = 500
 // この規則の判定は domain だけが持ち、frontend は判定を持たない（サーバーの 422
 // メッセージの表示だけを行う）。プロフィール更新で、送られたときだけ判定する。
 func ValidateBio(bio string) []string {
+	return Texts(LangEN, BioIssues(bio))
+}
+
+// BioIssues は、ValidateBio の判定を、言語に依らない文言(Message)で返す。有効なら nil を返す。
+func BioIssues(bio string) []Message {
 	if exceedsChars(bio, MaxBioChars) {
-		return []string{tooLongMessage("Bio", MaxBioChars)}
+		return []Message{Msg(keyBioTooLong, MaxBioChars)}
 	}
 	return nil
 }

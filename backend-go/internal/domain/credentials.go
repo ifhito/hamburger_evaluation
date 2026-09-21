@@ -7,5 +7,10 @@ package domain
 // （ValidateEmail）、パスワードの規則（ValidatePassword）の順に、結果を連結する。
 // 新しい規則はここには足さず、それぞれの検証関数に置く。
 func ValidateCredentials(email, password string) []string {
-	return append(ValidateEmail(email), ValidatePassword(password)...)
+	return Texts(LangEN, CredentialsIssues(email, password))
+}
+
+// CredentialsIssues は、ValidateCredentials の判定を、言語に依らない文言(Message)で返す。有効なら nil を返す。
+func CredentialsIssues(email, password string) []Message {
+	return append(EmailIssues(email), PasswordIssues(password)...)
 }

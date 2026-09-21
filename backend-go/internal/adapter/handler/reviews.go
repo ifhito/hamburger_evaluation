@@ -272,7 +272,7 @@ func reviewIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
 // writeReviewError は review の usecase のエラーを HTTP に対応させる：
 // domain の認可の判断は 403、3 つの not-found sentinel はそれぞれの
 // endpoint 固有の 404 body、validation は 422、それ以外は 500 である。
-func writeReviewError(w http.ResponseWriter, op string, err error) {
+func writeReviewError(w http.ResponseWriter, r *http.Request, op string, err error) {
 	var vErr *domain.ValidationError
 	switch {
 	case errors.Is(err, domain.ErrForbidden):
@@ -284,7 +284,7 @@ func writeReviewError(w http.ResponseWriter, op string, err error) {
 	case errors.Is(err, domain.ErrBurgerNotFound):
 		writeError(w, http.StatusNotFound, burgerNotFoundMessage)
 	case errors.As(err, &vErr):
-		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+		writeValidation(w, r, vErr)
 	default:
 		log.Printf("reviews: %s: %v", op, err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
@@ -367,7 +367,7 @@ func handleGetReview(reviews *usecase.Reviews) http.HandlerFunc {
 		}
 		detail, err := reviews.Get(r.Context(), viewerPtr(r), id)
 		if err != nil {
-			writeReviewError(w, "get", err)
+			writeReviewError(w, r, "get", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newReviewResponse(detail))
@@ -441,7 +441,7 @@ func handleCreateReview(reviews *usecase.Reviews) http.HandlerFunc {
 		detail, err := reviews.Create(r.Context(), viewer, form.shopID, form.burgerID,
 			form.burgerName, form.rating, form.comment, form.photo)
 		if err != nil {
-			writeReviewError(w, "create", err)
+			writeReviewError(w, r, "create", err)
 			return
 		}
 		writeJSON(w, http.StatusCreated, newReviewResponse(detail))
@@ -479,7 +479,7 @@ func handleUpdateReview(reviews *usecase.Reviews) http.HandlerFunc {
 		}
 		detail, err := reviews.Update(r.Context(), viewer, id, form.rating, form.comment, form.photo)
 		if err != nil {
-			writeReviewError(w, "update", err)
+			writeReviewError(w, r, "update", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newReviewResponse(detail))
@@ -499,7 +499,7 @@ func handleDeleteReview(reviews *usecase.Reviews) http.HandlerFunc {
 			return
 		}
 		if err := reviews.Delete(r.Context(), viewer, id); err != nil {
-			writeReviewError(w, "delete", err)
+			writeReviewError(w, r, "delete", err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

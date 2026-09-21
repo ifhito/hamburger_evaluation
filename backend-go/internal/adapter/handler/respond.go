@@ -10,6 +10,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
 type errorResponse struct {
@@ -47,6 +49,12 @@ const hasMoreHeader = "X-Has-More"
 // setHasMore は、本文を書く前に、次のページの有無をヘッダーに設定する。
 func setHasMore(w http.ResponseWriter, hasMore bool) {
 	w.Header().Set(hasMoreHeader, strconv.FormatBool(hasMore))
+}
+
+// writeValidation は、検証の失敗(422)を、利用者の言語(Accept-Language)の文言で書き込む。形は
+// {"errors":[...]}。
+func writeValidation(w http.ResponseWriter, r *http.Request, vErr *domain.ValidationError) {
+	writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Texts(langOf(r))})
 }
 
 // writeError は単一エラーの JSON 形式 {"error":"..."} を書き込む。
