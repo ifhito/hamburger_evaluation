@@ -446,6 +446,8 @@ Backend の変更では、通常は次を実行する:
 cd backend-go && docker compose run --rm sqlc generate   # db/queries/ を変更したとき
 ```
 
+同じ検査(`gofmt`・`go build`・`go vet`・DB つきの `go test -race`・sqlc の生成物の差分)は、`backend-go/` を変えた PR で CI(`.github/workflows/backend-go.yml`)も実行する。CI が赤いときは、手元で同じコマンドを再現して直す。
+
 Frontend の変更では、通常は次を実行する:
 
 ```bash

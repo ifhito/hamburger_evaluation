@@ -1,0 +1,119 @@
+name: Backend Go
+
+# backend-go/ を変えたときだけ動かす(frontend だけの変更では動かない)。
+# frontend の検査は ci.yml にある。
+on:
+  pull_request:
+    paths:
+      - "backend-go/**"
+      - ".github/workflows/backend-go.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend-go/**"
+      - ".github/workflows/backend-go.yml"
+
+permissions:
+  contents: read
+
+# 同じ PR の古い実行は止める。main への push は、止めずにすべて最後まで走らせる。
+concurrency:
+  group: backend-go-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: backend-go
+
+jobs:
+  format:
+    name: Backend Go — Format (gofmt)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      - name: gofmt で直すべきファイルがないこと
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt で整形されていないファイル:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+  build_vet:
+    name: Backend Go — Build and static analysis (go build, go vet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      - run: go build ./...
+      - run: go vet ./...
+
+  test:
+    name: Backend Go — Tests (go test -race, PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # この job の中だけで使う使い捨ての DB。秘密の値ではない。
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-throwaway-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # DB を使うテストは、これが未設定だと黙ってスキップされる。テストは、この DB の中に
+      # 実行ごとの専用の database を作り(マイグレーションもテストが適用する)、終わると消す。
+      TEST_DATABASE_URL: postgres://postgres:ci-throwaway-password@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      - name: go test -race
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -race -count=1 -v ./... 2>&1 | tee "$RUNNER_TEMP/go-test.log"
+      - name: DB を使うテストがスキップされていないこと
+        shell: bash
+        run: |
+          if grep -q "TEST_DATABASE_URL is not set" "$RUNNER_TEMP/go-test.log"; then
+            echo "TEST_DATABASE_URL が読まれず、DB を使うテストがスキップされた。"
+            exit 1
+          fi
+
+  sqlc:
+    name: Backend Go — sqlc generated code is up to date
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # 版は backend-go/docker-compose.yml の sqlc サービスと同じにする。
+      - name: sqlc generate
+        run: docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/src" -w /src sqlc/sqlc:1.27.0 generate
+      - name: 生成物に差分がないこと
+        run: |
+          changes="$(git status --porcelain -- internal/adapter/repository/sqlcgen)"
+          if [ -n "$changes" ]; then
+            echo "sqlc の生成物が、db/queries・db/migrations と食い違っている(sqlc generate をやり直して commit する):"
+            echo "$changes"
+            git diff -- internal/adapter/repository/sqlcgen | head -80
+            exit 1
+          fi

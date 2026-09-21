@@ -1,0 +1,264 @@
+/* リデザインのラフの見本(HTML)。ここで組んだ画面を、scripts/capture_mock.js が Penpot 用の一覧(JSON)にする。
+   アプリ(frontend/)の CSS ではない。値は、話し合いで決めた方向(白い背景・黒い文字・マスタード黄は塗りだけ・現代的なゴシック)の案。
+   黄色は白い地では文字にも線にも使えない(コントラストが約 2:1)ので、ボタンの面・札の面・バーガーのチーズ・ロゴの面だけに使い、その上の文字は黒にする。 */
+:root {
+  --bg: #ffffff;
+  --surface-2: #f3f2ee;
+  --border: #dedcd6;
+  --control-border: #6b6b66;
+  --text: #111111;
+  --text-muted: #5a5a55;
+  --accent: #e9b824;
+  --on-accent: #111111;
+  --danger: #b3261e;
+  --danger-surface: #fdf0ef;
+  --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; }
+html { color-scheme: light; }
+body { background: var(--bg); color: var(--text); font: 400 16px/1.6 "Noto Sans JP", system-ui, sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+.wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
+.muted { color: var(--text-muted); }
+
+/* ヘッダー。ロゴは文字だけ: Hamburger は太字、Evaluation は標準の太さで、黄色の面の上に黒で置く(黄色を文字の色にしない) */
+.bar { display: flex; align-items: center; gap: 24px; height: 64px; }
+.wordmark { display: flex; align-items: center; gap: 6px; margin-right: auto; font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
+.wm-pill { padding: 0 10px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-weight: 400; line-height: 30px; }
+.tabs { display: flex; gap: 4px; height: 64px; }
+.tab { position: relative; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: 14px; color: var(--text-muted); }
+.tab.active { color: var(--text); font-weight: 500; }
+.uline { position: absolute; left: 16px; right: 16px; bottom: 0; height: 2px; background: var(--text); }
+.lang { display: flex; gap: 2px; }
+.lang-btn { min-width: 44px; height: 44px; border: 0; border-radius: 8px; background: transparent; font-size: 14px; font-weight: 500; color: var(--text-muted); }
+.lang-btn.on { background: var(--text); color: var(--bg); }
+.rule { height: 1px; background: var(--border); }
+
+/* ページ */
+.page { padding: 48px 0 96px; }
+.page-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; }
+h1 { font-size: 32px; font-weight: 700; line-height: 1.3; }
+h2 { font-size: 20px; font-weight: 700; line-height: 1.4; }
+.count { font-size: 14px; color: var(--text-muted); }
+.toolbar { display: flex; gap: 16px; margin-bottom: 32px; }
+.toolbar .search { flex: 1; }
+.selectwrap { position: relative; width: 200px; }
+.caret { position: absolute; right: 16px; top: 0; line-height: 44px; font-size: 14px; color: var(--text-muted); }
+
+/* 部品: 入力欄・ボタン・札 */
+.input { width: 100%; height: 44px; padding: 0 16px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--bg); }
+.input::placeholder { color: var(--text-muted); }
+select.input { appearance: none; padding-right: 40px; }
+.btn { height: 44px; padding: 0 20px; border: 1px solid transparent; border-radius: 8px; font-size: 14px; font-weight: 500; }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
+.btn.ghost { background: var(--bg); border-color: var(--control-border); color: var(--text); }
+/* 赤は、削除とエラーだけに使う。色だけに頼らない: 削除は「赤の枠 + 赤の文字 + 「削除」の言葉」、エラーは「赤の枠 + 左の赤い帯 + アイコン + 文言」 */
+.btn.danger { background: var(--bg); border-color: var(--danger); color: var(--danger); }
+.chip { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border: 1px solid var(--text); border-radius: 14px; background: var(--bg); font-size: 12px; font-weight: 500; color: var(--text); }
+.chip.accent { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+
+/* 評価のバーガー: 線画のバーガーを、評価の分だけ水位のように下から塗る(rating-icons.js が SVG を組む)。数字は、必ずそばに書く(形や色だけで伝えない)。
+   段の数ではなく連続値で塗る。評価の最大値は、実装では /meta の rating.max から決める。 */
+.burger { display: inline-block; flex: none; line-height: 0; }
+.burger svg { display: block; }
+.rate { display: inline-flex; align-items: center; gap: 12px; }
+.rate b { font-size: 18px; font-weight: 700; line-height: 1; }
+
+/* 写真(仮)。実際の写真が入る所。文字は黒で、暗い側の色でも 4.5:1 を超える明るさにしてある */
+.photo { display: flex; justify-content: center; align-items: flex-start; padding-top: 96px; background: linear-gradient(160deg, var(--a) 0%, var(--b) 100%); }
+.photo-label { font-size: 14px; color: var(--text); }
+
+/* ポスター風のショップ。写真を大きく見せて、店名と評価は写真の下に黒い文字で置く */
+.grid { display: grid; gap: 40px 32px; }
+.shops { grid-template-columns: repeat(3, 1fr); }
+.pphoto { position: relative; height: 400px; border-radius: var(--radius); }
+.pphoto .chip { position: absolute; top: 16px; left: 16px; }
+.pinfo { padding: 16px 4px 0; }
+.name { font-size: 22px; font-weight: 700; line-height: 1.4; }
+.meta { display: flex; align-items: center; gap: 12px; margin-top: 8px; font-size: 14px; color: var(--text-muted); }
+.meta b { font-size: 18px; font-weight: 700; line-height: 1; color: var(--text); }
+
+/* レビューのカード */
+.reviews { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+.rcard { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.rphoto { height: 240px; border-radius: 11px 11px 0 0; }
+.rphoto.none { background: var(--surface-2); align-items: center; padding-top: 0; }
+.rphoto.none .photo-label { color: var(--text-muted); }
+.rbody { display: flex; flex-direction: column; gap: 8px; padding: 20px 24px 12px; }
+.rrow { display: flex; justify-content: space-between; align-items: center; }
+time { font-size: 14px; color: var(--text-muted); }
+.comment { line-height: 1.8; }
+.target { font-size: 14px; }
+.target b { font-weight: 700; }
+.foot { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: var(--text-muted); }
+.more { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 500; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+
+/* レビューの詳細 */
+.back { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 16px; font-size: 14px; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.hero { height: 520px; border-radius: 16px; padding-top: 160px; }
+.narrow { width: min(760px, 100%); margin-inline: auto; }
+.title { padding: 32px 0 0; }
+.title h1 { font-size: 36px; }
+.title .shop { margin-top: 4px; font-size: 16px; color: var(--text-muted); }
+.summary { display: flex; align-items: center; gap: 24px; padding: 24px 0 32px; }
+.avg { font-size: 56px; font-weight: 700; line-height: 1; }
+.summary .btn { margin-left: auto; }
+.section-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 16px; }
+.ritem { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; padding: 20px 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.ritem.current { padding: 19px 23px; border: 2px solid var(--text); background: var(--surface-2); }
+.who { display: flex; align-items: center; gap: 12px; }
+.avatar { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); font-weight: 700; }
+.ritem.current .avatar { background: var(--bg); }
+.who .grow { margin-right: auto; }
+.who .grow b { display: block; font-weight: 700; line-height: 1.4; }
+.actions { display: flex; gap: 12px; }
+
+/* エラーの表示: 赤の枠 + 左の帯 + 「!」のアイコン + 文言(API が返した文言は、そのまま出す) */
+.alert { position: relative; display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 16px 26px; border: 1px solid var(--danger); border-radius: 8px; background: var(--danger-surface); }
+.alert .band { position: absolute; left: -1px; top: -1px; bottom: -1px; width: 6px; border-radius: 8px 0 0 8px; background: var(--danger); }
+.alert .mark { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 12px; background: var(--danger); color: var(--bg); font-size: 14px; font-weight: 700; line-height: 1; }
+.alert .alert-title { display: block; font-weight: 700; line-height: 1.5; color: var(--danger); }
+.alert .msg { margin-top: 2px; line-height: 1.6; color: var(--text); }
+
+/* 空・読み込み中・見つからないときの画面(文言の見本) */
+.note { margin: 40px 0 12px; font-size: 14px; color: var(--text-muted); }
+.note:first-of-type { margin-top: 0; }
+.panel { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 56px 24px; border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
+.panel .state-title { font-size: 28px; font-weight: 700; line-height: 1.4; }
+.panel .state-sub { color: var(--text-muted); }
+.panel .code { font-size: 56px; font-weight: 700; line-height: 1; }
+.skels { display: flex; flex-direction: column; gap: 12px; width: min(420px, 100%); margin-top: 8px; }
+.skel { height: 16px; border-radius: 8px; background: var(--surface-2); }
+
+@media (max-width: 720px) {
+  .bar { flex-wrap: wrap; gap: 0; justify-content: space-between; height: auto; }
+  .wordmark { margin-right: 0; font-size: 18px; line-height: 56px; }
+  .wm-pill { line-height: 28px; }
+  .lang { order: 2; }
+  .tabs { order: 3; width: 100%; height: 44px; gap: 0; justify-content: space-between; }
+  .tab { padding: 0 8px; }
+  .uline { left: 8px; right: 8px; }
+  .page { padding: 24px 0 64px; }
+  h1 { font-size: 28px; }
+  .toolbar { flex-direction: column; gap: 12px; margin-bottom: 24px; }
+  .selectwrap { width: 100%; }
+  .toolbar .search { flex: none; }
+  .grid { grid-template-columns: 1fr; gap: 32px; }
+  .reviews { gap: 16px; }
+  .pphoto { height: 320px; }
+  .rphoto { height: 200px; }
+  .hero { height: 340px; border-radius: 12px; padding-top: 96px; }
+  .title { padding-top: 24px; }
+  .title h1 { font-size: 28px; }
+  .summary { flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 0 24px; }
+  .summary .btn { width: 100%; margin-left: 0; }
+  .ritem { padding: 16px; }
+  .ritem.current { padding: 15px; }
+  .panel { padding: 40px 16px; }
+  .panel .state-title { font-size: 24px; }
+}
+
+/* ---- 第 1 弾で足した部品(サインイン・レビューの投稿・ショップの追加ほか)。新しい色は足さない ---- */
+body { position: relative; }
+.lead { margin-bottom: 24px; color: var(--text-muted); }
+.form { display: flex; flex-direction: column; gap: 20px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.label { font-size: 14px; font-weight: 500; line-height: 1.5; }
+.optional { font-weight: 400; color: var(--text-muted); }
+.hint { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+.ph { color: var(--text-muted); }
+.counter { font-size: 13px; line-height: 1.6; text-align: right; color: var(--text-muted); }
+.input.area { height: auto; min-height: 160px; padding: 12px 16px; line-height: 1.7; }
+.btn.block { width: 100%; }
+.btn.wide { padding: 0 28px; }
+.btn.off { border-color: transparent; background: var(--surface-2); color: var(--text-muted); }
+.btn.danger-solid { border-color: var(--danger); background: var(--danger); color: var(--bg); }
+.linkline { font-size: 14px; color: var(--text-muted); }
+.linkline a, .textlink { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.textlink { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 500; }
+/* 箇条書きの「・」は、文字として書く(Penpot に写すとき、リストの印は、文字ではないので落ちるため) */
+.alert ul, .memo ul { margin: 2px 0 0; padding-left: 0; list-style: none; line-height: 1.6; }
+.alert li, .memo li { padding-left: 1em; text-indent: -1em; }
+
+/* サインイン・新規登録: PC は、左に写真、右にフォーム。モバイルは、フォームだけ */
+.auth { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; padding: 48px 0 96px; }
+.auth .photo { height: 640px; padding-top: 0; align-items: center; border-radius: 16px; }
+.auth-main { width: min(440px, 100%); margin-inline: auto; }
+.auth-main h1 { margin-bottom: 8px; }
+.status { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(560px, 100%); margin: 0 auto; padding: 72px 0 96px; text-align: center; }
+.status h1 { font-size: 28px; }
+
+/* レビューの投稿・編集: PC は、左に入力、右に写真 */
+.formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+.shopline { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-bottom: 24px; font-size: 14px; color: var(--text-muted); }
+.shopline b { font-size: 16px; font-weight: 700; color: var(--text); }
+.actions-row { display: flex; gap: 12px; padding-top: 8px; }
+
+/* 評価の入力: 水位のバーガー + 選んだ数字 + 数字のボタン(ラジオボタンの集まり。押せるのは、数字のボタン) */
+.ratingpick { display: flex; flex-direction: column; gap: 16px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); }
+.rp-view { display: flex; align-items: center; gap: 20px; }
+.rp-num { display: flex; align-items: baseline; gap: 6px; }
+.rp-num b { font-size: 48px; font-weight: 700; line-height: 1; }
+.rp-of { font-size: 14px; color: var(--text-muted); }
+.rp-steps { display: flex; gap: 8px; }
+.step { flex: 1; min-width: 44px; height: 44px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--bg); font-size: 16px; font-weight: 700; }
+.step.on { border-color: var(--text); background: var(--text); color: var(--bg); }
+
+/* 写真の追加: 空・小さくしている途中・付いた */
+.drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 280px; padding: 24px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--surface-2); text-align: center; }
+.drop .title-sm { font-weight: 700; }
+.pv { height: 280px; padding-top: 0; align-items: center; border-radius: var(--radius); }
+.pfile { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 12px; margin-top: 12px; font-size: 14px; }
+.pfile .fname { font-weight: 500; }
+.pbtns { display: flex; gap: 12px; margin-top: 12px; }
+.bar-track { width: min(320px, 100%); height: 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--control-border); }
+.bar-fill { height: 6px; border-radius: 3px; background: var(--text); }
+
+/* 状態の見本の並び(見出しつき) */
+.sample { display: flex; flex-direction: column; gap: 12px; margin-bottom: 40px; }
+.sample .note { margin: 0; }
+.sample-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px 48px; }
+
+/* ダイアログ(削除の確認): 後ろの画面を暗くして、中央に置く */
+.scrim { position: absolute; inset: 0; background: rgba(17, 17, 17, 0.55); }
+.dialog { position: absolute; top: 280px; left: 0; right: 0; width: min(440px, 100% - 32px); margin-inline: auto; padding: 28px; border-radius: 16px; background: var(--bg); }
+.dialog h2 { margin-bottom: 8px; }
+.dialog p { margin-bottom: 24px; color: var(--text-muted); }
+.dialog .actions-row { justify-content: flex-end; padding-top: 0; }
+
+/* ショップの詳細・追加 */
+.notice { margin-bottom: 24px; padding: 16px 20px; border: 1px solid var(--text); border-radius: 8px; background: var(--surface-2); line-height: 1.7; }
+.form .notice { margin-bottom: 0; }
+.notice b { display: block; font-weight: 700; }
+.shop-hero { height: 360px; padding-top: 0; align-items: center; border-radius: 16px; }
+.shop-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 28px 0 8px; }
+.shop-title h1 { font-size: 36px; }
+.shop-summary { display: flex; align-items: center; gap: 24px; padding: 12px 0 32px; }
+.shop-summary .btn { margin-left: auto; }
+.reviews.solo { grid-template-columns: repeat(2, 1fr); }
+.rcard .name-sm { font-size: 18px; font-weight: 700; line-height: 1.4; }
+
+/* 実装メモ(画面の下に付ける注記。アプリの見た目ではない) */
+.memo { width: 100%; text-align: left; margin-top: 56px; padding: 16px 20px; border-radius: 8px; background: var(--surface-2); font-size: 13px; line-height: 1.7; color: var(--text-muted); }
+.memo b { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 700; color: var(--text); }
+
+@media (max-width: 720px) {
+  .auth { grid-template-columns: 1fr; gap: 0; padding: 24px 0 64px; }
+  .auth .photo { display: none; }
+  .status { padding: 40px 0 64px; }
+  .formgrid { grid-template-columns: 1fr; gap: 20px; }
+  .rp-view { gap: 12px; }
+  .rp-steps { gap: 6px; }
+  .drop { min-height: 220px; }
+  .pv { height: 220px; }
+  .sample-grid { grid-template-columns: 1fr; gap: 24px; }
+  .dialog { top: 200px; padding: 20px; }
+  .shop-hero { height: 220px; border-radius: 12px; }
+  .shop-title { padding-top: 20px; }
+  .shop-title h1 { font-size: 28px; }
+  .shop-summary { flex-direction: column; align-items: flex-start; gap: 12px; padding-bottom: 24px; }
+  .shop-summary .btn { width: 100%; margin-left: 0; }
+  .reviews.solo { grid-template-columns: 1fr; }
+  .memo { margin-top: 40px; }
+}

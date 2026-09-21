@@ -104,7 +104,14 @@ Frontend ジョブ:
 
 Node は `.node-version` から、pnpm は v10 でインストールする。
 
-**Go API(`backend-go/`)を検証する CI ジョブは、現時点で存在しない。** Go の検証は、手元の `go-checks.sh` とフックの sensor に依存している。
+Go API(`backend-go/`)は、別の workflow `.github/workflows/backend-go.yml` で検証する。`backend-go/**` かこの workflow 自身を変えた pull request と、`main` への push で実行される(frontend だけの変更では動かない)。
+
+- `format`: `gofmt -l` に指摘がないこと
+- `build_vet`: `go build ./...` と `go vet ./...`
+- `test`: `go test -race -count=1 ./...`(`postgres:16` のサービスと `TEST_DATABASE_URL` を渡し、DB を使うテストを実行する。`TEST_DATABASE_URL` が読まれずスキップされたら失敗にする)
+- `sqlc`: `sqlc generate`(`sqlc/sqlc:1.27.0`。`docker-compose.yml` の版と同じ)をやり直しても、`internal/adapter/repository/sqlcgen` に差分が出ないこと
+
+Go の版は `backend-go/go.mod` から読む。手元の `go-checks.sh` とフックの sensor は、これまでどおり push 前の確認に使う(CI は、その後の最後の関門)。この workflow ができる前は、Go の検証が手元だけだった。
 
 ## 6. 境界とアーキテクチャ
 

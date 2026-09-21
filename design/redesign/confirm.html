@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>メールの確認(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-auth="out" data-active="signup">
+<main class="wrap status">
+  <div data-only="loading" class="status-in"><span class="burger" data-size="lg" data-score="3" data-decor></span></div>
+  <h1 data-only="loading" data-en="Confirming your email address…">メールアドレスを確認しています…</h1>
+  <p class="muted" data-only="loading" data-en="Just a moment">少しだけお待ちください</p>
+
+  <h1 data-only="done" data-en="Your email address is confirmed">メールアドレスを確認できました</h1>
+  <p class="muted" data-only="done" data-en="Your account is ready. Taking you to the reviews…">アカウントができました。レビューの一覧へ進みます…</p>
+  <a class="textlink" href="#" data-only="done" data-en="Go now →">すぐに進む →</a>
+
+  <h1 data-only="error" data-en="Could not confirm your email address">メールアドレスを確認できませんでした</h1>
+  <div data-only="error" style="width:100%;text-align:left"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Confirmation failed">確認できませんでした</b><p class="msg">Confirmation token is invalid or has expired</p></div></section></div>
+  <a class="textlink" href="#" data-only="error" data-en="Sign up again">もう一度、新規登録する</a>
+  <aside class="memo"><b>実装メモ</b><ul><li>・確認メールのリンクを開くと、すぐ確認を 1 回だけ呼ぶ(リンクのトークンは、1 回しか使えない)。トークンの有効・無効の判断と文言(<code>Confirmation token is invalid or has expired</code>)は backend だけ。</li><li>・「確認できました」は、確認できてから一覧へ進むまでの一瞬の画面(いまのアプリは、確認できたらすぐ一覧へ進む)。</li><li>・読み込み中の絵は飾りなので、読み上げない。「確認しています…」は、読み上げる(<code>aria-live</code>)。</li></ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

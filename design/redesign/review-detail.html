@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>レビューの詳細(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="reviews">
+<main class="wrap page">
+  <a class="back" href="#" data-en="← Back to reviews">← レビュー一覧に戻る</a>
+  <div class="photo hero" style="--a:#e3c29a;--b:#b98552"><span class="photo-label" data-en="Photo">写真</span></div>
+  <div class="narrow">
+    <section class="title"><h1 class="name">テリヤキバーガー</h1><p class="shop">J.S. BURGERS CAFE 新宿</p></section>
+    <section class="summary">
+      <span class="avg">4.5</span>
+      <div><span class="burger" data-size="lg" data-score="4.5"></span><p class="count" data-en="2 reviews">2 件のレビュー</p></div>
+      <button class="btn primary" data-en="Write a review">レビューを書く</button>
+    </section>
+    <div class="section-head"><h2 data-en="Reviews">レビュー</h2><span class="count" data-en="Newest first">新しい順</span></div>
+    <article class="ritem current">
+      <div class="who"><span class="avatar">a</span><div class="grow"><b>alice</b><time data-en="Sep 21, 2026">2026年9月21日</time></div><span class="chip accent"><span data-en="Selected review">表示中のレビュー</span></span></div>
+      <span class="rate"><span class="burger" data-size="sm" data-score="4"></span><b>4</b></span>
+      <p class="comment">チーズの量がちょうどよかった。</p>
+      <div class="actions"><button class="btn ghost" data-en="Edit">編集</button><button class="btn danger" data-en="Delete">削除</button></div>
+    </article>
+    <article class="ritem">
+      <div class="who"><span class="avatar">c</span><div class="grow"><b>charlie</b><time data-en="Sep 21, 2026">2026年9月21日</time></div></div>
+      <span class="rate"><span class="burger" data-size="sm" data-score="5"></span><b>5</b></span>
+      <p class="comment">また絶対行きたいです。</p>
+    </article>
+  </div>
+</main>
+<div class="scrim" data-only="delete"></div>
+<div class="dialog" data-only="delete" role="alertdialog" aria-modal="true" aria-labelledby="dlg-t">
+  <h2 id="dlg-t" data-en="Delete this review?">このレビューを削除しますか?</h2>
+  <p data-en="Once deleted, it cannot be restored.">削除すると、元に戻せません。</p>
+  <div class="actions-row"><button type="button" class="btn ghost" data-en="Cancel">キャンセル</button><button type="button" class="btn danger-solid" data-en="Delete">削除する</button></div>
+</div>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>レビューの投稿(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="shops">
+<main class="wrap page">
+  <a class="back" href="#" data-en="← Back to the shop">← ショップに戻る</a>
+  <h1 data-en="Write a review">レビューを書く</h1>
+  <p class="shopline"><span data-en="Shop">ショップ</span><b>J.S. BURGERS CAFE 新宿</b></p>
+  <div data-only="error" style="margin-bottom:24px"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not save the review">レビューを保存できませんでした</b><p class="msg">Comment is too long (maximum is 2000 characters)</p></div></section></div>
+  <div class="formgrid"><div class="form">
+      <div class="field"><label class="label" for="burger" data-en="Burger name">バーガーの名前</label><input class="input" id="burger" data-only="default" placeholder="バーガーの名前を入力" data-en-ph="Enter the burger name"><input class="input" id="burger" data-only="filled error" value="テリヤキバーガー"></div>
+      <div data-only="default"><div class="field"><span class="label" id="rl" data-en="Rating">評価</span><div class="ratingpick" role="radiogroup" aria-labelledby="rl"><div class="rp-view"><span class="burger" data-size="lg" data-score="3" data-decor></span><div class="rp-num"><b>3</b><span class="rp-of" data-en="out of 5">/ 5</span></div></div><div class="rp-steps"><button type="button" class="step" role="radio" aria-checked="false">1</button><button type="button" class="step" role="radio" aria-checked="false">2</button><button type="button" class="step on" role="radio" aria-checked="true">3</button><button type="button" class="step" role="radio" aria-checked="false">4</button><button type="button" class="step" role="radio" aria-checked="false">5</button></div></div></div></div>
+      <div data-only="filled error"><div class="field"><span class="label" id="rl" data-en="Rating">評価</span><div class="ratingpick" role="radiogroup" aria-labelledby="rl"><div class="rp-view"><span class="burger" data-size="lg" data-score="4" data-decor></span><div class="rp-num"><b>4</b><span class="rp-of" data-en="out of 5">/ 5</span></div></div><div class="rp-steps"><button type="button" class="step" role="radio" aria-checked="false">1</button><button type="button" class="step" role="radio" aria-checked="false">2</button><button type="button" class="step" role="radio" aria-checked="false">3</button><button type="button" class="step on" role="radio" aria-checked="true">4</button><button type="button" class="step" role="radio" aria-checked="false">5</button></div></div></div></div>
+      <div class="field"><label class="label" id="comment-l" for="comment" data-en="Comment">コメント</label>
+        <div data-only="default"><div class="input area" id="comment" role="textbox" aria-multiline="true" aria-labelledby="comment-l"><span class="ph" data-en="Write your burger review…">食べたバーガーの感想を書いてください…</span></div><p class="counter">0 / 2000</p></div>
+        <div data-only="filled error"><div class="input area" id="comment" role="textbox" aria-multiline="true" aria-labelledby="comment-l">チーズの量がちょうどよかった。ソースの甘さもよく、バンズがふわふわでした。</div><p class="counter" aria-live="polite">37 / 2000</p></div>
+      </div>
+    </div><div class="form">
+      <div data-only="default"><div class="field"><span class="label" data-en="Photo (optional)">写真 <span class="optional" data-en="(optional)">(任意)</span></span><div class="drop"><b class="title-sm" data-en="Add a photo">写真を追加</b><p class="hint" data-en="JPEG, PNG or WebP, up to 5MB. Large photos are shrunk on your device before sending.">JPEG・PNG・WebP。5MB まで。大きい写真は、送る前に、この端末で小さくします。</p><button type="button" class="btn ghost" data-en="Choose a photo">写真を選ぶ</button></div></div></div>
+      <div data-only="filled error"><div class="field"><span class="label" data-en="Photo (optional)">写真 <span class="optional" data-en="(optional)">(任意)</span></span><div><div class="photo pv" style="--a:#e3c29a;--b:#b98552"><span class="photo-label" data-en="Photo">写真</span></div><div class="pfile"><span class="fname">teriyaki.jpg</span><span class="muted" data-en="4.2 MB → 1.1 MB (shrunk)">4.2 MB → 1.1 MB(小さくしました)</span></div><div class="pbtns"><button type="button" class="btn ghost" data-en="Change photo">写真を変える</button><button type="button" class="btn ghost" data-en="Remove">外す</button></div></div></div></div>
+    </div></div>
+  <div class="actions-row"><button type="button" class="btn primary wide" data-en="Post review">レビューを投稿する</button><button type="button" class="btn ghost" data-en="Cancel">キャンセル</button></div>
+  <aside class="memo"><b>実装メモ</b><ul><li>・評価は、数字のボタン(ラジオボタンの集まり。<code>role="radiogroup"</code>)で選ぶ。矢印キーで増減し、選んだ数字を大きく表示する。バーガーは、選んだ値の水位を見せるだけ(押せない)。段階の数と水位は、<code>GET /meta</code> の <code>rating</code>(min・max)から決める。frontend に 5 を書かない。最初に選ばれている値(いまのアプリは 3)は、実装のとき決める。</li><li>・文字数のカウンターの上限(コメント 2000・バーガー名 100)は、いまの <code>GET /meta</code> にない(評価と写真の上限だけ)。出すなら <code>/meta</code> に足して、そこから取る。frontend に数字を書かない。出さないなら、カウンターをやめて、API のエラー文言だけにする。見本の数字は仮。</li><li>・写真の 5MB・長辺の上限は、<code>GET /meta</code> の <code>photo</code> から取る(見本の数字は仮)。</li><li>・エラーの文言(<code>Comment is too long …</code> など)は API が返したものをそのまま出す。API のエラーは、どの入力欄のものか分からない形なので、画面の上にまとめて出す。</li></ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>
