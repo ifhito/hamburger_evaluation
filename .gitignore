@@ -12,6 +12,8 @@ frontend/dist/
 .env.*
 frontend/.env
 frontend/.env.*
+# Penpot(design/)は、値の雛形(.env.example)だけをコミットする。design/.env は鍵を含むのでコミットしない
+!design/.env.example
 
 # 旧 API(backend/)の名残として手元に残りうる秘密ファイル。誤って commit しない
 backend/.kamal/secrets

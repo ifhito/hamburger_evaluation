@@ -34,6 +34,18 @@ const en = {
       hasAccount: "Already have an account?",
       signInLink: "Sign in",
       error: "Failed to create account",
+      sent: {
+        title: "Check your email",
+        message: "We sent a confirmation email to {{email}}. Open the link in it to finish creating your account.",
+        hint: "If you don't see it, check your spam folder. To change your details, sign up again.",
+        back: "Sign up again",
+      },
+    },
+    confirm: {
+      title: "Confirming your email",
+      loading: "Confirming your email address\u2026",
+      error: "Failed to confirm your email address",
+      signUpAgain: "Sign up again",
     },
     signout: {
       title: "Signing out\u2026",

@@ -73,6 +73,8 @@
       "Read(backend-go/.env.*)",
       "Read(frontend/.env)",
       "Read(frontend/.env.*)",
+      "Read(design/.env)",
+      "Read(design/.env.*)",
       "Read(secrets/**)",
       "Read(**/secrets/**)",
       "Read(backend/.kamal/secrets)",

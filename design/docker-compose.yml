@@ -1,0 +1,130 @@
+# Penpot(オープンソースのデザインツール)を、自分の PC で動かすためのローカル専用の compose。
+# 出典: Penpot 公式の構成(https://github.com/penpot/penpot/blob/main/docker/images/docker-compose.yaml)を、
+# 次のように変えた。
+#   - バージョンを固定した(PENPOT_VERSION。design/.env.example)
+#   - 使わないサービスを外した: penpot-mcp(エージェント連携。この story の対象外)、
+#     penpot-mailcatch(メールは送らない。smtp のフラグを付けない Penpot は、メールの内容をログに出すだけ)
+#   - テレメトリ(匿名の利用データの送信)を切った
+#   - 各サービスに mem_limit を付けた(合計 3.2 GiB)。restart は付けない(Docker の起動で勝手に立ち上がらない)
+# 起動: docker compose -p hamburger-penpot -f design/docker-compose.yml --env-file design/.env up -d
+# 使い方は design/README.md を参照。
+name: hamburger-penpot
+
+x-flags: &penpot-flags
+  # ローカル専用のフラグ。インターネットに公開するときは、disable-secure-session-cookies と
+  # disable-email-verification を外すこと(このファイルは公開を想定していない)。
+  #   disable-secure-session-cookies: HTTPS でない(http://localhost)ときに、セッションの cookie を使えるようにする
+  #   disable-email-verification    : ユーザー登録でメールの確認を求めない
+  #   enable-prepl-server           : create-profile などの CLI(manage.py)が、backend と通信するために必要
+  PENPOT_FLAGS: disable-email-verification disable-secure-session-cookies enable-prepl-server
+
+x-uri: &penpot-public-uri
+  # ブラウザから開く URL。PENPOT_PORT を変えると、ここも追従する。
+  PENPOT_PUBLIC_URI: http://localhost:${PENPOT_PORT:-9001}
+
+x-body-size: &penpot-http-body-size
+  # ファイル(.penpot)の読み込みで使う、リクエストの大きさの上限(350 MiB。公式の既定)
+  PENPOT_HTTP_SERVER_MAX_BODY_SIZE: 367001600
+  PENPOT_HTTP_SERVER_MAX_MULTIPART_BODY_SIZE: 367001600
+
+x-secret-key: &penpot-secret-key
+  # 各種の鍵(セッション・招待など)の元になる鍵。design/.env に、README の手順で生成して置く(コミットしない)。
+  PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:?design/.env に PENPOT_SECRET_KEY を設定してください(design/README.md の手順)}
+
+networks:
+  penpot:
+
+volumes:
+  penpot_postgres_v15:
+  penpot_assets:
+
+services:
+  penpot-frontend:
+    image: "penpotapp/frontend:${PENPOT_VERSION:-2.17.2}"
+    mem_limit: 192m
+    ports:
+      # 開く URL は http://localhost:9001(PENPOT_PORT で変えられる)。ホストの localhost だけに公開する。
+      - "127.0.0.1:${PENPOT_PORT:-9001}:8080"
+    volumes:
+      - penpot_assets:/opt/data/assets
+    depends_on:
+      - penpot-backend
+      - penpot-exporter
+    networks:
+      - penpot
+    environment:
+      <<: [*penpot-flags, *penpot-http-body-size, *penpot-public-uri]
+
+  penpot-backend:
+    image: "penpotapp/backend:${PENPOT_VERSION:-2.17.2}"
+    mem_limit: 1536m
+    volumes:
+      - penpot_assets:/opt/data/assets
+    depends_on:
+      penpot-postgres:
+        condition: service_healthy
+      penpot-valkey:
+        condition: service_healthy
+    networks:
+      - penpot
+    environment:
+      <<: [*penpot-flags, *penpot-public-uri, *penpot-http-body-size, *penpot-secret-key]
+      # データベースの接続。penpot のネットワークの中だけで使い、ホストには公開しない。
+      PENPOT_DATABASE_URI: postgresql://penpot-postgres/penpot
+      PENPOT_DATABASE_USERNAME: penpot
+      PENPOT_DATABASE_PASSWORD: penpot
+      # 通知(WebSocket)に使う Valkey(Redis 互換)
+      PENPOT_REDIS_URI: redis://penpot-valkey/0
+      # 画像などは、docker の volume(penpot_assets)のファイルとして保存する
+      PENPOT_OBJECTS_STORAGE_BACKEND: fs
+      PENPOT_OBJECTS_STORAGE_FS_DIRECTORY: /opt/data/assets
+      # 匿名の利用データを送らない
+      PENPOT_TELEMETRY_ENABLED: "false"
+
+  penpot-exporter:
+    image: "penpotapp/exporter:${PENPOT_VERSION:-2.17.2}"
+    mem_limit: 768m
+    depends_on:
+      penpot-valkey:
+        condition: service_healthy
+    networks:
+      - penpot
+    environment:
+      <<: [*penpot-secret-key, *penpot-public-uri]
+      # frontend との通信は、docker の内部のネットワークで行う(変えない)
+      PENPOT_INTERNAL_URI: http://penpot-frontend:8080
+      PENPOT_REDIS_URI: redis://penpot-valkey/0
+
+  penpot-postgres:
+    image: "postgres:15"
+    mem_limit: 512m
+    stop_signal: SIGINT
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penpot"]
+      interval: 2s
+      timeout: 10s
+      retries: 5
+      start_period: 2s
+    volumes:
+      - penpot_postgres_v15:/var/lib/postgresql/data
+    networks:
+      - penpot
+    environment:
+      - POSTGRES_INITDB_ARGS=--data-checksums
+      - POSTGRES_DB=penpot
+      - POSTGRES_USER=penpot
+      - POSTGRES_PASSWORD=penpot
+
+  penpot-valkey:
+    image: valkey/valkey:8.1
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping | grep PONG"]
+      interval: 1s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    networks:
+      - penpot
+    environment:
+      - VALKEY_EXTRA_FLAGS=--maxmemory 128mb --maxmemory-policy volatile-lfu

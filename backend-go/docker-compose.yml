@@ -14,6 +14,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://postgres:password@db:5432/hamburger_evaluation_go_development?sslmode=disable
@@ -24,7 +26,23 @@ services:
       # 署名および検証される。
       JWT_SECRET: ${JWT_SECRET:-}
       GOMEMLIMIT: 920MiB
+      # signup の確認メール(S16)。開発では、下の mailpit(認証なし・暗号化なし)へ送る。
+      # 本番は SMTP_HOST・SMTP_PORT・SMTP_SECURITY(tls / starttls)・SMTP_USER・SMTP_PASSWORD を
+      # 設定し、MAIL_FROM は検証済みの送信元にする(例は CLAUDE.md の「signup の確認メール」)。
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+      MAIL_FROM: noreply@hamburger.example.com
+      # 確認メールのリンクの生成元(frontend の URL)。
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
     mem_limit: 1g
+
+  # 開発用のメール受信(S16)。api-go の確認メールを SMTP :1025(compose のネットワーク内だけ)で
+  # 受け取り、Web UI(http://localhost:8025)で読める。
+  mailpit:
+    image: axllent/mailpit:v1.22.3
+    ports:
+      - "8025:8025"
 
   # 使い方：docker compose run --rm migrate up
   #         docker compose run --rm migrate down -all
