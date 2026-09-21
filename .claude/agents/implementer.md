@@ -66,6 +66,10 @@ own.
   pnpm run test` (plus `pnpm run build` if API client/Vite/tsconfig changed).
 - A failing check is a hard stop: fix it or report the failure verbatim.
   Never report a task done on unverified claims.
+- Opening the PR, marking it ready and running `/code-review` (the
+  `code-review` skill; it needs the Skill tool and `gh`, which you do not
+  have) are the caller's job (the orchestrator, or the session that
+  delegated to you). Never claim a `/code-review` ran.
 
 ## Output Contract
 

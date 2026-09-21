@@ -67,6 +67,8 @@ cd backend-go && docker compose run --rm sqlc generate
 4. `backend-go/db/queries/` を変更した場合: `cd backend-go && docker compose run --rm sqlc generate` を実行し、`internal/adapter/repository/sqlcgen` に差分が出ないこと。
 5. Frontend を変更した場合: `cd frontend && pnpm run type-check && pnpm run lint && pnpm run test`。
 6. Routing/build 設定または API 境界を変更した場合: `cd frontend && pnpm run build`。
+7. PR を ready にする前: `/code-review` を実行し、結果の要約を PR のコメントに残す(詳細は `CLAUDE.md`
+   の「Git と PR のワークフロー」)。実行できなかったときは ready にせず、利用者に手動での実行を頼む。
 
 ## 対象外
 
