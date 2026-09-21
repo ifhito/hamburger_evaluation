@@ -100,11 +100,14 @@ func (e *InsufficientScopeError) Is(target error) bool { return target == ErrOAu
 type OAuthScope struct {
 	Name        string
 	Description string
+	// Writes は、この範囲が、利用者の名前でデータを書き込む(投稿・編集・削除・申請)ものかである。
+	// 画面は、この値で書き込みの範囲を強調して見せる。名前を比べて決めない(規則は domain が持つ)。
+	Writes bool
 }
 
 var oauthScopes = []OAuthScope{
 	{Name: OAuthScopeRead, Description: "View shops, reviews and profiles"},
-	{Name: OAuthScopeWrite, Description: "Post, edit and delete reviews, and submit shops, on your behalf"},
+	{Name: OAuthScopeWrite, Description: "Post, edit and delete reviews, and submit shops, on your behalf", Writes: true},
 }
 
 // OAuthScopes は、許可できる範囲の一覧を、同意画面に出す順番で返す。

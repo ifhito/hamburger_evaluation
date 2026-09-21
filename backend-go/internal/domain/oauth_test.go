@@ -364,3 +364,24 @@ func TestValidateOAuthPKCE(t *testing.T) {
 		})
 	}
 }
+
+func TestOAuthScopeWrites(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		scope string
+		want  bool
+	}{
+		{"読み取りの範囲は、書き込みを伴わない", domain.OAuthScopeRead, false},
+		{"書き込みの範囲は、書き込みを伴う", domain.OAuthScopeWrite, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			scope, ok := domain.OAuthScopeByName(tt.scope)
+			if !ok {
+				t.Fatalf("scope %q not found", tt.scope)
+			}
+			if scope.Writes != tt.want {
+				t.Errorf("Writes = %v, want %v", scope.Writes, tt.want)
+			}
+		})
+	}
+}
