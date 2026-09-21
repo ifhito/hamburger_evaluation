@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../domains/auth/AuthProvider'
+import { Logo } from './Logo'
 import styles from './layout.module.css'
 
 interface LayoutProps {
@@ -17,7 +18,7 @@ export function Layout({ children, title }: LayoutProps) {
     <div className={styles.wrapper}>
       <header className={styles.header}>
         <Link to="/shops" className={styles.brand}>
-          🍔 {t('nav.brand')}
+          <Logo name={t('nav.brand')} />
         </Link>
         <nav className={styles.nav}>
           <Link to="/shops" className={styles.navLink}>{t('nav.shops')}</Link>
