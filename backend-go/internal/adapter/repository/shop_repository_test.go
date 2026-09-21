@@ -42,9 +42,15 @@ func insertUserRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string
 	return id
 }
 
+// insertUUIDRow は insertRow と同様だが、UUID の id(正規形の文字列。shops・burgers)を返す。
+func insertUUIDRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, args ...any) string {
+	t.Helper()
+	return insertUserRow(ctx, t, conn, sql, args...)
+}
+
 // shopIDs は、順序に依存しない比較のために shop の id を取り出す。
-func shopIDs(shops []domain.Shop) []int64 {
-	ids := make([]int64, 0, len(shops))
+func shopIDs(shops []domain.Shop) []string {
+	ids := make([]string, 0, len(shops))
 	for _, s := range shops {
 		ids = append(ids, s.ID)
 	}
@@ -52,7 +58,7 @@ func shopIDs(shops []domain.Shop) []int64 {
 	return ids
 }
 
-func sortedIDs(ids ...int64) []int64 {
+func sortedIDs(ids ...string) []string {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	return ids
 }
@@ -85,17 +91,17 @@ func TestShopRepository(t *testing.T) {
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
 	// status のコード：0=pending、1=active、2=rejected。
-	deltaDiner := insertRow(ctx, t, conn, insertShop, "Delta Diner", 1, nil, carol)
-	alicePending := insertRow(ctx, t, conn, insertShop, "Alpha Pending", 0, nil, alice)
-	golfRejected := insertRow(ctx, t, conn, insertShop, "Golf Grill", 2, "needs fixes", nil)
-	pctBeef := insertRow(ctx, t, conn, insertShop, "100% Beef", 1, nil, nil)
-	xBeef := insertRow(ctx, t, conn, insertShop, "100x Beef", 1, nil, nil)
-	underScore := insertRow(ctx, t, conn, insertShop, "Under_score", 1, nil, nil)
-	underX := insertRow(ctx, t, conn, insertShop, "UnderXscore", 1, nil, nil)
-	backslash := insertRow(ctx, t, conn, insertShop, `Back\slash Cafe`, 1, nil, nil)
-	orderA1 := insertRow(ctx, t, conn, insertShop, "Order Cafe A", 1, nil, nil)
-	orderA2 := insertRow(ctx, t, conn, insertShop, "Order Cafe A", 1, nil, nil)
-	orderB := insertRow(ctx, t, conn, insertShop, "Order Cafe B", 1, nil, nil)
+	deltaDiner := insertUUIDRow(ctx, t, conn, insertShop, "Delta Diner", 1, nil, carol)
+	alicePending := insertUUIDRow(ctx, t, conn, insertShop, "Alpha Pending", 0, nil, alice)
+	golfRejected := insertUUIDRow(ctx, t, conn, insertShop, "Golf Grill", 2, "needs fixes", nil)
+	pctBeef := insertUUIDRow(ctx, t, conn, insertShop, "100% Beef", 1, nil, nil)
+	xBeef := insertUUIDRow(ctx, t, conn, insertShop, "100x Beef", 1, nil, nil)
+	underScore := insertUUIDRow(ctx, t, conn, insertShop, "Under_score", 1, nil, nil)
+	underX := insertUUIDRow(ctx, t, conn, insertShop, "UnderXscore", 1, nil, nil)
+	backslash := insertUUIDRow(ctx, t, conn, insertShop, `Back\slash Cafe`, 1, nil, nil)
+	orderA1 := insertUUIDRow(ctx, t, conn, insertShop, "Order Cafe A", 1, nil, nil)
+	orderA2 := insertUUIDRow(ctx, t, conn, insertShop, "Order Cafe A", 1, nil, nil)
+	orderB := insertUUIDRow(ctx, t, conn, insertShop, "Order Cafe B", 1, nil, nil)
 
 	activeIDs := sortedIDs(deltaDiner, pctBeef, xBeef, underScore, underX, backslash, orderA1, orderA2, orderB)
 
@@ -120,7 +126,7 @@ func TestShopRepository(t *testing.T) {
 
 	t.Run("AC2 creator には自分の pending な shop が status 付きで追加で見える", func(t *testing.T) {
 		shops := list(t, aliceVis, "", 100, 0)
-		want := sortedIDs(append([]int64{alicePending}, activeIDs...)...)
+		want := sortedIDs(append([]string{alicePending}, activeIDs...)...)
 		if got := shopIDs(shops); !reflect.DeepEqual(got, want) {
 			t.Fatalf("ids = %v, want %v", got, want)
 		}
@@ -132,7 +138,7 @@ func TestShopRepository(t *testing.T) {
 	})
 
 	t.Run("AC3 admin はすべての status の shop を見られる", func(t *testing.T) {
-		want := sortedIDs(append([]int64{alicePending, golfRejected}, activeIDs...)...)
+		want := sortedIDs(append([]string{alicePending, golfRejected}, activeIDs...)...)
 		if got := shopIDs(list(t, adminVis, "", 100, 0)); !reflect.DeepEqual(got, want) {
 			t.Errorf("ids = %v, want %v", got, want)
 		}
@@ -144,8 +150,10 @@ func TestShopRepository(t *testing.T) {
 		if got := shopNames(shops); !reflect.DeepEqual(got, wantNames) {
 			t.Fatalf("names = %v, want %v", got, wantNames)
 		}
-		if shops[0].ID != orderA1 || shops[1].ID != orderA2 {
-			t.Errorf("same-name ids = %d,%d, want %d,%d (id asc)", shops[0].ID, shops[1].ID, orderA1, orderA2)
+		// id は UUID なので、同名の 2 件の並びは、id の昇順(文字列としての昇順)になる。
+		wantSame := sortedIDs(orderA1, orderA2)
+		if shops[0].ID != wantSame[0] || shops[1].ID != wantSame[1] {
+			t.Errorf("same-name ids = %s,%s, want %s,%s (id asc)", shops[0].ID, shops[1].ID, wantSame[0], wantSame[1])
 		}
 	})
 
@@ -257,19 +265,19 @@ func TestShopRepository(t *testing.T) {
 	})
 
 	t.Run("AC6 存在しない shop id は ErrShopNotFound になる", func(t *testing.T) {
-		if _, err := shopQuery.GetShopWithCreator(ctx, 99999); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := shopQuery.GetShopWithCreator(ctx, uid.N(99999)); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
 
 	t.Run("ListShopReviews は user、burger、stats を join して順序どおりに返す", func(t *testing.T) {
 		insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-		cheese := insertRow(ctx, t, conn, insertBurger, "Cheese")
-		plain := insertRow(ctx, t, conn, insertBurger, "Plain")
-		other := insertRow(ctx, t, conn, insertBurger, "Other")
-		mustLink := func(shopID, burgerID int64) {
+		cheese := insertUUIDRow(ctx, t, conn, insertBurger, "Cheese")
+		plain := insertUUIDRow(ctx, t, conn, insertBurger, "Plain")
+		other := insertUUIDRow(ctx, t, conn, insertBurger, "Other")
+		mustLink := func(shopID, burgerID string) {
 			if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopID, burgerID); err != nil {
-				t.Fatalf("link shop %d burger %d: %v", shopID, burgerID, err)
+				t.Fatalf("link shop %s burger %s: %v", shopID, burgerID, err)
 			}
 		}
 		mustLink(deltaDiner, cheese)
@@ -358,9 +366,9 @@ func TestShopModerationRepository(t *testing.T) {
 	// instant を共有するので、id desc が同順位を解消しなければならない。
 	tOld := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	tNew := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
-	old1 := insertRow(ctx, t, conn, insertShop, "Old One", 1, nil, alice, tOld)
-	old2 := insertRow(ctx, t, conn, insertShop, "Old Two", 2, "needs fixes", nil, tOld)
-	newest := insertRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
+	old1 := insertUUIDRow(ctx, t, conn, insertShop, "Old One", 1, nil, alice, tOld)
+	old2 := insertUUIDRow(ctx, t, conn, insertShop, "Old Two", 2, "needs fixes", nil, tOld)
+	newest := insertUUIDRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
 
 	anon := domain.ShopVisibilityFor(nil)
 	aliceVis := domain.ShopVisibilityFor(&domain.User{ID: alice})
@@ -374,7 +382,7 @@ func TestShopModerationRepository(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateShop returned error: %v", err)
 		}
-		if created.ID == 0 || created.Status != domain.ShopStatusPending || created.ModerationNote != nil {
+		if created.ID == "" || created.Status != domain.ShopStatusPending || created.ModerationNote != nil {
 			t.Errorf("created = %+v, want generated id, pending, nil note", created)
 		}
 		detail, err := shopQuery.GetShopWithCreator(ctx, created.ID)
@@ -413,21 +421,28 @@ func TestShopModerationRepository(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListShopsForModeration returned error: %v", err)
 		}
-		ids := make([]int64, 0, len(shops))
+		ids := make([]string, 0, len(shops))
 		for _, s := range shops {
 			ids = append(ids, s.ID)
 		}
-		if want := []int64{newest, old2, old1}; !reflect.DeepEqual(ids, want) {
+		// old1 と old2 は created_at が同じなので、id の降順(UUID は文字列としての降順)で並ぶ。
+		sameOld := sortedIDs(old1, old2)
+		if want := []string{newest, sameOld[1], sameOld[0]}; !reflect.DeepEqual(ids, want) {
 			t.Fatalf("ids = %v, want %v", ids, want)
 		}
-		if !reflect.DeepEqual(shops[0].Creator, &domain.UserRef{ID: alice, Username: "alice"}) {
-			t.Errorf("creator = %+v, want alice", shops[0].Creator)
+		// old1 と old2 の並びは id で決まるので、位置ではなく id で取り出す。
+		byID := map[string]domain.ShopDetail{}
+		for _, s := range shops {
+			byID[s.ID] = s
 		}
-		if shops[1].Creator != nil {
-			t.Errorf("creatorless shop creator = %+v, want nil", shops[1].Creator)
+		if !reflect.DeepEqual(byID[newest].Creator, &domain.UserRef{ID: alice, Username: "alice"}) {
+			t.Errorf("creator = %+v, want alice", byID[newest].Creator)
 		}
-		if shops[1].ModerationNote == nil || *shops[1].ModerationNote != "needs fixes" {
-			t.Errorf("note = %v, want needs fixes", shops[1].ModerationNote)
+		if byID[old2].Creator != nil {
+			t.Errorf("creatorless shop creator = %+v, want nil", byID[old2].Creator)
+		}
+		if note := byID[old2].ModerationNote; note == nil || *note != "needs fixes" {
+			t.Errorf("note = %v, want needs fixes", note)
 		}
 	})
 
@@ -490,7 +505,7 @@ func TestShopModerationRepository(t *testing.T) {
 	})
 
 	t.Run("カラム単位の書き込みは並行する更新を巻き戻さない", func(t *testing.T) {
-		shop := insertRow(ctx, t, conn, insertShop, "Race Shack", 0, nil, alice, tNew)
+		shop := insertUUIDRow(ctx, t, conn, insertShop, "Race Shack", 0, nil, alice, tNew)
 
 		// lost-update の回帰、方向 1：古い rename 側は、並行する approve の
 		// 前にスナップショットを読んだ。旧来の行全体の書き込みは status を
@@ -543,14 +558,14 @@ func TestShopModerationRepository(t *testing.T) {
 	})
 
 	t.Run("UpdateShopName に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
-		_, err := repo.UpdateShopName(ctx, 99999, "x")
+		_, err := repo.UpdateShopName(ctx, uid.N(99999), "x")
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
 
 	t.Run("UpdateShopStatus に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
-		_, err := repo.UpdateShopStatus(ctx, 99999, domain.ShopStatusActive, nil)
+		_, err := repo.UpdateShopStatus(ctx, uid.N(99999), domain.ShopStatusActive, nil)
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}

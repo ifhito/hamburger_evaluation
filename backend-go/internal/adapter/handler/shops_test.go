@@ -29,7 +29,7 @@ import (
 // 呼ばれなかったことの検証用）。
 type shopStoreFake struct {
 	shops                 []domain.ShopDetail // Reviews は未設定。下の reviews 経由で提供される
-	reviews               map[int64][]domain.ShopReview
+	reviews               map[string][]domain.ShopReview
 	err                   error
 	listCalls             int
 	lastLimit, lastOffset int32
@@ -67,7 +67,7 @@ func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, 
 	return out[lo:hi], hi < len(out), nil
 }
 
-func (f *shopStoreFake) GetShopWithCreator(_ context.Context, id int64) (domain.ShopDetail, error) {
+func (f *shopStoreFake) GetShopWithCreator(_ context.Context, id string) (domain.ShopDetail, error) {
 	if f.err != nil {
 		return domain.ShopDetail{}, f.err
 	}
@@ -79,7 +79,7 @@ func (f *shopStoreFake) GetShopWithCreator(_ context.Context, id int64) (domain.
 	return domain.ShopDetail{}, domain.ErrShopNotFound
 }
 
-func (f *shopStoreFake) ListShopReviews(_ context.Context, shopID int64) ([]domain.ShopReview, error) {
+func (f *shopStoreFake) ListShopReviews(_ context.Context, shopID string) ([]domain.ShopReview, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -116,14 +116,14 @@ func shopPtr[T any](v T) *T { return &v }
 func seedShops(creatorID string) *shopStoreFake {
 	return &shopStoreFake{
 		shops: []domain.ShopDetail{
-			{Shop: domain.Shop{ID: 1, Name: "Active Diner", Status: domain.ShopStatusActive}},
+			{Shop: domain.Shop{ID: uid.N(1), Name: "Active Diner", Status: domain.ShopStatusActive}},
 			{
-				Shop:    domain.Shop{ID: 2, Name: "Alice Pending", Status: domain.ShopStatusPending, CreatorID: shopPtr(creatorID)},
+				Shop:    domain.Shop{ID: uid.N(2), Name: "Alice Pending", Status: domain.ShopStatusPending, CreatorID: shopPtr(creatorID)},
 				Creator: &domain.UserRef{ID: creatorID, Username: "alice"},
 			},
-			{Shop: domain.Shop{ID: 3, Name: "Rejected Grill", Status: domain.ShopStatusRejected, CreatorID: shopPtr(uid.N(99))}},
+			{Shop: domain.Shop{ID: uid.N(3), Name: "Rejected Grill", Status: domain.ShopStatusRejected, CreatorID: shopPtr(uid.N(99))}},
 		},
-		reviews: map[int64][]domain.ShopReview{},
+		reviews: map[string][]domain.ShopReview{},
 	}
 }
 
@@ -140,17 +140,17 @@ func TestListShops(t *testing.T) {
 	}{
 		{
 			name:     "AC1 匿名は active な shop だけが見える",
-			wantBody: `[{"id":1,"name":"Active Diner","status":"active"}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"}]`,
 		},
 		{
 			name:       "AC2 creator は自分の pending な shop も status 付きで見える",
 			authHeader: aliceAuth,
-			wantBody:   `[{"id":1,"name":"Active Diner","status":"active"},{"id":2,"name":"Alice Pending","status":"pending"}]`,
+			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending"}]`,
 		},
 		{
 			name:       "AC3 admin はすべての status の shop が見える",
 			authHeader: adminAuth,
-			wantBody:   `[{"id":1,"name":"Active Diner","status":"active"},{"id":2,"name":"Alice Pending","status":"pending"},{"id":3,"name":"Rejected Grill","status":"rejected"}]`,
+			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending"},{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected"}]`,
 		},
 	}
 	for _, tt := range tests {
@@ -182,7 +182,7 @@ func TestListShopsParams(t *testing.T) {
 		{
 			name:     "keyword は部分文字列で絞り込む",
 			query:    "?keyword=diner",
-			wantBody: `[{"id":1,"name":"Active Diner","status":"active"}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"}]`,
 		},
 		{
 			name:     "keyword に一致するものがなければ空配列になる",
@@ -193,12 +193,12 @@ func TestListShopsParams(t *testing.T) {
 			name:       "per_page=1 page=2 は 2 番目の shop を返す",
 			query:      "?per_page=1&page=2",
 			authHeader: adminAuth,
-			wantBody:   `[{"id":2,"name":"Alice Pending","status":"pending"}]`,
+			wantBody:   `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending"}]`,
 		},
 		{
 			name:     "範囲外の page と per_page はデフォルト値に fallback する",
 			query:    "?page=0&per_page=0",
-			wantBody: `[{"id":1,"name":"Active Diner","status":"active"}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"}]`,
 		},
 		{
 			name:     "データの範囲外の page は空配列になる",
@@ -237,7 +237,7 @@ func TestListShopsRepoFailure(t *testing.T) {
 // ない burger はゼロ）。
 func TestGetShopDetail(t *testing.T) {
 	repo := seedShops(uid.N(1))
-	repo.reviews[1] = []domain.ShopReview{
+	repo.reviews[uid.N(1)] = []domain.ShopReview{
 		{
 			ID:        9,
 			Rating:    4,
@@ -245,7 +245,7 @@ func TestGetShopDetail(t *testing.T) {
 			CreatedAt: time.Date(2024, 5, 1, 12, 0, 0, 0, time.UTC),
 			User:      &domain.UserRef{ID: uid.N(3), Username: "bob"},
 			Burger: &domain.ShopReviewBurger{
-				ID: 5, Name: "Cheese", AverageRating: 4.5, ReviewCount: 2, WeightedScore: 4.1, Confidence: 0.8,
+				ID: uid.N(5), Name: "Cheese", AverageRating: 4.5, ReviewCount: 2, WeightedScore: 4.1, Confidence: 0.8,
 			},
 		},
 		{
@@ -253,20 +253,20 @@ func TestGetShopDetail(t *testing.T) {
 			Rating:    2,
 			CreatedAt: time.Date(2024, 4, 1, 12, 0, 0, 0, time.UTC),
 			User:      &domain.UserRef{ID: uid.N(3), Username: "bob"},
-			Burger:    &domain.ShopReviewBurger{ID: 6, Name: "Plain"},
+			Burger:    &domain.ShopReviewBurger{ID: uid.N(6), Name: "Plain"},
 		},
 	}
 	router, _, _, _ := newShopsRouter(t, repo)
 
-	rec := do(router, http.MethodGet, "/shops/1", "", "")
+	rec := do(router, http.MethodGet, "/shops/"+uid.N(1), "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
-	want := `{"id":1,"name":"Active Diner","status":"active","moderation_note":null,"creator":null,"reviews":[` +
+	want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"creator":null,"reviews":[` +
 		`{"id":9,"rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
-		`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
+		`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
 		`{"id":8,"rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
-		`"burger":{"id":6,"name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}],"can_review":false}`
+		`"burger":{"id":"` + uid.N(6) + `","name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}],"can_review":false}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}
@@ -286,11 +286,14 @@ func TestGetShopVisibility(t *testing.T) {
 		authHeader string
 		wantStatus int
 	}{
-		{name: "AC4 匿名の viewer が pending な shop を開くと 404 になる", path: "/shops/2", wantStatus: http.StatusNotFound},
-		{name: "AC4 creator が自分の pending な shop を開くと 200 になる", path: "/shops/2", authHeader: aliceAuth, wantStatus: http.StatusOK},
-		{name: "AC4 admin が pending な shop を開くと 200 になる", path: "/shops/2", authHeader: adminAuth, wantStatus: http.StatusOK},
-		{name: "creator 以外が rejected な shop を開くと 404 になる", path: "/shops/3", authHeader: aliceAuth, wantStatus: http.StatusNotFound},
-		{name: "AC6 未知の id は 404 になる", path: "/shops/999", wantStatus: http.StatusNotFound},
+		{name: "AC4 匿名の viewer が pending な shop を開くと 404 になる", path: "/shops/" + uid.N(2), wantStatus: http.StatusNotFound},
+		{name: "AC4 creator が自分の pending な shop を開くと 200 になる", path: "/shops/" + uid.N(2), authHeader: aliceAuth, wantStatus: http.StatusOK},
+		{name: "AC4 admin が pending な shop を開くと 200 になる", path: "/shops/" + uid.N(2), authHeader: adminAuth, wantStatus: http.StatusOK},
+		{name: "creator 以外が rejected な shop を開くと 404 になる", path: "/shops/" + uid.N(3), authHeader: aliceAuth, wantStatus: http.StatusNotFound},
+		{name: "AC6 未知の id は 404 になる", path: "/shops/" + uid.N(999), wantStatus: http.StatusNotFound},
+		{name: "AC6 整数の id は存在しない shop と同じ 404 になる", path: "/shops/1", wantStatus: http.StatusNotFound},
+		{name: "AC6 UUID でない文字列の id は 404 になる", path: "/shops/abc", wantStatus: http.StatusNotFound},
+		{name: "AC6 大文字の UUID は正規形でないので 404 になる", path: "/shops/" + upperUUID, wantStatus: http.StatusNotFound},
 		{name: "非数値の id は同じ 404 になる", path: "/shops/abc", wantStatus: http.StatusNotFound},
 	}
 	for _, tt := range tests {
@@ -309,7 +312,7 @@ func TestGetShopVisibility(t *testing.T) {
 
 	t.Run("repository の失敗は 500 を返す", func(t *testing.T) {
 		failRouter, _, _, _ := newShopsRouter(t, &shopStoreFake{err: fmt.Errorf("db down")})
-		rec := do(failRouter, http.MethodGet, "/shops/1", "", "")
+		rec := do(failRouter, http.MethodGet, "/shops/"+uid.N(1), "", "")
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusInternalServerError, rec.Body)
 		}

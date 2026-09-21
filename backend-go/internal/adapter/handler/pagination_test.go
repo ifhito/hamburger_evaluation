@@ -187,9 +187,9 @@ func TestListReviewsPaginationWithFilters(t *testing.T) {
 		wantBody string
 	}{
 		{name: "他の filter と併用しても page の 422 が返る", query: "?page=abc&rating=4", wantBody: pageErrBody},
-		{name: "有効な filter を全部付けても per_page の 422 が返る", query: "?rating=4&shop_id=1&user_id=" + uid.N(1) + "&keyword=x&per_page=1.5", wantBody: perPageErrBody},
+		{name: "有効な filter を全部付けても per_page の 422 が返る", query: "?rating=4&shop_id=" + uid.N(1) + "&user_id=" + uid.N(1) + "&keyword=x&per_page=1.5", wantBody: perPageErrBody},
 		{name: "rating が不正なら page も不正でも rating の 422 が先に返る", query: "?page=abc&rating=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
-		{name: "shop_id が不正なら page も不正でも shop_id の 422 が先に返る", query: "?per_page=abc&shop_id=abc", wantBody: `{"errors":["Shop id must be an integer"]}`},
+		{name: "shop_id が不正なら page も不正でも shop_id の 422 が先に返る", query: "?per_page=abc&shop_id=abc", wantBody: `{"errors":["Shop id must be a valid UUID"]}`},
 		{name: "user_id が不正なら page も per_page も不正でも user_id の 422 が先に返る", query: "?page=abc&per_page=abc&user_id=abc", wantBody: `{"errors":["User id must be a valid UUID"]}`},
 	}
 

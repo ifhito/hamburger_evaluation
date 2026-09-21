@@ -59,7 +59,7 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 // find_or_create_burger にもある同じ race であり、parity であってバグでは
 // ない。返される burger は insert 前の stats を持ち、burger_id 経路での
 // GetShopBurger とまったく同じである（まったく新しい burger ではゼロ）。
-func (r *ReviewRepository) CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
+func (r *ReviewRepository) CreateReviewForNamedBurger(ctx context.Context, shopID string, burgerName string, review domain.Review) (domain.Review, domain.ShopReviewBurger, error) {
 	var row sqlcgen.Review
 	var burger domain.ShopReviewBurger
 	err := withTx(ctx, r.db, "create review for named burger", func(q *sqlcgen.Queries) error {
@@ -230,7 +230,7 @@ func insertReviewAndRecalc(ctx context.Context, q *sqlcgen.Queries, review domai
 // UserRepository.DiscardUser）は、burger の集合が重なってもデッドロックしない
 // ように、burger ごとに burger_id の昇順で呼び出さなければならない。対象の
 // review がゼロ件でも、ゼロの行は upsert される（Rails BurgerScore.empty）。
-func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID int64) error {
+func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID string) error {
 	if _, err := q.LockBurgerForStats(ctx, burgerID); err != nil {
 		return fmt.Errorf("recalculate burger stats: lock burger: %w", err)
 	}

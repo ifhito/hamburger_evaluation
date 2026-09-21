@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
@@ -34,7 +33,7 @@ type rejectShopRequest struct {
 // adminShopResponse は shop の投稿/moderation の payload である。id、name、
 // status、moderation_note、creator を持ち、reviews は持たない。
 type adminShopResponse struct {
-	ID             int64            `json:"id"`
+	ID             string           `json:"id"`
 	Name           string           `json:"name"`
 	Status         string           `json:"status"`
 	ModerationNote *string          `json:"moderation_note"`
@@ -63,14 +62,15 @@ func requireViewer(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
 	return viewer, ok
 }
 
-// shopIDPathValue は {id} の path value をパースする。false は統一された
-// shop の 404 が既に書き込まれたことを意味する（数値でない id は存在しない
-// shop とまったく同じに見える。既存の GET /shops/{id} の規約）。
-func shopIDPathValue(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+// shopIDPathValue は {id} の path value を取り出す。false は統一された
+// shop の 404 が既に書き込まれたことを意味する（UUID の正規形でない id は
+// 存在しない shop とまったく同じに見える。既存の GET /shops/{id} の規約）。
+// 形式の判定は domain.IsUUID が持つ。
+func shopIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := r.PathValue("id")
+	if !domain.IsUUID(id) {
 		writeError(w, http.StatusNotFound, shopNotFoundMessage)
-		return 0, false
+		return "", false
 	}
 	return id, true
 }

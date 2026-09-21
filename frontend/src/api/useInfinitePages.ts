@@ -5,7 +5,7 @@ import { mergePages, type Page } from "./page";
 // 続きを読み込める一覧(GET /shops・GET /reviews)の共通の取得フック。
 // 次のページがあるかは、各ページの hasMore(backend が X-Has-More で返す)だけで決める。
 // getKey は、前のページの hasMore が false なら null を返して読み込みを止める。
-export function useInfinitePages<T extends { id: number }>(
+export function useInfinitePages<T extends { id: number | string }>(
   getKey: (index: number, previous: Page<T> | null) => string | null,
   fetchPage: (url: string) => Promise<Page<T>>,
 ) {

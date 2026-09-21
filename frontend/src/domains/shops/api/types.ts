@@ -3,7 +3,7 @@ import type { Review } from "../../reviews/api/types";
 export type ShopStatus = "pending" | "active" | "rejected";
 
 export interface Shop {
-  id: number;
+  id: string;
   name: string;
   status: ShopStatus;
 }

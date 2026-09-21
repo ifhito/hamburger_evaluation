@@ -40,7 +40,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 	// AC3：1..5 の範囲外の rating は CHECK 制約によって拒否される。
 	t.Run("AC3 範囲外の rating は CHECK 制約違反になる", func(t *testing.T) {
 		var userID string
-		var burgerID int64
+		var burgerID string
 		if err := conn.QueryRow(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3) RETURNING id",
 			"ac3@example.com", "ac3", "digest").Scan(&userID); err != nil {
@@ -75,7 +75,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 		_, err := conn.Exec(ctx,
 			"INSERT INTO shops (name, status, creator_id) VALUES ('S27 Orphan', 0, $1)", missing)
 		assertPgError(t, err, "23503", "shops_creator_id_fkey")
-		var burgerID int64
+		var burgerID string
 		if err := conn.QueryRow(ctx,
 			"INSERT INTO burgers (name) VALUES ('S27 Burger') RETURNING id").Scan(&burgerID); err != nil {
 			t.Fatalf("insert burger: %v", err)
@@ -83,6 +83,47 @@ func TestMigrationsAcceptance(t *testing.T) {
 		_, err = conn.Exec(ctx,
 			"INSERT INTO reviews (rating, user_id, burger_id) VALUES (3, $1, $2)", missing, burgerID)
 		assertPgError(t, err, "23503", "reviews_user_id_fkey")
+	})
+
+	// S29：shops.id・burgers.id は DB が uuid（v4）を生成し、それを参照する
+	// shops_burgers・reviews・burger_stats の外部キーが uuid で効く。
+	t.Run("S29 shops・burgers の id は uuid で生成され、外部キーが uuid で効く", func(t *testing.T) {
+		v4 := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+		var userID, shopID, burgerID string
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ('s29@example.com', 's29', 'digest') RETURNING id::text").Scan(&userID); err != nil {
+			t.Fatalf("insert user: %v", err)
+		}
+		if err := conn.QueryRow(ctx, "INSERT INTO shops (name, status) VALUES ('S29 Shop', 1) RETURNING id::text").Scan(&shopID); err != nil {
+			t.Fatalf("insert shop: %v", err)
+		}
+		if err := conn.QueryRow(ctx, "INSERT INTO burgers (name) VALUES ('S29 Burger') RETURNING id::text").Scan(&burgerID); err != nil {
+			t.Fatalf("insert burger: %v", err)
+		}
+		for name, id := range map[string]string{"shops.id": shopID, "burgers.id": burgerID} {
+			if !v4.MatchString(id) {
+				t.Errorf("%s = %q, want a lowercase v4 uuid", name, id)
+			}
+		}
+		if _, err := conn.Exec(ctx, "INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)", shopID, burgerID); err != nil {
+			t.Fatalf("link existing shop and burger: %v", err)
+		}
+		const missing = "00000000-0000-4000-8000-000000000000"
+		for _, tt := range []struct {
+			name       string
+			sql        string
+			args       []any
+			constraint string
+		}{
+			{"存在しない shop への link", "INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)", []any{missing, burgerID}, "shops_burgers_shop_id_fkey"},
+			{"存在しない burger への link", "INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)", []any{shopID, missing}, "shops_burgers_burger_id_fkey"},
+			{"存在しない burger への review", "INSERT INTO reviews (rating, user_id, burger_id) VALUES (3, $1, $2)", []any{userID, missing}, "reviews_burger_id_fkey"},
+			{"存在しない burger の stats", "INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at) VALUES ($1, 0, 0, 0, 0, now())", []any{missing}, "burger_stats_burger_id_fkey"},
+		} {
+			_, err := conn.Exec(ctx, tt.sql, tt.args...)
+			assertPgError(t, err, "23503", tt.constraint)
+			_ = tt.name
+		}
 	})
 
 	// AC4：同じ email を持つ 2 人目のユーザーは UNIQUE 制約によって
@@ -155,13 +196,13 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	// カラム単位の schema：table/column/data_type/is_nullable を、table 名、
 	// 次にカラムの位置の順に並べたもので、migration が定義するとおりである。
 	wantColumns := []string{
-		"burger_stats/burger_id/bigint/NO",
+		"burger_stats/burger_id/uuid/NO",
 		"burger_stats/review_count/bigint/NO",
 		"burger_stats/average_rating/double precision/NO",
 		"burger_stats/weighted_score/double precision/NO",
 		"burger_stats/confidence/double precision/NO",
 		"burger_stats/calculated_at/timestamp with time zone/NO",
-		"burgers/id/bigint/NO",
+		"burgers/id/uuid/NO",
 		"burgers/name/text/NO",
 		"burgers/created_at/timestamp with time zone/NO",
 		"burgers/updated_at/timestamp with time zone/NO",
@@ -169,22 +210,22 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"reviews/rating/smallint/NO",
 		"reviews/comment/text/YES",
 		"reviews/user_id/uuid/NO",
-		"reviews/burger_id/bigint/NO",
+		"reviews/burger_id/uuid/NO",
 		"reviews/discarded_at/timestamp with time zone/YES",
 		"reviews/created_at/timestamp with time zone/NO",
 		"reviews/updated_at/timestamp with time zone/NO",
 		// photo_key は 000007（S10）で追加されたので、ordinal position では
 		// 最後に来る。
 		"reviews/photo_key/text/YES",
-		"shops/id/bigint/NO",
+		"shops/id/uuid/NO",
 		"shops/name/text/NO",
 		"shops/status/smallint/NO",
 		"shops/moderation_note/text/YES",
 		"shops/creator_id/uuid/YES",
 		"shops/created_at/timestamp with time zone/NO",
 		"shops/updated_at/timestamp with time zone/NO",
-		"shops_burgers/shop_id/bigint/NO",
-		"shops_burgers/burger_id/bigint/NO",
+		"shops_burgers/shop_id/uuid/NO",
+		"shops_burgers/burger_id/uuid/NO",
 		"users/id/uuid/NO",
 		"users/email/text/NO",
 		"users/username/text/NO",
@@ -306,7 +347,7 @@ type textLimitCase struct {
 
 var textLimitCases = []textLimitCase{
 	{"reviews.comment", domain.MaxCommentChars, "reviews_comment_max_length",
-		"INSERT INTO reviews (rating, comment, user_id, burger_id) VALUES (3, $1, (SELECT id FROM users ORDER BY created_at LIMIT 1), (SELECT min(id) FROM burgers))"},
+		"INSERT INTO reviews (rating, comment, user_id, burger_id) VALUES (3, $1, (SELECT id FROM users ORDER BY created_at LIMIT 1), (SELECT id FROM burgers ORDER BY created_at LIMIT 1))"},
 	{"burgers.name", domain.MaxBurgerNameChars, "burgers_name_max_length",
 		"INSERT INTO burgers (name) VALUES ($1)"},
 	{"shops.name", domain.MaxShopNameChars, "shops_name_max_length",

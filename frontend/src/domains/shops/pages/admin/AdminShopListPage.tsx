@@ -24,13 +24,13 @@ export default function AdminShopListPage() {
   const { data: shops, isLoading } = useAdminShops(filter === "all" ? undefined : filter);
   const { approve, reject } = useShopModeration();
 
-  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   // 却下の失敗(例: note が長すぎる 422)は、サーバーのメッセージをそのまま表示する
   const [rejectError, setRejectError] = useState<string | string[] | null>(null);
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (id: string) => {
     setBusyId(id);
     try {
       await approve(id);
@@ -39,7 +39,7 @@ export default function AdminShopListPage() {
     }
   };
 
-  const handleReject = async (id: number) => {
+  const handleReject = async (id: string) => {
     setBusyId(id);
     setRejectError(null);
     try {

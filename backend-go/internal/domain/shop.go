@@ -18,7 +18,8 @@ const (
 
 // Shop は shop の domain 表現である。
 type Shop struct {
-	ID             int64
+	// ID は UUID の正規形（小文字・ハイフン区切り）である。DB が生成し、形式の判定は IsUUID が持つ。
+	ID             string
 	Name           string
 	Status         ShopStatus
 	ModerationNote *string
@@ -176,7 +177,8 @@ type ShopReview struct {
 // ShopReviewBurger は統計付きの対象 burger であり、統計はまだ計算されて
 // いない場合はゼロである。
 type ShopReviewBurger struct {
-	ID            int64
+	// ID は burger の UUID の正規形である。
+	ID            string
 	Name          string
 	AverageRating float64
 	ReviewCount   int64
@@ -197,11 +199,11 @@ type ShopRepository interface {
 	// UpdateShopName は、id の shop の name だけを永続化し、保存された行を
 	// 返す。カラム限定なので、並行する status の変更が古いスナップショットで
 	// 元に戻されることは決してない。
-	UpdateShopName(ctx context.Context, id int64, name string) (Shop, error)
+	UpdateShopName(ctx context.Context, id string, name string) (Shop, error)
 	// UpdateShopStatus は、id の shop の status と moderation note だけを
 	// 永続化し、保存された行を返す。カラム限定なので、並行する rename が
 	// 古いスナップショットで元に戻されることは決してない。
-	UpdateShopStatus(ctx context.Context, id int64, status ShopStatus, note *string) (Shop, error)
+	UpdateShopStatus(ctx context.Context, id string, status ShopStatus, note *string) (Shop, error)
 }
 
 // ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
@@ -227,12 +229,12 @@ func (s *Shops) Create(ctx context.Context, shop Shop) (Shop, error) {
 }
 
 // UpdateName は、id の shop の name だけを永続化し、保存された行を返す。
-func (s *Shops) UpdateName(ctx context.Context, id int64, name string) (Shop, error) {
+func (s *Shops) UpdateName(ctx context.Context, id string, name string) (Shop, error) {
 	return s.repo.UpdateShopName(ctx, id, name)
 }
 
 // UpdateStatus は、id の shop の status と moderation note だけを永続化し、
 // 保存された行を返す。
-func (s *Shops) UpdateStatus(ctx context.Context, id int64, status ShopStatus, note *string) (Shop, error) {
+func (s *Shops) UpdateStatus(ctx context.Context, id string, status ShopStatus, note *string) (Shop, error) {
 	return s.repo.UpdateShopStatus(ctx, id, status, note)
 }

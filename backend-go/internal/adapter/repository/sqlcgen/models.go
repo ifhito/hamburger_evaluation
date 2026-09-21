@@ -9,14 +9,14 @@ import (
 )
 
 type Burger struct {
-	ID        int64
+	ID        string
 	Name      string
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
 
 type BurgerStat struct {
-	BurgerID      int64
+	BurgerID      string
 	ReviewCount   int64
 	AverageRating float64
 	WeightedScore float64
@@ -29,7 +29,7 @@ type Review struct {
 	Rating      int16
 	Comment     pgtype.Text
 	UserID      string
-	BurgerID    int64
+	BurgerID    string
 	DiscardedAt pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
@@ -37,7 +37,7 @@ type Review struct {
 }
 
 type Shop struct {
-	ID             int64
+	ID             string
 	Name           string
 	Status         int16
 	ModerationNote pgtype.Text
@@ -47,8 +47,8 @@ type Shop struct {
 }
 
 type ShopsBurger struct {
-	ShopID   int64
-	BurgerID int64
+	ShopID   string
+	BurgerID string
 }
 
 type User struct {

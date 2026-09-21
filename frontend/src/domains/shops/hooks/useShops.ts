@@ -30,12 +30,12 @@ export function useShops(params?: { keyword?: string }) {
 // enabled: viewerId がまだ確定していない間(認証状態の復元前)は false にする。
 // token は localStorage にあるのに viewerId が null のまま取得すると、閲覧者向けの応答が匿名キーに入ってしまう。
 // enabled が false、または id が空なら null を返して取得しない。
-export function shopDetailKey(id: number | undefined, viewerId: string | null, enabled = true) {
+export function shopDetailKey(id: string | undefined, viewerId: string | null, enabled = true) {
   return enabled && id ? (["/shops", id, viewerId] as const) : null;
 }
 
 export function useShopDetail(
-  id: number | undefined,
+  id: string | undefined,
   viewerId: string | null,
   options?: { enabled?: boolean },
 ) {

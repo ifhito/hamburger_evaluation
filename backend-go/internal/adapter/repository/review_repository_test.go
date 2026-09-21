@@ -49,20 +49,20 @@ func TestReviewRepository(t *testing.T) {
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
 	// status のコード：0=pending、1=active、2=rejected。
-	active1 := insertRow(ctx, t, conn, insertShop, "Active One", 1, nil, alice)
-	active2 := insertRow(ctx, t, conn, insertShop, "Active Two", 1, nil, nil)
-	pending := insertRow(ctx, t, conn, insertShop, "Pending Shack", 0, nil, alice)
-	rejected := insertRow(ctx, t, conn, insertShop, "Rejected Grill", 2, nil, nil)
+	active1 := insertUUIDRow(ctx, t, conn, insertShop, "Active One", 1, nil, alice)
+	active2 := insertUUIDRow(ctx, t, conn, insertShop, "Active Two", 1, nil, nil)
+	pending := insertUUIDRow(ctx, t, conn, insertShop, "Pending Shack", 0, nil, alice)
+	rejected := insertUUIDRow(ctx, t, conn, insertShop, "Rejected Grill", 2, nil, nil)
 
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-	cheese := insertRow(ctx, t, conn, insertBurger, "Cheese")   // active な shop の「両方」に link されている
-	plain := insertRow(ctx, t, conn, insertBurger, "Plain")     // active1 だけに link されている。stats なし
-	hidden := insertRow(ctx, t, conn, insertBurger, "Hidden")   // pending だけに link されている
-	outcast := insertRow(ctx, t, conn, insertBurger, "Outcast") // rejected だけに link されている
-	mustLink := func(shopID, burgerID int64) {
+	cheese := insertUUIDRow(ctx, t, conn, insertBurger, "Cheese")   // active な shop の「両方」に link されている
+	plain := insertUUIDRow(ctx, t, conn, insertBurger, "Plain")     // active1 だけに link されている。stats なし
+	hidden := insertUUIDRow(ctx, t, conn, insertBurger, "Hidden")   // pending だけに link されている
+	outcast := insertUUIDRow(ctx, t, conn, insertBurger, "Outcast") // rejected だけに link されている
+	mustLink := func(shopID, burgerID string) {
 		t.Helper()
 		if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopID, burgerID); err != nil {
-			t.Fatalf("link shop %d burger %d: %v", shopID, burgerID, err)
+			t.Fatalf("link shop %s burger %s: %v", shopID, burgerID, err)
 		}
 	}
 	mustLink(active1, cheese)
@@ -178,7 +178,7 @@ func TestReviewRepository(t *testing.T) {
 
 	t.Run("ListReviews はフィードのルールに加えて Rails ReviewQuery の filter を適用する", func(t *testing.T) {
 		intp := func(n int) *int { return &n }
-		int64p := func(n int64) *int64 { return &n }
+		strp := func(n string) *string { return &n }
 		tests := []struct {
 			name   string
 			filter usecase.ReviewListFilter
@@ -196,10 +196,10 @@ func TestReviewRepository(t *testing.T) {
 			// ILIKE で一致してしまう。
 			{name: "keyword の LIKE メタ文字はリテラルとして一致する", filter: usecase.ReviewListFilter{Keyword: "%"}, want: []int64{}},
 			{name: "keyword が非表示の review にしか一致しない場合は空になる", filter: usecase.ReviewListFilter{Keyword: "only"}, want: []int64{}},
-			{name: "shop_id は shops_burgers の link をたどる", filter: usecase.ReviewListFilter{ShopID: int64p(active2)}, want: []int64{rTie1, rOld}},
-			{name: "shop_id で絞り込んでも、その shop の burger の review はすべて残る", filter: usecase.ReviewListFilter{ShopID: int64p(active1)}, want: []int64{rTie2, rTie1, rOld}},
-			{name: "存在しない shop_id は空になる", filter: usecase.ReviewListFilter{ShopID: int64p(99999)}, want: []int64{}},
-			{name: "filter は AND で組み合わされる", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: int64p(active2)}, want: []int64{rOld}},
+			{name: "shop_id は shops_burgers の link をたどる", filter: usecase.ReviewListFilter{ShopID: strp(active2)}, want: []int64{rTie1, rOld}},
+			{name: "shop_id で絞り込んでも、その shop の burger の review はすべて残る", filter: usecase.ReviewListFilter{ShopID: strp(active1)}, want: []int64{rTie2, rTie1, rOld}},
+			{name: "存在しない shop_id は空になる", filter: usecase.ReviewListFilter{ShopID: strp(uid.N(99999))}, want: []int64{}},
+			{name: "filter は AND で組み合わされる", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: strp(active2)}, want: []int64{rOld}},
 			{name: "AND の組み合わせが一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []int64{}},
 			// 範囲外の rating は比較結果が false にならなければならず、
 			// smallint カラムをオーバーフローさせて SQL エラーに
@@ -225,15 +225,15 @@ func TestReviewRepository(t *testing.T) {
 		// shop で絞り込むと何も返してはならない。これは Rails の、status を
 		// 見ない shop の filter よりも厳格であり、フィードの active な shop の
 		// ルールと整合する。
-		mixedActive := insertRow(ctx, t, conn, insertShop, "Mixed Active", 1, nil, nil)
-		mixed := insertRow(ctx, t, conn, insertBurger, "Mixed")
+		mixedActive := insertUUIDRow(ctx, t, conn, insertShop, "Mixed Active", 1, nil, nil)
+		mixed := insertUUIDRow(ctx, t, conn, insertBurger, "Mixed")
 		mustLink(mixedActive, mixed)
 		mustLink(pending, mixed)
 		rMixed := insertRow(ctx, t, conn, insertReview, 4, "mixed", alice, mixed, nil, t2)
 		t.Cleanup(func() {
 			for _, del := range []struct {
 				sql string
-				id  int64
+				id  any
 			}{
 				{`DELETE FROM reviews WHERE id = $1`, rMixed},
 				{`DELETE FROM shops_burgers WHERE burger_id = $1`, mixed},
@@ -246,7 +246,7 @@ func TestReviewRepository(t *testing.T) {
 			}
 		})
 
-		byShop := func(id int64) usecase.ReviewListFilter { return usecase.ReviewListFilter{ShopID: &id} }
+		byShop := func(id string) usecase.ReviewListFilter { return usecase.ReviewListFilter{ShopID: &id} }
 		got, _, err := reviewQuery.ListReviews(ctx, byShop(pending), 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
@@ -298,7 +298,7 @@ func TestReviewRepository(t *testing.T) {
 		if shop.ID != pending || shop.Status != domain.ShopStatusPending || shop.CreatorID == nil || *shop.CreatorID != alice {
 			t.Errorf("shop = %+v, want pending shop created by alice", shop)
 		}
-		if _, err := reviewQuery.GetShop(ctx, 99999); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := reviewQuery.GetShop(ctx, uid.N(99999)); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
@@ -321,7 +321,7 @@ func TestReviewRepository(t *testing.T) {
 			t.Errorf("stats-less burger = %+v, want %+v", statless, want)
 		}
 		// 別の shop に属する既存の burger と未知の burger は、区別できない。
-		for name, burgerID := range map[string]int64{"unlinked": hidden, "unknown": 99999} {
+		for name, burgerID := range map[string]string{"unlinked": hidden, "unknown": uid.N(99999)} {
 			if _, err := reviewQuery.GetShopBurger(ctx, active1, burgerID); !errors.Is(err, domain.ErrBurgerNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrBurgerNotFound)
 			}
@@ -455,15 +455,15 @@ func TestReviewRepositoryListByUser(t *testing.T) {
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
 	// status のコード：0=pending、1=active、2=rejected。
-	activeShop := insertRow(ctx, t, conn, insertShop, "Active Shop", 1, nil, nil)
-	pendingShop := insertRow(ctx, t, conn, insertShop, "Pending Shop", 0, nil, dave)
+	activeShop := insertUUIDRow(ctx, t, conn, insertShop, "Active Shop", 1, nil, nil)
+	pendingShop := insertUUIDRow(ctx, t, conn, insertShop, "Pending Shop", 0, nil, dave)
 
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-	cheese := insertRow(ctx, t, conn, insertBurger, "Cheese") // active な shop に link されている
-	secret := insertRow(ctx, t, conn, insertBurger, "Secret") // pending な shop だけに link されている
-	for _, link := range [][2]int64{{activeShop, cheese}, {pendingShop, secret}} {
+	cheese := insertUUIDRow(ctx, t, conn, insertBurger, "Cheese") // active な shop に link されている
+	secret := insertUUIDRow(ctx, t, conn, insertBurger, "Secret") // pending な shop だけに link されている
+	for _, link := range [][2]string{{activeShop, cheese}, {pendingShop, secret}} {
 		if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, link[0], link[1]); err != nil {
-			t.Fatalf("link shop %d burger %d: %v", link[0], link[1], err)
+			t.Fatalf("link shop %s burger %s: %v", link[0], link[1], err)
 		}
 	}
 
@@ -592,10 +592,10 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
-	shopA := insertRow(ctx, t, conn, insertShop, "Shop A", 1, nil, alice)
-	shopB := insertRow(ctx, t, conn, insertShop, "Shop B", 1, nil, nil)
+	shopA := insertUUIDRow(ctx, t, conn, insertShop, "Shop A", 1, nil, alice)
+	shopB := insertUUIDRow(ctx, t, conn, insertShop, "Shop B", 1, nil, nil)
 
-	cheese := insertRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
+	cheese := insertUUIDRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
 	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopA, cheese); err != nil {
 		t.Fatalf("link shop A cheese: %v", err)
 	}
@@ -617,9 +617,9 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		return countRows(t, `SELECT count(*) FROM burgers WHERE name = $1`, name)
 	}
 
-	mustNamedCreate := func(t *testing.T, shopID int64, name string) (domain.Review, domain.ShopReviewBurger) {
+	mustNamedCreate := func(t *testing.T, shopID string, name string) (domain.Review, domain.ShopReviewBurger) {
 		t.Helper()
-		review, err := domain.NewReview(4, "via name", alice, 0)
+		review, err := domain.NewReview(4, "via name", alice, "")
 		if err != nil {
 			t.Fatalf("NewReview returned error: %v", err)
 		}
@@ -633,14 +633,14 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 	t.Run("shop 内に同名の burger があれば再利用し、戻り値の burger は insert 前の stats を持つ", func(t *testing.T) {
 		created, burger := mustNamedCreate(t, shopA, "Cheese")
 		if burger.ID != cheese {
-			t.Fatalf("burger id = %d, want the existing Cheese %d", burger.ID, cheese)
+			t.Fatalf("burger id = %s, want the existing Cheese %s", burger.ID, cheese)
 		}
 		want := domain.ShopReviewBurger{ID: cheese, Name: "Cheese", AverageRating: 4.0, ReviewCount: 2, WeightedScore: 3.9, Confidence: 0.7}
 		if !reflect.DeepEqual(burger, want) {
 			t.Errorf("burger = %+v, want the seeded pre-insert stats %+v", burger, want)
 		}
 		if created.ID == 0 || created.BurgerID != cheese || created.CreatedAt.IsZero() {
-			t.Errorf("created = %+v, want a stored review for burger %d", created, cheese)
+			t.Errorf("created = %+v, want a stored review for burger %s", created, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 1 {
 			t.Errorf("Cheese burger rows = %d, want no duplicate", got)
@@ -660,7 +660,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 			t.Errorf("burger = %+v, want zero pre-insert stats", burger)
 		}
 		if created.BurgerID != burger.ID {
-			t.Errorf("review burger = %d, want %d", created.BurgerID, burger.ID)
+			t.Errorf("review burger = %s, want %s", created.BurgerID, burger.ID)
 		}
 		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1 AND burger_id = $2`, shopA, burger.ID); got != 1 {
 			t.Errorf("link rows = %d, want 1", got)
@@ -673,7 +673,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 	t.Run("別の shop の同じ名前は別の burger 行になる", func(t *testing.T) {
 		_, burger := mustNamedCreate(t, shopB, "Cheese")
 		if burger.ID == cheese {
-			t.Fatalf("burger id = %d, want a new row distinct from shop A's Cheese %d", burger.ID, cheese)
+			t.Fatalf("burger id = %s, want a new row distinct from shop A's Cheese %s", burger.ID, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 2 {
 			t.Errorf("Cheese burger rows = %d, want 2 (one per shop)", got)
@@ -684,6 +684,35 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		// Shop A の Cheese の link は、元の burger だけを指したままである。
 		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1`, shopA); got != 2 {
 			t.Errorf("shop A link rows = %d, want its original Cheese and Veggie", got)
+		}
+	})
+
+	t.Run("shop 内に同名の burger が複数あれば、作成が最も古いものが選ばれ、同時刻なら id の小さいものが選ばれる", func(t *testing.T) {
+		// id は UUID なので、id の大小は作成の順序を表さない。作成の新しい方を先に insert して、
+		// id の生成の順序に選び方が依存していないことを確かめる。
+		shopC := insertUUIDRow(ctx, t, conn, insertShop, "Shop C", 1, nil, nil)
+		insertTwin := `INSERT INTO burgers (name, created_at) VALUES ($1, $2) RETURNING id`
+		link := func(burgerID string) {
+			t.Helper()
+			if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopC, burgerID); err != nil {
+				t.Fatalf("link shop C burger %s: %v", burgerID, err)
+			}
+		}
+		newer := insertUUIDRow(ctx, t, conn, insertTwin, "Twin", time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC))
+		older := insertUUIDRow(ctx, t, conn, insertTwin, "Twin", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+		link(newer)
+		link(older)
+		if _, burger := mustNamedCreate(t, shopC, "Twin"); burger.ID != older {
+			t.Errorf("burger id = %s, want the earliest created %s (newer %s)", burger.ID, older, newer)
+		}
+
+		sameTime := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
+		tieA := insertUUIDRow(ctx, t, conn, insertTwin, "Tie", sameTime)
+		tieB := insertUUIDRow(ctx, t, conn, insertTwin, "Tie", sameTime)
+		link(tieA)
+		link(tieB)
+		if _, burger := mustNamedCreate(t, shopC, "Tie"); burger.ID != sortedIDs(tieA, tieB)[0] {
+			t.Errorf("burger id = %s, want the smaller id %s of the same-time burgers", burger.ID, sortedIDs(tieA, tieB)[0])
 		}
 	})
 
@@ -717,7 +746,7 @@ type storedBurgerStats struct {
 
 // fetchBurgerStats は burger_stats の行を直接読み取る。行が存在しない場合、
 // ok は false になる。
-func fetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) (storedBurgerStats, bool) {
+func fetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) (storedBurgerStats, bool) {
 	t.Helper()
 	var s storedBurgerStats
 	err := conn.QueryRow(ctx,
@@ -737,7 +766,7 @@ func fetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerI
 // （repository が使うのと同じルールで）domain の fact として読み込み、
 // 各 fact の author の、すべての burger にわたる kept な rating を
 // reviewer の履歴として付ける。
-func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) []domain.ReviewFact {
+func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) []domain.ReviewFact {
 	t.Helper()
 	rows, err := conn.Query(ctx,
 		`SELECT r.rating, r.created_at, r.user_id
@@ -803,11 +832,11 @@ func keptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID str
 // 切り詰めるのは、まさにこれが往復しても一致するようにするためである）、その
 // 行を返す。float は厳密に比較する：同じ入力を同じ純粋関数に通せば、同一の値に
 // ならなければならない。
-func requireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) storedBurgerStats {
+func requireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) storedBurgerStats {
 	t.Helper()
 	got, ok := fetchBurgerStats(ctx, t, conn, burgerID)
 	if !ok {
-		t.Fatalf("burger %d has no burger_stats row, want one", burgerID)
+		t.Fatalf("burger %s has no burger_stats row, want one", burgerID)
 	}
 	facts := keptReviewFacts(ctx, t, conn, burgerID)
 	score := domain.CalculateBurgerScore(facts, got.CalculatedAt)
@@ -825,7 +854,7 @@ func requireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, b
 }
 
 // mustCreateReview は repository を通して review を構築し永続化する。
-func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID string, burgerID int64) domain.Review {
+func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID string, burgerID string) domain.Review {
 	t.Helper()
 	review, err := domain.NewReview(rating, comment, authorID, burgerID)
 	if err != nil {
@@ -856,7 +885,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 	bob := insertUserRow(ctx, t, conn, insertUser, "bob@example.com", "bob", false)
 
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-	burger := insertRow(ctx, t, conn, insertBurger, "Stats Burger")
+	burger := insertUUIDRow(ctx, t, conn, insertBurger, "Stats Burger")
 
 	var aliceReview domain.Review
 
@@ -916,7 +945,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 	})
 
 	t.Run("AC4 discard 済みの user の review と履歴は除外される", func(t *testing.T) {
-		ac4Burger := insertRow(ctx, t, conn, insertBurger, "AC4 Burger")
+		ac4Burger := insertUUIDRow(ctx, t, conn, insertBurger, "AC4 Burger")
 		carl := insertUserRow(ctx, t, conn, insertUser, "carl@example.com", "carl", false)
 		aliceAC4 := mustCreateReview(ctx, t, repo, 5, "mine stays", alice, ac4Burger)
 		mustCreateReview(ctx, t, repo, 2, "mine vanishes", carl, ac4Burger)
@@ -970,7 +999,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		// のは、運よくうまく interleave しても race が隠れないようにするため
 		// である。
 		for i := 0; i < 5; i++ {
-			raceBurger := insertRow(ctx, t, conn, insertBurger, fmt.Sprintf("Race Burger %d", i))
+			raceBurger := insertUUIDRow(ctx, t, conn, insertBurger, fmt.Sprintf("Race Burger %d", i))
 			daveReview, err := domain.NewReview(5, "race", dave, raceBurger)
 			if err != nil {
 				t.Fatalf("NewReview returned error: %v", err)
@@ -1003,7 +1032,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 	})
 
 	t.Run("失敗した書き込みは burger_stats に手を付けない", func(t *testing.T) {
-		errBurger := insertRow(ctx, t, conn, insertBurger, "Error Burger")
+		errBurger := insertUUIDRow(ctx, t, conn, insertBurger, "Error Burger")
 		mustCreateReview(ctx, t, repo, 5, "baseline", alice, errBurger)
 		victim := mustCreateReview(ctx, t, repo, 3, "to discard", bob, errBurger)
 		if err := repo.DiscardReview(ctx, victim.ID); err != nil {
@@ -1050,9 +1079,9 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 	alice := insertUserRow(ctx, t, conn,
 		`INSERT INTO users (email, username, password_digest) VALUES ($1, $2, 'x') RETURNING id`,
 		"alice@example.com", "alice")
-	shop := insertRow(ctx, t, conn,
+	shop := insertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status) VALUES ($1, 1) RETURNING id`, "Active One")
-	burger := insertRow(ctx, t, conn,
+	burger := insertUUIDRow(ctx, t, conn,
 		`INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
 	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shop, burger); err != nil {
 		t.Fatalf("link shop and burger: %v", err)

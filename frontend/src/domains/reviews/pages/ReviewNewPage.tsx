@@ -18,7 +18,7 @@ export default function ReviewNewPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const shopId = Number(searchParams.get("shop_id"));
+  const shopId = searchParams.get("shop_id") ?? "";
 
   // ショップ名は、その shop 1 件を id で取得して表示する(一覧のページ送りに依存しない)
   const { user, isLoading: authLoading } = useAuth();

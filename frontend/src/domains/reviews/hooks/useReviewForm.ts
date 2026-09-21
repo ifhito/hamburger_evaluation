@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 export type CreateReviewFormData = {
   rating: number;
   comment: string;
-  shopId: number;
+  shopId: string;
   burgerName: string;
 };
 
@@ -19,7 +19,7 @@ export function useCreateReviewForm(defaults?: Partial<CreateReviewFormData>) {
     defaultValues: {
       rating: 3,
       comment: "",
-      shopId: 0,
+      shopId: "",
       burgerName: "",
       ...defaults,
     },

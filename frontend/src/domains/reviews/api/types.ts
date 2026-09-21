@@ -6,7 +6,7 @@ export interface Review {
   createdAt: string;
   user: { id: string; username: string } | null;
   burger: {
-    id: number;
+    id: string;
     name: string;
     averageRating: number;
     reviewCount: number;
@@ -25,7 +25,7 @@ export interface ReviewView extends Review {
 export interface ReviewCreateInput {
   rating: number;
   comment: string;
-  shopId: number;
+  shopId: string;
   burgerName: string;
 }
 

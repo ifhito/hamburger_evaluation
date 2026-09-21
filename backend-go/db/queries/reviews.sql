@@ -45,11 +45,11 @@ WHERE r.discarded_at IS NULL
   )
   AND (sqlc.narg(filter_rating)::bigint IS NULL OR r.rating = sqlc.narg(filter_rating)::bigint)
   AND (sqlc.narg(comment_pattern)::text IS NULL OR r.comment ILIKE sqlc.narg(comment_pattern)::text)
-  AND (sqlc.narg(filter_shop_id)::bigint IS NULL OR EXISTS (
+  AND (sqlc.narg(filter_shop_id)::uuid IS NULL OR EXISTS (
       SELECT 1
       FROM shops_burgers fsb
       JOIN shops fs ON fs.id = fsb.shop_id AND fs.status = 1
-      WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = sqlc.narg(filter_shop_id)::bigint
+      WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = sqlc.narg(filter_shop_id)::uuid
   ))
   AND (sqlc.narg(filter_user_id)::uuid IS NULL OR r.user_id = sqlc.narg(filter_user_id)::uuid)
 ORDER BY r.created_at DESC, r.id DESC

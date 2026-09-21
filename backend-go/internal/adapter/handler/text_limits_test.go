@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -48,7 +47,7 @@ func TestReviewTextLimits(t *testing.T) {
 			repo := seedReviewWorld(uid.N(1))
 			router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 			body := func(comment string) string {
-				return fmt.Sprintf(`{"review":{"rating":4,"comment":%s,"shop_id":%d,"burger_id":%d}}`, jsonString(t, comment), activeShopID, cheeseBurgerID)
+				return fmt.Sprintf(`{"review":{"rating":4,"comment":%s,"shop_id":%q,"burger_id":%q}}`, jsonString(t, comment), activeShopID, cheeseBurgerID)
 			}
 			if rec := do(router, http.MethodPost, "/reviews", body(exact), aliceAuth); rec.Code != http.StatusCreated {
 				t.Fatalf("上限ちょうど: status = %d, want 201 (body %.200s)", rec.Code, rec.Body)
@@ -69,7 +68,7 @@ func TestReviewTextLimits(t *testing.T) {
 			post := func(comment string) (code int, body string) {
 				form, ct := multipartBody(t, map[string]string{
 					"rating": "4", "comment": comment,
-					"shop_id": strconv.FormatInt(activeShopID, 10), "burger_id": strconv.FormatInt(cheeseBurgerID, 10),
+					"shop_id": activeShopID, "burger_id": cheeseBurgerID,
 				})
 				rec := doMultipart(router, http.MethodPost, "/reviews", form, ct, aliceAuth)
 				return rec.Code, rec.Body.String()
@@ -89,7 +88,7 @@ func TestReviewTextLimits(t *testing.T) {
 		t.Run("PUT: 上限ちょうどの"+u.name+"は 200、超えると 422 で内容が変わらない", func(t *testing.T) {
 			router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 			created := do(router, http.MethodPost, "/reviews",
-				fmt.Sprintf(`{"review":{"rating":4,"comment":"first","shop_id":%d,"burger_id":%d}}`, activeShopID, cheeseBurgerID), aliceAuth)
+				fmt.Sprintf(`{"review":{"rating":4,"comment":"first","shop_id":%q,"burger_id":%q}}`, activeShopID, cheeseBurgerID), aliceAuth)
 			id, _ := decodePhotoURL(t, created.Body.Bytes())
 			path := fmt.Sprintf("/reviews/%d", id)
 			edit := func(comment string) (int, string) {
@@ -120,7 +119,7 @@ func TestReviewTextLimits(t *testing.T) {
 		repo := seedReviewWorld(uid.N(1))
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := func(name string) string {
-			return fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d,"burger_name":%s}}`, activeShopID, jsonString(t, name))
+			return fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q,"burger_name":%s}}`, activeShopID, jsonString(t, name))
 		}
 		if rec := do(router, http.MethodPost, "/reviews", body(strings.Repeat("あ", domain.MaxBurgerNameChars)), aliceAuth); rec.Code != http.StatusCreated {
 			t.Fatalf("上限ちょうど: status = %d, want 201 (body %.200s)", rec.Code, rec.Body)
@@ -137,7 +136,7 @@ func TestReviewTextLimits(t *testing.T) {
 
 	t.Run("複数の違反は 1 つの応答に列挙され、rating の違反が先に並ぶ", func(t *testing.T) {
 		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
-		body := fmt.Sprintf(`{"review":{"rating":9,"comment":%s,"shop_id":%d,"burger_id":%d}}`,
+		body := fmt.Sprintf(`{"review":{"rating":9,"comment":%s,"shop_id":%q,"burger_id":%q}}`,
 			jsonString(t, strings.Repeat("a", domain.MaxCommentChars+1)), activeShopID, cheeseBurgerID)
 		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
 		want := `{"errors":["Rating must be in 1..5","Comment is too long (maximum is 2000 characters)"]}`
@@ -174,7 +173,7 @@ func TestShopTextLimits(t *testing.T) {
 		repo := seedShops(uid.N(1))
 		router, _, adminAuth, _ := newShopsRouter(t, repo)
 		put := func(name string) (int, string) {
-			rec := do(router, http.MethodPut, "/admin/shops/2", `{"shop":{"name":`+jsonString(t, name)+`}}`, adminAuth)
+			rec := do(router, http.MethodPut, "/admin/shops/"+uid.N(2), `{"shop":{"name":`+jsonString(t, name)+`}}`, adminAuth)
 			return rec.Code, rec.Body.String()
 		}
 		exact := strings.Repeat("🍔", domain.MaxShopNameChars)
@@ -193,7 +192,7 @@ func TestShopTextLimits(t *testing.T) {
 		repo := seedShops(uid.N(1))
 		router, _, adminAuth, _ := newShopsRouter(t, repo)
 		reject := func(note string) (int, string) {
-			rec := do(router, http.MethodPost, "/admin/shops/2/reject", `{"moderation_note":`+jsonString(t, note)+`}`, adminAuth)
+			rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(2)+"/reject", `{"moderation_note":`+jsonString(t, note)+`}`, adminAuth)
 			return rec.Code, rec.Body.String()
 		}
 		if code, body := reject(strings.Repeat("あ", domain.MaxModerationNoteChars+1)); code != http.StatusUnprocessableEntity || body != noteOver {
@@ -213,7 +212,7 @@ func TestShopTextLimits(t *testing.T) {
 
 	t.Run("却下: 一般ユーザーは、note が長くても先に 403 になる", func(t *testing.T) {
 		router, aliceAuth, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
-		rec := do(router, http.MethodPost, "/admin/shops/2/reject",
+		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(2)+"/reject",
 			`{"moderation_note":`+jsonString(t, strings.Repeat("a", domain.MaxModerationNoteChars+1))+`}`, aliceAuth)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("status = %d, want 403 (body %s)", rec.Code, rec.Body)
@@ -290,7 +289,7 @@ func TestTextLimitsIntegration(t *testing.T) {
 	conn, router := newUsersIntegrationKit(t)
 	_, token := signupUser(t, router, "limits", "limits@example.com", "Password123!")
 
-	var shopID, burgerID int64
+	var shopID, burgerID string
 	if err := conn.QueryRow(ctx, "INSERT INTO shops (name, status) VALUES ('Limit Diner', 1) RETURNING id").Scan(&shopID); err != nil {
 		t.Fatalf("insert shop: %v", err)
 	}
@@ -309,7 +308,7 @@ func TestTextLimitsIntegration(t *testing.T) {
 		return n
 	}
 	postReview := func(comment string) *httptest.ResponseRecorder {
-		body := fmt.Sprintf(`{"review":{"rating":4,"comment":%s,"shop_id":%d,"burger_id":%d}}`, jsonString(t, comment), shopID, burgerID)
+		body := fmt.Sprintf(`{"review":{"rating":4,"comment":%s,"shop_id":%q,"burger_id":%q}}`, jsonString(t, comment), shopID, burgerID)
 		return do(router, http.MethodPost, "/reviews", body, token)
 	}
 

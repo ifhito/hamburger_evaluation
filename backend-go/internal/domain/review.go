@@ -15,9 +15,10 @@ type Review struct {
 	// いないときは nil である（S10）。key はここでは不透明な値であり、URL は
 	// usecase が photo storage を介して組み立てる。domain 自身が組み立てる
 	// ことは決してない。
-	PhotoKey  *string
-	AuthorID  string
-	BurgerID  int64
+	PhotoKey *string
+	AuthorID string
+	// BurgerID は burger の UUID の正規形である。
+	BurgerID  string
 	CreatedAt time.Time
 }
 
@@ -72,7 +73,7 @@ func ValidateBurgerName(name string) error {
 // review を組み立てる。comment は渡された値のまま保存され（存在のみが
 // validate される）、ユーザーのテキストを決して trim しない Rails に合わせて
 // いる。
-func NewReview(rating int, comment string, authorID string, burgerID int64) (Review, error) {
+func NewReview(rating int, comment string, authorID string, burgerID string) (Review, error) {
 	if err := ValidateReviewContent(rating, comment); err != nil {
 		return Review{}, err
 	}
@@ -134,7 +135,7 @@ type ReviewRepository interface {
 	// リンクは残らない。返される burger は、insert 前に保存されていた stats を
 	// 持つ。これは burger_id の経路で usecase の ReviewQuery.GetShopBurger が
 	// 返すものとまったく同じである。まったく新しい burger の stats はゼロである。
-	CreateReviewForNamedBurger(ctx context.Context, shopID int64, burgerName string, review Review) (Review, ShopReviewBurger, error)
+	CreateReviewForNamedBurger(ctx context.Context, shopID string, burgerName string, review Review) (Review, ShopReviewBurger, error)
 	// UpdateReviewContent は、id の、まだ kept な review の rating と comment
 	// だけを永続化し、保存された行を返す。存在しないか discard 済みのときは
 	// （wrap された）ErrReviewNotFound を返す。カラム限定の書き込み
@@ -183,7 +184,7 @@ func (s *Reviews) Create(ctx context.Context, review Review) (Review, error) {
 // CreateForNamedBurger は、新しい（validate 済みの）review を、shop の burger の
 // うち指定された名前と完全一致するものに対して永続化する（なければ burger を作る）。
 // 返される burger は、insert 前に保存されていた stats を持つ。
-func (s *Reviews) CreateForNamedBurger(ctx context.Context, shopID int64, burgerName string, review Review) (Review, ShopReviewBurger, error) {
+func (s *Reviews) CreateForNamedBurger(ctx context.Context, shopID string, burgerName string, review Review) (Review, ShopReviewBurger, error) {
 	return s.repo.CreateReviewForNamedBurger(ctx, shopID, burgerName, review)
 }
 

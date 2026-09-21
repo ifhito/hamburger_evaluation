@@ -138,15 +138,15 @@ func TestUserRepositoryManagement(t *testing.T) {
 	// alice の両方が review し、"solo" は victim だけが review した。victim の
 	// discard 後、shared は alice の review だけに減り、solo は stats がゼロの
 	// 行にならなければならない。
-	shop := insertRow(ctx, t, conn,
+	shop := insertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-	shared := insertRow(ctx, t, conn, insertBurger, "Shared")
-	solo := insertRow(ctx, t, conn, insertBurger, "Solo")
-	for _, burgerID := range []int64{shared, solo} {
+	shared := insertUUIDRow(ctx, t, conn, insertBurger, "Shared")
+	solo := insertUUIDRow(ctx, t, conn, insertBurger, "Solo")
+	for _, burgerID := range []string{shared, solo} {
 		if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shop, burgerID); err != nil {
-			t.Fatalf("link shop %d burger %d: %v", shop, burgerID, err)
+			t.Fatalf("link shop %s burger %s: %v", shop, burgerID, err)
 		}
 	}
 	victimShared := mustCreateReview(ctx, t, reviewRepo, 2, "meh", victim, shared)
