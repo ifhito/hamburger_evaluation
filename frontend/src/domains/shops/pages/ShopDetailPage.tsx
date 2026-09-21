@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useShopDetail } from "../hooks/useShops";
+import { useRatingRange } from "../../reviews/hooks/useRatingRange";
 import { formatRating } from "../../../lib/rating";
 import { Button } from "../../../components/Button";
 import { Layout } from "../../../components/Layout";
@@ -11,6 +12,7 @@ export default function ShopDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { user, isLoading: authLoading } = useAuth();
+  const ratingRange = useRatingRange();
   // レビューを書けるか(canReview)は backend が返す。閲覧者ごとに違うので、認証状態が確定してから取得する
   const { data: shop, isLoading, error } = useShopDetail(id, user?.id ?? null, {
     enabled: !authLoading,
@@ -48,7 +50,7 @@ export default function ShopDetailPage() {
               <li key={review.id} className={styles.reviewCard}>
                 <div className={styles.reviewCardHeader}>
                   <strong>{review.burger?.name ?? "—"}</strong>
-                  <span>{formatRating(review.rating)}</span>
+                  <span>{formatRating(review.rating, ratingRange?.max)}</span>
                 </div>
                 <p className={styles.reviewComment}>{review.comment}</p>
                 <small className={styles.reviewAuthor}>

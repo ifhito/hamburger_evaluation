@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
 import { useUpdateReview } from "../hooks/useReviewMutations";
 import { useUpdateReviewForm } from "../hooks/useReviewForm";
+import { useRatingRange } from "../hooks/useRatingRange";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
@@ -23,6 +24,7 @@ export default function ReviewEditPage() {
   });
   const isLoading = reviewLoading || authLoading;
   const { update } = useUpdateReview(Number(id));
+  const ratingRange = useRatingRange();
 
   const { register, handleSubmit, setValue, watch, reset } = useUpdateReviewForm();
 
@@ -52,13 +54,24 @@ export default function ReviewEditPage() {
   return (
     <Layout title={t("reviews.edit.title")}>
       {isLoading && <p className={styles.muted}>{t("reviews.edit.loading")}</p>}
-      {!isLoading && (
+      {/* 編集してよいか(canEdit)は backend が返す。他人のレビューでは、フォームを出さない */}
+      {!isLoading && review && !review.canEdit && (
+        <>
+          <ErrorMessage message={t("reviews.edit.forbidden")} />
+          <Link to={`/reviews/${id}`}>{t("reviews.edit.cancel")}</Link>
+        </>
+      )}
+      {!isLoading && !(review && !review.canEdit) && (
         <form onSubmit={(e) => void onSubmit(e)} className={styles.form}>
           {serverError && <ErrorMessage message={serverError} />}
-          <RatingSelect
-            value={watch("rating")}
-            onChange={(v) => setValue("rating", v)}
-          />
+          {ratingRange && (
+            <RatingSelect
+              value={watch("rating")}
+              onChange={(v) => setValue("rating", v)}
+              min={ratingRange.min}
+              max={ratingRange.max}
+            />
+          )}
           <Textarea
             id="comment"
             label={t("reviews.edit.comment")}

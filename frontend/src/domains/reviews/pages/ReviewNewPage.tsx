@@ -10,6 +10,7 @@ import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
+import { useRatingRange } from "../hooks/useRatingRange";
 import { RatingSelect } from "../../../components/RatingSelect";
 import { Textarea } from "../../../components/Textarea";
 import styles from "./reviewForm.module.css";
@@ -26,6 +27,7 @@ export default function ReviewNewPage() {
   const shopName = shop?.name;
 
   const { create } = useCreateReview();
+  const ratingRange = useRatingRange();
   const { register, handleSubmit, setValue, watch } = useCreateReviewForm({ shopId });
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
@@ -54,10 +56,14 @@ export default function ReviewNewPage() {
         <div className={styles.shopInfo}>
           <strong>{t("reviews.new.shop")}</strong> {shopName ?? `#${shopId}`}
         </div>
-        <RatingSelect
-          value={watch("rating")}
-          onChange={(v) => setValue("rating", v)}
-        />
+        {ratingRange && (
+          <RatingSelect
+            value={watch("rating")}
+            onChange={(v) => setValue("rating", v)}
+            min={ratingRange.min}
+            max={ratingRange.max}
+          />
+        )}
         <Textarea
           id="comment"
           label={t("reviews.new.comment")}

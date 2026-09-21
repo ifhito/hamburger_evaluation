@@ -38,6 +38,9 @@ type adminShopResponse struct {
 	Status         string           `json:"status"`
 	ModerationNote *string          `json:"moderation_note"`
 	Creator        *userRefResponse `json:"creator"`
+	// CanApprove・CanReject は、承認・却下の操作を画面が提示してよいか（domain が判断する）。
+	CanApprove bool `json:"can_approve"`
+	CanReject  bool `json:"can_reject"`
 }
 
 func newAdminShopResponse(detail domain.ShopDetail) adminShopResponse {
@@ -47,6 +50,8 @@ func newAdminShopResponse(detail domain.ShopDetail) adminShopResponse {
 		Status:         string(detail.Status),
 		ModerationNote: detail.ModerationNote,
 		Creator:        newUserRefResponse(detail.Creator),
+		CanApprove:     detail.Shop.CanBeApproved(),
+		CanReject:      detail.Shop.CanBeRejected(),
 	}
 }
 

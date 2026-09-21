@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -49,6 +50,30 @@ func TestValidateReviewContent(t *testing.T) {
 				t.Errorf("messages = %v, want %v", vErr.Messages, tt.want)
 			}
 		})
+	}
+}
+
+// TestRatingRange は、rating の範囲の定数(GET /meta で frontend に返す値)が、検証の境界と一致し、
+// メッセージにも使われることを固定する。
+func TestRatingRange(t *testing.T) {
+	if domain.MinRating > domain.MaxRating {
+		t.Fatalf("MinRating %d > MaxRating %d", domain.MinRating, domain.MaxRating)
+	}
+	for _, r := range []int{domain.MinRating, domain.MaxRating} {
+		if err := domain.ValidateReviewContent(r, "ok"); err != nil {
+			t.Errorf("rating %d(範囲の端)は有効なはず: %v", r, err)
+		}
+	}
+	for _, r := range []int{domain.MinRating - 1, domain.MaxRating + 1} {
+		var vErr *domain.ValidationError
+		err := domain.ValidateReviewContent(r, "ok")
+		if !errors.As(err, &vErr) {
+			t.Fatalf("rating %d(範囲の外)は検証エラーのはず: %v", r, err)
+		}
+		want := fmt.Sprintf("Rating must be in %d..%d", domain.MinRating, domain.MaxRating)
+		if len(vErr.Messages) != 1 || vErr.Messages[0] != want {
+			t.Errorf("messages = %v, want [%s]", vErr.Messages, want)
+		}
 	}
 }
 

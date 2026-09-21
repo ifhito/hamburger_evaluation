@@ -31,7 +31,7 @@ export default function ShopListPage() {
               <Button type="button">{t("shops.list.addShop")}</Button>
             </Link>
           )}
-          {user?.admin && (
+          {user?.canModerate && (
             <Link to="/admin/shops">
               <Button type="button" variant="secondary">
                 {t("shops.list.moderate")}

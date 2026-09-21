@@ -92,7 +92,7 @@ export default function AdminShopListPage() {
                 </span>
               )}
               <div className={styles.actions}>
-                {shop.status !== "active" && (
+                {shop.canApprove && (
                   <Button
                     type="button"
                     onClick={() => void handleApprove(shop.id)}
@@ -101,7 +101,7 @@ export default function AdminShopListPage() {
                     {t("shops.admin.approve")}
                   </Button>
                 )}
-                {shop.status !== "rejected" && rejectingId !== shop.id && (
+                {shop.canReject && rejectingId !== shop.id && (
                   <Button
                     type="button"
                     variant="danger"

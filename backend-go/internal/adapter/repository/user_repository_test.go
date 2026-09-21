@@ -3,16 +3,13 @@ package repository_test
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 	"time"
 
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 // strPtr は、domain.ProfileChanges のフィールド用に、s へのポインタを返す。
@@ -32,7 +29,6 @@ func TestUserRepository(t *testing.T) {
 	conn, _ := dbtest.New(t)
 
 	repo := repository.NewUserRepository(conn)
-	userQuery := query.NewUserQuery(conn)
 
 	created, err := repo.CreateUser(ctx, domain.CreateUserParams{
 		Username:       "alice",
@@ -51,35 +47,18 @@ func TestUserRepository(t *testing.T) {
 		t.Fatalf("CreateUser = %+v, want %+v", created, wantUser)
 	}
 
-	t.Run("GetActiveUserByEmail は user と digest を返す", func(t *testing.T) {
-		creds, err := userQuery.GetActiveUserByEmail(ctx, "alice@example.com")
-		if err != nil {
-			t.Fatalf("GetActiveUserByEmail returned error: %v", err)
+	t.Run("CreateUser は保存された行に、渡した値と digest を入れる", func(t *testing.T) {
+		var username, email, digest string
+		var admin bool
+		var discardedAt *time.Time
+		if err := conn.QueryRow(ctx,
+			`SELECT username, email, password_digest, admin, discarded_at FROM users WHERE id = $1`, created.ID,
+		).Scan(&username, &email, &digest, &admin, &discardedAt); err != nil {
+			t.Fatalf("select created user: %v", err)
 		}
-		if creds.User != wantUser {
-			t.Fatalf("GetActiveUserByEmail user = %+v, want %+v", creds.User, wantUser)
-		}
-		if creds.PasswordDigest != "digest-alice" {
-			t.Fatalf("GetActiveUserByEmail digest = %q, want %q", creds.PasswordDigest, "digest-alice")
-		}
-	})
-
-	t.Run("GetActiveUserByID は user を返す", func(t *testing.T) {
-		user, err := userQuery.GetActiveUserByID(ctx, created.ID)
-		if err != nil {
-			t.Fatalf("GetActiveUserByID returned error: %v", err)
-		}
-		if user != wantUser {
-			t.Fatalf("GetActiveUserByID = %+v, want %+v", user, wantUser)
-		}
-	})
-
-	t.Run("存在しない email と id は ErrUserNotFound になる", func(t *testing.T) {
-		if _, err := userQuery.GetActiveUserByEmail(ctx, "nobody@example.com"); !errors.Is(err, domain.ErrUserNotFound) {
-			t.Fatalf("GetActiveUserByEmail error = %v, want %v", err, domain.ErrUserNotFound)
-		}
-		if _, err := userQuery.GetActiveUserByID(ctx, uid.N(1000)); !errors.Is(err, domain.ErrUserNotFound) {
-			t.Fatalf("GetActiveUserByID error = %v, want %v", err, domain.ErrUserNotFound)
+		if username != "alice" || email != "alice@example.com" || digest != "digest-alice" || admin || discardedAt != nil {
+			t.Errorf("stored = (%q, %q, %q, admin %v, discarded %v), want alice with digest-alice, not admin, kept",
+				username, email, digest, admin, discardedAt)
 		}
 	})
 
@@ -92,18 +71,6 @@ func TestUserRepository(t *testing.T) {
 		})
 		if !errors.Is(err, domain.ErrEmailTaken) {
 			t.Fatalf("CreateUser error = %v, want %v", err, domain.ErrEmailTaken)
-		}
-	})
-
-	t.Run("discard 済みの user は active な検索から除外される", func(t *testing.T) {
-		if _, err := conn.Exec(ctx, "UPDATE users SET discarded_at = now() WHERE id = $1", created.ID); err != nil {
-			t.Fatalf("discard user: %v", err)
-		}
-		if _, err := userQuery.GetActiveUserByEmail(ctx, "alice@example.com"); !errors.Is(err, domain.ErrUserNotFound) {
-			t.Fatalf("GetActiveUserByEmail error = %v, want %v", err, domain.ErrUserNotFound)
-		}
-		if _, err := userQuery.GetActiveUserByID(ctx, created.ID); !errors.Is(err, domain.ErrUserNotFound) {
-			t.Fatalf("GetActiveUserByID error = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})
 }
@@ -120,16 +87,13 @@ func TestUserRepositoryManagement(t *testing.T) {
 	ctx := context.Background()
 	conn, _ := dbtest.New(t)
 	repo := repository.NewUserRepository(conn)
-	userQuery := query.NewUserQuery(conn)
 	reviewRepo := repository.NewReviewRepository(conn)
-	reviewQuery := query.NewReviewQuery(conn)
-	shopQuery := query.NewShopQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, $3, $4) RETURNING id`
-	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", "digest-alice", false)
-	bob := insertUserRow(ctx, t, conn, insertUser, "bob@example.com", "bob", "digest-bob", false)
-	victim := insertUserRow(ctx, t, conn, insertUser, "victim@example.com", "victim", "digest-victim", false)
-	ghost := insertUserRow(ctx, t, conn, insertUser, "ghost@example.com", "ghost", "digest-ghost", false)
+	alice := dbtest.InsertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", "digest-alice", false)
+	bob := dbtest.InsertUserRow(ctx, t, conn, insertUser, "bob@example.com", "bob", "digest-bob", false)
+	victim := dbtest.InsertUserRow(ctx, t, conn, insertUser, "victim@example.com", "victim", "digest-victim", false)
+	ghost := dbtest.InsertUserRow(ctx, t, conn, insertUser, "ghost@example.com", "ghost", "digest-ghost", false)
 	if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = now() WHERE id = $1`, ghost); err != nil {
 		t.Fatalf("discard ghost: %v", err)
 	}
@@ -138,20 +102,20 @@ func TestUserRepositoryManagement(t *testing.T) {
 	// alice の両方が review し、"solo" は victim だけが review した。victim の
 	// discard 後、shared は alice の review だけに減り、solo は stats がゼロの
 	// 行にならなければならない。
-	shop := insertUUIDRow(ctx, t, conn,
+	shop := dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-	shared := insertUUIDRow(ctx, t, conn, insertBurger, "Shared")
-	solo := insertUUIDRow(ctx, t, conn, insertBurger, "Solo")
+	shared := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Shared")
+	solo := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Solo")
 	for _, burgerID := range []string{shared, solo} {
 		if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shop, burgerID); err != nil {
 			t.Fatalf("link shop %s burger %s: %v", shop, burgerID, err)
 		}
 	}
-	victimShared := mustCreateReview(ctx, t, reviewRepo, 2, "meh", victim, shared)
-	aliceShared := mustCreateReview(ctx, t, reviewRepo, 4, "good", alice, shared)
-	victimSolo := mustCreateReview(ctx, t, reviewRepo, 5, "only mine", victim, solo)
+	mustCreateReview(ctx, t, reviewRepo, 2, "meh", victim, shared)
+	mustCreateReview(ctx, t, reviewRepo, 4, "good", alice, shared)
+	mustCreateReview(ctx, t, reviewRepo, 5, "only mine", victim, solo)
 
 	t.Run("UpdateUserProfile は指定されたフィールドだけを更新する", func(t *testing.T) {
 		updated, err := repo.UpdateUserProfile(ctx, bob, domain.ProfileChanges{Username: strPtr("bobby")})
@@ -245,9 +209,6 @@ func TestUserRepositoryManagement(t *testing.T) {
 		if discardedAt == nil {
 			t.Fatal("users.discarded_at is NULL, want a timestamp")
 		}
-		if _, err := userQuery.GetActiveUserByID(ctx, victim); !errors.Is(err, domain.ErrUserNotFound) {
-			t.Errorf("GetActiveUserByID after discard = %v, want %v", err, domain.ErrUserNotFound)
-		}
 		// Rails parity：victim の review 自体は kept のままである。非表示化は
 		// 純粋に読み取り側で行われる。
 		var keptReviews int
@@ -277,46 +238,6 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 		if err := repo.DiscardUser(ctx, uid.N(99999)); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrUserNotFound)
-		}
-	})
-
-	t.Run("読み取り経路は discard 済みの user の kept な review を隠す", func(t *testing.T) {
-		// フィード：alice の review だけが残り、表示される stats は再計算された
-		// burger_stats の行（count 1）と一致する。
-		feed, _, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
-		if err != nil {
-			t.Fatalf("ListReviews returned error: %v", err)
-		}
-		if got, want := reviewIDs(feed), []int64{aliceShared.ID}; !reflect.DeepEqual(got, want) {
-			t.Fatalf("feed ids = %v, want %v (victim's reviews hidden)", got, want)
-		}
-		sharedStats := requireConsistentStats(ctx, t, conn, shared)
-		if feed[0].Burger.ReviewCount != sharedStats.ReviewCount || feed[0].Burger.ReviewCount != int64(len(feed)) {
-			t.Errorf("displayed review count = %d, want burger_stats %d = %d displayed reviews",
-				feed[0].Burger.ReviewCount, sharedStats.ReviewCount, len(feed))
-		}
-		// 詳細：discard 済みの author の review は、存在しない review と
-		// 区別がつかない。alice の review には引き続き到達できる。
-		if _, err := reviewQuery.GetReview(ctx, victimShared.ID); !errors.Is(err, domain.ErrReviewNotFound) {
-			t.Errorf("GetReview(victim shared) = %v, want %v", err, domain.ErrReviewNotFound)
-		}
-		if _, err := reviewQuery.GetReview(ctx, victimSolo.ID); !errors.Is(err, domain.ErrReviewNotFound) {
-			t.Errorf("GetReview(victim solo) = %v, want %v", err, domain.ErrReviewNotFound)
-		}
-		if _, err := reviewQuery.GetReview(ctx, aliceShared.ID); err != nil {
-			t.Errorf("GetReview(alice) returned error: %v", err)
-		}
-		// shop の review：alice の review だけが一覧に載る。
-		shopReviews, err := shopQuery.ListShopReviews(ctx, shop)
-		if err != nil {
-			t.Fatalf("ListShopReviews returned error: %v", err)
-		}
-		ids := make([]int64, 0, len(shopReviews))
-		for _, r := range shopReviews {
-			ids = append(ids, r.ID)
-		}
-		if want := []int64{aliceShared.ID}; !reflect.DeepEqual(ids, want) {
-			t.Errorf("shop review ids = %v, want %v (victim's review hidden)", ids, want)
 		}
 	})
 }
