@@ -30,12 +30,15 @@ GO_BOUNDARY_RULES = (
 )
 # repository は domain からだけ使う(S15 / #46 の規約):
 # - *Repository の interface(書き込み専用)は domain が宣言し、呼べるのは domain のコードだけ
-#   (単一集約の書き込みは集約ごとの書き込みオブジェクト。*Service は集約を跨ぐ更新だけ)
+#   (単一集約の書き込みは集約ごとの書き込みオブジェクト。*Service は、間に読み取りを挟まない、集約を跨ぐ更新だけ。
+#   読み取りを挟む手順は、usecase が UnitOfWork.Do の中で組み立てる)
 # - usecase は repository を宣言も保持も呼び出しもしない。読み取りは usecase が宣言する *Query、
 #   書き込みは domain の書き込みオブジェクトを通す
-# interface のメソッド名は、*Query が Get*/List* だけ、*Repository が Create*/Update*/Discard* だけ
+# interface のメソッド名は、*Query が Get*/List* だけ、*Repository が Create*/Update*/Discard* と、
+# 書き込みの前段の排他ロックの Lock*(統計の再計算の前に、バーガーの行をロックして、並行する書き込みの取りこぼしを防ぐ。
+# 値を返さず、行も変えない)だけ
 GO_INTERFACE_START_RE = re.compile(r"^type\s+(\w+)\s+interface\s*\{", re.M)
-GO_ALLOWED_PREFIXES = {"Query": ("Get", "List"), "Repository": ("Create", "Update", "Discard")}
+GO_ALLOWED_PREFIXES = {"Query": ("Get", "List"), "Repository": ("Create", "Update", "Discard", "Lock")}
 GO_REPOSITORY_TYPE_RE = re.compile(r"^type\s+(\w*Repository)\b", re.M)
 # パッケージ名は問わず(import の別名でも)、名前の接尾辞だけで判定する
 GO_REPOSITORY_REF_RE = re.compile(r"\b(\w+)\.(\w*Repository)\b")
@@ -188,7 +191,7 @@ def go_query_repository_violations(paths: list[str]) -> list[str]:
         if not file_path.is_file():
             continue
         text = file_path.read_text(errors="ignore")
-        # interface のメソッド名(*Query は Get*/List* だけ、*Repository は Create*/Update*/Discard* だけ)
+        # interface のメソッド名(*Query は Get*/List* だけ、*Repository は Create*/Update*/Discard*/Lock* だけ)
         for name, body, first_line in go_interfaces(text):
             kind = next((k for k in GO_ALLOWED_PREFIXES if name.endswith(k)), None)
             if kind is None:
@@ -271,8 +274,8 @@ def main() -> int:
         for violation in query_violations:
             print(f"- {violation}")
         print(
-            "Repositories are used only from domain: *Repository interfaces (Create*/Update*/Discard* only) live in domain "
-            "and are called only by domain code; usecase reads via *Query (Get*/List* only) and writes via domain write objects (per-aggregate; *Service only for cross-aggregate updates)."
+            "Repositories are used only from domain: *Repository interfaces (Create*/Update*/Discard* and the pre-write row lock Lock* only) live in domain "
+            "and are called only by domain code; usecase reads via *Query (Get*/List* only) and writes via domain write objects (per-aggregate; *Service only for cross-aggregate updates with no read in between; procedures that read in between are built by the usecase inside UnitOfWork.Do)."
         )
         failures.append("go query/repository split sensor failed")
 

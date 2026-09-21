@@ -16,7 +16,7 @@ Review the diff for, in priority order:
    from the frontend API types, and persistence dependency violations: a
    usecase declaring, holding, or calling a repository (`.repo.` calls,
    `*Repository` types or fields, `domain.*Repository` references). Repository
-   interfaces (writes only via `Create*`/`Update*`/`Discard*`) are declared in
+   interfaces (writes only via `Create*`/`Update*`/`Discard*`, plus `Lock*` for the row lock taken before a write) are declared in
    `domain` and called only by domain code; usecases read through `*Query`
    (`Get*`/`List*` only) and write through the per-aggregate domain write
    objects (a `*Service` is only for updates spanning several aggregates).

@@ -27,7 +27,7 @@ Boundaries (from `backend-go-boundaries` / `frontend-spa-boundaries` skills):
   input, explanations, server errors, and returned values — never duplicate
   validation, permission conditions, constants, or derived values
 - repositories are used only from domain: `*Repository` interfaces (writes
-  only) are declared in domain and called only by domain code; usecases
+  only: `Create*`/`Update*`/`Discard*`, plus `Lock*` for the row lock before a write) are declared in domain and called only by domain code; usecases
   never declare, hold, or call a repository — they read via `*Query`
   (`Get*`/`List*`) and write via the per-aggregate domain write objects
   (`*Service` only for updates spanning several aggregates)
