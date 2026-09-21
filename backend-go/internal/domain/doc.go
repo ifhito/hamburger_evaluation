@@ -1,8 +1,8 @@
 // Package domain は entity、value object、domain error、そして書き込みの
 // 契約（repository の interface と、それを持つ書き込みオブジェクト）を保持する。
 //
-// repository の interface（*Repository。Create* / Update* / Discard* だけを
-// 持つ書き込み専用の契約）はこの package が宣言し、呼び出せるのはこの package の
+// repository の interface（*Repository。Create* / Update* / Discard* と、書き込みの前段の
+// 排他ロックの Lock* だけを持つ書き込み専用の契約）はこの package が宣言し、呼び出せるのはこの package の
 // コードだけである（Service という型に限らない）。usecase は repository に
 // 依存せず、書き込みをこの package のオブジェクトに任せる。実装は
 // adapter/repository が担う。
@@ -16,12 +16,13 @@
 // 書き込みの置き場所は、更新が何個の集約に触れるかで決まる:
 //   - 1 つの集約だけを更新する書き込み: 集約ごとの書き込みオブジェクト（Shops、
 //     Reviews、Users）に置く。Service は作らない。
-//   - 複数の集約を跨ぐ更新（例: ユーザーの削除で、そのユーザーのレビューと統計も
-//     動かす手順を domain のコードとして持つとき）: domain の Service（*Service）に
-//     置く。現時点では、そのような手順は domain のコードにない（DiscardUser が
-//     burger_stats を再計算するのは repository の同一 transaction の内部で、domain の
-//     コードとしては跨いでいない）ので、Service は 1 つもない。UoW（S17）などで
-//     跨ぐ手順が domain に入ったときに、初めて Service が生まれる。
+//   - 複数の集約を跨ぐ更新: 手順の途中で読み取り（usecase の *Query）を挟むかどうかで、置き場所が
+//     分かれる。読み取りを挟まない、書き込みだけの手順は、domain の Service（*Service）に置く。
+//     読み取りを挟む手順（例: review の書き込み → 統計の元になる facts の読み取り → 統計の保存。
+//     退会 → 影響する burger の一覧の読み取り → 各 burger の統計の再計算）は、repository だけを持つ
+//     Service では表現できない（repository は読み取りを持たない）ので、トランザクションを持つ
+//     usecase が、UnitOfWork.Do の中で、各集約の書き込みオブジェクト（BurgerStats など）と Query を
+//     組み合わせて組み立てる。現時点では、後者だけがあり、Service は 1 つもない。
 //
 // 書き込みオブジェクトと Service のルール（肥大化を防ぐための決まり。構造検査のテストで
 // 一部を強制する）:
