@@ -92,8 +92,8 @@ func NewReview(rating int, comment string, authorID string, burgerID string) (Re
 }
 
 // CanBeModifiedBy は review の所有権ルールの唯一の置き場である。author だけが
-// review を編集または削除できる。意図的に admin の例外は設けない（issue #14
-// AC3）。moderation の権限が対象とするのは shop であり、他のユーザーの
+// review を編集または削除できる。意図的に admin の例外は設けない。
+// moderation の権限が対象とするのは shop であり、他のユーザーの
 // review ではない。
 func (r Review) CanBeModifiedBy(viewer User) bool {
 	return r.AuthorID == viewer.ID

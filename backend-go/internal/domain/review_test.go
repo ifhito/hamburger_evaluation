@@ -10,8 +10,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
-// TestValidateReviewContent は Rails parity の validation メッセージを固定する
-// （issue #14 AC4）。1..5 の範囲外の rating と空の comment は full message
+// TestValidateReviewContent は Rails parity の validation メッセージを固定する。
+// 1..5 の範囲外の rating と空の comment は full message
 // そのままで失敗し、両方が失敗する場合は rating のメッセージが先に来る。
 func TestValidateReviewContent(t *testing.T) {
 	tests := []struct {
@@ -103,7 +103,7 @@ func TestNewReview(t *testing.T) {
 	})
 }
 
-// TestReviewCanBeModifiedBy は所有権ルールを固定する（issue #14 AC3）。
+// TestReviewCanBeModifiedBy は所有権ルールを固定する。
 // author だけが編集または削除でき、admin にも例外はない。
 func TestReviewCanBeModifiedBy(t *testing.T) {
 	review := domain.Review{ID: uid.N(1), AuthorID: uid.N(7)}
