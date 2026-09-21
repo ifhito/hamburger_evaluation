@@ -15,7 +15,7 @@ import (
 // 誰にでも呼べてしまう。逆に表にだけあって登録がなければ、範囲の確認が空振りする。
 // 登録されたツールの一覧と表が、名前も範囲も一致することを確かめる。
 func TestMCPToolScopesMatchRegisteredTools(t *testing.T) {
-	server := (&MCPServer{}).newToolServer(domain.User{ID: "00000000-0000-4000-8000-000000000001"}, nil)
+	server := (&MCPServer{}).newToolServer(domain.User{ID: "00000000-0000-4000-8000-000000000001"}, nil, domain.LangEN)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	ctx := context.Background()
 	if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
@@ -91,9 +91,13 @@ var validArguments = func() map[string]map[string]any {
 // 通らずに、ツールを直接呼んで、範囲が足りなければ、中身(usecase。ここでは nil で、呼べば panic する)に
 // 届く前に断られることを確かめる。
 func TestMCPToolsCheckTheScopeRightBeforeRunning(t *testing.T) {
-	call := func(t *testing.T, scopes []string, tool string) *mcp.CallToolResult {
+	call := func(t *testing.T, scopes []string, tool string, lang ...domain.Lang) *mcp.CallToolResult {
 		t.Helper()
-		server := (&MCPServer{}).newToolServer(domain.User{ID: "00000000-0000-4000-8000-000000000001"}, scopes)
+		language := domain.LangEN
+		if len(lang) > 0 {
+			language = lang[0]
+		}
+		server := (&MCPServer{}).newToolServer(domain.User{ID: "00000000-0000-4000-8000-000000000001"}, scopes, language)
 		clientTransport, serverTransport := mcp.NewInMemoryTransports()
 		ctx := context.Background()
 		if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
@@ -129,6 +133,9 @@ func TestMCPToolsCheckTheScopeRightBeforeRunning(t *testing.T) {
 				t.Errorf("%s (%s): got %q (isError=%v), want it to be refused with the missing scope", tool, name, text(res), res.IsError)
 			}
 		}
+	}
+	if res := call(t, nil, "get_meta", domain.LangJA); !res.IsError || text(res) != "許可の範囲が足りません: hamburger:read" {
+		t.Errorf("日本語の要求で範囲が足りないとき: got %q (isError=%v), want 日本語の文言", text(res), res.IsError)
 	}
 	if res := call(t, []string{domain.OAuthScopeRead}, "get_meta"); res.IsError || !strings.Contains(text(res), `"rating"`) {
 		t.Errorf("get_meta with the read scope = %q (isError=%v), want it to run", text(res), res.IsError)

@@ -55,7 +55,7 @@ type ExternalIdentity struct {
 }
 
 // Validate は、この情報でサインイン・新規登録・連携をしてよいかを判断する。識別の ID とメールがあり、
-// メールが確認済みで、メールの形が規則(ValidateEmail)を満たすときだけ nil を返す。メールを、外部の
+// メールが確認済みで、メールの形が規則(EmailIssues)を満たすときだけ nil を返す。メールを、外部の
 // サービスが確かめていないと、他人のメールを名乗って、その人のアカウントに入れるため、確認済みでない
 // ものは受け付けない。満たさないときは(wrap された)ErrExternalIdentityRejected を返す。
 func (e ExternalIdentity) Validate() error {
@@ -65,7 +65,7 @@ func (e ExternalIdentity) Validate() error {
 	if !e.EmailVerified {
 		return errors.Join(ErrExternalIdentityRejected, errors.New("email is not verified"))
 	}
-	if msgs := ValidateEmail(e.Email); len(msgs) > 0 {
+	if len(EmailIssues(e.Email)) > 0 {
 		return errors.Join(ErrExternalIdentityRejected, errors.New("email is invalid"))
 	}
 	return nil

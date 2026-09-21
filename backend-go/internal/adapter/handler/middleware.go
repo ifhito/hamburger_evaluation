@@ -44,7 +44,7 @@ func limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		limit := bodyLimit(r)
 		if r.ContentLength > limit {
-			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			writeError(w, r, http.StatusRequestEntityTooLarge, msgBodyTooLarge)
 			return
 		}
 		if r.Body != nil {
@@ -89,13 +89,13 @@ func RequireAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token, ok := bearerToken(r)
 			if !ok {
-				writeError(w, http.StatusUnauthorized, "Unauthorized")
+				writeError(w, r, http.StatusUnauthorized, msgUnauthorized)
 				return
 			}
 			viewer, err := auth.AuthenticateToken(r.Context(), token)
 			if err != nil {
 				if errors.Is(err, domain.ErrUnauthenticated) {
-					writeError(w, http.StatusUnauthorized, "Unauthorized")
+					writeError(w, r, http.StatusUnauthorized, msgUnauthorized)
 					return
 				}
 				// それ以外は infrastructure の障害（例：usecase が
@@ -106,7 +106,7 @@ func RequireAuth(auth *usecase.Auth) func(http.Handler) http.Handler {
 				// するのは decode/not-found だけなので、Rails でも
 				// infra の障害は 500 になる）。
 				log.Printf("auth: authenticate token: %v", err)
-				writeError(w, http.StatusInternalServerError, "internal server error")
+				writeInternalError(w)
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), viewerKey, viewer)))

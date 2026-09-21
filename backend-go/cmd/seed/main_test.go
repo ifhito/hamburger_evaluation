@@ -10,7 +10,7 @@ import (
 // 満たすことを固定する。規則が変わったとき、開発用 fixture だけが現行の規則で
 // 作れない値のまま残るのを防ぐ。
 func TestDevPasswordSatisfiesPolicy(t *testing.T) {
-	if msgs := domain.ValidatePassword(devPassword); len(msgs) != 0 {
-		t.Fatalf("devPassword violates the password policy: %q", msgs)
+	if issues := domain.PasswordIssues(devPassword); len(issues) != 0 {
+		t.Fatalf("devPassword violates the password policy: %q", domain.Texts(domain.LangEN, issues))
 	}
 }

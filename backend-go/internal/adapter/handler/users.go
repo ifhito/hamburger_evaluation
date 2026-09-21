@@ -9,11 +9,11 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// userNotFoundMessage は、存在しない user、discard 済みの user、および
+// msgUserNotFound は、存在しない user、discard 済みの user、および
 // UUID の正規形でない user の id に共通の 404 body（GET/PUT/DELETE /users/{id}）であり、
 // soft delete 済みの account が一度も存在しなかったものと区別できないように
 // する。
-const userNotFoundMessage = "User not found"
+var msgUserNotFound = apiMsg(keyUserNotFound)
 
 // userResponse は、PUT /users/{id} の、token を含まない user の JSON 形式である：
 // frontend の契約（「user の形 + admin フラグ」のレスポンスの形）に従った {id, username, email, admin} に、自己紹介文（bio）を加えた {id, username, bio, email, admin} であり、
@@ -75,7 +75,7 @@ type updateUserRequest struct {
 func userIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := r.PathValue("id")
 	if !domain.IsUUID(id) {
-		writeError(w, http.StatusNotFound, userNotFoundMessage)
+		writeError(w, r, http.StatusNotFound, msgUserNotFound)
 		return "", false
 	}
 	return id, true
@@ -87,18 +87,18 @@ func userIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
 // 404 になる。これは「先に対象を読み込み、そのあとで権限を確かめる」順序であり、
 // 退役した Rails の controller が path の id を無視して current_user に対して
 // 動作していたのとは意図的に異なる）、validation は 422、それ以外は 500 である。
-func writeUserError(w http.ResponseWriter, op string, err error) {
+func writeUserError(w http.ResponseWriter, r *http.Request, op string, err error) {
 	var vErr *domain.ValidationError
 	switch {
 	case errors.Is(err, domain.ErrForbidden):
-		writeError(w, http.StatusForbidden, forbiddenMessage)
+		writeError(w, r, http.StatusForbidden, msgForbidden)
 	case errors.Is(err, domain.ErrUserNotFound):
-		writeError(w, http.StatusNotFound, userNotFoundMessage)
+		writeError(w, r, http.StatusNotFound, msgUserNotFound)
 	case errors.As(err, &vErr):
-		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+		writeValidation(w, r, vErr)
 	default:
 		log.Printf("users: %s: %v", op, err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 	}
 }
 
@@ -114,7 +114,7 @@ func handleGetUser(users *usecase.Users) http.HandlerFunc {
 		}
 		profile, err := users.Get(r.Context(), viewerPtr(r), id)
 		if err != nil {
-			writeUserError(w, "get", err)
+			writeUserError(w, r, "get", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newUserProfileResponse(profile))
@@ -146,7 +146,7 @@ func handleUpdateUser(users *usecase.Users) http.HandlerFunc {
 			PasswordConfirmation: req.User.PasswordConfirmation,
 		})
 		if err != nil {
-			writeUserError(w, "update", err)
+			writeUserError(w, r, "update", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newUserResponse(updated))
@@ -166,7 +166,7 @@ func handleDeleteUser(users *usecase.Users) http.HandlerFunc {
 			return
 		}
 		if err := users.Delete(r.Context(), viewer, id); err != nil {
-			writeUserError(w, "delete", err)
+			writeUserError(w, r, "delete", err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

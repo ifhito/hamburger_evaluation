@@ -62,9 +62,9 @@ func newAuthUserResponse(user domain.User, token string) authUserResponse {
 // 未登録の email でも、同じ値を返す（応答から登録の有無を判別できないようにするため）。
 const signupAcceptedMessage = "Confirmation email sent"
 
-// signupTokenInvalidMessage は、確認トークンが期限切れ・存在しない・改ざん・使用済みの
+// msgSignupTokenInvalid は、確認トークンが期限切れ・存在しない・改ざん・使用済みの
 // いずれかのときの 400 のメッセージである（どれなのかは区別できない）。
-const signupTokenInvalidMessage = "Confirmation token is invalid or has expired"
+var msgSignupTokenInvalid = apiMsg(keySignupTokenInvalid)
 
 type signupConfirmRequest struct {
 	Token string `json:"token"`
@@ -89,12 +89,12 @@ func handleSignup(signups *usecase.Signups) http.HandlerFunc {
 		if err != nil {
 			var vErr *domain.ValidationError
 			if errors.As(err, &vErr) {
-				writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+				writeValidation(w, r, vErr)
 				return
 			}
 			// wrap された usecase のエラーには password は含まれない。
 			log.Printf("signup: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			writeInternalError(w)
 			return
 		}
 		writeJSON(w, http.StatusAccepted, messageResponse{Message: signupAcceptedMessage})
@@ -113,12 +113,12 @@ func handleSignupConfirm(signups *usecase.Signups) http.HandlerFunc {
 		user, token, err := signups.Confirm(r.Context(), req.Token)
 		if err != nil {
 			if errors.Is(err, domain.ErrSignupTokenInvalid) {
-				writeError(w, http.StatusBadRequest, signupTokenInvalidMessage)
+				writeError(w, r, http.StatusBadRequest, msgSignupTokenInvalid)
 				return
 			}
 			// ログにはトークンの値を含めない（wrap された usecase のエラーにも含まれない）。
 			log.Printf("signup confirm: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			writeInternalError(w)
 			return
 		}
 		writeJSON(w, http.StatusCreated, newAuthUserResponse(user, token))
@@ -138,15 +138,15 @@ func handleLogin(auth *usecase.Auth) http.HandlerFunc {
 		if err != nil {
 			var vErr *domain.ValidationError
 			if errors.As(err, &vErr) {
-				writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+				writeValidation(w, r, vErr)
 				return
 			}
 			if errors.Is(err, domain.ErrInvalidCredentials) {
-				writeError(w, http.StatusUnauthorized, "Invalid email or password")
+				writeError(w, r, http.StatusUnauthorized, msgInvalidCredentials)
 				return
 			}
 			log.Printf("login: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			writeInternalError(w)
 			return
 		}
 		writeJSON(w, http.StatusOK, newAuthUserResponse(user, token))

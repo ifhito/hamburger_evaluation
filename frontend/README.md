@@ -53,6 +53,7 @@ src/
 ├── states/
 │   └── authAtom.ts       # Jotai atoms: authUserAtom, authTokenAtom
 └── components/           # 共有 UI: Button, Input, Textarea, RatingSelect, Layout
+    └── ui/               # リデザインの部品: Button, Badge, Card, Alert, TextField, RatingBurger, RatingInput, states(既存の画面はまだ使わない)
 ```
 
 ## Run Locally

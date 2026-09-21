@@ -31,7 +31,7 @@ func handleHealth(db Pinger) http.HandlerFunc {
 		defer cancel()
 		if err := db.Ping(ctx); err != nil {
 			log.Printf("health: db ping failed: %v", err)
-			writeError(w, http.StatusServiceUnavailable, "database unavailable")
+			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "database unavailable"})
 			return
 		}
 		writeJSON(w, http.StatusOK, healthResponse{Status: "ok"})

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -8,6 +9,11 @@ export default defineConfig(({ mode }) => {
   const proxyTarget = env.VITE_API_PROXY_TARGET ?? 'http://host.docker.internal:8080'
   return {
     plugins: [react()],
+    test: {
+      // 既定では、テストの中で CSS を ?raw で読むと空の文字列になる。デザインのトークン(CSS)との一致を確かめるテストのために、
+      // ?raw で読む CSS だけは、中身をそのまま返す(CSS モジュールの処理には影響しない)。
+      css: { include: /\.css\?raw$/ },
+    },
     server: {
       host: '0.0.0.0',
       port: 5173,

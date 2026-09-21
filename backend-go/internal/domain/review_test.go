@@ -46,8 +46,8 @@ func TestValidateReviewContent(t *testing.T) {
 			if !errors.As(err, &vErr) {
 				t.Fatalf("error = %v, want *domain.ValidationError", err)
 			}
-			if !reflect.DeepEqual(vErr.Messages, tt.want) {
-				t.Errorf("messages = %v, want %v", vErr.Messages, tt.want)
+			if !reflect.DeepEqual(vErr.Texts(domain.LangEN), tt.want) {
+				t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), tt.want)
 			}
 		})
 	}
@@ -71,8 +71,8 @@ func TestRatingRange(t *testing.T) {
 			t.Fatalf("rating %d(範囲の外)は検証エラーのはず: %v", r, err)
 		}
 		want := fmt.Sprintf("Rating must be in %d..%d", domain.MinRating, domain.MaxRating)
-		if len(vErr.Messages) != 1 || vErr.Messages[0] != want {
-			t.Errorf("messages = %v, want [%s]", vErr.Messages, want)
+		if len(vErr.Texts(domain.LangEN)) != 1 || vErr.Texts(domain.LangEN)[0] != want {
+			t.Errorf("messages = %v, want [%s]", vErr.Texts(domain.LangEN), want)
 		}
 	}
 }
