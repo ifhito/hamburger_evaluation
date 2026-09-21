@@ -48,3 +48,18 @@ func (r *OAuthGrantQuery) GetOAuthGrantByUserAndClient(ctx context.Context, user
 	}
 	return toOAuthGrant(row), nil
 }
+
+// ListOAuthGrantsByUser は、利用者が許可したアプリを、最近使ったものから順に、limit 件まで返す(offset 件を飛ばす)。
+// 2 つ目の戻り値は、続き(次のページ)があるかである。続きを知るために、1 件多く取り出して、切り詰める。
+func (r *OAuthGrantQuery) ListOAuthGrantsByUser(ctx context.Context, userID string, limit, offset int32) ([]domain.OAuthGrant, bool, error) {
+	rows, err := r.q.ListOAuthGrantsByUser(ctx, sqlcgen.ListOAuthGrantsByUserParams{UserID: userID, PageLimit: limit + 1, PageOffset: offset})
+	if err != nil {
+		return nil, false, fmt.Errorf("list oauth grants: %w", err)
+	}
+	rows, hasMore := trimPage(rows, limit)
+	grants := make([]domain.OAuthGrant, 0, len(rows))
+	for _, row := range rows {
+		grants = append(grants, toOAuthGrant(row))
+	}
+	return grants, hasMore, nil
+}

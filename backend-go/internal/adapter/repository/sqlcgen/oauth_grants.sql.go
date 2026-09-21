@@ -64,6 +64,50 @@ func (q *Queries) GetOAuthGrantByUserAndClient(ctx context.Context, arg GetOAuth
 	return i, err
 }
 
+const listOAuthGrantsByUser = `-- name: ListOAuthGrantsByUser :many
+SELECT id, user_id, client_id, client_name, scopes, created_at, updated_at
+FROM oauth_grants
+WHERE user_id = $1
+ORDER BY updated_at DESC, id
+LIMIT $3 OFFSET $2
+`
+
+type ListOAuthGrantsByUserParams struct {
+	UserID     string
+	PageOffset int32
+	PageLimit  int32
+}
+
+// 利用者が許可したアプリを、最近使ったものから順に、ページ送りで返す(同時刻は id で決める)。
+// 呼び出し側は、続きがあるかを知るために、1 ページの件数より 1 件多く取り出す。
+func (q *Queries) ListOAuthGrantsByUser(ctx context.Context, arg ListOAuthGrantsByUserParams) ([]OauthGrant, error) {
+	rows, err := q.db.Query(ctx, listOAuthGrantsByUser, arg.UserID, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OauthGrant
+	for rows.Next() {
+		var i OauthGrant
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ClientID,
+			&i.ClientName,
+			&i.Scopes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertOAuthGrant = `-- name: UpsertOAuthGrant :one
 INSERT INTO oauth_grants (user_id, client_id, client_name, scopes)
 VALUES ($1, $2, $3, $4::text[])

@@ -4,8 +4,8 @@ import "fmt"
 
 const (
 	// MinPasswordBytes はパスワードの最小バイト数である。
-	// 規則の判定はこの domain だけが持つ。frontend の入力欄の説明文（locale の passwordHint）に
-	// 数値が書かれているので、変えるときは説明文も直す。
+	// 規則の判定はこの domain だけが持つ。frontend の入力欄の説明文は、GET /meta が返すこの値から
+	// 作るので、変えても、説明文を直す必要はない。
 	MinPasswordBytes = 8
 	// MaxPasswordBytes はパスワードの最大バイト数である。bcrypt の入力上限（72 バイト）に合わせる。
 	MaxPasswordBytes = 72

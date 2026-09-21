@@ -92,7 +92,7 @@ func newMCPE2E(t *testing.T) *mcpE2E {
 		t.Fatalf("new mcp server: %v", err)
 	}
 	auth := usecase.NewAuth(userQuery, hasher, codec, codec)
-	srv.Config.Handler = handler.NewRouter(pool, auth, unusedSignups(), shops, reviews, users, nil, e.oauth, mcpServer)
+	srv.Config.Handler = handler.NewRouter(pool, auth, unusedSignups(), shops, reviews, users, nil, &handler.OAuth{Endpoints: e.oauth}, mcpServer)
 	srv.Start()
 	t.Cleanup(srv.Close)
 

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { useLoginForm } from "../hooks/useAuthForm";
 import { ApiError } from "../../../api/client/buildApiClient";
+import { returnPathFrom } from "../../../app/router/returnTo";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -14,6 +15,7 @@ export default function SigninPage() {
   const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { register, handleSubmit } = useLoginForm();
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +25,8 @@ export default function SigninPage() {
     setServerError(null);
     try {
       await login(data);
-      void navigate("/reviews");
+      // ログインが必要な画面から送られてきたときは、その画面へ戻す。
+      void navigate(returnPathFrom(location.state) ?? "/reviews", { replace: true });
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("auth.signin.error")]);
     } finally {

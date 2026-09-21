@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { useSignupForm } from "../hooks/useAuthForm";
 import { ApiError } from "../../../api/client/buildApiClient";
+import { useMeta } from "../../../api/meta";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -12,7 +13,8 @@ import styles from "./auth.module.css";
 export default function SignupPage() {
   const { t } = useTranslation();
   const { signup } = useAuth();
-  const { register, handleSubmit } = useSignupForm();
+  const { register, handleSubmit, watch } = useSignupForm();
+  const meta = useMeta().data;
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   // 確認メールの送信を申し込んだあとは、送り先を表示する(登録済みでも同じ画面。応答が同じなので区別できない)。
@@ -53,6 +55,7 @@ export default function SignupPage() {
           id="username"
           label={t("auth.signup.username")}
           autoComplete="username"
+          counter={{ value: watch("username"), max: meta?.text.usernameMaxChars }}
           {...register("username")}
         />
         <Input
@@ -67,7 +70,7 @@ export default function SignupPage() {
           label={t("auth.signup.password")}
           type="password"
           autoComplete="new-password"
-          hint={t("auth.passwordHint")}
+          hint={meta && t("auth.passwordHint", { min: meta.password.minBytes, max: meta.password.maxBytes })}
           {...register("password")}
         />
         <Input

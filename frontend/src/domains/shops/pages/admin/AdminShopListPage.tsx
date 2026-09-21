@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAdminShops, useShopModeration } from "../../hooks/useShopMutations";
 import type { ShopStatus } from "../../api/types";
 import { ApiError } from "../../../../api/client/buildApiClient";
+import { useMeta } from "../../../../api/meta";
 import { Button } from "../../../../components/Button";
 import { ErrorMessage } from "../../../../components/ErrorMessage";
 import { Input } from "../../../../components/Input";
@@ -23,6 +24,7 @@ export default function AdminShopListPage() {
   const [filter, setFilter] = useState<ShopStatus | "all">("all");
   const { data: shops, isLoading } = useAdminShops(filter === "all" ? undefined : filter);
   const { approve, reject } = useShopModeration();
+  const textLimits = useMeta().data?.text;
 
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -129,6 +131,7 @@ export default function AdminShopListPage() {
                     type="text"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
+                    counter={{ value: note, max: textLimits?.moderationNoteMaxChars }}
                     placeholder={t("shops.admin.notePlaceholder")}
                   />
                   <Button

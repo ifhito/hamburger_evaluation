@@ -6,6 +6,7 @@ import { useCreateReview } from "../hooks/useReviewMutations";
 import { useCreateReviewForm } from "../hooks/useReviewForm";
 import { useShopDetail } from "../../shops/hooks/useShops";
 import { ApiError } from "../../../api/client/buildApiClient";
+import { useMeta } from "../../../api/meta";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -28,6 +29,7 @@ export default function ReviewNewPage() {
 
   const { create } = useCreateReview();
   const ratingRange = useRatingRange();
+  const textLimits = useMeta().data?.text;
   const { register, handleSubmit, setValue, watch } = useCreateReviewForm({ shopId });
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
@@ -68,6 +70,7 @@ export default function ReviewNewPage() {
           id="comment"
           label={t("reviews.new.comment")}
           placeholder={t("reviews.new.commentPlaceholder")}
+          counter={{ value: watch("comment"), max: textLimits?.reviewCommentMaxChars }}
           {...register("comment")}
         />
         <Input
@@ -75,6 +78,7 @@ export default function ReviewNewPage() {
           label={t("reviews.new.burgerName")}
           type="text"
           placeholder={t("reviews.new.burgerNamePlaceholder")}
+          counter={{ value: watch("burgerName"), max: textLimits?.burgerNameMaxChars }}
           {...register("burgerName")}
         />
         <div className={styles.field}>

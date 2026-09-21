@@ -197,12 +197,12 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 ### OAuth の認可サーバー
 
-AI アプリ(MCP のクライアントなど)が、利用者のログインと許可だけでこのアプリにつなぐための、OAuth 2.1 の認可サーバー(`internal/adapter/oauthserver`。認可ライブラリは `github.com/ory/fosite`)。`OAUTH_ISSUER` を設定したときだけ有効で、設定しなければ、下の窓口は登録されない(404)。リモートの MCP(`/mcp`。下の「リモートの MCP サーバー」)は、ここが発行したトークンで認証する。
+AI アプリ(MCP のクライアントなど)が、利用者のログインと許可だけでこのアプリにつなぐための、OAuth 2.1 の認可サーバー(`internal/adapter/oauthserver`。認可ライブラリは `github.com/ory/fosite`)。`OAUTH_ISSUER` を設定したときだけ有効で、設定しなければ、下の窓口は登録されない(404)。リモートの MCP(`/mcp`。下の「リモートの MCP サーバー」)は、ここが発行したトークンで認証する。許可を尋ねる画面と、許可したアプリの一覧・取り消しは、frontend にある。
 
 **流れ**(認可コード + PKCE)
 
 1. アプリが、利用者のブラウザで `GET /oauth/authorize?...`(`client_id`・`redirect_uri`・`scope`・`state`・`code_challenge`(S256)・`resource`)を開く。API は要求を検証し、問題がなければ、許可を尋ねる画面(frontend。`OAUTH_CONSENT_URL`)へ、同じ値のまま 303 で渡す。アプリへ結果を戻せない不正(未登録のアプリ・登録と違う戻り先)は、リダイレクトせずにエラーで返し、戻せる不正(PKCE がない・知らない範囲・宛先の誤り)は、`error` を付けてアプリへ戻す。
-2. 利用者がログイン済みの画面で許可すると、API が認可コードを発行し、アプリへ戻す(戻り先に `code`・`state`・`iss`(発行者。RFC 9207)を付ける)。
+2. 許可を尋ねる画面(frontend の `/oauth/authorize`)は、利用者のログイン(JWT)を確かめ(未ログインならログイン画面へ送り、ログイン後に戻す)、`GET /oauth/authorize/request?<同じ値>` で、アプリの名前・求められた範囲と説明・尋ねる必要があるか(`consent_required`)を受け取る。すでに許可済みの範囲に収まれば、尋ねずにそのまま許可を送る。利用者が選ぶと、`POST /oauth/authorize/decision`(`{"query":"<認可の URL の ? のあと>","approve":true|false}`)を送る。API は要求を検証し直し、許可なら許可の記録を残して認可コードを発行し、`redirect_to`(アプリへの戻り先。`code`・`state`・`iss`(発行者。RFC 9207)付き。拒否なら `error=access_denied` 付き)を返す。画面はそこへブラウザを移す。cookie のセッションは使わず、画面の API は、いつものログインの JWT(Bearer)で守る(OAuth のアクセストークンは受け付けない)。
 3. アプリが `POST /oauth/token` で、認可コードと PKCE の `code_verifier` を、アクセストークン(と更新トークン)に交換する。切れたら、更新トークンで取り直す。
 4. 保護する側(`/mcp` など)は、`usecase.OAuthAccessTokens.Authenticate` で、`Authorization: Bearer` のトークンを確かめる(宛先・範囲・持ち主のユーザーの有効性)。
 
@@ -212,6 +212,8 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - `GET /oauth/authorize` — 認可の入口(上記 1)。
 - `POST /oauth/token` — トークンの発行(認可コードの交換・更新)。
 - `POST /oauth/revoke` — 取り消し(RFC 7009)。更新トークンを取り消すと、その認可から発行されたトークンがすべて使えなくなる。
+- `GET /oauth/authorize/request`・`POST /oauth/authorize/decision` — 許可の画面が使う API(要ログイン。上記 2)。要求がアプリへ結果を戻せない形で不正なときは 422 `{"error":"…"}`。
+- `GET /oauth/grants`・`DELETE /oauth/grants/{id}` — 利用者本人が許可したアプリの一覧(`id`・`client_id`・`client_name`・範囲と説明・`created_at`・`updated_at`。最近使ったものから順)と、取り消し(204)。**一覧は、既存の一覧(`GET /shops`・`GET /reviews`)と同じ契約でページ送りする**: `page` / `per_page`(整数でなければ 422、範囲外は補正。1 ページの件数は backend が決める。既定 20 件・上限 100 件で、規則は共有の `clampPage`)、続きがあるかはレスポンスヘッダー `X-Has-More`(`true` / `false`)で返す。取り消すと、そのアプリのトークンはすぐ使えなくなる。別の利用者の許可・存在しない許可・正規の形でない id は、区別できない同一の 404。プロフィール画面の「接続済みのアプリ」が使う。
 
 **ルール**(判断は `internal/domain/oauth*.go` だけが持つ)
 
@@ -223,7 +225,7 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - 持ち主が退会(論理削除)した利用者には、認可コードの交換でも更新でも、新しいトークンを発行しない(`invalid_grant`)。退会(`DELETE /users/:id`)は、同じトランザクションで、その利用者のすべての許可(と、発行済みのトークンの記録)を取り消す。アクセストークンの検証(`usecase.OAuthAccessTokens.Authenticate`)の判定の順は「宛先 → 持ち主が有効か → 範囲」で、退会済みの持ち主のトークンは、範囲に関係なく、常に無効(401 相当)になる。
 - 宛先(`resource`): トークンは、`OAUTH_RESOURCE_URL` の宛先だけに発行する(指定がなければその宛先、違えば `invalid_target`)。保護する側は、宛先が自分のトークンだけを受け付ける。
 - 戻り先: https、またはループバックの http だけを登録できる。照合は完全一致で、`127.0.0.1` と `[::1]` だけポート番号の違いを許す(`localhost` はポートまで完全一致)。独自スキーム(`myapp://`)は登録できない。
-- PKCE: `S256` だけ必須(`domain.ValidateOAuthPKCE`)。`state` も必須(ライブラリの既定)。
+- PKCE: `S256` だけ必須(`domain.ValidateOAuthPKCE`)。`state` も必須(ライブラリの既定)。確認用の文字列(`code_verifier`)が違う交換を 1 回でも行うと、その認可コードは、正しい値でも使えなくなる(推測を繰り返させない。ライブラリの挙動)。
 - アプリの登録: 秘密の鍵を持たない公開クライアントだけ。**固定で登録**(`OAUTH_STATIC_CLIENTS`)するか、アプリが自分の説明を https の URL で公開する方式(CIMD。`client_id` がその URL)。CIMD の文書は、サーバーが取りに行くので、内部のサーバーへ向けさせる攻撃(SSRF)への対策を必ず守る: https だけ・標準のポートだけ・ホスト名だけ(IP アドレスの直接指定は不可)・接続の直前に、名前解決の結果が公開のアドレスかを確認(ループバック・プライベート・リンクローカルを断る)・リダイレクトを追わない・プロキシを使わない・待ち時間 5 秒・本文 64 KiB まで・種類は `application/json` だけ(`HTTPMetadataFetcher`)。文書の `client_id` が URL と違えば断り、許す使い方・範囲・宛先は、文書に何を書いても広がらない。取得した内容は 5 分覚える。
 
 **環境変数**(有効にしたのに足りない・不正なときは起動時に落ちる。値はログ・エラーに出さない)
@@ -261,7 +263,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - **つなぎ方**(ローカル。Claude Code の例):
   1. API を、OAuth を有効にして起動する(`export OAUTH_ISSUER=http://localhost:8080 OAUTH_TOKEN_SECRET=$(openssl rand -hex 32)`)。Claude Code を固定のアプリとして登録する(`OAUTH_STATIC_CLIENTS='[{"id":"claude-code","name":"Claude Code","redirect_uris":["http://localhost:8788/callback"]}]'`)。
   2. `claude mcp add --transport http hamburger http://localhost:8080/mcp --client-id claude-code --callback-port 8788`
-  3. Claude Code の `/mcp` から認可する。ブラウザで、ログインして、許可を選ぶ(許可の画面は、別の PR の予定。それまでは、トークンを直接渡す確認しかできない)。
+  3. Claude Code の `/mcp` から認可する。ブラウザで、ログインして、許可を選ぶ(許可の画面は frontend の `/oauth/authorize`)。
 - **本番の公開**: 公開の HTTPS の URL・ドメインは未決(この story の外)。`OAUTH_ISSUER` / `OAUTH_RESOURCE_URL` を、その公開の URL に合わせる。
 
 ### エンドポイント
@@ -274,6 +276,8 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `GET /oauth/authorize` — 認可の入口。検証して、許可を尋ねる画面へ 303 で渡す
 - `POST /oauth/token` — 認可コード(PKCE つき)・更新トークンを、トークンに交換する
 - `POST /oauth/revoke` — トークンの取り消し(RFC 7009)
+- `GET /oauth/authorize/request` / `POST /oauth/authorize/decision` — 許可の画面が使う API(要認証)
+- `GET /oauth/grants` / `DELETE /oauth/grants/:id` — 許可したアプリの一覧と取り消し(要認証)
 
 **リモートの MCP サーバー**(`OAUTH_ISSUER` を設定したときだけ。詳細は「リモートの MCP サーバー」)
 - `POST /mcp` — MCP(Streamable HTTP。`Authorization: Bearer <アクセストークン>` が必須。範囲はツールごと)
@@ -284,7 +288,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `POST /signup/confirm` — 確認メールのリンクの平文トークン(`{"token":"…"}`)でアカウントを作成する。成功すると従来の signup と同じ 201 `{id, username, email, admin, can_moderate, token}`(`can_moderate` は login・`GET /me` と共通)を返し、そのままログイン状態にできる。期限切れ・存在しない・改ざん・使用済みのトークン(と、確認までの間に同じ email のユーザーが作られていた場合)は、区別できない同一の 400 `{"error":"Confirmation token is invalid or has expired"}`
 - `POST /login` — 認証して JWT トークンを受け取る (email とパスワードは signup と同じ規則を `domain.ValidateCredentials` で判定し、満たさなければ照合の前に 422。規則を満たしたうえで誤っていれば 401 `Invalid email or password`)
 - `GET /me` — Bearer トークンから解決した現在のユーザー(`id`・`username`・`email`・`admin`・`can_moderate`)。無効・期限切れのトークンは 401。frontend は、トークンの有効性を自分で判断せず、起動時にこの応答でログイン状態を復元する。`can_moderate`(moderation ができるか。domain の `User.CanModerate`)は、`POST /login`・`POST /signup` の応答にも含まれ、frontend は `admin` から権限を導かず、管理画面の出し分けをこの値で行う (要認証)
-- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、写真の上限は `photo.MaxEdge` と handler の `maxPhotoBytes`)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小にこの値を使う
+- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}, "text": {"review_comment_max_chars": 2000, "burger_name_max_chars": 100, "shop_name_max_chars": 100, "username_max_chars": 50, "bio_max_chars": 500, "moderation_note_max_chars": 500}, "password": {"min_bytes": 8, "max_bytes": 72}}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、文字数の上限は domain の `Max*Chars`、パスワードの長さは `MinPasswordBytes` / `MaxPasswordBytes`、写真の上限は `photo.MaxEdge` と handler の `maxPhotoBytes`)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小・文字数のカウンター・パスワードの説明文にこの値を使う。文字数はコードポイント数(日本語・絵文字も 1 文字)、パスワードはバイト数(日本語は 1 文字が 3 バイト)。domain に `Max*` / `Min*` の公開の定数を足したときは、`GET /meta` に足すか、出さない理由を `handler/meta_limits_test.go` の一覧に書く(書かないとテストが失敗する)。frontend の文字数のカウンター(`CharCounter`)は表示だけで、上限を超えても入力も送信も止めない(判定は backend の 422)
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**
@@ -378,7 +382,7 @@ shops   *──────* burgers  (shops_burgers 経由)
 ```text
 frontend/src/
 ├── app/          # router、provider、アプリシェル
-├── domains/      # auth、reviews、shops、users
+├── domains/      # auth、oauth、reviews、shops、users
 ├── api/          # API クライアント / HTTP 境界
 ├── states/       # グローバル state
 ├── lib/          # 共通ユーティリティ (date、i18n、rating、photoResize)
@@ -395,6 +399,13 @@ frontend/src/
 - 写真を選ぶ input の `accept` は、**JPEG・PNG・WebP だけ**にする。HEIC / HEIF を加えない: iPhone の Safari は、`accept` が JPEG・PNG・WebP だけのとき、写真を JPEG に変換して渡す(加えると、HEIC のまま渡り、backend は HEIC / HEIF を受け付けない)。
 - 送る前に、`useCreateReview` / `useUpdateReview` が `shrinkPhoto` を通す。長辺が上限(`GET /meta` の `photo.maxEdge`)を超える、またはファイルが `photo.maxBytes` を超えるときだけ、canvas で縮小した JPEG にする(向きは `createImageBitmap` の `imageOrientation: "from-image"` で画素に反映する)。**上限の値は frontend に書かない**(backend の値を使う)。
 - 縮小できないとき(ブラウザが画像を読み込めないなど)は、失敗にせず、元のファイルをそのまま送る。backend が受け付けるか、理由つきのメッセージ(422 の 4 種類。HEIC / HEIF は、対応しない理由つき)を返し、それを画面にそのまま出す。
+
+### 許可を尋ねる画面と、接続済みのアプリ(`domains/oauth`)
+
+- `/oauth/authorize`(要ログイン): AI アプリが、ログインと許可だけでつなぐための画面。backend の `GET /oauth/authorize` から、同じクエリのまま 303 で渡される。未ログインなら、`ProtectedRoute` がログイン画面へ送り、ログイン後に、この画面へ(クエリごと)戻す。戻り先は、ルーターの遷移の state(`from`)に入れる。URL のパラメーターには入れない(外部のリンクから任意の戻り先を指定されるのを防ぐ。`returnPathFrom` は、このアプリの中のパスだけを返す)。
+- **画面の状態は、それを作った認可の要求(URL の query。`search`)に結び付ける**(`consentFlow.ts`)。同じ画面のまま query だけが変わったとき(履歴を戻る・進む)に、前のアプリの内容が残ったまま、新しいアプリへの許可を送ってしまうのを防ぐため: いまの URL のために作られた状態だけを見せ(それ以外は「確認中」で、ボタンも出ない)、許可・拒否として送るのは、いま画面に内容を見せている要求だけにする。URL が変わったら、前の取得は取り消し(`AbortController`)、遅れて返った応答は画面に届かない。
+- 画面は、`GET /oauth/authorize/request` の結果(アプリの名前・範囲と説明・`consentRequired`)を表示し、選択を `POST /oauth/authorize/decision` に送って、返ってきた `redirectTo`(アプリへの戻り先)へブラウザを移す。`consentRequired` が false(すでに許可済みの範囲に収まる)なら、尋ねずに許可を送る。**要求の検証・範囲の説明・尋ねる必要があるかの判断は、すべて backend が行い、frontend は表示と送信だけ**を行う(範囲の名前や説明を frontend に持たない)。アプリへの戻り先は、http(s) のときだけ開く(`isNavigable`。ページの中でコードが動くのを防ぐ確認)。
+- プロフィール(本人のときだけ。`canEdit`)に「Connected apps」を出す(`ConnectedApps`)。`GET /oauth/grants` の一覧(ページ送り。`X-Has-More` があるときに「Load more」で続きを取る。既存の一覧と同じ `useInfinitePages`。キャッシュのキーには利用者の id を含める)と、`DELETE /oauth/grants/{id}` の取り消し(確認のあと。読み込み済みの全ページを取り直す)。OAuth の認可サーバーが無効な環境(API が 404)では、何も出さない。
 
 ### Frontend コマンド
 

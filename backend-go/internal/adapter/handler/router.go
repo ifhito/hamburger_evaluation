@@ -40,15 +40,15 @@ type OAuthEndpoints interface {
 // （Go 1.22 の ServeMux は最も限定的なパターンを優先するので、登録順に関わらず
 // catch-all の "/" より優先される）、s3 モードでは nil で、写真の URL は
 // 代わりに bucket の公開ドメインを指す。oauth は nil でない場合（OAuth の認可サーバーが有効な
-// とき）、認可サーバーの情報・認可・トークン・取り消しの窓口を登録する。nil なら、これらは未登録で、
-// 404 になる。mcp は nil でない場合（リモートの MCP サーバーが有効なとき）、POST /mcp と保護された
-// リソースの情報の窓口を登録する。nil なら未登録で、404 になる。
-func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler, oauth OAuthEndpoints, mcp MCPEndpoints) http.Handler {
+// とき）、認可サーバーの情報・認可・トークン・取り消しの窓口と、許可の画面・許可したアプリの一覧が使う
+// API を登録する。nil なら、これらは未登録で、404 になる。mcp は nil でない場合（リモートの MCP サーバーが
+// 有効なとき）、POST /mcp と保護されたリソースの情報の窓口を登録する。nil なら未登録で、404 になる。
+func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler, oauth *OAuth, mcp MCPEndpoints) http.Handler {
 	mux := http.NewServeMux()
 	if photoFiles != nil {
 		mux.Handle("GET /photos/", http.StripPrefix("/photos/", photoFiles))
 	}
-	registerRoutes(mux, append(append(oauthRoutes(oauth), mcpRoutes(mcp)...), []route{
+	registerRoutes(mux, append(append(oauthRoutes(oauth, auth), mcpRoutes(mcp)...), []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(signups)}},
 		{path: "/signup/confirm", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignupConfirm(signups)}},
@@ -123,16 +123,21 @@ func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *u
 
 // oauthRoutes は、OAuth の認可サーバーの route を返す。oauth が nil なら、何も返さない。
 // 認可の URL は、利用者のブラウザが開く(ログインの確認は、frontend の許可の画面で行う)ので、認証の
-// middleware は付けない。トークンと取り消しは、アプリが直接呼ぶ。
-func oauthRoutes(oauth OAuthEndpoints) []route {
+// middleware は付けない。トークンと取り消しは、アプリが直接呼ぶ。許可の画面の API と許可したアプリの
+// 一覧は、利用者本人の JWT で守る(RequireAuth)。
+func oauthRoutes(oauth *OAuth, auth *usecase.Auth) []route {
 	if oauth == nil {
 		return nil
 	}
 	return []route{
-		{path: "/.well-known/oauth-authorization-server", methods: map[string]http.HandlerFunc{http.MethodGet: oauth.HandleMetadata}},
-		{path: "/oauth/authorize", methods: map[string]http.HandlerFunc{http.MethodGet: oauth.HandleAuthorize}},
-		{path: "/oauth/token", methods: map[string]http.HandlerFunc{http.MethodPost: oauth.HandleToken}},
-		{path: "/oauth/revoke", methods: map[string]http.HandlerFunc{http.MethodPost: oauth.HandleRevoke}},
+		{path: "/.well-known/oauth-authorization-server", methods: map[string]http.HandlerFunc{http.MethodGet: oauth.Endpoints.HandleMetadata}},
+		{path: "/oauth/authorize", methods: map[string]http.HandlerFunc{http.MethodGet: oauth.Endpoints.HandleAuthorize}},
+		{path: "/oauth/token", methods: map[string]http.HandlerFunc{http.MethodPost: oauth.Endpoints.HandleToken}},
+		{path: "/oauth/revoke", methods: map[string]http.HandlerFunc{http.MethodPost: oauth.Endpoints.HandleRevoke}},
+		{path: "/oauth/authorize/request", methods: map[string]http.HandlerFunc{http.MethodGet: handleOAuthAuthorizeRequest(oauth.Consents)}, middleware: RequireAuth(auth)},
+		{path: "/oauth/authorize/decision", methods: map[string]http.HandlerFunc{http.MethodPost: handleOAuthDecision(oauth.Consents)}, middleware: RequireAuth(auth)},
+		{path: "/oauth/grants", methods: map[string]http.HandlerFunc{http.MethodGet: handleListOAuthGrants(oauth.Apps)}, middleware: RequireAuth(auth)},
+		{path: "/oauth/grants/{id}", methods: map[string]http.HandlerFunc{http.MethodDelete: handleRevokeOAuthGrant(oauth.Apps)}, middleware: RequireAuth(auth)},
 	}
 }
 
