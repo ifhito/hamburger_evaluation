@@ -5,6 +5,12 @@ import (
 	"unicode"
 )
 
+// MaxEmailChars はメールアドレスの文字数の上限（Unicode のコードポイント数）である。
+// DB の CHECK 制約 users_email_max_length（マイグレーション 000009）と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。変えるときは、この定数と、新しい
+// マイグレーションの CHECK の両方を直す。
+const MaxEmailChars = 254
+
 // ValidateEmail は email の形式を検証し、違反の Rails 形式 full message を返す。
 // 有効なら nil を返す。メッセージは API の外部契約なので英語のままである。
 //

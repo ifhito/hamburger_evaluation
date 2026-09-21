@@ -1,5 +1,5 @@
 -- S21: テキスト入力の文字数の上限(コードポイント数。char_length と同じ数え方)を DB でも守る。
--- 上限の値は internal/domain/limits.go の定数と同じでなければならない
+-- 上限の値は、internal/domain の各ルールの定数(review.go・shop.go・username.go・email.go)と同じでなければならない
 -- (食い違いは db/migrations_test.go が検出する)。
 --
 -- 既存の行が上限を超えているときは、自動で切り詰めず、該当の行を報告して止める。

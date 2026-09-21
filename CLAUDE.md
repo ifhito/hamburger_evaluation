@@ -164,7 +164,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 ### 入力の上限
 
-テキスト入力には文字数の上限がある。超えると 422 で、`{"errors": ["Comment is too long (maximum is 2000 characters)"]}` のように、他の違反と一緒に列挙される(検証は永続化の前で、失敗したら何も書かれない。JSON と multipart の両方の経路で同じ)。判定は domain だけが持ち(`internal/domain/limits.go` の定数 1 か所)、frontend は判定を持たず、サーバーのメッセージを表示する。
+テキスト入力には文字数の上限がある。超えると 422 で、`{"errors": ["Comment is too long (maximum is 2000 characters)"]}` のように、他の違反と一緒に列挙される(検証は永続化の前で、失敗したら何も書かれない。JSON と multipart の両方の経路で同じ)。判定は domain だけが持ち(上限の定数は、ルールを持つ側の `internal/domain/` のファイルに、検証の関数と並べて置く: `review.go` のコメント・バーガー名、`shop.go` のショップ名・却下メモ、`username.go`、`email.go`)、frontend は判定を持たず、サーバーのメッセージを表示する。
 
 | 項目 | 上限(文字) |
 |---|---|
