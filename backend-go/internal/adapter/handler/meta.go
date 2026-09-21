@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
 
 // metaCacheControl は GET /meta のキャッシュの指定である。値はコードの定数で、デプロイで
@@ -60,7 +59,7 @@ func handleMeta(w http.ResponseWriter, r *http.Request) {
 func newMetaResponse() metaResponse {
 	return metaResponse{
 		Rating: ratingRangeResponse{Min: domain.MinRating, Max: domain.MaxRating},
-		Photo:  photoLimitsResponse{MaxEdge: photo.MaxEdge, MaxBytes: maxPhotoBytes},
+		Photo:  photoLimitsResponse{MaxEdge: domain.MaxPhotoEdge, MaxBytes: domain.MaxPhotoBytes},
 		Text: textLimitsResponse{
 			ReviewCommentMaxChars:  domain.MaxCommentChars,
 			BurgerNameMaxChars:     domain.MaxBurgerNameChars,

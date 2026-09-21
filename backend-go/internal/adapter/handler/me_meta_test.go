@@ -9,7 +9,6 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
 
 // TestMe は GET /me を扱う：有効なトークンは現在のユーザー(can_moderate つき)を 200 で返し、
@@ -72,7 +71,7 @@ func TestMeta(t *testing.T) {
 	}
 	itoa := strconv.Itoa
 	want := `{"rating":{"min":` + itoa(domain.MinRating) + `,"max":` + itoa(domain.MaxRating) + `},` +
-		`"photo":{"max_edge":` + itoa(photo.MaxEdge) + `,"max_bytes":5242880},` +
+		`"photo":{"max_edge":` + itoa(domain.MaxPhotoEdge) + `,"max_bytes":5242880},` +
 		`"text":{"review_comment_max_chars":` + itoa(domain.MaxCommentChars) +
 		`,"burger_name_max_chars":` + itoa(domain.MaxBurgerNameChars) +
 		`,"shop_name_max_chars":` + itoa(domain.MaxShopNameChars) +
