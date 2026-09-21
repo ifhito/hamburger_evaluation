@@ -23,7 +23,7 @@ func newSMTPTestMailer(t *testing.T, srv *smtptest.Server, security, user, pass 
 	port, _ := strconv.Atoi(portStr)
 	m, err := NewSMTPMailer(Config{
 		SMTPHost: host, SMTPPort: port, SMTPUser: user, SMTPPassword: pass,
-		SMTPSecurity: security, MailFrom: "Hamburger <noreply@example.com>",
+		SMTPSecurity: security, MailFrom: "BurgerStack <noreply@example.com>",
 	})
 	if err != nil {
 		t.Fatalf("NewSMTPMailer: %v", err)
@@ -74,7 +74,7 @@ func TestSMTPMailerModes(t *testing.T) {
 				t.Errorf("tls=%v authed=%v, want tls=%v authed=%v", got.TLS, got.Authed, tt.wantTLS, tt.wantAuthed)
 			}
 			for _, want := range []string{
-				"From: Hamburger <noreply@example.com>\r\n",
+				"From: BurgerStack <noreply@example.com>\r\n",
 				"To: a@example.com\r\n",
 				"Subject: Confirm your email address\r\n",
 				"Content-Type: text/plain; charset=UTF-8\r\n",

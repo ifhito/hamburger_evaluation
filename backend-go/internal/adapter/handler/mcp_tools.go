@@ -61,7 +61,7 @@ func boolPtr(b bool) *bool { return &b }
 // 出す。許可されていない範囲のツールを呼ぶと、要求の入口が 403 で、足りない範囲を伝える(クライアントは、
 // それを見て、範囲を広げる許可を求め直せる)。
 func (m *MCPServer) newToolServer(viewer domain.User, scopes []string) *mcp.Server {
-	s := mcp.NewServer(&mcp.Implementation{Name: "hamburger-evaluation", Version: "1.0.0"}, &mcp.ServerOptions{Instructions: mcpInstructions})
+	s := mcp.NewServer(&mcp.Implementation{Name: "burgerstack", Version: "1.0.0"}, &mcp.ServerOptions{Instructions: mcpInstructions})
 	t := &mcpTools{viewer: viewer, scopes: scopes, shops: m.shops, reviews: m.reviews, users: m.users}
 
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: boolPtr(false)}

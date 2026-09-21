@@ -246,7 +246,7 @@ func TestAsyncMailerRecordsDeliveries(t *testing.T) {
 			}
 		}
 		// 出した文面は、種類に合った件名になる。
-		if d.delivered[0].Subject != "Confirm your email address" || d.delivered[1].Subject != "You already have an account" {
+		if d.delivered[0].Subject != "Confirm your email address for BurgerStack" || d.delivered[1].Subject != "You already have a BurgerStack account" {
 			t.Errorf("件名 = %q / %q", d.delivered[0].Subject, d.delivered[1].Subject)
 		}
 	})

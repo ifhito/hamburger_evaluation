@@ -2,7 +2,7 @@
 name: backend-go-boundaries
 description: hamburger_evaluation の backend-go/ 配下の Go API(ハンドラ、ユースケース、ドメイン、リポジトリ、sqlc クエリ、Go テスト)を変更するときに使う。
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

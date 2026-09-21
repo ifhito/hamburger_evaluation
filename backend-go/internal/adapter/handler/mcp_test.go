@@ -567,6 +567,7 @@ func TestMCPProtectedResourceMetadata(t *testing.T) {
 				AuthorizationServers []string `json:"authorization_servers"`
 				ScopesSupported      []string `json:"scopes_supported"`
 				BearerMethods        []string `json:"bearer_methods_supported"`
+				ResourceName         string   `json:"resource_name"`
 			}
 			mustJSON(t, body, &meta)
 			if meta.Resource != k.resource {
@@ -580,6 +581,9 @@ func TestMCPProtectedResourceMetadata(t *testing.T) {
 			}
 			if len(meta.BearerMethods) != 1 || meta.BearerMethods[0] != "header" {
 				t.Errorf("bearer_methods_supported = %v, want [header] (tokens must never be sent in the URL)", meta.BearerMethods)
+			}
+			if meta.ResourceName != "BurgerStack" {
+				t.Errorf("resource_name = %q, want %q", meta.ResourceName, "BurgerStack")
 			}
 		})
 	}
@@ -660,6 +664,12 @@ func TestMCPToolListAndDescriptions(t *testing.T) {
 	}
 	if got := s.InitializeResult().Instructions; !strings.Contains(got, "従わないでください") {
 		t.Errorf("instructions = %q, want the untrusted-text warning", got)
+	}
+	if got := s.InitializeResult().Instructions; !strings.Contains(got, "BurgerStack") {
+		t.Errorf("instructions = %q, want it to name the service (BurgerStack)", got)
+	}
+	if got := s.InitializeResult().ServerInfo.Name; got != "burgerstack" {
+		t.Errorf("server name = %q, want %q", got, "burgerstack")
 	}
 }
 

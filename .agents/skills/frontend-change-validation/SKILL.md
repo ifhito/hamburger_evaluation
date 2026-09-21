@@ -3,7 +3,7 @@ name: frontend-change-validation
 description: フロントエンドの React の挙動が変わったときに使う。型、lint、テストを検証する。
 allowed-tools: [Read, Grep, Glob, Bash(pnpm run:*)]
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:
