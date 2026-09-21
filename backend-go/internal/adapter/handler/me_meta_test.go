@@ -60,16 +60,25 @@ func TestMe(t *testing.T) {
 	}
 }
 
-// TestMeta は GET /meta を扱う：認証なしで、domain の rating の範囲と、写真の上限(長辺・バイト数)を返し、
-// キャッシュしてよいことを示す(frontend はこれらの値を複製しない)。
+// TestMeta は GET /meta を扱う：認証なしで、domain の rating の範囲・文字数の上限・パスワードの長さと、
+// 写真の上限(長辺・バイト数)を返し、キャッシュしてよいことを示す(frontend はこれらの値を複製しない)。
+// 値は domain の定数を参照して比べるので、定数を変えると、応答も一緒に変わることの確認にもなる。
 func TestMeta(t *testing.T) {
 	_, auth, _ := newAuthKit()
 	rec := do(newTestRouterWith(t, okPinger, auth), http.MethodGet, "/meta", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body)
 	}
-	want := `{"rating":{"min":` + strconv.Itoa(domain.MinRating) + `,"max":` + strconv.Itoa(domain.MaxRating) + `},` +
-		`"photo":{"max_edge":` + strconv.Itoa(domain.PhotoMaxEdge) + `,"max_bytes":5242880}}`
+	itoa := strconv.Itoa
+	want := `{"rating":{"min":` + itoa(domain.MinRating) + `,"max":` + itoa(domain.MaxRating) + `},` +
+		`"photo":{"max_edge":` + itoa(domain.MaxPhotoEdge) + `,"max_bytes":5242880},` +
+		`"text":{"review_comment_max_chars":` + itoa(domain.MaxCommentChars) +
+		`,"burger_name_max_chars":` + itoa(domain.MaxBurgerNameChars) +
+		`,"shop_name_max_chars":` + itoa(domain.MaxShopNameChars) +
+		`,"username_max_chars":` + itoa(domain.MaxUsernameChars) +
+		`,"bio_max_chars":` + itoa(domain.MaxBioChars) +
+		`,"moderation_note_max_chars":` + itoa(domain.MaxModerationNoteChars) + `},` +
+		`"password":{"min_bytes":` + itoa(domain.MinPasswordBytes) + `,"max_bytes":` + itoa(domain.MaxPasswordBytes) + `}}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

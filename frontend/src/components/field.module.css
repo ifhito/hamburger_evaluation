@@ -42,3 +42,29 @@
   font-size: 0.75rem;
   color: var(--color-text-muted);
 }
+
+.counterRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.counter {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.counterOver {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-error);
+}
+
+/* 画面には出さず、読み上げにだけ伝える */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

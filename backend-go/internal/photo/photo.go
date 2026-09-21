@@ -42,7 +42,7 @@ var ErrHEIFNotSupported = fmt.Errorf("%w: HEIC/HEIF is not supported", ErrUnsupp
 const (
 	// maxEdge は出力の最長辺である。これより大きい画像は縮小され、小さい
 	// 画像は決して拡大されない。値(業務の規則)は domain が持つ。
-	maxEdge = domain.PhotoMaxEdge
+	maxEdge = domain.MaxPhotoEdge
 	// maxDimension と maxPixels は、画像ヘッダで宣言されたサイズの上限で
 	// あり、完全な decode の前にチェックされる（decompression bomb のガード）。
 	// 値(業務の規則)は domain が持つ。

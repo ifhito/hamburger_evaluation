@@ -11,8 +11,8 @@ func TestPhotoRuleConstants(t *testing.T) {
 	if domain.MaxPhotoBytes != 5*1024*1024 {
 		t.Errorf("MaxPhotoBytes = %d, want 5 MiB (5242880)", domain.MaxPhotoBytes)
 	}
-	if domain.PhotoMaxEdge != 1600 {
-		t.Errorf("PhotoMaxEdge = %d, want 1600", domain.PhotoMaxEdge)
+	if domain.MaxPhotoEdge != 1600 {
+		t.Errorf("MaxPhotoEdge = %d, want 1600", domain.MaxPhotoEdge)
 	}
 	if domain.MaxPhotoDimension != 10000 {
 		t.Errorf("MaxPhotoDimension = %d, want 10000", domain.MaxPhotoDimension)

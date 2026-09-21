@@ -8,9 +8,9 @@ package domain
 const (
 	// MaxPhotoBytes は、アップロードできる写真のファイルの大きさの上限(バイト。5 MiB)である。
 	MaxPhotoBytes int64 = 5 << 20
-	// PhotoMaxEdge は、保存する写真の長辺の上限(ピクセル)である。これより大きい写真は、縮小して保存する
+	// MaxPhotoEdge は、保存する写真の長辺の上限(ピクセル)である。これより大きい写真は、縮小して保存する
 	// (小さい写真は拡大しない)。frontend は、この値(GET /meta)を目安に、送る前に縮小する。
-	PhotoMaxEdge = 1600
+	MaxPhotoEdge = 1600
 	// MaxPhotoDimension は、写真の横・縦の上限(ピクセル)である。画像のヘッダーが宣言する大きさで判定する。
 	MaxPhotoDimension = 10000
 	// MaxPhotoPixels は、写真の画素数(横 × 縦)の上限である。実際のカメラの出力(24 メガピクセル)まで受け付ける。
