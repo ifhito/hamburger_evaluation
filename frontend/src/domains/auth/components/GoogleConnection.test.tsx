@@ -12,7 +12,9 @@ import { GoogleConnection } from "./GoogleConnection";
 vi.mock("../api/authApiClient", () => ({
   authApi: { listIdentities: vi.fn(), unlinkGoogle: vi.fn(), startGoogleLink: vi.fn() },
 }));
-vi.mock("../../../api/meta", () => ({ useMeta: () => ({ data: { loginProviders: ["google"] } }) }));
+// GET /meta の内容は、テストごとに差し替える(既定は、Google が有効)。
+const meta = vi.hoisted(() => ({ loginProviders: ["google"] as string[] }));
+vi.mock("../../../api/meta", () => ({ useMeta: () => ({ data: meta }) }));
 
 const listIdentities = vi.mocked(authApi.listIdentities);
 const unlinkGoogle = vi.mocked(authApi.unlinkGoogle);
@@ -35,6 +37,7 @@ const show = () =>
 beforeEach(() => {
   vi.resetAllMocks();
   vi.spyOn(window, "confirm").mockReturnValue(true);
+  meta.loginProviders = ["google"];
 });
 afterEach(cleanup);
 
@@ -261,5 +264,61 @@ describe("GoogleConnection(プロフィールの Google の連携。一覧の取
 
     expect(page.textContent).toContain("Loading");
     expect(page.textContent).toContain("Connected as carol@gmail.example");
+  });
+
+  it("取得に失敗し続けても、自動の再取得で、「失敗と Retry」が「読み込み中」に切り替わらない(再取得は、Retry を押したときだけ)", async () => {
+    listIdentities.mockRejectedValue(new ApiError(["boom"], 500));
+    // SWR の既定(失敗すると、間隔をあけて自動で再取得する)のまま。間隔だけを短くする。
+    const page = await mount(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, errorRetryInterval: 15 }}>
+        <GoogleConnection viewerId="7" navigateTo={navigateTo} />
+      </SWRConfig>,
+    );
+    await eventually(() => expect(byText(page, "button", "Retry")).toBeDefined());
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    expect(listIdentities).toHaveBeenCalledTimes(1);
+    expect(byText(page, "button", "Retry")).toBeDefined();
+    expect(page.textContent).not.toContain("Loading");
+  });
+
+  it("GET /meta が Google を返さない(または、この項目がない)ときは、何も出さず、一覧も取得しない", async () => {
+    for (const providers of [[], ["other"], undefined]) {
+      meta.loginProviders = providers as unknown as string[];
+      listIdentities.mockResolvedValue(connected);
+      const page = await show();
+
+      expect(page.textContent).toBe("");
+      expect(listIdentities).not.toHaveBeenCalled();
+      await cleanup();
+    }
+  });
+
+  it("解除が 404 のとき、取り直した一覧に、まだ Google の連携があれば(解除済みではない)、解除できたとは言わず、失敗を出す", async () => {
+    listIdentities.mockResolvedValue(connected); // 取り直しても、連携が残っている
+    unlinkGoogle.mockRejectedValue(new ApiError(["not found"], 404));
+    const page = await show();
+    await eventually(() => expect(page.textContent).toContain("Connected as carol@gmail.example"));
+
+    await click(need(byText(page, "button", "Disconnect"), "Disconnect"));
+
+    await eventually(() => expect(page.textContent).toContain("Failed to disconnect Google."));
+    expect(page.textContent).not.toContain("Google disconnected.");
+    expect(page.textContent).toContain("Connected as carol@gmail.example");
+  });
+
+  it("解除が 404 のとき、一覧を取り直せなかったときも、解除できたとは言わず、失敗を出す(Google の機能が止まっているときの 404 を、解除済みと取り違えない)", async () => {
+    listIdentities.mockResolvedValueOnce(connected).mockRejectedValue(new ApiError(["not found"], 404));
+    unlinkGoogle.mockRejectedValue(new ApiError(["not found"], 404));
+    const page = await show();
+    await eventually(() => expect(page.textContent).toContain("Connected as carol@gmail.example"));
+
+    await click(need(byText(page, "button", "Disconnect"), "Disconnect"));
+
+    await eventually(() => expect(page.textContent).toContain("Failed to disconnect Google."));
+    expect(page.textContent).not.toContain("Google disconnected.");
   });
 });

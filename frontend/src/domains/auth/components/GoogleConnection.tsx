@@ -134,12 +134,21 @@ export function GoogleConnection({
     try {
       await authApi.unlinkGoogle();
     } catch (e) {
-      // 別のタブなどで、すでに解除済み(404)なら、解除できたものとして扱う(同じ結果になっている)。
       if (!(e instanceof ApiError && e.status === 404)) {
         setActionError(e instanceof ApiError ? e.messages : [t("auth.google.profile.disconnectError")]);
         setBusy(null);
         return;
       }
+      // 404: 別のタブなどで、すでに解除済みかもしれない。ただし、Google の機能が止まっているときの 404 も、同じ形になる。
+      // 取り直した一覧で確かめ、Google の連携が(取り直せなかったときも)残っていれば、解除できたとは言わない。
+      const fresh = await refresh();
+      if (!fresh || fresh.identities.some((i) => i.provider === GOOGLE_PROVIDER)) {
+        setActionError([t("auth.google.profile.disconnectError")]);
+      } else {
+        setDisconnected(true);
+      }
+      setBusy(null);
+      return;
     }
     // 解除は済んだ。このあとの再取得の成否は、解除の成否とは別(失敗しても、解除できたことは変わらない)。
     await removeProvider(GOOGLE_PROVIDER);
