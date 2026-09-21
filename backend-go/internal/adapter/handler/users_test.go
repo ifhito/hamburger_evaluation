@@ -93,9 +93,14 @@ func newUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(int64) str
 // ユーザーの JSON のキー集合（ソート済み、カンマ区切り）。email と admin は
 // 値が null や空であっても「キーが存在する」時点で不合格にしたいので、値ではなく
 // キー集合で検証する。
+//
+// publicUserKeys は、他のエンドポイントに埋め込まれる user の参照（{id, username}）の
+// キー集合である。publicProfileKeys と selfUserKeys は GET /users/{id} のプロフィールで、
+// viewer ごとの can_edit（編集・削除できるか）が常に付く。
 const (
-	publicUserKeys = "id,username"
-	selfUserKeys   = "admin,email,id,username"
+	publicUserKeys    = "id,username"
+	publicProfileKeys = "can_edit,id,username"
+	selfUserKeys      = "admin,can_edit,email,id,username"
 )
 
 // userKeySet は JSON オブジェクトのキーをソートしてカンマで連結する。
@@ -159,8 +164,11 @@ func TestGetUser(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 		obj := decodeUserObject(t, rec.Body.Bytes())
-		if got := userKeySet(obj); got != publicUserKeys {
-			t.Errorf("keys = [%s], want [%s]", got, publicUserKeys)
+		if got := userKeySet(obj); got != publicProfileKeys {
+			t.Errorf("keys = [%s], want [%s]", got, publicProfileKeys)
+		}
+		if obj["can_edit"] != false {
+			t.Errorf("can_edit = %v, want false（匿名は編集できない）", obj["can_edit"])
 		}
 		if userObjectID(t, obj) != 1 || obj["username"] != "alice" {
 			t.Errorf("body = %s, want id 1 alice", rec.Body)
@@ -194,6 +202,9 @@ func TestGetUser(t *testing.T) {
 				if obj["email"] != tt.wantEmail || obj["admin"] != tt.wantAdmin {
 					t.Errorf("body = %s, want email %q admin %v", rec.Body, tt.wantEmail, tt.wantAdmin)
 				}
+				if obj["can_edit"] != true {
+					t.Errorf("can_edit = %v, want true（本人は編集できる）", obj["can_edit"])
+				}
 			})
 		}
 	})
@@ -218,11 +229,14 @@ func TestGetUser(t *testing.T) {
 					t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 				}
 				obj := decodeUserObject(t, rec.Body.Bytes())
-				if got := userKeySet(obj); got != publicUserKeys {
-					t.Errorf("keys = [%s], want [%s]", got, publicUserKeys)
+				if got := userKeySet(obj); got != publicProfileKeys {
+					t.Errorf("keys = [%s], want [%s]", got, publicProfileKeys)
 				}
 				if userObjectID(t, obj) != tt.targetID {
 					t.Errorf("id = %v, want %d", obj["id"], tt.targetID)
+				}
+				if obj["can_edit"] != false {
+					t.Errorf("can_edit = %v, want false（他人は admin でも編集できない）", obj["can_edit"])
 				}
 				if body := rec.Body.String(); strings.Contains(body, tt.leakEmail) || strings.Contains(body, "@") {
 					t.Errorf("body = %s, want no email", body)
@@ -250,8 +264,8 @@ func TestGetUser(t *testing.T) {
 				if rec.Code != http.StatusOK {
 					t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 				}
-				if got := userKeySet(decodeUserObject(t, rec.Body.Bytes())); got != publicUserKeys {
-					t.Errorf("keys = [%s], want [%s]", got, publicUserKeys)
+				if got := userKeySet(decodeUserObject(t, rec.Body.Bytes())); got != publicProfileKeys {
+					t.Errorf("keys = [%s], want [%s]", got, publicProfileKeys)
 				}
 			})
 		}
@@ -379,7 +393,7 @@ func TestUpdateUser(t *testing.T) {
 			t.Errorf("body = %s, want %s", got, want)
 		}
 		got := do(router, http.MethodGet, "/users/1", "", "")
-		if got.Code != http.StatusOK || got.Body.String() != `{"id":1,"username":"alice2"}` {
+		if got.Code != http.StatusOK || got.Body.String() != `{"id":1,"username":"alice2","can_edit":false}` {
 			t.Errorf("GET /users/1 = %d %s, want 200 with the new username reflected", got.Code, got.Body)
 		}
 	})
@@ -746,8 +760,8 @@ func TestUsersProfileViewsIntegration(t *testing.T) {
 		}
 		obj := decodeUserObject(t, rec.Body.Bytes())
 		if wantEmail == "" {
-			if got := userKeySet(obj); got != publicUserKeys {
-				t.Errorf("user %d: keys = [%s], want [%s]", id, got, publicUserKeys)
+			if got := userKeySet(obj); got != publicProfileKeys {
+				t.Errorf("user %d: keys = [%s], want [%s]", id, got, publicProfileKeys)
 			}
 			if strings.Contains(rec.Body.String(), "@") {
 				t.Errorf("user %d: body leaks an email address: %s", id, rec.Body)
@@ -882,7 +896,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Errorf("GET /users/%d = %d %s, want 404 User not found", aliceID, rec.Code, rec.Body)
 	}
 	rec = do(router, http.MethodGet, fmt.Sprintf("/users/%d", bobID), "", "")
-	if want := fmt.Sprintf(`{"id":%d,"username":"bob"}`, bobID); rec.Code != http.StatusOK || rec.Body.String() != want {
+	if want := fmt.Sprintf(`{"id":%d,"username":"bob","can_edit":false}`, bobID); rec.Code != http.StatusOK || rec.Body.String() != want {
 		t.Errorf("GET /users/%d = %d %s, want 200 %s", bobID, rec.Code, rec.Body, want)
 	}
 

@@ -24,7 +24,9 @@ type ReviewQuery interface {
 	// いる、discard されていない review（author が discard 済みの user である
 	// review も除く）を返す。filter で絞り込み、author、burger、stats を
 	// 結合し（N+1 なし）、新しい順（created_at desc、id desc）に並べる。
-	ListReviews(ctx context.Context, filter ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error)
+	// 2 つ目の戻り値は、offset+limit 件より後ろにも一致する review があるか（has_more）で、
+	// 実装は limit+1 件を取得して判定する。
+	ListReviews(ctx context.Context, filter ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error)
 	// GetReview は、author、burger、stats つきの、discard されていない
 	// review を 1 件返すか、（wrap された）domain.ErrReviewNotFound を返す。
 	// 存在しない review、discard 済みの review、author が discard 済みの
@@ -87,28 +89,33 @@ func NewReviews(query ReviewQuery, reviews *domain.Reviews, photos PhotoStorage)
 }
 
 // List は、filter で絞り込んだ公開 review フィードを返す。ページネーションは
-// clampPage に従い、Shops.List と同じフォールバック規則で行う。
-func (s *Reviews) List(ctx context.Context, filter ReviewListFilter, page, perPage int) ([]domain.ReviewDetail, error) {
+// clampPage に従い、Shops.List と同じフォールバック規則で行う。viewer（nil = 匿名）は
+// 絞り込みには関与せず、各 review の CanEdit の設定だけに使う。2 つ目の戻り値は、
+// 次のページがあるか（has_more）である。
+func (s *Reviews) List(ctx context.Context, viewer *domain.User, filter ReviewListFilter, page, perPage int) ([]domain.ReviewDetail, bool, error) {
 	limit, offset := clampPage(page, perPage)
-	reviews, err := s.query.ListReviews(ctx, filter, limit, offset)
+	reviews, hasMore, err := s.query.ListReviews(ctx, filter, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("list reviews: %w", err)
+		return nil, false, fmt.Errorf("list reviews: %w", err)
 	}
 	for i := range reviews {
 		reviews[i].PhotoURL = s.photoURL(reviews[i].PhotoKey)
+		reviews[i].CanEdit = reviews[i].CanBeModifiedByViewer(viewer)
 	}
-	return reviews, nil
+	return reviews, hasMore, nil
 }
 
 // Get は author、burger、stats つきの review を 1 件返す。存在しない review、
 // discard 済みの review、author が discard 済みの user である review は、
-// いずれも domain.ErrReviewNotFound を返す。
-func (s *Reviews) Get(ctx context.Context, id int64) (domain.ReviewDetail, error) {
+// いずれも domain.ErrReviewNotFound を返す。viewer（nil = 匿名）は CanEdit の
+// 設定だけに使う。
+func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id int64) (domain.ReviewDetail, error) {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("get review: %w", err)
 	}
 	detail.PhotoURL = s.photoURL(detail.PhotoKey)
+	detail.CanEdit = detail.CanBeModifiedByViewer(viewer)
 	return detail, nil
 }
 
@@ -161,12 +168,14 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 		s.deletePhotoBestEffort(ctx, review.PhotoKey)
 		return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
 	}
-	return domain.ReviewDetail{
+	detail := domain.ReviewDetail{
 		Review:   created,
 		User:     &domain.UserRef{ID: viewer.ID, Username: viewer.Username},
 		Burger:   &burger,
 		PhotoURL: s.photoURL(created.PhotoKey),
-	}, nil
+	}
+	detail.CanEdit = detail.CanBeModifiedByViewer(&viewer)
+	return detail, nil
 }
 
 // Update は review の rating と comment を編集する。load（存在しない review、
@@ -211,6 +220,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 	}
 	detail.Review = updated
 	detail.PhotoURL = s.photoURL(updated.PhotoKey)
+	detail.CanEdit = detail.CanBeModifiedByViewer(&viewer)
 	return detail, nil
 }
 

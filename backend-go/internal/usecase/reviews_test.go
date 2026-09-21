@@ -19,13 +19,13 @@ import (
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeReviewQuery struct {
-	listReviews   func(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error)
+	listReviews   func(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error)
 	getReview     func(ctx context.Context, id int64) (domain.ReviewDetail, error)
 	getShop       func(ctx context.Context, id int64) (domain.Shop, error)
 	getShopBurger func(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error)
 }
 
-func (f *fakeReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
+func (f *fakeReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error) {
 	if f.listReviews == nil {
 		panic("unexpected ListReviews call")
 	}
@@ -120,12 +120,12 @@ func TestReviewsListPagination(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotLimit, gotOffset int32
 			query := &fakeReviewQuery{
-				listReviews: func(_ context.Context, _ usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
+				listReviews: func(_ context.Context, _ usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error) {
 					gotLimit, gotOffset = limit, offset
-					return []domain.ReviewDetail{}, nil
+					return []domain.ReviewDetail{}, false, nil
 				},
 			}
-			if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).List(context.Background(), usecase.ReviewListFilter{}, tt.page, tt.perPage); err != nil {
+			if _, _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).List(context.Background(), nil, usecase.ReviewListFilter{}, tt.page, tt.perPage); err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}
 			if gotLimit != tt.wantLimit || gotOffset != tt.wantOffset {
@@ -145,12 +145,12 @@ func TestReviewsListFilterPassThrough(t *testing.T) {
 	want := usecase.ReviewListFilter{Rating: &rating, Keyword: "tasty", ShopID: &shopID, UserID: &userID}
 	var got usecase.ReviewListFilter
 	query := &fakeReviewQuery{
-		listReviews: func(_ context.Context, filter usecase.ReviewListFilter, _, _ int32) ([]domain.ReviewDetail, error) {
+		listReviews: func(_ context.Context, filter usecase.ReviewListFilter, _, _ int32) ([]domain.ReviewDetail, bool, error) {
 			got = filter
-			return []domain.ReviewDetail{}, nil
+			return []domain.ReviewDetail{}, false, nil
 		},
 	}
-	if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).List(context.Background(), want, 1, 20); err != nil {
+	if _, _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).List(context.Background(), nil, want, 1, 20); err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -161,11 +161,11 @@ func TestReviewsListFilterPassThrough(t *testing.T) {
 // TestReviewsListFailure：query の失敗は wrap されて伝播する。
 func TestReviewsListFailure(t *testing.T) {
 	query := &fakeReviewQuery{
-		listReviews: func(_ context.Context, _ usecase.ReviewListFilter, _, _ int32) ([]domain.ReviewDetail, error) {
-			return nil, io.ErrUnexpectedEOF
+		listReviews: func(_ context.Context, _ usecase.ReviewListFilter, _, _ int32) ([]domain.ReviewDetail, bool, error) {
+			return nil, false, io.ErrUnexpectedEOF
 		},
 	}
-	if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).List(context.Background(), usecase.ReviewListFilter{}, 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) {
+	if _, _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).List(context.Background(), nil, usecase.ReviewListFilter{}, 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("List error = %v, want %v", err, io.ErrUnexpectedEOF)
 	}
 }
@@ -189,7 +189,7 @@ func TestReviewsGet(t *testing.T) {
 	}
 	reviews := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{})
 
-	got, err := reviews.Get(context.Background(), detail.ID)
+	got, err := reviews.Get(context.Background(), nil, detail.ID)
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestReviewsGet(t *testing.T) {
 		t.Errorf("Get = %+v, want %+v", got, detail)
 	}
 
-	if _, err := reviews.Get(context.Background(), 999); !errors.Is(err, domain.ErrReviewNotFound) {
+	if _, err := reviews.Get(context.Background(), nil, 999); !errors.Is(err, domain.ErrReviewNotFound) {
 		t.Fatalf("Get error = %v, want %v", err, domain.ErrReviewNotFound)
 	}
 }
@@ -779,5 +779,78 @@ func TestReviewsDeletePhoto(t *testing.T) {
 	}
 	if !reflect.DeepEqual(photos.deletes, []string{key}) {
 		t.Errorf("deletes = %v, want %q", photos.deletes, key)
+	}
+}
+
+// TestReviewsGetCanEdit は、詳細の CanEdit が domain の所有権ルール（author だけ。
+// admin にも例外なし。匿名は false）どおりに設定されることを固定する。
+func TestReviewsGetCanEdit(t *testing.T) {
+	author := domain.User{ID: 1, Username: "alice"}
+	other := domain.User{ID: 2, Username: "bob"}
+	admin := domain.User{ID: 3, Username: "root", Admin: true}
+	detail := domain.ReviewDetail{Review: domain.Review{ID: 9, Rating: 4, AuthorID: author.ID, BurgerID: 5}}
+	query := &fakeReviewQuery{
+		getReview: func(context.Context, int64) (domain.ReviewDetail, error) { return detail, nil },
+	}
+	reviews := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{})
+
+	tests := []struct {
+		name   string
+		viewer *domain.User
+		want   bool
+	}{
+		{name: "匿名は false", viewer: nil, want: false},
+		{name: "author は true", viewer: &author, want: true},
+		{name: "他のユーザーは false", viewer: &other, want: false},
+		{name: "admin でも他人の review は false", viewer: &admin, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := reviews.Get(context.Background(), tt.viewer, detail.ID)
+			if err != nil {
+				t.Fatalf("Get returned error: %v", err)
+			}
+			if got.CanEdit != tt.want {
+				t.Errorf("CanEdit = %v, want %v", got.CanEdit, tt.want)
+			}
+		})
+	}
+}
+
+// TestReviewsListCanEditAndHasMore は、一覧の各 review の CanEdit が viewer ごとに
+// 設定されること（author の review だけ true）と、次のページの有無（has_more）が
+// query の判定のまま返ることを固定する。
+func TestReviewsListCanEditAndHasMore(t *testing.T) {
+	author := domain.User{ID: 1, Username: "alice"}
+	feed := []domain.ReviewDetail{
+		{Review: domain.Review{ID: 3, AuthorID: 2}},
+		{Review: domain.Review{ID: 2, AuthorID: author.ID}},
+	}
+	for _, hasMore := range []bool{true, false} {
+		query := &fakeReviewQuery{
+			listReviews: func(context.Context, usecase.ReviewListFilter, int32, int32) ([]domain.ReviewDetail, bool, error) {
+				return append([]domain.ReviewDetail(nil), feed...), hasMore, nil
+			},
+		}
+		reviews := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{})
+
+		got, gotHasMore, err := reviews.List(context.Background(), &author, usecase.ReviewListFilter{}, 1, 20)
+		if err != nil {
+			t.Fatalf("List returned error: %v", err)
+		}
+		if gotHasMore != hasMore {
+			t.Errorf("hasMore = %v, want %v", gotHasMore, hasMore)
+		}
+		if len(got) != 2 || got[0].CanEdit || !got[1].CanEdit {
+			t.Errorf("CanEdit = [%v %v], want [false true]", got[0].CanEdit, got[1].CanEdit)
+		}
+
+		anon, _, err := reviews.List(context.Background(), nil, usecase.ReviewListFilter{}, 1, 20)
+		if err != nil {
+			t.Fatalf("List (anonymous) returned error: %v", err)
+		}
+		if anon[0].CanEdit || anon[1].CanEdit {
+			t.Errorf("anonymous CanEdit = [%v %v], want [false false]", anon[0].CanEdit, anon[1].CanEdit)
+		}
 	}
 }

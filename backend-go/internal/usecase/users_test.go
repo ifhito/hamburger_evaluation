@@ -39,9 +39,9 @@ func publicProfile(u domain.User) domain.UserProfile {
 	return domain.UserProfile{ID: u.ID, Username: u.Username}
 }
 
-// selfProfile は、u の本人ビュー（email と admin を含む）を返す。
+// selfProfile は、u の本人ビュー（email と admin を含み、編集できる: CanEdit）を返す。
 func selfProfile(u domain.User) domain.UserProfile {
-	return domain.UserProfile{ID: u.ID, Username: u.Username, Email: strPtr(u.Email), Admin: boolPtr(u.Admin)}
+	return domain.UserProfile{ID: u.ID, Username: u.Username, Email: strPtr(u.Email), Admin: boolPtr(u.Admin), CanEdit: true}
 }
 
 // TestUsersGet は、詳細が viewer ごとのビューで返ることと、存在しない

@@ -100,3 +100,31 @@ func TestReviewCanBeModifiedBy(t *testing.T) {
 		})
 	}
 }
+
+// TestReviewCanBeModifiedByViewer は、API の can_edit の元になる値を固定する。
+// 匿名（nil）は常に false で、それ以外は CanBeModifiedBy の規則（author だけ。admin にも
+// 例外なし）に従う。
+func TestReviewCanBeModifiedByViewer(t *testing.T) {
+	review := domain.Review{ID: 1, AuthorID: 7}
+	author := domain.User{ID: 7}
+	other := domain.User{ID: 8}
+	admin := domain.User{ID: 9, Admin: true}
+
+	tests := []struct {
+		name   string
+		viewer *domain.User
+		want   bool
+	}{
+		{name: "匿名は変更できない", viewer: nil, want: false},
+		{name: "author は変更できる", viewer: &author, want: true},
+		{name: "他のユーザーは変更できない", viewer: &other, want: false},
+		{name: "admin でも他人の review は変更できない", viewer: &admin, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := review.CanBeModifiedByViewer(tt.viewer); got != tt.want {
+				t.Errorf("CanBeModifiedByViewer(%+v) = %v, want %v", tt.viewer, got, tt.want)
+			}
+		})
+	}
+}

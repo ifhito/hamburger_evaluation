@@ -94,7 +94,7 @@ func TestShopRepository(t *testing.T) {
 
 	list := func(t *testing.T, vis domain.ShopVisibility, keyword string, limit, offset int32) []domain.Shop {
 		t.Helper()
-		shops, err := shopQuery.ListShops(ctx, vis, keyword, limit, offset)
+		shops, _, err := shopQuery.ListShops(ctx, vis, keyword, limit, offset)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -147,6 +147,33 @@ func TestShopRepository(t *testing.T) {
 		}
 		if got := list(t, anon, "Order Cafe", 2, 100); len(got) != 0 {
 			t.Errorf("far page = %v, want empty", got)
+		}
+	})
+
+	t.Run("has_more は limit+1 件の取得で判定され、ちょうど最後のページでは false になる", func(t *testing.T) {
+		// "Order Cafe" は 3 件（A、A、B）。
+		tests := []struct {
+			name          string
+			limit, offset int32
+			wantLen       int
+			wantMore      bool
+		}{
+			{name: "途中のページ（3 件を 2 件ずつの 1 ページ目）は true", limit: 2, offset: 0, wantLen: 2, wantMore: true},
+			{name: "最後のページ（2 ページ目の 1 件）は false", limit: 2, offset: 2, wantLen: 1, wantMore: false},
+			{name: "件数ちょうどの limit（3 件を 3 件）は false（空のページを取りに行かせない）", limit: 3, offset: 0, wantLen: 3, wantMore: false},
+			{name: "limit が件数より大きければ false", limit: 100, offset: 0, wantLen: 3, wantMore: false},
+			{name: "範囲外の offset は空で false", limit: 2, offset: 100, wantLen: 0, wantMore: false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				shops, hasMore, err := shopQuery.ListShops(ctx, anon, "Order Cafe", tt.limit, tt.offset)
+				if err != nil {
+					t.Fatalf("ListShops returned error: %v", err)
+				}
+				if len(shops) != tt.wantLen || hasMore != tt.wantMore {
+					t.Errorf("len = %d, hasMore = %v, want %d, %v", len(shops), hasMore, tt.wantLen, tt.wantMore)
+				}
+			})
 		}
 	})
 
@@ -349,14 +376,14 @@ func TestShopModerationRepository(t *testing.T) {
 
 		// S4 の visibility のルールは、作成直後の shop でも成り立つ：
 		// creator には一覧に見え、匿名の viewer には見えない。
-		anonShops, err := shopQuery.ListShops(ctx, anon, "Fresh Shack", 100, 0)
+		anonShops, _, err := shopQuery.ListShops(ctx, anon, "Fresh Shack", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
 		if len(anonShops) != 0 {
 			t.Errorf("anonymous list = %v, want empty", anonShops)
 		}
-		ownShops, err := shopQuery.ListShops(ctx, aliceVis, "Fresh Shack", 100, 0)
+		ownShops, _, err := shopQuery.ListShops(ctx, aliceVis, "Fresh Shack", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -418,7 +445,7 @@ func TestShopModerationRepository(t *testing.T) {
 		if approved.Status != domain.ShopStatusActive || approved.ModerationNote != nil {
 			t.Errorf("approved = %+v, want active with nil note", approved)
 		}
-		anonShops, err := shopQuery.ListShops(ctx, anon, "Newest", 100, 0)
+		anonShops, _, err := shopQuery.ListShops(ctx, anon, "Newest", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -442,7 +469,7 @@ func TestShopModerationRepository(t *testing.T) {
 		if stored.Status != domain.ShopStatusRejected || stored.ModerationNote == nil || *stored.ModerationNote != note {
 			t.Errorf("stored = %+v, want the persisted rejection", stored.Shop)
 		}
-		anonShops, err = shopQuery.ListShops(ctx, anon, "Newest", 100, 0)
+		anonShops, _, err = shopQuery.ListShops(ctx, anon, "Newest", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}

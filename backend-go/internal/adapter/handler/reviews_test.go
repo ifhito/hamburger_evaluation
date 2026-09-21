@@ -72,11 +72,11 @@ func (f *reviewStoreFake) detailFor(review domain.Review) domain.ReviewDetail {
 	}
 }
 
-func (f *reviewStoreFake) ListReviews(_ context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
+func (f *reviewStoreFake) ListReviews(_ context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error) {
 	f.listFilters = append(f.listFilters, filter)
 	f.lastLimit, f.lastOffset = limit, offset
 	if f.err != nil {
-		return nil, f.err
+		return nil, false, f.err
 	}
 	activeBurgers := map[int64]bool{}
 	for shopID, shop := range f.shops {
@@ -127,7 +127,7 @@ func (f *reviewStoreFake) ListReviews(_ context.Context, filter usecase.ReviewLi
 	for _, review := range out[lo:hi] {
 		details = append(details, f.detailFor(review))
 	}
-	return details, nil
+	return details, hi < len(out), nil
 }
 
 func (f *reviewStoreFake) GetReview(_ context.Context, id int64) (domain.ReviewDetail, error) {
@@ -325,8 +325,10 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
+		// 作成のレスポンスは投稿者本人（can_edit が true）。匿名で読む一覧・詳細は false になる。
 		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
-			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
+			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`
+		wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -335,16 +337,16 @@ func TestCreateReview(t *testing.T) {
 		if list.Code != http.StatusOK {
 			t.Fatalf("list status = %d, want %d (body %s)", list.Code, http.StatusOK, list.Body)
 		}
-		if got := list.Body.String(); got != "["+want+"]" {
-			t.Errorf("list body = %s, want [%s]", got, want)
+		if got := list.Body.String(); got != "["+wantAnon+"]" {
+			t.Errorf("list body = %s, want [%s]", got, wantAnon)
 		}
 
 		detail := do(router, http.MethodGet, "/reviews/1", "", "")
 		if detail.Code != http.StatusOK {
 			t.Fatalf("detail status = %d, want %d (body %s)", detail.Code, http.StatusOK, detail.Body)
 		}
-		if got := detail.Body.String(); got != want {
-			t.Errorf("detail body = %s, want %s", got, want)
+		if got := detail.Body.String(); got != wantAnon {
+			t.Errorf("detail body = %s, want %s", got, wantAnon)
 		}
 	})
 
@@ -404,7 +406,7 @@ func TestCreateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
 		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
-			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
+			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the existing Cheese burger %s", got, want)
 		}
@@ -423,7 +425,7 @@ func TestCreateReview(t *testing.T) {
 		}
 		// 作成された burger（fake の id 7）の統計はゼロである。
 		want := `{"id":1,"rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
-			`"burger":{"id":7,"name":"Veggie","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}`
+			`"burger":{"id":7,"name":"Veggie","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0},"can_edit":true}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the created burger %s", got, want)
 		}
@@ -442,7 +444,7 @@ func TestCreateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
 		want := `{"id":1,"rating":4,"comment":"Both","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
-			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
+			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the burger_id burger %s", got, want)
 		}
@@ -542,7 +544,7 @@ func TestListReviews(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 		want := fmt.Sprintf(`[{"id":%d,"rating":4,"comment":"On cheese","created_at":"2024-06-01T12:01:00Z",`+
-			`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}]`,
+			`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":false}]`,
 			cheeseReviewID)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -810,14 +812,16 @@ func TestUpdateReview(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
+		// PUT のレスポンスは author 本人（can_edit が true）。匿名で読む詳細は false になる。
 		want := fmt.Sprintf(`{"id":%d,"rating":5,"comment":"Even better","created_at":"2024-06-01T12:01:00Z",`+
-			`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
+			`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`,
 			cheeseReviewID)
+		wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
-		if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != want {
-			t.Errorf("detail after edit = %s, want %s", detail.Body, want)
+		if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != wantAnon {
+			t.Errorf("detail after edit = %s, want %s", detail.Body, wantAnon)
 		}
 	})
 
@@ -859,13 +863,14 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
 	want := fmt.Sprintf(`{"id":%d,"rating":2,"comment":"Tampered","created_at":"2024-06-01T12:01:00Z",`+
-		`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
+		`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`,
 		cheeseReviewID)
+	wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want the original burger with updated content %s", got, want)
 	}
-	if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != want {
-		t.Errorf("detail after tampered edit = %s, want %s", detail.Body, want)
+	if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != wantAnon {
+		t.Errorf("detail after tampered edit = %s, want %s", detail.Body, wantAnon)
 	}
 
 	// でたらめな id も同様に効果を持たない。

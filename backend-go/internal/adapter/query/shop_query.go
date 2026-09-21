@@ -31,11 +31,12 @@ var _ usecase.ShopQuery = (*ShopQuery)(nil)
 
 // ListShops は、keyword に一致する可視の shop を name、id の順に並べて返す。
 // keyword はエスケープ済みの ILIKE パラメータとして渡され、SQL に連結される
-// ことはない。
-func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
+// ことはない。次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて
+// 返す。2 つ目の戻り値は、offset+limit 件より後ろにも見える shop があるか（has_more）である。
+func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
 	params := sqlcgen.ListShopsParams{
 		ViewAll:    vis.ViewAll,
-		PageLimit:  limit,
+		PageLimit:  limit + 1,
 		PageOffset: offset,
 	}
 	if vis.ViewerID != nil {
@@ -46,17 +47,18 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 	}
 	rows, err := r.q.ListShops(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("list shops: %w", err)
+		return nil, false, fmt.Errorf("list shops: %w", err)
 	}
+	rows, hasMore := trimPage(rows, limit)
 	shops := make([]domain.Shop, 0, len(rows))
 	for _, row := range rows {
 		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
 		if err != nil {
-			return nil, fmt.Errorf("list shops: %w", err)
+			return nil, false, fmt.Errorf("list shops: %w", err)
 		}
 		shops = append(shops, shop)
 	}
-	return shops, nil
+	return shops, hasMore, nil
 }
 
 // GetShopWithCreator は shop とその creator を返す（Reviews は空のまま）。

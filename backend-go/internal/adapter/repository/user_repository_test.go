@@ -282,7 +282,7 @@ func TestUserRepositoryManagement(t *testing.T) {
 	t.Run("読み取り経路は discard 済みの user の kept な review を隠す", func(t *testing.T) {
 		// フィード：alice の review だけが残り、表示される stats は再計算された
 		// burger_stats の行（count 1）と一致する。
-		feed, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
+		feed, _, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{}, 100, 0)
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}

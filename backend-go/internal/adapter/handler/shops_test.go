@@ -39,11 +39,11 @@ var (
 	_ domain.ShopRepository = (*shopStoreFake)(nil)
 )
 
-func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, error) {
+func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
 	f.listCalls++
 	f.lastLimit, f.lastOffset = limit, offset
 	if f.err != nil {
-		return nil, f.err
+		return nil, false, f.err
 	}
 	var out []domain.Shop
 	for _, d := range f.shops {
@@ -63,7 +63,7 @@ func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, 
 	})
 	lo := min(int(offset), len(out))
 	hi := min(lo+int(limit), len(out))
-	return out[lo:hi], nil
+	return out[lo:hi], hi < len(out), nil
 }
 
 func (f *shopStoreFake) GetShopWithCreator(_ context.Context, id int64) (domain.ShopDetail, error) {
@@ -265,7 +265,7 @@ func TestGetShopDetail(t *testing.T) {
 		`{"id":9,"rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":3,"username":"bob"},` +
 		`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
 		`{"id":8,"rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":3,"username":"bob"},` +
-		`"burger":{"id":6,"name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}]}`
+		`"burger":{"id":6,"name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}],"can_review":false}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

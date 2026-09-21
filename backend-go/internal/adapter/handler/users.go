@@ -37,18 +37,20 @@ func newUserResponse(user domain.User) userResponse {
 // {id, username} で、本人が閲覧したときだけ {id, username, email, admin} になる。
 // Email と Admin は pointer + omitempty で、他人・匿名では nil としてキーごと
 // 省かれる（null にはならない）。admin=false は非 nil の pointer なので、本人
-// ビューでは "admin":false として出力される。
+// ビューでは "admin":false として出力される。CanEdit は、viewer がこのプロフィールを
+// 編集・削除できるか（domain の本人管理ルール）で、本人だけが true。常に出力される。
 type userProfileResponse struct {
 	ID       int64   `json:"id"`
 	Username string  `json:"username"`
 	Email    *string `json:"email,omitempty"`
 	Admin    *bool   `json:"admin,omitempty"`
+	CanEdit  bool    `json:"can_edit"`
 }
 
 // newUserProfileResponse は domain.UserProfile を JSON 形式に写すだけである。
 // 何を見せるかの判断は domain（User.ProfileFor）が済ませている。
 func newUserProfileResponse(profile domain.UserProfile) userProfileResponse {
-	return userProfileResponse{ID: profile.ID, Username: profile.Username, Email: profile.Email, Admin: profile.Admin}
+	return userProfileResponse{ID: profile.ID, Username: profile.Username, Email: profile.Email, Admin: profile.Admin, CanEdit: profile.CanEdit}
 }
 
 // updateUserRequest は PUT /users/{id} の {"user":{...}} ラッパーである。

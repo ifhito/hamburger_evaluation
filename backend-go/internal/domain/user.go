@@ -27,6 +27,9 @@ type UserProfile struct {
 	Username string
 	Email    *string
 	Admin    *bool
+	// CanEdit は、viewer がこのプロフィールを編集・削除できるか（Manages）である。
+	// 匿名は false。frontend は、編集リンクの出し分けにこの値を使う。
+	CanEdit bool
 }
 
 // ProfileFor は、viewer（nil = 匿名）から見た u のビューを返す。Email と Admin
@@ -39,6 +42,7 @@ func (u User) ProfileFor(viewer *User) UserProfile {
 		p.Email = &u.Email
 		p.Admin = &u.Admin
 	}
+	p.CanEdit = viewer != nil && viewer.Manages(u.ID)
 	return p
 }
 

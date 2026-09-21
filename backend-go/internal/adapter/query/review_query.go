@@ -38,9 +38,11 @@ var _ usecase.ReviewQuery = (*ReviewQuery)(nil)
 // 新しい順（created_at desc、id desc）に並ぶ。
 // keyword は likeEscaper を通して ILIKE パラメータに渡され、SQL に連結される
 // ことはない。指定のない filter は NULL のままである。
-func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, error) {
+// 次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて返す。
+// 2 つ目の戻り値は、offset+limit 件より後ろにも一致する review があるか（has_more）である。
+func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error) {
 	params := sqlcgen.ListPublicReviewsParams{
-		PageLimit:  limit,
+		PageLimit:  limit + 1,
 		PageOffset: offset,
 	}
 	if filter.Rating != nil {
@@ -57,8 +59,9 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 	}
 	rows, err := r.q.ListPublicReviews(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("list reviews: %w", err)
+		return nil, false, fmt.Errorf("list reviews: %w", err)
 	}
+	rows, hasMore := trimPage(rows, limit)
 	reviews := make([]domain.ReviewDetail, 0, len(rows))
 	for _, row := range rows {
 		reviews = append(reviews, toReviewDetail(
@@ -67,7 +70,7 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 			row.ReviewCount, row.AverageRating, row.WeightedScore, row.Confidence,
 		))
 	}
-	return reviews, nil
+	return reviews, hasMore, nil
 }
 
 // GetReview は、discard されていない review 1 件を author、burger、stats

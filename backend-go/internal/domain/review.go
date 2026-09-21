@@ -71,6 +71,13 @@ func (r Review) CanBeModifiedBy(viewer User) bool {
 	return r.AuthorID == viewer.ID
 }
 
+// CanBeModifiedByViewer は、匿名（nil）を含む viewer が review を編集・削除できるかを
+// 返す。匿名は常に false で、それ以外は CanBeModifiedBy に従う。API が返す can_edit の
+// 元になる値で、frontend はこの判断を再計算しない。
+func (r Review) CanBeModifiedByViewer(viewer *User) bool {
+	return viewer != nil && r.CanBeModifiedBy(*viewer)
+}
+
 // ReviewDetail は、author と、review 由来の統計を含む対象 burger を持つ
 // review であり、review endpoint の payload である。統計は、まだ計算されて
 // いない場合はゼロである。
@@ -82,6 +89,9 @@ type ReviewDetail struct {
 	// である。PhotoKey から usecase が（photo storage を介して）導出する。
 	// domain 自身は決して URL を組み立てない。
 	PhotoURL *string
+	// CanEdit は、viewer がこの review を編集・削除できるかである。viewer ごとに
+	// 決まる値なので、usecase が CanBeModifiedByViewer で設定する（読み取ったままでは false）。
+	CanEdit bool
 }
 
 // ---- repository の契約(実装は adapter/repository) ----
