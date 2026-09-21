@@ -2,7 +2,6 @@
 // 押す・入力する・表示を待つ、ための最小の道具。ページの移動は jsdom では起きない(起きるはずの移動は、テスト側で表す)。
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { vi } from "vitest";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -56,11 +55,22 @@ export async function type(input: HTMLInputElement, value: string): Promise<void
 const WAIT_TIMEOUT_MS = 3_000;
 const WAIT_INTERVAL_MS = 10;
 
-// 条件が満たされるまで(非同期の更新を act の中で流しながら)待つ。
+// 条件が満たされるまで待つ。React 19 は、act の中で予約した更新を、act の終わりまで流さないので、待つ全体を 1 つの act に
+// 包むと、待っている間にタイマーなどで起きる描画を観測できない。間隔ごとに act を閉じて、更新を流しながら、確かめ直す。
+// 時間内に満たされなかったときは、最後の失敗を投げる。
 export async function eventually(assertion: () => void): Promise<void> {
-  await act(async () => {
-    await vi.waitFor(assertion, { timeout: WAIT_TIMEOUT_MS, interval: WAIT_INTERVAL_MS });
-  });
+  const deadline = Date.now() + WAIT_TIMEOUT_MS;
+  for (;;) {
+    try {
+      assertion();
+      return;
+    } catch (e) {
+      if (Date.now() >= deadline) throw e;
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, WAIT_INTERVAL_MS));
+    });
+  }
 }
 
 export function byText<T extends Element>(container: ParentNode, selector: string, text: string): T | undefined {
