@@ -19,13 +19,13 @@
 .gbtn.neutral { background: var(--g-neutral-fill); border-color: transparent; color: var(--g-light-text); }
 .gbtn.dark { background: var(--g-dark-fill); border-color: var(--g-dark-stroke); color: var(--g-dark-text); }
 /* ダークのボタンでは、「G」を白い下地の上に置く(「G」は、白い下地の上の標準の色だけ、という決まり。見本の下地の形は、公式の画像で確かめる) */
-.gbtn.dark .gw { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #fff; }
-.gbtn.dark .gw .glogo { width: 16px; height: 16px; }
+.gbtn.dark .gw { display: grid; place-items: center; width: 26px; height: 26px; margin-left: -4px; border-radius: 50%; background: #fff; }
 /* このアプリの高さ・角丸にそろえる(入力欄・ボタンと同じ 44px・8px) */
 .gbtn.app { height: 44px; padding: 0 20px; border-radius: 8px; }
 .gbtn.block { display: flex; width: 100%; }
 .gbtn.icon { width: 40px; padding: 0; }
-.gbtn[aria-busy="true"] { opacity: 0.6; cursor: default; }
+/* 送信中: 押せない(pointer-events)。文字は薄めすぎず、灰色の文字(--text-muted、白に対して 6:1 前後)にする。「G」は標準の色のまま(透明にしない) */
+.gbtn[aria-busy="true"] { color: var(--text-muted); cursor: default; pointer-events: none; }
 
 /* 「または」の区切り(両側に線。いまの実装と同じ) */
 .gor { display: flex; align-items: center; gap: 12px; margin: 4px 0; font-size: 13px; color: var(--text-muted); }
@@ -36,7 +36,6 @@
 .gsheet { width: min(1120px, 100% - 32px); margin-inline: auto; padding: 40px 0 72px; }
 .gsheet h1 { font-size: 28px; }
 .gsheet h2 { margin: 48px 0 12px; font-size: 20px; padding-top: 24px; border-top: 2px solid var(--text); }
-.gsheet h3 { margin: 24px 0 8px; font-size: 16px; }
 .gsheet p, .gsheet li { font-size: 14px; line-height: 1.7; }
 .gsheet ul { margin: 4px 0 0; padding-left: 0; list-style: none; }
 .gsheet code { padding: 1px 4px; border-radius: 4px; background: var(--surface-2); font-size: 12.5px; }
@@ -47,11 +46,13 @@
 .gcard .gtag { align-self: flex-start; padding: 2px 10px; border-radius: 12px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 700; }
 .gcard .gname { font-size: 16px; font-weight: 700; }
 .gcard .gstage { display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 8px; background: var(--surface-2); }
-.gcard .gstage.wide { background: var(--bg); border: 1px dashed var(--border); }
 .gcard .gpm { font-size: 13px; line-height: 1.7; color: var(--text-muted); }
 .gcard .gpm b { color: var(--text); }
-.gtable { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; line-height: 1.6; }
+.gscroll { overflow-x: auto; }
+.gscroll:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.gtable { width: 100%; min-width: 640px; border-collapse: collapse; margin-top: 12px; font-size: 14px; line-height: 1.6; }
 .gtable th, .gtable td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.gtable td:first-child { min-width: 9.5em; }
 .gtable th { border-bottom: 2px solid var(--text); font-weight: 700; white-space: nowrap; }
 .grec { margin-top: 32px; padding: 20px 24px; border: 2px solid var(--text); border-radius: var(--radius); background: var(--bg); }
 .grec b { font-weight: 700; }
@@ -84,7 +85,6 @@ body.embed .page { padding: 24px 0; }
 @media (max-width: 720px) {
   .gcards, .gframes { grid-template-columns: 1fr; }
   .gwire { grid-template-columns: 1fr; }
-  .gtable { display: block; overflow-x: auto; }
 }
 
 /* 欄のボタンの文字が、狭い所で折り返さない(Google の連携の欄・状態の見本) */

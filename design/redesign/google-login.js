@@ -17,12 +17,13 @@
     g4: { cls: 'dark app block', name: 'G4 ダーク(黒い面)' },
     g5: { cls: 'light icon', name: 'G5 「G」だけ', center: true, icon: true },
   };
-  // 文言の案。per = 画面ごと(サインイン画面は「サインイン」、登録画面は「登録」。いまの実装)/ cont = どちらも「続ける」
-  const textFor = (kind, labelSet) => (labelSet === 'cont' ? LABEL.cont : LABEL[kind]);
+  // 文言の案(?label=)。per = T1 画面ごと(サインイン画面は「サインイン」、登録画面は「登録」。いまの実装)/ cont = T2 どちらも「続ける」(推奨。既定)/ mix = T3 サインインだけ「続ける」
+  const textFor = (kind, labelSet) => (labelSet === 'per' ? LABEL[kind] : labelSet === 'mix' ? (kind === 'signin' ? LABEL.cont : LABEL.signup) : LABEL.cont);
   const btn = (variant, text, opts = {}) => {
     const v = VARIANTS[variant] || VARIANTS.g2;
     const logo = v.cls.includes('dark') ? `<span class="gw">${G}</span>` : G;
-    const busy = opts.busy ? ' aria-busy="true"' : '';
+    // 送信中は、押せなくして(aria-disabled・フォーカスを外す)、二重に開始しない。色は薄めすぎない(opacity にしない)
+    const busy = opts.busy ? ' aria-busy="true" aria-disabled="true" tabindex="-1"' : '';
     const label = opts.busy ? LABEL.busy : text;
     const style = v.center ? ' style="align-self:center"' : '';
     return v.icon
@@ -40,7 +41,7 @@
   if (kind) {
     const place = q.get('place') || document.body.dataset.gplace || 'bottom';
     const variant = q.get('btn') || 'g2';
-    const text = textFor(kind, q.get('label') || 'per');
+    const text = textFor(kind, q.get('label') || 'cont');
     const button = btn(variant, text, { busy: state === 'busy' });
     const or = `<div class="gor" aria-hidden="true"><span>${LABEL.or}</span></div>`;
     const html = place === 'top' ? `<div class="gblock">${button}${or}</div>` : `<div class="gblock">${or}${button}</div>`;
@@ -48,8 +49,10 @@
     if (target) target.innerHTML = html;
   }
   // 部品の見本(data-gbtn="signin|signup|cont" と data-v="g1"...)。比較の表で使う
+  // ボタンの案・文言の案は、query(?btn=・?label=)で切り替わる(data-v があれば、それを優先。比較の表の見本)
   document.querySelectorAll('[data-gbtn]').forEach((el) => {
     const k = el.dataset.gbtn;
-    el.outerHTML = btn(el.dataset.v || 'g2', LABEL[k] || LABEL.signin, { busy: el.dataset.busy === '1' });
+    const text = el.dataset.v ? LABEL[k] || LABEL.signin : textFor(k, q.get('label') || 'cont');
+    el.outerHTML = btn(el.dataset.v || q.get('btn') || 'g2', text, { busy: el.dataset.busy === '1' });
   });
 })();

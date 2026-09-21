@@ -14,14 +14,14 @@
 <main class="wrap page">
   <!-- state: none = Google を連携していない / connected = 連携済み(解除できる)/ cannot = 連携済みだが、解除できない(サインインの方法が Google だけ)/ loaderror = 連携の状態を読み込めなかった -->
   <section class="profile">
-    <span class="avatar-lg" data-only="none connected cannot loaderror">a</span>
+    <span class="avatar-lg" data-only="none connected cannot loaderror default">a</span>
     <div class="profile-main">
-      <h1 data-only="none connected cannot loaderror">alice</h1>
-      <p class="bio" data-only="none connected cannot loaderror" data-en="Lunch-break burger hunter in Shinjuku. I like thick patties and a lot of cheese.">新宿でお昼にハンバーガーを探しています。厚めのパティと、たっぷりのチーズが好きです。</p>
-      <p class="email" data-only="none connected cannot loaderror">alice@example.com</p>
+      <h1 data-only="none connected cannot loaderror default">alice</h1>
+      <p class="bio" data-only="none connected cannot loaderror default" data-en="Lunch-break burger hunter in Shinjuku. I like thick patties and a lot of cheese.">新宿でお昼にハンバーガーを探しています。厚めのパティと、たっぷりのチーズが好きです。</p>
+      <p class="email" data-only="none connected cannot loaderror default">alice@example.com</p>
       <div class="profile-actions">
         <button class="btn ghost" data-en="Copy link">リンクをコピー</button>
-        <button class="btn ghost" data-only="none connected cannot loaderror" data-en="Edit profile">プロフィールを編集</button>
+        <button class="btn ghost" data-only="none connected cannot loaderror default" data-en="Edit profile">プロフィールを編集</button>
       </div>
     </div>
   </section>
@@ -33,7 +33,7 @@
       <div><b class="name-sm" data-en="Google account">Google アカウント</b><p class="appmeta" data-en="Not connected. Connect it to sign in with Google.">連携していません。連携すると、Google でサインインできます。</p></div>
       <button class="btn ghost" data-en="Connect Google">Google を連携する</button>
     </article>
-    <article class="appitem" data-only="connected">
+    <article class="appitem" data-only="connected default">
       <div><b class="name-sm" data-en="Google account">Google アカウント</b><p class="appmeta" data-en="Connected as alice@gmail.com">連携済み: alice@gmail.com</p></div>
       <button class="btn danger" data-en="Disconnect">連携を解除</button>
     </article>
