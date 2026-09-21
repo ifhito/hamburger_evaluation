@@ -79,14 +79,19 @@ backend-go/
   - `*Query`(例: `ShopQuery`): usecase が宣言する**読み取り専用**の interface
     (利用側で宣言する Go の慣習)。メソッド名は `Get*` / `List*`。
   - `*Repository`(例: `ShopRepository`): **domain が宣言する書き込み専用**の interface。
-    メソッド名は `Create*` / `Update*` / `Discard*`。書き込みが更新後の行(`RETURNING`)を
-    返すのはよいが、読み取りのメソッドを置いてはならない。
+    メソッド名は `Create*` / `Update*` / `Discard*` と、書き込みの前段の排他ロック `Lock*`(統計の再計算の
+    前に、バーガーの行をロックして、並行する書き込みの取りこぼしを防ぐ。値を返さず、行も変えない)。
+    書き込みが更新後の行(`RETURNING`)を返すのはよいが、読み取りのメソッドを置いてはならない。
   - **repository を呼べるのは domain のコードだけ**(`*Service` に限らない)。usecase と
     handler は repository を宣言も保持も呼び出しもせず、読み取りは `*Query`、書き込みは
     domain の書き込みオブジェクト(`domain.Shops` など)を通す。組み立て(`cmd/api/main.go`)は
     「repository → 書き込みオブジェクト → usecase」の順に行う。
   - **単一の集約だけを更新する書き込みに `*Service` を使わない**(集約の書き込みオブジェクトが担う)。
-    domain の `*Service` は、複数の集約を跨ぐ更新の手順だけに使う。書き込みオブジェクトは、自分の
+    domain の `*Service` は、複数の集約を跨ぐ更新のうち、**間に読み取りを挟まない手順**だけに使う。読み取りを挟む
+    手順(例: レビューの保存 → 統計の元データの読み取り → 統計の保存)は、repository だけを持つ `*Service` では
+    表現できない。トランザクションを持つ usecase が、`UnitOfWork.Do`(ここからここまでの読み書きを 1 つの
+    トランザクションにまとめる仕組み。途中で失敗すれば全体を取り消す)の中で、各集約の書き込みオブジェクトと
+    `*Query` を組み合わせて組み立てる。書き込みオブジェクトは、自分の
     集約の repository だけを持ち、公開メソッドは 8 個まで、読み取り・認可・外部 I/O は持たない
     (業務の判断はエンティティ・値オブジェクトへ)。
   - 書き込みの内部で必要な読み取り(例: 同一トランザクション内のロック取得)は、
@@ -182,7 +187,7 @@ backend-go/
 7. usecase が repository を宣言・保持・呼び出す(`.repo.` の呼び出し、`*Repository` の型・
    フィールド、`domain.*Repository` の参照)。書き込みは domain の書き込みオブジェクトを通す。
 8. `*Repository` に `Get*` / `List*` を足す、`*Query` に `Create*` / `Update*` /
-   `Discard*` を足す(読み取りと書き込みを同じインターフェースに混ぜる)。
+   `Discard*` / `Lock*` を足す(読み取りと書き込みを同じインターフェースに混ぜる)。
 9. ドメインのルールの判断を、handler や frontend に置く・複製する(検証・権限・導出)。
    判断は domain に置き、API は結果を返す。
 
@@ -191,7 +196,7 @@ backend-go/
 - [ ] `domain` と `usecase` に外向きの import(adapter/infra/pgx/net-http)がない。
 - [ ] usecase が repository を宣言・保持・呼び出していない(`.repo.` の呼び出し、`*Repository` の
       型・フィールド、`domain.*Repository` の参照がない)。domain の `*Repository` は
-      `Create*` / `Update*` / `Discard*` だけ、usecase の `*Query` は `Get*` / `List*` だけ。
+      `Create*` / `Update*` / `Discard*` / `Lock*`(排他ロックだけ)だけ、usecase の `*Query` は `Get*` / `List*` だけ。
       `usecase` が import する内部ライブラリは、副作用のない純粋なものに限られる。
 - [ ] ドメインのルールの判断が domain にあり、API が結果(422 のメッセージ、`can_*` などの値)を
       返している。frontend に同じ判断が必要になっていない。
