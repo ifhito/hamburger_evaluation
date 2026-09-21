@@ -15,7 +15,7 @@ import (
 // msgShopNotFound は、存在しない shop と隠された shop（および UUID の
 // 正規形でない id）に共通の 404 body であり、shop が存在するかどうかをレスポンスから
 // 決して明かさないようにする。
-var msgShopNotFound = domain.Msg(keyShopNotFound)
+var msgShopNotFound = apiMsg(keyShopNotFound)
 
 // shopResponse は GET /shops のトップレベル配列の要素 1 つである
 // （frontend の Shop、domains/shops/api/types.ts。ワイヤ上は snake_case）。
@@ -89,8 +89,8 @@ var integerPattern = regexp.MustCompile(`^[+-]?[0-9]+$`)
 // per_page の順で両方）を並べた 422 を書き込み済みで false を返すので、呼び出し
 // 側は何も書かずに return する。
 func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok bool) {
-	var msgs []domain.Message
-	parse := func(name string, msg domain.Message) int {
+	var msgs []apiMessage
+	parse := func(name string, msg apiMessage) int {
 		raw := r.URL.Query().Get(name)
 		if raw == "" {
 			return 0

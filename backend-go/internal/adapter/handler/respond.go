@@ -54,17 +54,26 @@ func setHasMore(w http.ResponseWriter, hasMore bool) {
 // writeValidation は、検証の失敗(422)を、利用者の言語(Accept-Language)の文言で書き込む。形は
 // {"errors":[...]}。
 func writeValidation(w http.ResponseWriter, r *http.Request, vErr *domain.ValidationError) {
+	varyByLanguage(w)
 	writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Texts(langOf(r))})
 }
 
+// varyByLanguage は、応答の文言が Accept-Language で変わることを、キャッシュ(前段の CDN・プロキシ)に伝える。
+// 伝えないと、404 のような、キャッシュされうる応答の別の言語が、ほかの利用者に返りうる。
+func varyByLanguage(w http.ResponseWriter) {
+	w.Header().Add("Vary", "Accept-Language")
+}
+
 // writeError は、利用者に見える単一エラーの JSON 形式 {"error":"..."} を、利用者の言語(Accept-Language)の
-// 文言で書き込む。文言は、カタログ(messages.go)の domain.Message で渡す(文字列を直接は渡せない)。
-func writeError(w http.ResponseWriter, r *http.Request, status int, m domain.Message) {
+// 文言で書き込む。文言は、カタログ(messages.go)の apiMessage で渡す(文字列を直接は渡せない)。
+func writeError(w http.ResponseWriter, r *http.Request, status int, m apiMessage) {
+	varyByLanguage(w)
 	writeJSON(w, status, errorResponse{Error: text(langOf(r), m)})
 }
 
 // writeErrorList は、入力の誤り(422)を、リスト形式 {"errors":[...]} で、利用者の言語の文言で書き込む。
-func writeErrorList(w http.ResponseWriter, r *http.Request, status int, ms ...domain.Message) {
+func writeErrorList(w http.ResponseWriter, r *http.Request, status int, ms ...apiMessage) {
+	varyByLanguage(w)
 	l := langOf(r)
 	texts := make([]string, len(ms))
 	for i, m := range ms {

@@ -419,14 +419,6 @@ func TestProcessDimensionLimits(t *testing.T) {
 	}
 }
 
-// TestDimensionLimits は、寸法の上限の値を固定する。handler が、断るときの文言(API の契約。
-// "Photo dimensions are too large (max 10000px per side and 24 megapixels)")に、この値を入れる。
-func TestDimensionLimits(t *testing.T) {
-	if photo.MaxDimension != 10000 || photo.MaxPixels != 24_000_000 {
-		t.Errorf("MaxDimension = %d, MaxPixels = %d, want 10000 と 24000000", photo.MaxDimension, photo.MaxPixels)
-	}
-}
-
 // TestProcessRejectionCauses は、断る理由を、呼び出し側が見分けられることを確かめる:
 // 寸法が大きすぎる写真と、HEIC / HEIF の写真は、それぞれ専用のエラーになる(どちらも、対応しない画像の
 // 一種でもある)。それ以外の対応しないファイル(AVIF や写真でないもの)は、どちらでもない。

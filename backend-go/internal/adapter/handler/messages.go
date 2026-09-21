@@ -69,30 +69,43 @@ var catalog = map[string]domain.Entry{
 	keyPerPageNotInteger:  {EN: "Per page must be an integer", JA: "1 ページの件数は、整数で指定してください"},
 }
 
-// text は、m を l の言語の文字列にする。handler のカタログにあればそれを、なければ domain のカタログ
-// (検証の失敗の文言)を使う。
-func text(l domain.Lang, m domain.Message) string {
-	if entry, ok := catalog[m.Key]; ok {
-		return entry.Format(l, m.Args...)
+// apiMessage は、handler が返す文言を、言語に依らない形(キー + 引数)で表す。domain の検証の文言
+// (domain.Message。別のカタログ)とは、型を分けている(取り違えると、キーがそのまま利用者に出るため)。
+type apiMessage struct {
+	key  string
+	args []any
+}
+
+// apiMsg は、キーと引数から apiMessage を作る。
+func apiMsg(key string, args ...any) apiMessage {
+	return apiMessage{key: key, args: args}
+}
+
+// text は、m を l の言語の文字列にする。カタログにないキーは、キーをそのまま返す(構造テストが、
+// カタログにないキーを検出する)。
+func text(l domain.Lang, m apiMessage) string {
+	entry, ok := catalog[m.key]
+	if !ok {
+		return m.key
 	}
-	return m.Text(l)
+	return entry.Format(l, m.args...)
 }
 
 var (
-	msgRouteNotFound      = domain.Msg(keyRouteNotFound)
-	msgUnauthorized       = domain.Msg(keyUnauthorized)
-	msgInvalidCredentials = domain.Msg(keyInvalidCredentials)
-	msgInvalidJSON        = domain.Msg(keyInvalidJSON)
-	msgInvalidBody        = domain.Msg(keyInvalidBody)
-	msgBodyTooLarge       = domain.Msg(keyBodyTooLarge)
-	msgInvalidMultipart   = domain.Msg(keyInvalidMultipart)
-	msgDuplicatePhoto     = domain.Msg(keyDuplicatePhoto)
-	msgFieldTooLarge      = domain.Msg(keyFieldTooLarge)
-	msgMethodNotAllowed   = domain.Msg(keyMethodNotAllowed)
-	msgRatingNotInteger   = domain.Msg(keyRatingNotInteger)
-	msgShopIDInvalid      = domain.Msg(keyShopIDInvalid)
-	msgBurgerIDInvalid    = domain.Msg(keyBurgerIDInvalid)
-	msgUserIDInvalid      = domain.Msg(keyUserIDInvalid)
-	msgPageNotInteger     = domain.Msg(keyPageNotInteger)
-	msgPerPageNotInteger  = domain.Msg(keyPerPageNotInteger)
+	msgRouteNotFound      = apiMsg(keyRouteNotFound)
+	msgUnauthorized       = apiMsg(keyUnauthorized)
+	msgInvalidCredentials = apiMsg(keyInvalidCredentials)
+	msgInvalidJSON        = apiMsg(keyInvalidJSON)
+	msgInvalidBody        = apiMsg(keyInvalidBody)
+	msgBodyTooLarge       = apiMsg(keyBodyTooLarge)
+	msgInvalidMultipart   = apiMsg(keyInvalidMultipart)
+	msgDuplicatePhoto     = apiMsg(keyDuplicatePhoto)
+	msgFieldTooLarge      = apiMsg(keyFieldTooLarge)
+	msgMethodNotAllowed   = apiMsg(keyMethodNotAllowed)
+	msgRatingNotInteger   = apiMsg(keyRatingNotInteger)
+	msgShopIDInvalid      = apiMsg(keyShopIDInvalid)
+	msgBurgerIDInvalid    = apiMsg(keyBurgerIDInvalid)
+	msgUserIDInvalid      = apiMsg(keyUserIDInvalid)
+	msgPageNotInteger     = apiMsg(keyPageNotInteger)
+	msgPerPageNotInteger  = apiMsg(keyPerPageNotInteger)
 )

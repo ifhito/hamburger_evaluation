@@ -10,7 +10,7 @@ import (
 )
 
 // msgForbidden は、権限を持たない認証済みの viewer に返す Rails-parity の 403 body である。
-var msgForbidden = domain.Msg(keyForbidden)
+var msgForbidden = apiMsg(keyForbidden)
 
 // shopParamsRequest は POST /shops と PUT /admin/shops/{id} の
 // {"shop":{"name":...}} ラッパーである。wrapper や name が欠けている場合は

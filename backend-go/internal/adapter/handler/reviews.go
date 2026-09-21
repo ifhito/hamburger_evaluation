@@ -18,11 +18,11 @@ import (
 // msgReviewNotFound は、存在しない review、discard 済みの review、
 // および UUID の正規形でない review の id に共通の 404 body であり、soft delete 済みの
 // review が一度も存在しなかったものと区別できないようにする。
-var msgReviewNotFound = domain.Msg(keyReviewNotFound)
+var msgReviewNotFound = apiMsg(keyReviewNotFound)
 
 // msgBurgerNotFound は、存在しない burger、または要求された shop が
 // 提供していない burger に対する 404 body である。
-var msgBurgerNotFound = domain.Msg(keyBurgerNotFound)
+var msgBurgerNotFound = apiMsg(keyBurgerNotFound)
 
 // reviewParamsRequest は POST /reviews と PUT /reviews/{id} の
 // {"review":{...}} ラッパーである（PUT は shop_id/burger_id/burger_name を
@@ -53,17 +53,17 @@ const (
 
 // msgPhotoTooLarge は、写真のファイルが上限(domain.MaxPhotoBytes)を超えるときに返す。
 // これより大きなアップロードは 413 ではなく 422 になる。グローバルな review の body cap の方が広い。
-var msgPhotoTooLarge = domain.Msg(keyPhotoTooLarge, domain.MaxPhotoBytes>>20)
+var msgPhotoTooLarge = apiMsg(keyPhotoTooLarge, domain.MaxPhotoBytes>>20)
 
 // msgPhotoDimensions は、寸法(横・縦・画素数)が上限を超える写真に返す。値は、上限(internal/photo)から入れる。
-var msgPhotoDimensions = domain.Msg(keyPhotoDimensions, photo.MaxDimension, photo.MaxPixels/1_000_000)
+var msgPhotoDimensions = apiMsg(keyPhotoDimensions, photo.MaxDimension, photo.MaxPixels/1_000_000)
 
 // msgPhotoUnsupported は、形式が対応外の写真と、壊れていてデコードできない写真に返す。
-var msgPhotoUnsupported = domain.Msg(keyPhotoUnsupported)
+var msgPhotoUnsupported = apiMsg(keyPhotoUnsupported)
 
 // msgPhotoHEIF は、HEIC / HEIF の写真に返す。形式の違いのうち、利用者が心当たりのある(iPhone の
 // 既定の形式)ものなので、対応しないことを、はっきり書く。
-var msgPhotoHEIF = domain.Msg(keyPhotoHEIF)
+var msgPhotoHEIF = apiMsg(keyPhotoHEIF)
 
 // multipartReviewForm は multipart/form-data の review 投稿（写真つきの投稿の
 // 通信の取り決め）のフラットなフィールドを保持する：reviewParamsRequest と同じ値に
@@ -176,8 +176,8 @@ func readTextPart(w http.ResponseWriter, r *http.Request, part *multipart.Part) 
 // エラーではなく too large として報告される。ただし Process は先頭の magic
 // bytes が jpeg/png/webp でなければ残りを読まずに ErrUnsupportedImage を
 // 返すため、巨大でも画像でないデータは too large ではなく unsupported になる。
-// ctx（request の context）は、Process 内の decode semaphore の待機を制限
-// する。false は、エラーレスポンスが既に書き込まれたことを意味する。
+// r の context は、Process 内の decode semaphore の待機を制限する。false は、
+// エラーレスポンスが既に書き込まれたことを意味する。
 func readPhotoPart(w http.ResponseWriter, r *http.Request, part *multipart.Part) (*photo.Processed, bool) {
 	limited := &io.LimitedReader{R: part, N: domain.MaxPhotoBytes + 1}
 	processed, err := photo.Process(r.Context(), limited)
@@ -376,32 +376,32 @@ func handleGetReview(reviews *usecase.Reviews) http.HandlerFunc {
 }
 
 // checkReviewTargetIDs は、review の投稿の shop_id と burger_id の形を確かめる（HTTP の POST /reviews と
-// MCP の create_review が共有する）。問題がなければ (0, "") を返し、あれば HTTP の status とメッセージを
-// 返す：shop_id が空なら 404、UUID の正規形でない shop_id と burger_id は 422 である。空の burger_id は
-// 「指定なし」（burger_name の経路）である。形式の判定は domain.IsUUID が持つ。
-func checkReviewTargetIDs(shopID, burgerID string) (status int, msg domain.Message) {
+// MCP の create_review が共有する）。問題がなければ ok が true で、あれば false と、HTTP の status と
+// メッセージを返す：shop_id が空なら 404、UUID の正規形でない shop_id と burger_id は 422 である。
+// 空の burger_id は「指定なし」（burger_name の経路）である。形式の判定は domain.IsUUID が持つ。
+func checkReviewTargetIDs(shopID, burgerID string) (status int, msg apiMessage, ok bool) {
 	if shopID == "" {
-		return http.StatusNotFound, msgShopNotFound
+		return http.StatusNotFound, msgShopNotFound, false
 	}
 	if !domain.IsUUID(shopID) {
-		return http.StatusUnprocessableEntity, msgShopIDInvalid
+		return http.StatusUnprocessableEntity, msgShopIDInvalid, false
 	}
 	if burgerID != "" && !domain.IsUUID(burgerID) {
-		return http.StatusUnprocessableEntity, msgBurgerIDInvalid
+		return http.StatusUnprocessableEntity, msgBurgerIDInvalid, false
 	}
-	return
+	return 0, apiMessage{}, true
 }
 
 // validReviewTargetIDs は checkReviewTargetIDs の結果を HTTP の応答に写す。false は、そのレスポンスが
 // 既に書き込まれたことを意味する。
 func validReviewTargetIDs(w http.ResponseWriter, r *http.Request, form multipartReviewForm) bool {
-	status, msg := checkReviewTargetIDs(form.shopID, form.burgerID)
-	switch status {
-	case 0:
+	status, msg, ok := checkReviewTargetIDs(form.shopID, form.burgerID)
+	if ok {
 		return true
-	case http.StatusNotFound:
+	}
+	if status == http.StatusNotFound {
 		writeError(w, r, status, msg)
-	default:
+	} else {
 		writeErrorList(w, r, status, msg)
 	}
 	return false

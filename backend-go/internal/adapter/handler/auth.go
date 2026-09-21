@@ -64,7 +64,7 @@ const signupAcceptedMessage = "Confirmation email sent"
 
 // msgSignupTokenInvalid は、確認トークンが期限切れ・存在しない・改ざん・使用済みの
 // いずれかのときの 400 のメッセージである（どれなのかは区別できない）。
-var msgSignupTokenInvalid = domain.Msg(keySignupTokenInvalid)
+var msgSignupTokenInvalid = apiMsg(keySignupTokenInvalid)
 
 type signupConfirmRequest struct {
 	Token string `json:"token"`

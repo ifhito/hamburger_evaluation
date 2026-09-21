@@ -116,7 +116,7 @@ func failure(message string) (*mcp.CallToolResult, any, error) {
 }
 
 // failureMessage は、カタログの文言(handler と同じ)を、英語で、ツールの失敗にする。
-func failureMessage(m domain.Message) (*mcp.CallToolResult, any, error) {
+func failureMessage(m apiMessage) (*mcp.CallToolResult, any, error) {
 	return failure(text(domain.LangEN, m))
 }
 
@@ -274,7 +274,7 @@ type createReviewInput struct {
 }
 
 func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in createReviewInput) (*mcp.CallToolResult, any, error) {
-	if status, msg := checkReviewTargetIDs(in.ShopID, in.BurgerID); status != 0 {
+	if _, msg, ok := checkReviewTargetIDs(in.ShopID, in.BurgerID); !ok {
 		return failureMessage(msg)
 	}
 	detail, err := t.reviews.Create(ctx, t.viewer, in.ShopID, in.BurgerID, in.BurgerName, in.Rating, in.Comment, nil)

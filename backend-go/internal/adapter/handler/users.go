@@ -13,7 +13,7 @@ import (
 // UUID の正規形でない user の id に共通の 404 body（GET/PUT/DELETE /users/{id}）であり、
 // soft delete 済みの account が一度も存在しなかったものと区別できないように
 // する。
-var msgUserNotFound = domain.Msg(keyUserNotFound)
+var msgUserNotFound = apiMsg(keyUserNotFound)
 
 // userResponse は、PUT /users/{id} の、token を含まない user の JSON 形式である：
 // frontend の契約（「user の形 + admin フラグ」のレスポンスの形）に従った {id, username, email, admin} に、自己紹介文（bio）を加えた {id, username, bio, email, admin} であり、

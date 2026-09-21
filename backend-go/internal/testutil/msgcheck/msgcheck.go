@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // Entry は、1 つの文言の、言語ごとの書式である。
@@ -29,15 +30,24 @@ type Config struct {
 	KeyFile string
 	// Dirs は、Msg(key, args...) の呼び出しを探すディレクトリである(テスト以外の .go)。
 	Dirs []string
-	// DirectOK は、Message{...} を Msg を通さずに直接書いてよいファイル名である。
+	// Constructor は、文言を作る関数の名前である(空なら Msg)。Type は、その文言の型の名前である(空なら Message)。
+	Constructor, Type string
+	// DirectOK は、Type{...}(中身を書いたもの)を、Constructor を通さずに直接書いてよいファイル名である。
 	DirectOK []string
 }
 
-// Run は、次を確かめる: 英語と日本語の両方がある / 書式の値の並びが両言語で同じ / キーの定数と
-// カタログが一致する / コードの Msg のキーがカタログにある / 引数の数と(リテラルの)型が書式と合う /
-// カタログの文言がコードのどこかで使われている / Msg を通さない Message{...} がない。
+// Run は、次を確かめる: 英語と日本語の両方がある(日本語は、日本語の文字を含む。英語のコピーのままでない) /
+// 書式の値の並びが両言語で同じ / キーの定数とカタログが一致する / コードの Msg のキーがカタログにある /
+// 引数の数と(リテラルの)型が書式と合う / カタログの文言がコードのどこかで使われている /
+// Msg を通さない Message{...} がない。
 func Run(t *testing.T, c Config) {
 	t.Helper()
+	if c.Constructor == "" {
+		c.Constructor = "Msg"
+	}
+	if c.Type == "" {
+		c.Type = "Message"
+	}
 	t.Run("両言語がそろっている", func(t *testing.T) {
 		for key, e := range c.Catalog {
 			if strings.TrimSpace(e.EN) == "" {
@@ -45,6 +55,8 @@ func Run(t *testing.T, c Config) {
 			}
 			if strings.TrimSpace(e.JA) == "" {
 				t.Errorf("キー %q の日本語の文言が空である(キーを足したら、英語と日本語の両方を書く)", key)
+			} else if !hasJapanese(e.JA) {
+				t.Errorf("キー %q の日本語の文言 %q に、日本語の文字がない(英語のコピーのままでは、日本語の利用者に英語が出る)", key, e.JA)
 			}
 		}
 	})
@@ -109,6 +121,16 @@ func Run(t *testing.T, c Config) {
 			t.Errorf("%s: Message は Msg(key, args...) で作る(直接書くと、キーの検査をすり抜ける)", pos)
 		}
 	})
+}
+
+// hasJapanese は、s に、ひらがな・カタカナ・漢字のいずれかがあるかを返す。
+func hasJapanese(s string) bool {
+	for _, r := range s {
+		if unicode.In(r, unicode.Hiragana, unicode.Katakana, unicode.Han) {
+			return true
+		}
+	}
+	return false
 }
 
 // formatArgs は、fmt の書式から、引数の使われ方(「何番目の引数を、どの型で」)の一覧を取り出す。
@@ -188,7 +210,7 @@ type call struct {
 }
 
 // scan は、c.Dirs の(テスト以外の)コードから、Msg(...) の呼び出しと、Msg を通さずに直接書かれた
-// Message{...} を集める。キーは、文字列のリテラルか、key… の定数だけを読む。
+// Type{...}(中身を書いたもの)を集める。キーは、文字列のリテラルか、key… の定数だけを読む。
 func scan(t *testing.T, c Config, consts map[string]string) (calls []call, direct []string) {
 	t.Helper()
 	for _, dir := range c.Dirs {
@@ -208,7 +230,7 @@ func scan(t *testing.T, c Config, consts map[string]string) (calls []call, direc
 				ast.Inspect(file, func(n ast.Node) bool {
 					switch n := n.(type) {
 					case *ast.CallExpr:
-						if len(n.Args) == 0 || !isName(n.Fun, "Msg") {
+						if len(n.Args) == 0 || !isName(n.Fun, c.Constructor) {
 							return true
 						}
 						var key string
@@ -220,7 +242,7 @@ func scan(t *testing.T, c Config, consts map[string]string) (calls []call, direc
 						}
 						calls = append(calls, call{pos: fset.Position(n.Pos()).String(), key: key, args: n.Args[1:]})
 					case *ast.CompositeLit:
-						if isName(n.Type, "Message") && !allowed {
+						if len(n.Elts) > 0 && isName(n.Type, c.Type) && !allowed {
 							direct = append(direct, fset.Position(n.Pos()).String())
 						}
 					}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -35,6 +36,16 @@ func TestClientErrorsFollowAcceptLanguage(t *testing.T) {
 		return func(t *testing.T, lang string) *httptest.ResponseRecorder {
 			router, _, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
 			return doWithLanguage(router, method, path, "", "", lang)
+		}
+	}
+	adminShops := func(method, path, body string, asAdmin bool) func(*testing.T, string) *httptest.ResponseRecorder {
+		return func(t *testing.T, lang string) *httptest.ResponseRecorder {
+			router, alice, admin, _ := newShopsRouter(t, seedShops(uid.N(1)))
+			auth := alice
+			if asAdmin {
+				auth = admin
+			}
+			return doWithLanguage(router, method, path, body, auth, lang)
 		}
 	}
 	reviews := func(method, path, body string, signedIn bool) func(*testing.T, string) *httptest.ResponseRecorder {
@@ -107,6 +118,14 @@ func TestClientErrorsFollowAcceptLanguage(t *testing.T) {
 	{
 		en, ja := single("Forbidden", "この操作をする権限がありません")
 		add("権限がない: 他人のプロフィールの更新", users(http.MethodPut, "/users/"+uid.N(1), `{"user":{"username":"x"}}`, "bob"), http.StatusForbidden, en, ja)
+	}
+	{
+		en, ja := single("Forbidden", "この操作をする権限がありません")
+		add("権限がない: 管理者でない利用者のショップの変更", adminShops(http.MethodPut, "/admin/shops/"+uid.N(2), `{"shop":{"name":"x"}}`, false), http.StatusForbidden, en, ja)
+	}
+	{
+		en, ja := single("Shop not found", "ショップが見つかりません")
+		add("見つからない: 管理者の承認の対象のショップ", adminShops(http.MethodPost, "/admin/shops/"+uid.N(999)+"/approve", "", true), http.StatusNotFound, en, ja)
 	}
 	{
 		en, ja := single("Unauthorized", "サインインが必要です")
@@ -210,13 +229,12 @@ func TestClientErrorsFollowAcceptLanguage(t *testing.T) {
 		add("クエリ: ページと件数が整数でない", shops(http.MethodGet, "/shops?page=a&per_page=b"), http.StatusUnprocessableEntity, en, ja)
 	}
 
+	// 言語の選び方そのものは lang_test.go が持つので、ここでは、英語(指定なし)と日本語の 2 通りだけを見る。
 	languages := []struct {
 		name, header string
 		ja           bool
 	}{
 		{"指定なし", "", false},
-		{"en", "en", false},
-		{"対応しない言語(fr)", "fr-FR", false},
 		{"ja", "ja", true},
 		{"ja-JP,ja;q=0.9,en;q=0.8", "ja-JP,ja;q=0.9,en;q=0.8", true},
 	}
@@ -233,6 +251,9 @@ func TestClientErrorsFollowAcceptLanguage(t *testing.T) {
 				}
 				if rec.Body.String() != want {
 					t.Errorf("body = %s, want %s", rec.Body, want)
+				}
+				if !slices.Contains(rec.Header().Values("Vary"), "Accept-Language") {
+					t.Errorf("Vary = %q, want Accept-Language(言語で本文が変わるので、キャッシュに伝える)", rec.Header().Values("Vary"))
 				}
 			})
 		}
