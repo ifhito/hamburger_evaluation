@@ -58,7 +58,12 @@ const (
 
 const photoTooLargeMessage = "Photo is too large (max 5MB)"
 
-const photoUnsupportedMessage = "Photo must be a JPEG, PNG, or WebP image"
+// photoUnsupportedMessage は、形式が対応外の写真と、壊れていてデコードできない写真に返す。
+const photoUnsupportedMessage = "Photo must be a JPEG, PNG, WebP, or HEIC image"
+
+// photoDimensionsMessage は、写真の寸法(横・縦・画素数)が上限を超えるときに返す。形式の違いとは
+// 直し方が違う(画像を小さくする)ので、別のメッセージにしている。
+const photoDimensionsMessage = "Photo dimensions are too large (max 10000px per side and 24 megapixels, 16 megapixels for HEIC)"
 
 // multipartReviewForm は multipart/form-data の review 投稿（S10 の wire
 // 契約）のフラットなフィールドを保持する：reviewParamsRequest と同じ値に
@@ -181,6 +186,11 @@ func readPhotoPart(ctx context.Context, w http.ResponseWriter, part *multipart.P
 		return nil, false
 	}
 	if err != nil {
+		// 寸法超過は ErrUnsupportedImage の一種でもあるので、先に調べる。
+		if errors.Is(err, photo.ErrDimensionsTooLarge) {
+			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoDimensionsMessage}})
+			return nil, false
+		}
 		if errors.Is(err, photo.ErrUnsupportedImage) {
 			writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoUnsupportedMessage}})
 			return nil, false
