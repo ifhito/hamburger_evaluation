@@ -221,13 +221,13 @@ func registerRoutes(mux *http.ServeMux, routes []route) {
 		allow := strings.Join(allowed, ", ")
 		mux.HandleFunc(rt.path, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Allow", allow)
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			writeError(w, r, http.StatusMethodNotAllowed, msgMethodNotAllowed)
 		})
 	}
 
 	// 一致しない path 用の catch-all で、stdlib のプレーンテキストの 404 を
 	// 置き換える。
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "not found")
+		writeError(w, r, http.StatusNotFound, msgRouteNotFound)
 	})
 }

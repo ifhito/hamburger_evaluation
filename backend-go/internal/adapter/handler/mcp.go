@@ -211,23 +211,23 @@ func (m *MCPServer) HandleMCP(w http.ResponseWriter, r *http.Request) {
 	// 詳細は返さない。
 	if !m.originAllowed(r) {
 		log.Printf("mcp: rejected a request whose Origin is not allowed: %.100q", r.Header.Get("Origin"))
-		writeError(w, http.StatusForbidden, forbiddenMessage)
+		writeError(w, r, http.StatusForbidden, msgForbidden)
 		return
 	}
 	token, ok := bearerToken(r)
 	if !ok {
 		w.Header().Set("WWW-Authenticate", m.challenge("", ""))
-		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		writeError(w, r, http.StatusUnauthorized, msgUnauthorized)
 		return
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			writeError(w, r, http.StatusRequestEntityTooLarge, msgBodyTooLarge)
 			return
 		}
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		writeError(w, r, http.StatusBadRequest, msgInvalidBody)
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
@@ -241,16 +241,16 @@ func (m *MCPServer) HandleMCP(w http.ResponseWriter, r *http.Request) {
 	case err == nil:
 	case errors.Is(err, domain.ErrOAuthInvalidToken):
 		w.Header().Set("WWW-Authenticate", m.challenge("invalid_token", ""))
-		writeError(w, http.StatusUnauthorized, "Unauthorized")
+		writeError(w, r, http.StatusUnauthorized, msgUnauthorized)
 		return
 	case errors.As(err, &scopeErr):
 		w.Header().Set("WWW-Authenticate", m.challenge("insufficient_scope", strings.Join(scopeErr.Missing, " ")))
-		writeError(w, http.StatusForbidden, "Insufficient scope: "+strings.Join(scopeErr.Missing, " "))
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "Insufficient scope: " + strings.Join(scopeErr.Missing, " ")})
 		return
 	default:
 		// 保存先などの障害。トークンは決してログに出さない。
 		log.Printf("mcp: authenticate oauth access token: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 		return
 	}
 	m.mcp.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpPrincipalKey, mcpPrincipal{user: viewer, scopes: access.Scopes})))

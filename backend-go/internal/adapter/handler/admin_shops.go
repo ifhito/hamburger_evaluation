@@ -9,9 +9,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// forbiddenMessage は、moderation の権限を持たない認証済みの viewer に返す
-// Rails-parity の 403 body である。
-const forbiddenMessage = "Forbidden"
+// msgForbidden は、権限を持たない認証済みの viewer に返す Rails-parity の 403 body である。
+var msgForbidden = apiMsg(keyForbidden)
 
 // shopParamsRequest は POST /shops と PUT /admin/shops/{id} の
 // {"shop":{"name":...}} ラッパーである。wrapper や name が欠けている場合は
@@ -62,7 +61,7 @@ func requireViewer(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
 	viewer, ok := ViewerFrom(r.Context())
 	if !ok {
 		log.Printf("handler: %s %s: no viewer in context (route missing RequireAuth?)", r.Method, r.URL.Path)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 	}
 	return viewer, ok
 }
@@ -74,7 +73,7 @@ func requireViewer(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
 func shopIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := r.PathValue("id")
 	if !domain.IsUUID(id) {
-		writeError(w, http.StatusNotFound, shopNotFoundMessage)
+		writeError(w, r, http.StatusNotFound, msgShopNotFound)
 		return "", false
 	}
 	return id, true
@@ -88,14 +87,14 @@ func writeShopModerationError(w http.ResponseWriter, r *http.Request, op string,
 	var vErr *domain.ValidationError
 	switch {
 	case errors.Is(err, domain.ErrForbidden):
-		writeError(w, http.StatusForbidden, forbiddenMessage)
+		writeError(w, r, http.StatusForbidden, msgForbidden)
 	case errors.Is(err, domain.ErrShopNotFound):
-		writeError(w, http.StatusNotFound, shopNotFoundMessage)
+		writeError(w, r, http.StatusNotFound, msgShopNotFound)
 	case errors.As(err, &vErr):
 		writeValidation(w, r, vErr)
 	default:
 		log.Printf("shops: %s: %v", op, err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 	}
 }
 

@@ -374,7 +374,7 @@ func TestProcessRejections(t *testing.T) {
 		{name: "幅が 10000 を超えると拒否される", input: pngHeader(t, 10001, 1, 8)},
 		{name: "高さが 10000 を超えると拒否される", input: pngHeader(t, 1, 10001, 8)},
 		{name: "ピクセル数が 24M を超えると拒否される", input: pngHeader(t, 5000, 5000, 8)},
-		// 4500x4500 は 20.25M ピクセルで maxPixels 未満だが、16-bit の
+		// 4500x4500 は 20.25M ピクセルで MaxPixels 未満だが、16-bit の
 		// truecolor（decode 後は 8 bytes/px）では推定値が約 162MB になり、
 		// 128MiB の decode メモリ上限を超える。
 		{name: "ピクセル数の上限内でも decode メモリ上限を超える 16-bit 画像は拒否される", input: pngHeader(t, 4500, 4500, 16)},
@@ -416,15 +416,6 @@ func TestProcessDimensionLimits(t *testing.T) {
 				t.Errorf("寸法が大きすぎるエラーか = %v, want %v (err %v)", got, tt.wantTooLarge, err)
 			}
 		})
-	}
-}
-
-// TestDimensionsTooLargeMessage は、寸法が大きすぎるときに利用者へ返すメッセージが、上限の値を含めて
-// 変わらないことを固定する(API の契約)。
-func TestDimensionsTooLargeMessage(t *testing.T) {
-	const want = "Photo dimensions are too large (max 10000px per side and 24 megapixels)"
-	if photo.DimensionsTooLargeMessage != want {
-		t.Errorf("DimensionsTooLargeMessage = %q, want %q", photo.DimensionsTooLargeMessage, want)
 	}
 }
 

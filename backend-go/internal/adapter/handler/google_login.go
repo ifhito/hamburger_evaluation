@@ -367,7 +367,7 @@ func (g *GoogleLogin) HandleExchange(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("google login: exchange: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 		return
 	}
 	g.cookie.clearBinder(w, req.Code) // コードは使い切った
@@ -421,7 +421,7 @@ func (g *GoogleLogin) HandleLinkStart(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("google login: link start: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 		return
 	}
 	writeJSON(w, http.StatusOK, googleLinkStartResponse{RedirectURL: begin.AuthURL})
@@ -448,7 +448,7 @@ func (g *GoogleLogin) HandleListIdentities(w http.ResponseWriter, r *http.Reques
 	views, err := g.logins.ListIdentities(r.Context(), viewer)
 	if err != nil {
 		log.Printf("google login: list identities: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 		return
 	}
 	resp := identitiesResponse{Identities: make([]identityResponse, 0, len(views))}
@@ -472,9 +472,9 @@ func (g *GoogleLogin) HandleUnlinkGoogle(w http.ResponseWriter, r *http.Request)
 	case errors.Is(err, domain.ErrCannotUnlinkIdentity):
 		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{googleCannotUnlinkMessage}})
 	case errors.Is(err, domain.ErrIdentityNotFound):
-		writeError(w, http.StatusNotFound, "not found")
+		writeError(w, r, http.StatusNotFound, msgRouteNotFound)
 	default:
 		log.Printf("google login: unlink: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 	}
 }
