@@ -7,4 +7,5 @@ docker-compose.yml
 docker-compose.override.yml
 docker-compose.override.yml.example
 Dockerfile
+Dockerfile.dev
 Dockerfile.prod

@@ -11,7 +11,7 @@ services:
     region: singapore
     branch: docs/deploy-verification
     rootDir: backend-go
-    dockerfilePath: ./Dockerfile.prod
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /up
     envVars:
       - key: PORT

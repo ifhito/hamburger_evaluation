@@ -1,5 +1,10 @@
-# 本番用。開発用の Dockerfile(コンテナ起動時に go build する)とは別に置く。
-# 静的バイナリを distroless へ入れるので、イメージは数十 MB、起動は即時になる。
+# 互換のための別名。中身は既定の Dockerfile(本番用)と同じ。
+#
+# 多くの基盤(Back4App Containers など)は Dockerfile 名を選べず、既定の
+# `Dockerfile` を見る。そのため本番用を `Dockerfile` に置いた。
+# 一方で `Dockerfile.prod` を指定済みの設定が既にある場合に備え、この名前も残す。
+#
+# 変更するときは Dockerfile 側を直し、ここへ反映すること。
 FROM golang:1.27 AS build
 WORKDIR /src
 

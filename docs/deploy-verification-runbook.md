@@ -99,8 +99,11 @@ nohup ./scripts/bench/coldstart.sh https://example.com/healthz 30 5 cold-render 
 
 ### 手順
 
-1. **本番用 Dockerfile を作る。** 現行の `backend-go/Dockerfile` は開発用で、
-   コンテナ起動時に `go build` する。このままではコールドスタートの計測が成立しない。
+1. **本番用 Dockerfile を用意する。**(作成済み)
+
+   多くの基盤は Dockerfile 名を選べず既定の `Dockerfile` を見るため、
+   **本番用を `Dockerfile` に置き、開発用を `Dockerfile.dev` に移した**。
+   `Dockerfile.prod` も互換のために同じ内容で残してある。
 
    ```dockerfile
    FROM golang:1.27 AS build
@@ -117,7 +120,11 @@ nohup ./scripts/bench/coldstart.sh https://example.com/healthz 30 5 cold-render 
    ENTRYPOINT ["/api"]
    ```
 
-   既存の開発用と共存させる(`Dockerfile.prod` にするか、ステージを分ける)。
+   | ファイル | 用途 |
+   |---|---|
+   | `Dockerfile` | **本番用**。distroless + 静的リンク。30.9MB |
+   | `Dockerfile.dev` | 開発用。起動時に `go build` する。`docker-compose.yml` が使う |
+   | `Dockerfile.prod` | 互換のための別名。中身は `Dockerfile` と同じ |
 
 2. 内部ジョブのエンドポイントを足す([ADR-0005](adr/0005-async-job-platform.md))。Phase 5 で使う。
 
@@ -434,7 +441,7 @@ Render Postgres の同居効果は、Render の計測時に追加パターンと
 
 #### 2. Back4App Containers
 
-1. 登録し(カード不要)、GitHub を接続して `backend-go/Dockerfile.prod` を指定する。
+1. 登録し(カード不要)、GitHub を接続して `backend-go/Dockerfile`(本番用) を指定する。
 2. **記録**: 無料枠は 256MB。**写真のアップロードで落ちると予想される**
    (Phase 0 で 24MP 単発のピークが 260MiB)。落ちた場合の挙動を記録する。
 3. 環境変数を入れ、公開 URL を控える。
@@ -459,7 +466,7 @@ Render Postgres の同居効果は、Render の計測時に追加パターンと
 
 #### 4. Northflank(Sandbox)
 
-1. 登録し、GitHub を接続して `backend-go/Dockerfile.prod` を指定する。
+1. 登録し、GitHub を接続して `backend-go/Dockerfile`(本番用) を指定する。
    リージョンは **Asia East** を選ぶ。
 2. **記録**: 無料枠の実条件(メモリ、常時起動かどうか、**超過時に課金されるか**)。
    カードは検証のみと案内されているが、超過の扱いは公式に明記がないため実測で確かめる。

@@ -26,9 +26,21 @@ Rails は退役済み(`chore!: Rails 退役 — backend/ を削除`)。`backend-
 
 ### 本番用 Dockerfile(作成済み)
 
-現行 `backend-go/Dockerfile` は開発用で、`CMD ["sh", "-c", "go build -o /tmp/api ./cmd/api && exec /tmp/api"]`
-となっている。イメージは 1GB 近く、起動のたびにコンパイルが走る。コールドスタートの計測が成立しないため、
-`backend-go/Dockerfile.prod` を別に用意した(distroless + 静的リンク)。
+当初の `backend-go/Dockerfile` は開発用で、`CMD ["sh", "-c", "go build ... && exec /tmp/api"]`
+となっていた。イメージは 1GB 近く、**起動のたびにコンパイルが走る**。512MB の無料枠では
+起動中に OOM しうるうえ、コールドスタートの計測も成立しない。
+
+そこで本番用(distroless + 静的リンク)を用意し、**名前を入れ替えた**。
+
+| ファイル | 用途 |
+|---|---|
+| `Dockerfile` | **本番用**。30.9MB、起動は即時 |
+| `Dockerfile.dev` | 開発用。`docker-compose.yml` が使う |
+| `Dockerfile.prod` | 互換のための別名 |
+
+入れ替えた理由は、**多くの基盤が Dockerfile 名を選べない**ためである。
+Back4App Containers は指定できず、既定の `Dockerfile` を見る(2026-09-22 実測)。
+本番用を既定の名前に置かないと、そうした基盤で開発用がビルドされてしまう。
 
 実測: **イメージ 29MB、待機時メモリ 12.75 MiB、起動は即時**(`docs/benchmarks/phase0-baseline.md`)。
 
