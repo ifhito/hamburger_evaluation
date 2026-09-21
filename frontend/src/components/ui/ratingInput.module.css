@@ -1,0 +1,98 @@
+/* fieldset の枠は使わない(既定では、凡例が枠の線にまたがって置かれる)。ラベルは箱の上に置く */
+.pick {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.label {
+  display: block;
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+}
+
+.view {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.num {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.num b {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.of {
+  font-size: 14px;
+  color: var(--ui-text-muted);
+}
+
+.steps {
+  display: flex;
+  gap: 8px;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  border: 1px solid var(--ui-control-border);
+  border-radius: 8px;
+  background: var(--ui-bg);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.on {
+  border-color: var(--ui-text);
+  background: var(--ui-text);
+  color: var(--ui-bg);
+}
+
+/* 本物のラジオボタンは見えなくして、ボタンの見た目の label に任せる(キーボードの操作は、ラジオボタンのまま) */
+.radio {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.step:has(.radio:focus-visible) {
+  outline: 2px solid var(--ui-text);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .view {
+    gap: 12px;
+  }
+
+  .steps {
+    gap: 6px;
+  }
+}

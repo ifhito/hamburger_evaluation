@@ -1,0 +1,18 @@
+.burger {
+  display: block;
+  flex: none;
+}
+
+.rate {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  line-height: 0;
+}
+
+.rate b {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ui-text);
+}

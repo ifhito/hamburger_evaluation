@@ -15,6 +15,14 @@ const en = {
       overAnnounce: "Over the limit (maximum {{max}} characters)",
       withinAnnounce: "Within the limit",
     },
+    ratingAria: "Rating {{value}} out of {{max}}",
+    ratingOutOf: "out of {{max}}",
+    // 空・読み込み中・見つからないときの画面の文言(デザインの英語版のとおり)。
+    states: {
+      empty: { title: "Nobody's eaten here yet", description: "Why not write the first review?" },
+      loading: { title: "Grilling…", description: "Just a moment" },
+      notFound: { code: "404", title: "Sold out", description: "Page not found" },
+    },
   },
   auth: {
     // パスワードの規則の判定は backend(domain.ValidatePassword)だけが持つ。これは規則を利用者に伝える説明文で、
