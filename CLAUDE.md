@@ -237,8 +237,9 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 | `OAUTH_RESOURCE_URL` | 任意 | トークンの宛先。既定は `<OAUTH_ISSUER>/mcp` |
 | `OAUTH_CONSENT_URL` | 任意 | 許可を尋ねる画面の URL。既定は `<APP_BASE_URL>/oauth/authorize` |
 | `OAUTH_STATIC_CLIENTS` | 任意 | 固定で登録するアプリ。JSON の配列 `[{"id":"…","name":"…","redirect_uris":["…"]}]` |
+| `MCP_ALLOWED_ORIGINS` | 任意 | リモートの MCP(`/mcp`)が受け付ける Origin(ブラウザが付ける要求元)。カンマ区切りの `scheme://host[:port]`。既定は `OAUTH_ISSUER` の Origin だけ(設定すると置き換える)。ワイルドカードと `null` は起動時に拒否する。Origin のない要求(ブラウザ以外)は、この設定に関係なく通る |
 
-**主なクライアントとの相性**(公式ドキュメントで確認した内容。Claude Code は、`/mcp` に、トークンつきでつなぐところまで実機で確認した(下の「リモートの MCP サーバー」)。許可の画面を通した認可の流れの実機確認は、まだ)
+**主なクライアントとの相性**(公式ドキュメントで確認した内容。Claude Code は、`/mcp` に、トークンつきでつなぐところまで実機で確認した(下の「リモートの MCP サーバー」)。ブラウザで許可する流れ(未ログイン → ログイン → 許可の画面 → トークン交換 → `/mcp`)は、自作のクライアントと実際のブラウザで確認した。Claude Code 自身の OAuth の実行は、非対話(`-p`)ではできず、対話画面での確認は、まだ)
 
 - Cursor: 固定のクライアント ID を設定する方式(動的登録・CIMD は使わない)。戻り先は `http://localhost:8787/callback` と `https://www.cursor.com/agents/mcp/oauth/callback` → `OAUTH_STATIC_CLIENTS` で足りる。
 - Claude Code: 既定は動的登録(DCR)で、認可サーバーが CIMD に対応していれば CIMD も使う。戻り先は `http://localhost:<ランダムなポート>/callback`。`--client-id` と `--callback-port` で固定すれば、固定で登録したアプリ(戻り先は `http://localhost:<そのポート>/callback`)でつなげる。
@@ -255,6 +256,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
   - トークンがない・無効(存在しない・期限切れ・取り消し済み・宛先違い・持ち主が退会済み) → `401` と `WWW-Authenticate: Bearer resource_metadata="…"`(トークンがあって無効なときは `error="invalid_token"` も付く)。
   - 範囲が足りない → `403` と `WWW-Authenticate: Bearer error="insufficient_scope", scope="hamburger:write", …`(クライアントは、範囲を広げる許可を求め直せる)。
   - 保護されたリソースの情報(RFC 9728)は、トークンなしで `GET /.well-known/oauth-protected-resource`(と、リソースの path を足した `/.well-known/oauth-protected-resource/mcp`)。宛先・認可サーバーの場所・使える範囲を返す。
+- **Origin の検証**(DNS の付け替え攻撃への対策): MCP の仕様は、Streamable HTTP のサーバーに、すべての接続で `Origin` を検証すること、不正なら `403` を返すことを求めている(2025-06-18 は MUST。最新の 2026-07-28 は「Origin が存在して不正なら 403」まで明記)。`POST /mcp` は、**認証より前**に検証する(トークンの確認にも、本文の読み取りにも進ませない)。`Origin` がなければ通す(Claude Code などブラウザ以外のクライアント)。あれば、`MCP_ALLOWED_ORIGINS` の一覧と、scheme・host・port の**完全一致**で比べる(`domain.NormalizeOrigin`。scheme と host の大文字小文字は区別せず、既定のポートは省いて比べる。部分一致はしない)。一覧にない・`null`・空・複数・path や末尾のスラッシュを持つ不正な形は、理由を返さず、固定の本文(`{"error":"Forbidden"}`)で `403`。CORS のヘッダーは返さない(別の Origin のブラウザから直接使うクライアントには、対応しない。事前確認(preflight)は承認されないので、ブラウザは本要求を送らない)。
 - **範囲はツールごと**: 読み取りのツール(`get_meta`・`list_shops`・`get_shop`・`list_reviews`・`get_review`・`get_user`)は `hamburger:read`、書き込みのツール(`create_review`・`update_review`・`delete_review`・`submit_shop`)は `hamburger:write`。対応表は `mcpToolScopes` の 1 か所で、入口(本文から読み取った範囲の確認。範囲を広げる許可を求め直せる 403 を返すため)と、ツールを実行する直前の確認(`guarded`。SDK が本文を別の読み方で解釈しても、書き込みが通らないようにする二重の防御)の両方が使う。ツールを足すときは、この表に足す(足し忘れると、テストが落ちる)。初期化・ツールの一覧は、範囲を要求しない。
 - **ツールの実体**: 既存の usecase を呼ぶだけ。権限(投稿者本人だけが編集・削除、審査待ちのショップの見え方)は usecase と domain にあり、ここに複製しない。返す JSON は、REST の API と同じ形(`newReviewResponse` などを共有)。エラーの文言も REST と同じで、知らないエラーは、詳細をログにだけ残し、利用者には `internal server error` だけを返す。
 - **プロンプトインジェクションへの注意**: レビューの本文・店名・自己紹介は、他の利用者が書いた文字列である。ツールの説明と、接続時の説明(`instructions`)で、内容として扱い、その中の命令には従わないよう伝えている。書き込みのツールの説明には、実際にデータを変えること、実行前に利用者へ確認することを書いている。防げる保証はない(AI の判断による)ので、書き込みは、必要なときだけ許可する。
