@@ -12,6 +12,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
@@ -22,6 +23,11 @@ const DefaultIssuer = "https://accounts.google.com"
 
 // httpTimeout は、Google への 1 回の HTTP 要求(探索の情報・公開鍵・コードの交換)の待ち時間の上限である。
 const httpTimeout = 10 * time.Second
+
+// defaultDiscoveryRetryInterval は、探索の情報の取得に失敗したあと、次に通信を試すまで待つ時間である。
+// 提供元の窓口が落ちている間、要求のたびに、探索の通信(最大 httpTimeout)を試すと、全部の要求が待たされて
+// しまうので、失敗を短い間だけ覚えて、その間は、通信せずに失敗させる。
+const defaultDiscoveryRetryInterval = 5 * time.Second
 
 // stateBytes は、state と nonce の乱数のバイト数である(256 ビット)。
 const stateBytes = 32
@@ -38,6 +44,8 @@ type Config struct {
 	// Issuer は、OpenID Connect の提供元の URL である。空なら DefaultIssuer(Google)。テストや隔離した確認で、
 	// 別の提供元に差し替えるためにある(https、または、ループバックの http だけを許す検査は、設定を読む側にある)。
 	Issuer string
+	// DiscoveryRetryInterval は、探索の情報の取得に失敗したあと、次に通信を試すまで待つ時間である(0 なら 5 秒)。
+	DiscoveryRetryInterval time.Duration
 }
 
 // Provider は usecase.GoogleProvider の実装である。提供元の探索の情報(認可・トークンの窓口と公開鍵の場所)は、
@@ -46,8 +54,12 @@ type Provider struct {
 	cfg    Config
 	client *http.Client
 
-	mu       sync.Mutex
-	provider *oidc.Provider
+	// 探索の情報は、最初に 1 度だけ取得する。取得の通信は、ロックの外で、同時に来た要求で 1 回だけ行い(discovery)、
+	// 失敗は、短い間だけ覚える(failedAt)。
+	mu        sync.Mutex
+	provider  *oidc.Provider
+	failedAt  time.Time
+	discovery singleflight.Group
 }
 
 var _ usecase.GoogleProvider = (*Provider)(nil)
@@ -60,19 +72,53 @@ func New(cfg Config) *Provider {
 	return &Provider{cfg: cfg, client: &http.Client{Timeout: httpTimeout}}
 }
 
-// discover は、提供元の探索の情報を返す(取得済みならそれを返し、まだなら取得する。失敗は覚えず、次の呼び出しで再び試す)。
+// errDiscoveryFailed は、探索の情報を取得できなかったことを表す(原因は含めない)。
+var errDiscoveryFailed = errors.New("googleauth: discovery failed")
+
+// discover は、提供元の探索の情報を返す。取得済みならそれを返し、まだなら取得する。**通信は、ロックを持たずに、同時に
+// 来た要求で 1 回だけ行う**(待っている要求は、その結果を共有する。要求が取り消されたら、通信の完了を待たずに終わる)。
+// 通信は、最初の要求の context ではなく、専用の context(httpTimeout で切れる)で行う(最初の要求が取り消されても、
+// 待っているほかの要求が、道連れで失敗しないため)。失敗したときは、RetryInterval の間、通信せずに失敗させる
+// (提供元の窓口が落ちている間、要求のたびに、通信を待たされないため)。
 func (p *Provider) discover(ctx context.Context) (*oidc.Provider, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.provider != nil {
-		return p.provider, nil
+	prov, failedAt := p.provider, p.failedAt
+	p.mu.Unlock()
+	if prov != nil {
+		return prov, nil
 	}
-	prov, err := oidc.NewProvider(oidc.ClientContext(ctx, p.client), p.cfg.Issuer)
-	if err != nil {
-		return nil, errors.New("googleauth: discovery failed")
+	if !failedAt.IsZero() && time.Since(failedAt) < p.retryInterval() {
+		return nil, errDiscoveryFailed
 	}
-	p.provider = prov
-	return prov, nil
+	ch := p.discovery.DoChan("discover", func() (any, error) {
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), httpTimeout)
+		defer cancel()
+		prov, err := oidc.NewProvider(oidc.ClientContext(dctx, p.client), p.cfg.Issuer)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if err != nil {
+			p.failedAt = time.Now()
+			return nil, errDiscoveryFailed
+		}
+		p.provider, p.failedAt = prov, time.Time{}
+		return prov, nil
+	})
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		return res.Val.(*oidc.Provider), nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("googleauth: discovery canceled: %w", ctx.Err())
+	}
+}
+
+func (p *Provider) retryInterval() time.Duration {
+	if p.cfg.DiscoveryRetryInterval > 0 {
+		return p.cfg.DiscoveryRetryInterval
+	}
+	return defaultDiscoveryRetryInterval
 }
 
 func (p *Provider) oauth2Config(prov *oidc.Provider) *oauth2.Config {

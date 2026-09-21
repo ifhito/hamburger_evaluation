@@ -35,13 +35,14 @@ type BurgerStatsRecalcRequest struct {
 }
 
 type LoginHandoff struct {
-	ID        string
-	CodeHash  string
-	Outcome   string
-	UserID    *string
-	ReturnTo  string
-	ExpiresAt pgtype.Timestamptz
-	CreatedAt pgtype.Timestamptz
+	ID         string
+	CodeHash   string
+	BinderHash string
+	Outcome    string
+	UserID     *string
+	ReturnTo   string
+	ExpiresAt  pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
 }
 
 type MailDelivery struct {

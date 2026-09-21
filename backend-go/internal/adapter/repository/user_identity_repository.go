@@ -56,6 +56,14 @@ func (r *UserIdentityRepository) CreateUserIdentity(ctx context.Context, params 
 	return rowmap.UserIdentity(row), nil
 }
 
+// DiscardUserIdentitiesByUser は、userID の、すべての結び付きを削除する(1 件もなくてもエラーにしない)。
+func (r *UserIdentityRepository) DiscardUserIdentitiesByUser(ctx context.Context, userID string) error {
+	if err := r.q.DiscardUserIdentitiesByUser(ctx, userID); err != nil {
+		return fmt.Errorf("discard user identities by user: %w", err)
+	}
+	return nil
+}
+
 // DiscardUserIdentity は、userID の、provider の結び付きを削除する。なければ domain.ErrIdentityNotFound を返す。
 func (r *UserIdentityRepository) DiscardUserIdentity(ctx context.Context, userID, provider string) error {
 	n, err := r.q.DiscardUserIdentity(ctx, sqlcgen.DiscardUserIdentityParams{UserID: userID, Provider: provider})

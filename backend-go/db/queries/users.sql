@@ -11,6 +11,14 @@ WHERE id = $1;
 SELECT * FROM users
 WHERE email = $1 AND discarded_at IS NULL;
 
+-- name: GetActiveUserByEmailIgnoreCase :one
+-- メールの一意性は lower(email) で守られているので、「登録済みか」の確認(signup・外部のサービスでの新規登録)は、
+-- 大文字小文字を区別せずに調べる(「Alice@」と「alice@」を別のアカウントとして扱わないため)。退会済みは含めない。
+SELECT * FROM users
+WHERE lower(email) = lower($1) AND discarded_at IS NULL
+ORDER BY created_at
+LIMIT 1;
+
 -- name: GetActiveUserByID :one
 SELECT * FROM users
 WHERE id = $1 AND discarded_at IS NULL;

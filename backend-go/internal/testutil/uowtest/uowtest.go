@@ -179,9 +179,11 @@ type UoW struct {
 	// 削除)に使う代役である。未設定(nil)のものが使われると panic する。
 	SignupVerifications domain.SignupVerificationRepository
 	PendingSignups      usecase.SignupVerificationQuery
-	// UserIdentities は、外部のサービスでの新規登録で、結び付きを記録する代役である。未設定(nil)のものが使われると
-	// panic する。
+	// UserIdentities は、外部のサービスでの新規登録で、結び付きを記録する代役である。未設定(nil)のときは、
+	// Identities(退会のときの、結び付きの削除を記録する代役)が使われ、それ以外の操作は panic する。
 	UserIdentities domain.UserIdentityRepository
+	// Identities は、退会のときの、結び付きの削除を記録する代役である。未設定(nil)なら、Do が空のものを作る。
+	Identities *IdentityDiscards
 	// LoginHandoffs と PendingHandoff は、画面へ渡すコードを使う手順の代役である。未設定(nil)のものが使われると
 	// panic する。
 	LoginHandoffs  domain.LoginHandoffRepository
@@ -220,6 +222,29 @@ func (g *GrantRevocations) DiscardOAuthGrantsByUser(_ context.Context, userID st
 
 var _ domain.OAuthGrantRepository = (*GrantRevocations)(nil)
 
+// IdentityDiscards は、domain.UserIdentityRepository の代役で、退会で結び付きを削除された利用者の ID を、
+// 呼ばれた順に記録する。Err を設定すると、削除がそのエラーで失敗する。結び付きの作成・1 件の削除は、
+// 退会の手順の外の操作なので、呼ばれると panic して、テストが想定していない操作に気づける。
+type IdentityDiscards struct {
+	UserIDs []string
+	Err     error
+}
+
+func (d *IdentityDiscards) CreateUserIdentity(context.Context, domain.CreateUserIdentityParams) (domain.UserIdentity, error) {
+	panic("unexpected CreateUserIdentity call")
+}
+
+func (d *IdentityDiscards) DiscardUserIdentity(context.Context, string, string) error {
+	panic("unexpected DiscardUserIdentity call")
+}
+
+func (d *IdentityDiscards) DiscardUserIdentitiesByUser(_ context.Context, userID string) error {
+	d.UserIDs = append(d.UserIDs, userID)
+	return d.Err
+}
+
+var _ domain.UserIdentityRepository = (*IdentityDiscards)(nil)
+
 var _ usecase.UnitOfWork = (*UoW)(nil)
 
 // Do は fn を実行し、成功なら commit、エラーなら rollback として回数を数える。
@@ -233,6 +258,13 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 	if u.Grants == nil {
 		u.Grants = &GrantRevocations{}
 	}
+	if u.Identities == nil {
+		u.Identities = &IdentityDiscards{}
+	}
+	identities := u.UserIdentities
+	if identities == nil {
+		identities = u.Identities
+	}
 	tx := usecase.Tx{
 		OAuthGrants: domain.NewOAuthGrants(u.Grants),
 		Reviews:     domain.NewReviews(u.Reviews),
@@ -243,7 +275,7 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 		// 使うと panic して、テストが想定していない操作に気づける。
 		SignupVerifications: domain.NewSignupVerifications(u.SignupVerifications),
 		PendingSignups:      u.PendingSignups,
-		UserIdentities:      domain.NewUserIdentities(u.UserIdentities),
+		UserIdentities:      domain.NewUserIdentities(identities),
 		LoginHandoffs:       domain.NewLoginHandoffs(u.LoginHandoffs),
 		PendingHandoff:      u.PendingHandoff,
 		UserReads:           u.UserReads,

@@ -41,6 +41,16 @@ func (q *Queries) CreateUserIdentity(ctx context.Context, arg CreateUserIdentity
 	return i, err
 }
 
+const discardUserIdentitiesByUser = `-- name: DiscardUserIdentitiesByUser :exec
+DELETE FROM user_identities
+WHERE user_id = $1
+`
+
+func (q *Queries) DiscardUserIdentitiesByUser(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, discardUserIdentitiesByUser, userID)
+	return err
+}
+
 const discardUserIdentity = `-- name: DiscardUserIdentity :execrows
 DELETE FROM user_identities
 WHERE user_id = $1 AND provider = $2
@@ -57,32 +67,6 @@ func (q *Queries) DiscardUserIdentity(ctx context.Context, arg DiscardUserIdenti
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const getActiveUserByEmailIgnoreCase = `-- name: GetActiveUserByEmailIgnoreCase :one
-SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
-WHERE lower(email) = lower($1) AND discarded_at IS NULL
-ORDER BY created_at
-LIMIT 1
-`
-
-// 外部のサービスでの新規登録のとき、同じメールのアカウントがすでにあるかを調べる。大文字小文字は
-// 区別しない(「Alice@」と「alice@」を別のアカウントとして作らないため)。退会済みは含めない。
-func (q *Queries) GetActiveUserByEmailIgnoreCase(ctx context.Context, lower string) (User, error) {
-	row := q.db.QueryRow(ctx, getActiveUserByEmailIgnoreCase, lower)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Username,
-		&i.Bio,
-		&i.PasswordDigest,
-		&i.Admin,
-		&i.DiscardedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const getUserIdentityByProviderUserID = `-- name: GetUserIdentityByProviderUserID :one

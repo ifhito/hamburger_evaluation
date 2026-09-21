@@ -53,6 +53,11 @@ type googleKit struct {
 	alice  string // パスワードでサインインできる利用者(alice@example.com)
 	bob    string // パスワードでサインインできる利用者(bob@example.com)
 	logs   *bytes.Buffer
+
+	// handoffs は、コールバックの応答が、手続きを終えたブラウザに設定した「結び付けの値」の cookie を、コードごとに
+	// 覚えておく(そのブラウザが、あとで、そのコードを交換するときに、送るもの)。別のブラウザの交換は、これを使わない(exchangeWith)。
+	mu       sync.Mutex
+	handoffs map[string][]*http.Cookie
 }
 
 // kitOptions は、テストのために、部品を差し替えるための指定である。
@@ -60,8 +65,14 @@ type kitOptions struct {
 	issuer func(usecase.TokenIssuer) usecase.TokenIssuer
 	// txUsers は、トランザクションの中で、ユーザーを読む窓口を包む(DB の一時的なエラーを起こすため)。
 	txUsers func(usecase.UserQuery) usecase.UserQuery
+	// identityQuery は、結び付きを読む窓口を包む(並行する手続きの、読み取りと書き込みの間に割り込むため)。
+	identityQuery func(usecase.IdentityQuery) usecase.IdentityQuery
 	// maxConns は、DB の接続プールの上限である(0 なら、既定)。並行する処理が、接続を取り合って止まらないことを確かめるため、小さくする。
 	maxConns int32
+}
+
+func withIdentityQuery(fn func(usecase.IdentityQuery) usecase.IdentityQuery) func(*kitOptions) {
+	return func(o *kitOptions) { o.identityQuery = fn }
 }
 
 func withMaxConns(n int32) func(*kitOptions) {
@@ -126,6 +137,35 @@ func (f *flakyUsers) GetActiveUserByID(ctx context.Context, id string) (domain.U
 	return f.UserQuery.GetActiveUserByID(ctx, id)
 }
 
+// rendezvousIdentities は、結び付きを読む窓口を包んで、「結び付きがない」と返された手続きを、n 件が揃うまで待たせる。
+// 並行する手続きが、どちらも「まだ結び付きがない」と見てから、書き込みに進むことを、確実に起こすためにある
+// (揃ったあとの読み取りは、待たされない)。
+type rendezvousIdentities struct {
+	usecase.IdentityQuery
+	n       int
+	arrived atomic.Int32
+	release chan struct{}
+	once    sync.Once
+}
+
+func newRendezvousIdentities(n int) *rendezvousIdentities {
+	return &rendezvousIdentities{n: n, release: make(chan struct{})}
+}
+
+func (r *rendezvousIdentities) GetIdentityByProviderUserID(ctx context.Context, provider, subject string) (domain.UserIdentity, error) {
+	got, err := r.IdentityQuery.GetIdentityByProviderUserID(ctx, provider, subject)
+	if errors.Is(err, domain.ErrIdentityNotFound) {
+		if int(r.arrived.Add(1)) >= r.n {
+			r.once.Do(func() { close(r.release) })
+		}
+		select {
+		case <-r.release:
+		case <-time.After(5 * time.Second):
+		}
+	}
+	return got, err
+}
+
 func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	t.Helper()
 	var ko kitOptions
@@ -166,9 +206,13 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	if ko.issuer != nil {
 		loginIssuer = ko.issuer(codec)
 	}
+	var identityQuery usecase.IdentityQuery = query.NewUserIdentityQuery(pool)
+	if ko.identityQuery != nil {
+		identityQuery = ko.identityQuery(identityQuery)
+	}
 	logins := usecase.NewGoogleLogins(
 		googleauth.New(googleauth.Config{ClientID: googleTestClientID, ClientSecret: googleTestClientSecret, RedirectURL: googleTestRedirect, Issuer: idp.URL}),
-		query.NewUserIdentityQuery(pool), userQuery, loginUoW,
+		identityQuery, userQuery, loginUoW,
 		domain.NewLoginHandoffs(repository.NewLoginHandoffRepository(pool)),
 		domain.NewUserIdentities(repository.NewUserIdentityRepository(pool)),
 		loginIssuer,
@@ -190,7 +234,7 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	originalLogWriter := log.Writer()
 	log.SetOutput(logs)
 	t.Cleanup(func() { log.SetOutput(originalLogWriter) })
-	return &googleKit{pool: pool, conn: conn, router: router, idp: idp, codec: codec, alice: alice, bob: bob, logs: logs}
+	return &googleKit{pool: pool, conn: conn, router: router, idp: idp, codec: codec, alice: alice, bob: bob, logs: logs, handoffs: map[string][]*http.Cookie{}}
 }
 
 func (k *googleKit) bearer(t *testing.T, userID string) string {
@@ -283,14 +327,30 @@ func plainRun() runOpts {
 	return runOpts{cookie: func(c *http.Cookie) *http.Cookie { return c }, query: func(url.Values) {}}
 }
 
+const (
+	flowCookiePrefix    = "google_login_flow_"
+	handoffCookiePrefix = "google_login_handoff_"
+)
+
 // cookieFrom は、応答に設定された、手続きの cookie を返す(なければ nil)。
 func cookieFrom(rec *httptest.ResponseRecorder) *http.Cookie {
 	for _, c := range rec.Result().Cookies() {
-		if c.Name == "google_login_flow" {
+		if strings.HasPrefix(c.Name, flowCookiePrefix) && c.MaxAge >= 0 {
 			return c
 		}
 	}
 	return nil
+}
+
+// handoffCookiesFrom は、応答に設定された、「結び付けの値」の cookie(消すものを除く)を返す。
+func handoffCookiesFrom(rec *httptest.ResponseRecorder) []*http.Cookie {
+	var out []*http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if strings.HasPrefix(c.Name, handoffCookiePrefix) && c.MaxAge >= 0 {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // authorizeLink は、ログイン済みの利用者(userID)の、結び付けの手続きを、認証つきの POST で始め、返された Google の URL
@@ -350,6 +410,11 @@ func (k *googleKit) callback(t *testing.T, p pendingCallback, cookies []*http.Co
 		t.Fatalf("frontend の結果の画面へ戻していない: %q", f.callback.Header().Get("Location"))
 	}
 	f.code = dest.Query().Get("code")
+	if f.code != "" {
+		k.mu.Lock()
+		k.handoffs[f.code] = handoffCookiesFrom(f.callback)
+		k.mu.Unlock()
+	}
 	return f
 }
 
@@ -368,25 +433,28 @@ func (k *googleKit) run(t *testing.T, startQuery string, opts ...func(*runOpts))
 	return k.callback(t, p, p.cookies, o)
 }
 
-// browserJar は、1 つのブラウザが持つ、手続きの cookie の代役である(Set-Cookie で置き換わり、消されると空になる)。
-type browserJar struct{ cookie *http.Cookie }
+// browserJar は、1 つのブラウザが持つ cookie の代役である。ブラウザと同じく、名前と Path が同じ cookie を、Set-Cookie で
+// 置き換え、MaxAge が負の Set-Cookie で(名前と Path が同じものだけを)消す。
+type browserJar struct{ store map[string]*http.Cookie }
 
 func (j *browserJar) cookies() []*http.Cookie {
-	if j.cookie == nil {
-		return nil
+	out := make([]*http.Cookie, 0, len(j.store))
+	for _, c := range j.store {
+		out = append(out, c)
 	}
-	return []*http.Cookie{j.cookie}
+	return out
 }
 
 func (j *browserJar) update(rec *httptest.ResponseRecorder) {
+	if j.store == nil {
+		j.store = map[string]*http.Cookie{}
+	}
 	for _, c := range rec.Result().Cookies() {
-		if c.Name != "google_login_flow" {
-			continue
-		}
+		key := c.Name + "|" + c.Path
 		if c.MaxAge < 0 {
-			j.cookie = nil
+			delete(j.store, key)
 		} else {
-			j.cookie = c
+			j.store[key] = c
 		}
 	}
 }
@@ -401,9 +469,26 @@ func withCookie(fn func(*http.Cookie) *http.Cookie) func(*runOpts) {
 	return func(o *runOpts) { o.cookie = fn }
 }
 
+// exchange は、コードを、そのコードの手続きを終えたブラウザ(コールバックの応答が「結び付けの値」の cookie を
+// 設定したブラウザ)が交換する要求である。
 func (k *googleKit) exchange(code string) *httptest.ResponseRecorder {
+	k.mu.Lock()
+	cookies := k.handoffs[code]
+	k.mu.Unlock()
+	return k.exchangeWith(code, cookies...)
+}
+
+// exchangeWith は、コードを、指定した cookie を持つブラウザが交換する要求である(cookie を渡さなければ、別のブラウザ)。
+// cookie は、ブラウザと同じく、Path が合うものだけが送られる。
+func (k *googleKit) exchangeWith(code string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(map[string]string{"code": code})
-	return do(k.router, http.MethodPost, "/auth/google/exchange", string(body), "")
+	req := httptest.NewRequest(http.MethodPost, "/auth/google/exchange", strings.NewReader(string(body)))
+	for _, c := range sendable(cookies, "/auth/google/exchange") {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	k.router.ServeHTTP(rec, req)
+	return rec
 }
 
 func (k *googleKit) count(t *testing.T, table string) int {
@@ -486,6 +571,22 @@ func TestGoogleSignIn(t *testing.T) {
 		}
 	})
 
+	t.Run("表示名(name)がない Google アカウントでも、公開のユーザー名に、メールの一部(@ より前)を使わない", func(t *testing.T) {
+		k := newGoogleKit(t)
+		k.idp.SetUser(fakeoidc.User{Sub: "sub-noname", Email: "john.smith1985@gmail.example", EmailVerified: true, Name: ""})
+		body := decodeExchange(t, k.exchange(k.run(t, "").code))
+		if body.Token == "" {
+			t.Fatalf("サインインできなかった: %+v", body)
+		}
+		if strings.Contains(strings.ToLower(body.Username), "john") || strings.Contains(body.Username, "1985") || strings.Contains(body.Username, "@") {
+			t.Fatalf("ユーザー名 %q に、メールの一部が含まれている(email は本人にしか見せない)", body.Username)
+		}
+		var publicName string
+		if err := k.conn.QueryRow(context.Background(), `SELECT username FROM users WHERE email = 'john.smith1985@gmail.example'`).Scan(&publicName); err != nil || publicName != body.Username {
+			t.Fatalf("保存されたユーザー名 = %q(%v), 応答 = %q", publicName, err, body.Username)
+		}
+	})
+
 	t.Run("2 回目以降は、同じ利用者としてサインインし、新しい利用者は作られない", func(t *testing.T) {
 		k := newGoogleKit(t)
 		first := decodeExchange(t, k.exchange(k.run(t, "").code))
@@ -554,6 +655,43 @@ func TestGoogleSignIn(t *testing.T) {
 		}
 	})
 
+	t.Run("同じ Google アカウントの初回のサインインが並行しても、両方が同じ利用者としてサインインでき、「パスワードでサインインしてください」とは案内されない", func(t *testing.T) {
+		rendezvous := newRendezvousIdentities(2)
+		k := newGoogleKit(t, withIdentityQuery(func(inner usecase.IdentityQuery) usecase.IdentityQuery {
+			rendezvous.IdentityQuery = inner
+			return rendezvous
+		}))
+		first := k.authorize(t, "")
+		second := k.authorize(t, "")
+
+		codes := make([]string, 2)
+		var wg sync.WaitGroup
+		for i, p := range []pendingCallback{first, second} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				codes[i] = k.callback(t, p, p.cookies, plainRun()).code
+			}()
+		}
+		wg.Wait()
+
+		ids := map[string]bool{}
+		for i, code := range codes {
+			rec := k.exchange(code)
+			body := decodeExchange(t, rec)
+			if rec.Code != http.StatusOK || body.Token == "" {
+				t.Fatalf("%d 番目の手続き = %d %s, want サインインの成功(負けた側が、誤った案内になっていないか)", i+1, rec.Code, rec.Body)
+			}
+			ids[body.ID] = true
+		}
+		if len(ids) != 1 {
+			t.Fatalf("同じ Google アカウントなのに、別の利用者としてサインインした: %v", ids)
+		}
+		if k.count(t, "users") != 3 || k.count(t, "user_identities") != 1 {
+			t.Fatalf("利用者 %d 人・結び付き %d 件, want 3 人・1 件", k.count(t, "users"), k.count(t, "user_identities"))
+		}
+	})
+
 	t.Run("state が違う・cookie がない・cookie が改ざんされている・期限切れの手続きは、失敗になり、何も作られない", func(t *testing.T) {
 		cases := map[string][]func(*runOpts){
 			"state の改ざん": {withQuery(func(q url.Values) { q.Set("state", "forged-state") })},
@@ -579,6 +717,70 @@ func TestGoogleSignIn(t *testing.T) {
 				}
 			})
 		}
+	})
+
+	t.Run("手続きの cookie がない(または、state が合わない)コールバックでは、DB に何も書かず、コードなしで frontend の結果の画面へ戻す", func(t *testing.T) {
+		cases := map[string]func(*runOpts){
+			"cookie がない":      func(o *runOpts) { o.cookie = func(*http.Cookie) *http.Cookie { return nil } },
+			"state の改ざん":      func(o *runOpts) { o.query = func(q url.Values) { q.Set("state", "forged-state") } },
+			"state がない":       func(o *runOpts) { o.query = func(q url.Values) { q.Del("state") } },
+			"別の秘密で封じた cookie": func(o *runOpts) { o.cookie = func(c *http.Cookie) *http.Cookie { c.Value = "garbage"; return c } },
+		}
+		for name, mutate := range cases {
+			t.Run(name, func(t *testing.T) {
+				k := newGoogleKit(t)
+				before := k.count(t, "login_handoffs")
+				f := k.run(t, "", func(o *runOpts) { mutate(o) })
+				if f.code != "" {
+					t.Fatalf("コードが渡された(手続きを始めたブラウザが確かめられないのに、結果を作った): %q", f.code)
+				}
+				if after := k.count(t, "login_handoffs"); after != before {
+					t.Fatalf("login_handoffs が %d 件から %d 件に増えた(手続きの cookie がない要求で、DB に書いている)", before, after)
+				}
+			})
+		}
+		t.Run("パラメーターなしの要求", func(t *testing.T) {
+			k := newGoogleKit(t)
+			rec := do(k.router, http.MethodGet, "/auth/google/callback", "", "")
+			if rec.Code != http.StatusSeeOther || strings.Contains(rec.Header().Get("Location"), "code=") || k.count(t, "login_handoffs") != 0 {
+				t.Fatalf("%d %q, login_handoffs %d 件", rec.Code, rec.Header().Get("Location"), k.count(t, "login_handoffs"))
+			}
+		})
+	})
+
+	t.Run("失敗の応答(409・400)にも、検証済みの戻り先(return_to)を含める(AI アプリの許可の画面から来た利用者が、元の要求へ戻れるように)", func(t *testing.T) {
+		const consent = "/oauth/authorize?client_id=app-1&state=xyz"
+		cases := map[string]struct {
+			setup      func(*googleKit)
+			wantStatus int
+		}{
+			"同じメールのアカウントがある(409)": {func(k *googleKit) {
+				k.idp.SetUser(fakeoidc.User{Sub: "sub-x", Email: "alice@example.com", EmailVerified: true, Name: "X"})
+			}, http.StatusConflict},
+			"利用者が認可を拒否した(400)":     {func(k *googleKit) { k.idp.SetTweaks(fakeoidc.Tweaks{DenyAuthorize: true}) }, http.StatusBadRequest},
+			"ID トークンの検証に失敗した(400)": {func(k *googleKit) { k.idp.SetTweaks(fakeoidc.Tweaks{Aud: "another-client"}) }, http.StatusBadRequest},
+		}
+		for name, tc := range cases {
+			t.Run(name, func(t *testing.T) {
+				k := newGoogleKit(t)
+				tc.setup(k)
+				rec := k.exchange(k.run(t, "?return_to="+url.QueryEscape(consent)).code)
+				if rec.Code != tc.wantStatus {
+					t.Fatalf("交換 = %d %s, want %d", rec.Code, rec.Body, tc.wantStatus)
+				}
+				if got := decodeExchange(t, rec).ReturnTo; got != consent {
+					t.Fatalf("失敗の応答の return_to = %q, want %q", got, consent)
+				}
+			})
+		}
+		t.Run("アプリの外を指す戻り先は、失敗の応答でも、既定(空)になる", func(t *testing.T) {
+			k := newGoogleKit(t)
+			k.idp.SetTweaks(fakeoidc.Tweaks{DenyAuthorize: true})
+			rec := k.exchange(k.run(t, "?return_to="+url.QueryEscape("https://evil.example/x")).code)
+			if rec.Code != http.StatusBadRequest || decodeExchange(t, rec).ReturnTo != "" {
+				t.Fatalf("%d %s", rec.Code, rec.Body)
+			}
+		})
 	})
 
 	t.Run("ID トークンの検証に失敗する手続き(宛先・発行者・期限・署名・nonce・メール未確認)は、失敗になり、何も作られない", func(t *testing.T) {
@@ -686,8 +888,10 @@ func TestGoogleSignIn(t *testing.T) {
 		if b2 := decodeExchange(t, k.exchange(f2.code)); b2.Token == "" || b2.ReturnTo != "/reviews" {
 			t.Fatalf("後発のタブ: %+v", b2)
 		}
-		if jar.cookie != nil {
-			t.Fatal("両方の手続きが終わったのに、手続きの cookie が残っている")
+		jar.update(k.exchange(f1.code)) // (交換の応答も、ブラウザの cookie を消す)
+		jar.update(k.exchange(f2.code))
+		if left := jar.cookies(); len(left) != 0 {
+			t.Fatalf("両方の手続きが終わったのに、cookie が %d 件残っている: %+v", len(left), left)
 		}
 	})
 
@@ -767,28 +971,61 @@ func TestGoogleSignIn(t *testing.T) {
 		}
 	})
 
-	t.Run("手続きの cookie は、HttpOnly・SameSite=Lax・戻り先の path に限られ、値に平文の秘密を含まず、コールバックで消される", func(t *testing.T) {
+	t.Run("手続きの cookie は、手続きごとに 1 つで、HttpOnly・SameSite=Lax・戻りの要求の path だけに限られ、名前にも値にも平文の秘密を含まず、コールバックで消される", func(t *testing.T) {
 		k := newGoogleKit(t)
 		f := k.run(t, "")
-		var flowCookie *http.Cookie
-		for _, c := range f.start.Result().Cookies() {
-			if c.Name == "google_login_flow" {
-				flowCookie = c
-			}
-		}
-		if flowCookie == nil || !flowCookie.HttpOnly || flowCookie.SameSite != http.SameSiteLaxMode || flowCookie.Path != browserAPIPrefix || flowCookie.MaxAge != 600 || flowCookie.Secure {
+		flowCookie := cookieFrom(f.start)
+		if flowCookie == nil || !strings.HasPrefix(flowCookie.Name, flowCookiePrefix) || !flowCookie.HttpOnly || flowCookie.SameSite != http.SameSiteLaxMode ||
+			flowCookie.Path != browserAPIPrefix+"/auth/google/callback" || flowCookie.MaxAge != 600 || flowCookie.Secure {
 			t.Fatalf("cookie = %+v", flowCookie)
 		}
 		authURL, _ := url.Parse(f.start.Header().Get("Location"))
-		if state := authURL.Query().Get("state"); strings.Contains(flowCookie.Value, state) {
-			t.Error("cookie の値に、平文の state が含まれている")
+		if state := authURL.Query().Get("state"); strings.Contains(flowCookie.Value, state) || strings.Contains(flowCookie.Name, state) {
+			t.Error("cookie の名前か値に、平文の state が含まれている")
 		}
-		var cleared bool
+		var cleared *http.Cookie
 		for _, c := range f.callback.Result().Cookies() {
-			cleared = cleared || (c.Name == "google_login_flow" && c.MaxAge < 0)
+			if c.Name == flowCookie.Name && c.MaxAge < 0 {
+				cleared = c
+			}
 		}
-		if !cleared {
-			t.Error("コールバックが cookie を消していない")
+		if cleared == nil || cleared.Path != flowCookie.Path {
+			t.Errorf("コールバックが、同じ名前・Path の cookie を消していない: %+v", cleared)
+		}
+
+		// コールバックは、「結び付けの値」の cookie を、結果との交換の要求だけに送られる Path で設定する。
+		binders := handoffCookiesFrom(f.callback)
+		if len(binders) != 1 {
+			t.Fatalf("結び付けの値の cookie = %d 件, want 1", len(binders))
+		}
+		b := binders[0]
+		if !strings.HasPrefix(b.Name, handoffCookiePrefix) || !b.HttpOnly || b.SameSite != http.SameSiteLaxMode || b.Path != browserAPIPrefix+"/auth/google/exchange" ||
+			b.MaxAge != int(domain.LoginHandoffTTL.Seconds()) || b.Secure {
+			t.Fatalf("結び付けの値の cookie = %+v", b)
+		}
+		if strings.Contains(b.Name, f.code) || b.Value == f.code || strings.Contains(f.callback.Header().Get("Location"), b.Value) {
+			t.Error("結び付けの値が、コードと同じか、URL に含まれているか、名前にコードが含まれている")
+		}
+	})
+
+	t.Run("手続きを終えたブラウザに、cookie は残らない(手続きの cookie はコールバックで、結び付けの値の cookie は交換で、消える)。古い Path の同名の cookie が読まれ続けることも、ない", func(t *testing.T) {
+		k := newGoogleKit(t)
+		jar := &browserJar{}
+		p := k.authorize(t, "")
+		jar.update(p.start)
+		if len(jar.cookies()) != 1 {
+			t.Fatalf("開始のあとの cookie = %d 件, want 1", len(jar.cookies()))
+		}
+
+		f := k.callback(t, p, jar.cookies(), plainRun())
+		jar.update(f.callback)
+		if names := len(jar.cookies()); names != 1 { // 手続きの cookie は消え、結び付けの値の cookie だけが残る
+			t.Fatalf("コールバックのあとの cookie = %d 件, want 1(結び付けの値だけ)", names)
+		}
+
+		jar.update(k.exchange(f.code))
+		if left := jar.cookies(); len(left) != 0 {
+			t.Fatalf("交換のあとも、cookie が %d 件残っている: %+v", len(left), left)
 		}
 	})
 }
@@ -844,6 +1081,61 @@ func TestGoogleLinking(t *testing.T) {
 			if b := decodeExchange(t, k.exchange(f.code)); !b.Linked {
 				t.Fatalf("%d 番目のタブの手続きが失敗した: %+v", i+1, b)
 			}
+		}
+	})
+
+	t.Run("手続きを終えたブラウザとは別のブラウザが、「画面へ渡すコード」だけを持ち込んで交換しても、サインインも結び付けもできず、本来のブラウザのコードも使えなくならない(ログイン CSRF)", func(t *testing.T) {
+		k := newGoogleKit(t)
+		// 攻撃者が、自分の Google で手続きを最後まで進め、画面へ戻る URL(/auth/google/complete?code=C)で止める。
+		attacker := k.run(t, "")
+		if attacker.code == "" {
+			t.Fatal("攻撃者の手続きが、コードを得られなかった")
+		}
+		// 被害者が、その URL を(60 秒以内に)踏む。被害者のブラウザは、結び付けの値の cookie を持たない。
+		rec := k.exchangeWith(attacker.code)
+		body := decodeExchange(t, rec)
+		if rec.Code != http.StatusBadRequest || body.Token != "" || len(body.Errors) != 1 {
+			t.Fatalf("別のブラウザが、コードだけで交換できた(被害者が、攻撃者のアカウントでログインした状態になる): %d %s", rec.Code, rec.Body)
+		}
+		if n := k.count(t, "users"); n != 3 { // alice・bob と、攻撃者自身の Google のアカウント(コールバックで作られた)
+			t.Fatalf("利用者が %d 人, want 3 人(別のブラウザの交換で、増えていないこと)", n)
+		}
+
+		// 無効なコードと、区別できない(応答が同じ)。
+		unknown := k.exchangeWith("unknown-code")
+		if unknown.Code != rec.Code || unknown.Body.String() != rec.Body.String() {
+			t.Fatalf("結び付けの値がない交換 = %d %s / 無効なコード = %d %s, want 同じ応答", rec.Code, rec.Body, unknown.Code, unknown.Body)
+		}
+
+		// 被害者の試み(または、攻撃者の推測)で、本来のブラウザのコードは、消費されない。
+		if legit := k.exchange(attacker.code); legit.Code != http.StatusOK || decodeExchange(t, legit).Token == "" {
+			t.Fatalf("別のブラウザの試みのあと、本来のブラウザが交換できない: %d %s", legit.Code, legit.Body)
+		}
+		if again := k.exchange(attacker.code); again.Code != http.StatusBadRequest {
+			t.Fatalf("2 回目 = %d, want 400(1 回だけ使える)", again.Code)
+		}
+	})
+
+	t.Run("結び付けの値が合わない(改ざん・別のコードのもの・コードそのもの)交換は、無効なコードと同じ応答で断られ、コードは消費されない", func(t *testing.T) {
+		k := newGoogleKit(t)
+		first, second := k.run(t, ""), k.run(t, "")
+		firstBinder, secondBinder := k.handoffs[first.code][0], k.handoffs[second.code][0]
+
+		wrongValue := *firstBinder
+		wrongValue.Value = secondBinder.Value // 別のコードの結び付けの値
+		tampered := *firstBinder
+		tampered.Value = firstBinder.Value[:len(firstBinder.Value)-2] + "AA"
+		asCode := *firstBinder
+		asCode.Value = first.code
+		movedName := *secondBinder // 別のコードの名前の cookie に、値だけを移し替えたもの(名前が合わないので、送られても読まれない)
+		movedName.Value = firstBinder.Value
+		for name, c := range map[string]*http.Cookie{"別のコードの結び付けの値": &wrongValue, "改ざん": &tampered, "コードそのもの": &asCode, "名前の違う cookie": &movedName} {
+			if rec := k.exchangeWith(first.code, c); rec.Code != http.StatusBadRequest || decodeExchange(t, rec).Token != "" {
+				t.Errorf("%s で交換できた: %d %s", name, rec.Code, rec.Body)
+			}
+		}
+		if ok := k.exchange(first.code); ok.Code != http.StatusOK {
+			t.Fatalf("断られた試みのあと、正しい結び付けの値での交換 = %d %s", ok.Code, ok.Body)
 		}
 	})
 
@@ -967,6 +1259,25 @@ func TestGoogleLinking(t *testing.T) {
 		list := do(k.router, http.MethodGet, "/me/identities", "", auth)
 		if !strings.Contains(list.Body.String(), `"can_unlink":false`) {
 			t.Fatalf("一覧 = %s", list.Body)
+		}
+	})
+
+	t.Run("Google と結び付けた利用者が退会すると、結び付きも消え、その Google アカウントを、別の利用者が結び付けられる", func(t *testing.T) {
+		k := newGoogleKit(t)
+		if body := decodeExchange(t, k.exchange(linkFlow(t, k, k.alice).code)); !body.Linked {
+			t.Fatal("alice の結び付けに失敗した")
+		}
+
+		if del := do(k.router, http.MethodDelete, "/users/"+k.alice, "", k.bearer(t, k.alice)); del.Code != http.StatusNoContent {
+			t.Fatalf("退会 = %d %s", del.Code, del.Body)
+		}
+
+		if n := k.count(t, "user_identities"); n != 0 {
+			t.Fatalf("退会したのに、結び付きが %d 件残っている", n)
+		}
+		linked := k.exchange(linkFlow(t, k, k.bob).code)
+		if linked.Code != http.StatusOK || !decodeExchange(t, linked).Linked {
+			t.Fatalf("退会した利用者の Google を、別の利用者(bob)が結び付けられない: %d %s", linked.Code, linked.Body)
 		}
 	})
 

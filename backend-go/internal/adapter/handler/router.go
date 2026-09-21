@@ -159,9 +159,13 @@ func oauthRoutes(oauth *OAuth, auth *usecase.Auth) []route {
 }
 
 // googleRoutes は、Google のアカウントでのサインインの route を返す。g が nil なら、何も返さない。
-// 認可の画面への移動と、Google からの戻りは、利用者のブラウザが開くので、認証の middleware は付けない
-// (結び付けは、開始のコードで利用者を伝える)。結果との交換は、コードそのものが資格なので、これも付けない。
-// 結び付けの API(コードの発行・一覧・解除)は、利用者本人の JWT で守る(RequireAuth)。
+// 認可の画面への移動(GET /auth/google/start。サインイン・新規登録の手続きだけ)と、Google からの戻りは、利用者の
+// ブラウザが開くので、認証の middleware は付けない。**結び付ける利用者は、URL やコードでは伝えない**: 結び付けは、
+// 利用者本人の JWT で守った POST /me/identities/google/link から始め、結び付ける利用者は、その要求を出したブラウザの
+// 手続きの cookie にだけ持たせる(開始の URL やコードを、別のブラウザに開かせても、結び付けられない)。
+// 結果との交換(POST /auth/google/exchange)は、「画面へ渡すコード」と、手続きを終えたブラウザの cookie にある
+// 結び付けの値の両方が資格なので、認証の middleware は付けない(コードだけでは、交換できない)。
+// 結び付けの API(開始・一覧・解除)は、利用者本人の JWT で守る(RequireAuth)。
 func googleRoutes(g *GoogleLogin, auth *usecase.Auth) []route {
 	if g == nil {
 		return nil

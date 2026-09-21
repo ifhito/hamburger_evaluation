@@ -49,8 +49,9 @@ func (r *UserRepository) CreateUser(ctx context.Context, params domain.CreateUse
 	row, err := r.q.CreateUser(ctx, sqlcgen.CreateUserParams{
 		Email:    params.Email,
 		Username: params.Username,
-		// パスワードでサインインする方法を持たないアカウント(外部のサービスだけで作ったもの)は、空文字列を NULL で保存する。
-		PasswordDigest: pgtype.Text{String: params.PasswordDigest, Valid: params.PasswordDigest != ""},
+		// パスワードなしは、明示された(Passwordless)ときだけ NULL で保存する。空の digest を、黙って NULL にはしない
+		// (そのまま保存しようとして、DB の CHECK(password_digest <> '')に拒否される)。
+		PasswordDigest: pgtype.Text{String: params.PasswordDigest, Valid: !params.Passwordless},
 		Admin:          params.Admin,
 	})
 	if err != nil {

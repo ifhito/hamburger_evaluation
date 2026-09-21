@@ -1,0 +1,32 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.mark {
+  flex: none;
+  fill: none;
+  stroke: var(--logo-on-light);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.onDark .mark {
+  stroke: var(--logo-on-dark);
+}
+
+.text {
+  color: var(--color-text);
+  letter-spacing: 0.01em;
+}
+
+.onDark .text {
+  color: #fff;
+}
+
+.first {
+  font-weight: 700;
+}

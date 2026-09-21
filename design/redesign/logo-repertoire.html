@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BurgerStack 一筆書きのレパートリー(黄色の線 1 本・外枠なし)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { width: 1440px; padding: 40px; }
+  .lead { margin-top: 8px; font-size: 14px; line-height: 1.7; color: var(--text-muted); max-width: 1180px; }
+  .lead b { font-weight: 700; color: var(--text); }
+  .cap { font-size: 11px; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; }
+  /* ロゴの組み(記号 + 文字)。文字は、Burger は太字、Stack は標準の太さ、黒 */
+  .l2 { display: inline-flex; align-items: center; gap: .4em; letter-spacing: .01em; line-height: 1.5; white-space: nowrap; }
+  .l2 b { font-weight: 700; } .l2 i { font-style: normal; font-weight: 400; }
+  .sand { position: relative; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; line-height: 1; }
+  .sand b { font-weight: 700; } .sand i { font-style: normal; font-weight: 400; }
+  .sand svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  .px { display: inline-block; line-height: 0; background: #fff; vertical-align: top; }
+  .zoom { line-height: 0; } .zoom img { image-rendering: pixelated; }
+  .tab { display: inline-flex; align-items: center; justify-content: center; padding: 6px 8px; border-radius: 6px; }
+  .tab.light { background: #ffffff; border: 1px solid var(--border); } .tab.dark { background: #202124; }
+  /* サムネイルの表 */
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+  .card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+  .card h3 { font-size: 14px; font-weight: 700; line-height: 1.4; }
+  .card h3 .no { display: inline-block; min-width: 30px; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: #111; color: #fff; font-size: 12px; text-align: center; }
+  .card .note { font-size: 11px; line-height: 1.5; color: var(--text-muted); min-height: 33px; }
+  .card .row { display: flex; align-items: center; gap: 12px; }
+  .card .ev { font-size: 11px; line-height: 1.55; }
+  .card .ev b { font-weight: 700; }
+  .rate { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; }
+  .rate span { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; }
+  .top { border: 2px solid var(--text); }
+  /* 詳細 */
+  .det { margin-top: 40px; padding-top: 14px; border-top: 2px solid var(--text); }
+  .det h2 { display: flex; align-items: baseline; gap: 10px; }
+  .det h2 small { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+  .dgrid { display: grid; grid-template-columns: 500px 470px 1fr; gap: 14px; margin-top: 12px; }
+  .box { padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+  .hdr2 { display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+  .hdr2 .t { font-size: 12px; color: var(--text-muted); } .hdr2 .logo { margin-right: auto; }
+  .cr { font-size: 12px; line-height: 1.65; } .cr b { font-weight: 700; }
+  .jp .h1 { font-size: 20px; font-weight: 700; line-height: 1.3; } .jp p { font-size: 12px; color: var(--text-muted); }
+  .jbar { display: flex; align-items: center; gap: 12px; height: 44px; border-bottom: 1px solid var(--border); margin-bottom: 8px; } .jbar .logo { margin-right: auto; } .jbar span { font-size: 12px; color: var(--text-muted); }
+  .side { display: flex; align-items: center; gap: 10px; } .side .num { font-size: 18px; font-weight: 700; }
+  .pcx { font-size: 13px; line-height: 1.75; margin-top: 10px; } .pcx b { font-weight: 700; }
+  .rec { margin-top: 32px; padding: 18px 22px; border: 2px solid var(--text); border-radius: 8px; font-size: 14px; line-height: 1.85; } .rec b { font-weight: 700; }
+  table.m { border-collapse: collapse; font-size: 12px; margin-top: 10px; } table.m td, table.m th { padding: 5px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .sw { display: flex; gap: 14px; align-items: flex-end; }
+  .sw div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div id="sheet1">
+  <h1>一筆書きのレパートリー(黄色の線 1 本・外枠なし)</h1>
+  <p class="lead">利用者の要望「一筆書きのレパートリーをもっと考えて欲しい。<b>黄色の線 1 本。特に外枠もいらない</b>」への探索です。記号は、<b>黄色の 1 本の連続した線だけ</b>(黒い札・縁取り・外枠・面の塗り・影は使いません)。文字「BurgerStack」(Burger は太字、Stack は標準の太さ、黒)は、これまでどおりです。<b>線の始まりは自由</b>で(利用者から、「真ん中から始めてもよい」と聞いています)、各案は、始まりの位置を決めずに、形だけで考えています。</p>
+  <p class="lead"><b>最大の課題</b>: 黄色(いまのトークン #e9b824)の線は、白地に対して 1.85:1 で、線としては淡いことです。そこで、各案を、<b>(A) いまのマスタード黄</b>と、<b>(B) ロゴだけに使う、わずかに深いマスタード黄</b>(<span id="bhex"></span>。色相はそのまま、明るさだけを下げ、白に対して 3:1 に届く最も明るい値)で並べます。(B) は、新しい色を 1 つ増やす提案になるので、<b>利用者の判断が要ります</b>。また、<b>黒や暗い面の上(暗いヘッダー、暗いタブなど)に置くときは、黄色の線だけで 10:1 前後あるので、外枠なしで成立します</b>。</p>
+
+  <h2 style="margin-top:28px">全案の一覧(番号つき。白地・黄色の線だけ。左から、大きく / ヘッダー / 実寸 16px と、その 8 倍 / 白黒 / ファビコン(明るいタブ・暗いタブ))</h2>
+  <div class="grid" id="grid"></div>
+  </div>
+
+  <div id="sheet2">
+  <div id="tops"></div>
+  <div class="rec" id="rec"></div>
+  </div>
+
+<script src="rating-icons.js"></script>
+<script>
+  const YA = '#e9b824', YB = '#b88f13', K = '#111111';
+  document.getElementById('bhex').textContent = YB + '(白に対して 3.01:1)';
+  const f1 = (v) => Math.round(v * 10) / 10;
+  const pl = (pts) => 'M ' + pts.map(([x, y]) => `${f1(x)} ${f1(y)}`).join(' L ');
+  // 楕円の弧の点列。角度は、数学の向き(0 が右、90 が上。増えると画面上で反時計回り)
+  const ell = (cx, cy, rx, ry, a0, a1, n) => Array.from({ length: n + 1 }, (_, i) => { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; return [cx + rx * Math.cos(a), cy - ry * Math.sin(a)]; });
+  const wv = (xs, xe, y, n, A) => { const dx = (xe - xs) / n, k = 0.36 * dx; let d = ''; // 水平の取っ手つきの波(n は偶数)
+    for (let i = 0; i < n; i++) { const xa = xs + dx * i, xb = xa + dx, ya = y - (i % 2 ? A : 0), yb = y - ((i + 1) % 2 ? A : 0); d += ` C ${f1(xa + k)} ${ya} ${f1(xb - k)} ${yb} ${f1(xb)} ${yb}`; }
+    return d; };
+
+  // ---------- 案の定義(高さ 100 の記号の座標。w は線の太さ) ----------
+  const R = [];
+  const add = (name, note, d, w, opt = {}) => R.push({ no: R.length + 1, name, note, d, w, vb: [120, 100], ...opt });
+
+  add('コイル(ばね)', '積み上がるばね。1 本の線が、輪を描きながら、上へ登る', (() => { const p = [], N = 72, T = 3 * 2 * Math.PI; for (let i = 0; i <= N; i++) { const t = 0.5 + T * i / N; p.push([60 + 44 * Math.cos(t), 80 - 60 * i / N + 11 * Math.sin(t)]); } return pl(p); })(), 6);
+  add('積み重ねた輪', '3 つの輪(バンズ・パティ・バンズ)を、左の縁でつなぐ', 'M 18 22 A 42 9 0 1 1 102 22 A 42 9 0 1 1 18 22 L 18 50 A 42 9 0 1 1 102 50 A 42 9 0 1 1 18 50 L 18 78 A 42 9 0 1 1 102 78 A 42 9 0 1 1 18 78', 7.5);
+  add('S(バンズの形)', '上の弧はドーム、下の弧は鉢。S の字そのものが、上下のバンズ', pl(ell(60, 27, 36, 21, 35, 270, 44).concat(ell(60, 69, 36, 21, 90, -145, 44).slice(1))), 8.5);
+  add('B と S のモノグラム', 'B の幹と 2 つのふくらみから、下の線を通って、S へつながる', 'M 18 88 L 18 14 C 54 10 54 47 18 47 C 60 45 60 90 18 88 L 66 88 C 76 96 106 90 104 72 C 102 56 72 60 70 42 C 68 24 92 14 106 26', 7);
+  add('ごまの輪(ドーム)', 'ドームの上の線が、ごまのような小さな輪を描きながら進み、パティ・下のバンズへ', (() => { const p = [], N = 170; for (let i = 0; i <= N; i++) { const u = i / N, ph = Math.PI * (1 - u), th = 2 * Math.PI * 6 * u; p.push([60 + 46 * Math.cos(ph) + 4 * Math.cos(th), 54 - 38 * Math.sin(ph) - 4 * Math.sin(th)]); } return pl(p) + ' L 14 54 L 14 66 L 106 66 C 108 90 96 92 84 92 L 36 92 C 24 92 12 90 14 66'; })(), 5.5);
+  add('段ごとに違う波', '下から、まっすぐ(バンズ)→ 三角のたれ(チーズ)→ なめらかな波(レタス)→ ドーム。1 本の線が順に通る', `M 98 88 L 22 88 A 11 11 0 0 1 22 66 ${Array.from({ length: 9 }, (_, i) => `L ${22 + 9.5 * i} ${i % 2 ? 73 : 66}`).slice(1).join(' ')} A 11 11 0 0 0 98 44${wv(98, 22, 44, 4, 9)} A 11 11 0 0 1 22 22 C 22 -2 98 -2 98 22`, 6.5);
+  add('かじった跡', 'バーガーの輪郭の右上が、半円に欠けている。内側の線が、パティとレタス', 'M 98 90 L 28 90 C 14 90 12 78 12 68 L 12 54 C 12 24 34 8 60 8 C 72 8 82 11 88 16 A 7 7 0 0 0 90 28 A 7 7 0 0 0 95 41 A 7 7 0 0 0 100 54 L 100 76 C 100 88 100 90 98 90 L 98 70 L 12 70 L 12 54' + wv(12, 100, 54, 6, -6), 7);
+  add('笑うバーガー', 'ドームと鉢でできた丸の中に、笑った口(パティの線)。遊び', 'M 14 50 C 12 2 108 2 106 50 C 108 98 12 98 14 50 L 32 54 C 44 76 76 76 88 54', 6.5);
+  add('積み重なる虹', '上ほど小さいアーチを、1 本の線が往復。真ん中の小さなアーチから始まる', 'M 44 90 A 16 16 0 0 1 76 90 L 90 90 A 30 30 0 0 0 30 90 L 16 90 A 44 44 0 0 1 104 90', 8);
+  add('折れ線の S(最も単純)', '3 本の横線を、左右でつなぐだけ。バンズ・パティ・バンズの、いちばん単純な形', 'M 98 20 L 26 20 L 26 50 L 94 50 L 94 80 L 22 80', 9);
+  add('文字をはさむ線', '線が文字「BurgerStack」の下をくぐり、上のドームへ回り込む(文字がパティ)', 'M 16 50 C 16 8 104 8 104 50 C 104 92 16 92 16 50 L 104 50', 6, { sand: true });
+  add('B のバーガー', 'B の字の 2 つのふくらみが、上下のバンズ。真ん中から始まり、幹をたどる', 'M 26 50 L 26 12 C 80 6 80 50 26 50 C 98 46 98 92 26 88 L 26 50', 8);
+  add('登る階段', '積み上がる段(成長)。バーガーの手がかりは、ほぼ無い', 'M 12 88 L 44 88 L 44 62 L 76 62 L 76 36 L 108 36 L 108 12', 9);
+
+  // ---------- 描画の部品 ----------
+  const stk = (d, col, w) => `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const sym = (r, h, col = YA, w = r.w) => `<svg viewBox="0 0 120 100" width="${h * 1.2}" height="${h}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="overflow:visible">${stk(r.d, col, w)}</svg>`;
+  const Lk = (r, h, col = YA) => r.sand
+    ? `<span class="sand" data-h="${h}" data-col="${col}" style="font-size:${h * 0.5}px;height:${h}px;padding:0 ${h * 0.55}px"><span><b>Burger</b><i>Stack</i></span></span>`
+    : `<span class="l2" style="font-size:${h * 0.625}px">${sym(r, h, col)}<span><b>Burger</b><i>Stack</i></span></span>`;
+  const buildSand = () => document.querySelectorAll('.sand').forEach((el) => {
+    if (el.querySelector('svg')) return;
+    const h = +el.dataset.h, W = el.offsetWidth, col = el.dataset.col, w = 6 * h / 100 * 1.0;
+    const d = `M ${h * 0.12} ${h * 0.5} C ${h * 0.12} ${-h * 0.06} ${W - h * 0.12} ${-h * 0.06} ${W - h * 0.12} ${h * 0.5} C ${W - h * 0.12} ${h * 1.06} ${h * 0.12} ${h * 1.06} ${h * 0.12} ${h * 0.5}`;
+    el.insertAdjacentHTML('afterbegin', `<svg width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" aria-hidden="true"><path d="${d}" fill="none" stroke="${col}" stroke-width="${Math.max(w, 1.6)}" stroke-linecap="round"/></svg>`);
+  });
+  document.fonts.ready.then(() => setTimeout(buildSand, 50));
+  // 札のない、透明な背景のファビコン(明るいタブ・暗いタブの上に、線だけを置く)
+  const fav = (r, s, col = YA) => `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><svg x="2" y="5" width="28" height="23.3" viewBox="0 0 120 100" style="overflow:visible">${stk(r.d, col, Math.max(r.w, 7) * (s < 24 ? 1.15 : 1))}</svg></svg>`;
+  const lum = (hex) => { const v = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return ((x + 0.05) / (y + 0.05)).toFixed(2) + ':1'; };
+  const rate = (v, sz) => Burger.svgOf(Burger.resolve({ variant: 'B', value: v, max: 5, size: sz }));
+
+  // ---------- 評価(16px での読みやすさ・Burger と Stack の意味・実装の軽さ・評価のバーガーとの紛らわしさ) ----------
+  const EV = {};
+  const ev = (no, r16, burger, stack, impl, mix, text) => { EV[no] = { r16, burger, stack, impl, mix, text }; };
+  window.ev = ev; window.EV = EV;
+</script>
+<script src="logo-repertoire-eval.js"></script>
+<script>
+  const TOP = window.TOP || [3, 9, 1];
+  // ---------- サムネイルの表 ----------
+  document.getElementById('grid').innerHTML = R.map((r) => { const e = EV[r.no] || {}; return `
+    <div class="card ${TOP.includes(r.no) ? 'top' : ''}">
+      <h3><span class="no">${String(r.no).padStart(2, '0')}</span>${r.name}${TOP.includes(r.no) ? ' ★' : ''}</h3>
+      <div class="note">${r.note}</div>
+      <div class="row"><div>${r.sand ? '<div style="width:150px;height:125px;display:flex;align-items:center"><span style="font-size:0">' + sym(r, 110) + '</span></div>' : sym(r, 125)}</div>
+        <div><div class="cap">ヘッダー(32px)</div>${Lk(r, 32)}<div class="cap" style="margin-top:8px">白黒(32px)</div><div style="filter:grayscale(1)">${Lk(r, 32)}</div></div></div>
+      <div class="row"><div><div class="cap">実寸 16px</div><span class="px" id="px-${r.no}-16">${sym(r, 16)}</span></div>
+        <div><div class="cap">16px の 8 倍</div><div class="zoom" data-zoom="px-${r.no}-16"></div></div>
+        <div><div class="cap">ファビコン(明るい・暗い)</div><div style="display:flex;gap:6px"><span class="tab light">${fav(r, 32)}</span><span class="tab dark">${fav(r, 32)}</span></div><div style="display:flex;gap:6px;margin-top:4px"><span class="tab light">${fav(r, 16)}</span><span class="tab dark">${fav(r, 16)}</span></div></div></div>
+      <div class="rate"><span>16px ${e.r16 || ''}</span><span>Burger ${e.burger || ''}</span><span>Stack ${e.stack || ''}</span><span>実装 ${e.impl || ''}</span><span>紛らわしさ ${e.mix || ''}</span></div>
+      <div class="ev">${e.text || ''}</div>
+    </div>`; }).join('');
+
+  // ---------- 上位の案の詳細 ----------
+  const hdr = (r, col) => `<div class="hdr2"><span class="logo">${Lk(r, 32, col)}</span><span class="t">ショップ</span><span class="t">レビュー</span></div>`;
+  document.getElementById('tops').innerHTML = TOP.map((no) => { const r = R[no - 1], e = EV[no] || {}; return `
+    <section class="det" id="top-${no}">
+      <h2>★ ${String(no).padStart(2, '0')} ${r.name} <small>${r.note}</small></h2>
+      <div class="dgrid">
+        <div class="box"><div class="cap">(a) 大きく(幅 約 240px)。左が (A) いまのマスタード黄、右が (B) 深いマスタード黄</div>
+          <div style="display:flex;gap:16px;align-items:center">${sym(r, 200, YA)}${sym(r, 200, YB)}</div>
+          <div class="cap" style="margin-top:12px">(h) 線の太さ(太いほど読める一方、折り返しがつぶれる)。太さ 4・6・8・10・12 を、32px と 16px で</div>
+          <div class="sw">${[4, 6, 8, 10, 12].map((w) => `<div>${sym(r, 32, YA, w)}${sym(r, 16, YA, w)}w=${w}</div>`).join('')}</div>
+          <div class="cap" style="margin-top:8px">この案の太さは ${r.w}(高さ 100 のとき)</div></div>
+        <div class="box"><div class="cap">(b) ヘッダー(高さ 32px)。上が (A)、下が (B)</div>${hdr(r, YA)}${hdr(r, YB)}
+          <div class="cap" style="margin-top:10px">(d) 白黒(グレースケール)。左が (A)、右が (B)</div><div style="filter:grayscale(1);display:flex;gap:22px">${Lk(r, 32, YA)}${Lk(r, 32, YB)}</div>
+          <div class="cap" style="margin-top:10px">(c) 小さく: 実寸 20px・16px と、16px の 8 倍(左が (A)、右が (B))</div>
+          <div style="display:flex;gap:16px;align-items:flex-start"><span class="px" id="pxA20-${no}">${sym(r, 20, YA)}</span><span class="px" id="pxA16-${no}">${sym(r, 16, YA)}</span><span class="px" id="pxB16-${no}">${sym(r, 16, YB)}</span>
+            <div class="zoom" data-zoom="pxA16-${no}"></div><div class="zoom" data-zoom="pxB16-${no}"></div></div></div>
+        <div class="box"><div class="cap">(e) ファビコン(札なし・透明な背景。明るいタブ / 暗いタブ。32px・16px・4 倍)</div>
+          ${[[YA, '(A)'], [YB, '(B)']].map(([c, n]) => `<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><span style="font-size:11px;width:26px">${n}</span><span class="tab light">${fav(r, 32, c)}${fav(r, 16, c)}${fav(r, 64, c)}</span><span class="tab dark">${fav(r, 32, c)}${fav(r, 16, c)}${fav(r, 64, c)}</span></div>`).join('')}
+          <div class="cap" style="margin-top:8px">(f) コントラスト比(実測)</div>
+          <div class="cr"><b>${ratio(YA, '#ffffff')}</b> (A) / 白(3 未満。淡い)<br><b>${ratio(YB, '#ffffff')}</b> (B) / 白(3 以上)<br><b>${ratio(YA, K)}</b> (A) / 黒い面<br><b>${ratio(YA, '#202124')}</b> (A) / 暗いタブ<br><b>${ratio(YB, '#202124')}</b> (B) / 暗いタブ(暗い面では、(A) の方が見やすい)</div>
+          <div class="cap" style="margin-top:8px">(f) 日本語の画面に置いたところ((A) と (B))</div>
+          <div class="jp"><div class="jbar"><span class="logo">${Lk(r, 28, YA)}</span><span>ショップ</span></div><div class="jbar"><span class="logo">${Lk(r, 28, YB)}</span><span>ショップ</span></div><div class="h1">ショップ</div><p>BurgerStack で、食べたバーガーを積み上げよう(見本の文)。</p></div>
+          <div class="cap" style="margin-top:8px">(g) 評価のバーガー(4.5)と並べたところ</div>
+          <div class="side">${sym(r, 36, YA)}${sym(r, 36, YB)}<span class="side" style="gap:8px">${rate(4.5, 'sm')}<span class="num">4.5</span></span></div></div>
+      </div>
+      <div class="pcx">${e.detail || e.text || ''}</div>
+    </section>`; }).join('');
+  document.getElementById('rec').innerHTML = window.REC || '';
+</script>
+</body>
+</html>

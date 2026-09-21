@@ -575,6 +575,15 @@ func TestLoadConfigGoogle(t *testing.T) {
 		}
 	})
 
+	t.Run("戻り先の path は、/auth/google/callback で終わっていれば(前に、公開の接頭辞があってもよい)、受け付ける", func(t *testing.T) {
+		for _, path := range []string{"/auth/google/callback", "/api/auth/google/callback", "/a/b/auth/google/callback"} {
+			env := valid(map[string]string{"GOOGLE_REDIRECT_URL": "https://api.example.com" + path, "APP_BASE_URL": "https://app.example.com"})
+			if _, err := LoadConfig(base(env)); err != nil {
+				t.Errorf("%s: err = %v, want accepted", path, err)
+			}
+		}
+	})
+
 	t.Run("Google でのサインインが無効なときは、アプリの URL の外部 http は、これまでどおり受け付ける(この制約は有効なときだけ)", func(t *testing.T) {
 		if _, err := LoadConfig(base(map[string]string{"APP_BASE_URL": "http://app.example.com"})); err != nil {
 			t.Fatalf("err = %v", err)
@@ -603,6 +612,11 @@ func TestLoadConfigGoogle(t *testing.T) {
 		{"提供元が URL でないと、起動に失敗する", valid(map[string]string{"GOOGLE_OIDC_ISSUER": "idp"}), "GOOGLE_OIDC_ISSUER"},
 		// 認可コード・state・手続きの cookie が、平文で外部を流れるのを防ぐ(cookie の Secure も、戻り先が https のときだけ付く)。
 		{"戻り先が外部ホストの http だと、認可コードが平文で流れるので、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "http://api.example.com/auth/google/callback"}), "GOOGLE_REDIRECT_URL"},
+		// 手続きの cookie の Path は、戻り先の path から決まり、結果との交換の path も、戻り先の path から導く。
+		// 末尾が違うと、cookie が届かず、手続きが失敗するので、起動のときに気づけるようにする。
+		{"戻り先の path の末尾に / があると、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "http://localhost:8080/auth/google/callback/"}), "GOOGLE_REDIRECT_URL"},
+		{"戻り先の path が /auth/google/callback で終わらないと、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "http://localhost:8080/api/auth/google/cb"}), "GOOGLE_REDIRECT_URL"},
+		{"戻り先の path が空(根)だと、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "https://api.example.com"}), "GOOGLE_REDIRECT_URL"},
 		{"アプリの URL が外部ホストの http だと、1 回限りのコードが平文で流れるので、起動に失敗する", valid(map[string]string{"APP_BASE_URL": "http://app.example.com"}), "APP_BASE_URL"},
 	}
 	for _, tt := range failures {

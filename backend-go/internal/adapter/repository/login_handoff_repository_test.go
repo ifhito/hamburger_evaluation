@@ -26,7 +26,7 @@ func TestLoginHandoffRepository(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		alice := dbtest.InsertUserRow(ctx, t, conn, `INSERT INTO users (email, username, password_digest) VALUES ('alice@example.com', 'alice', 'd') RETURNING id`)
 		repo := repository.NewLoginHandoffRepository(conn)
-		if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: "hash-1", Outcome: domain.OutcomeSignedIn, UserID: alice, ReturnTo: "/shops"}); err != nil {
+		if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{BinderHash: "binder-hash", CodeHash: "hash-1", Outcome: domain.OutcomeSignedIn, UserID: alice, ReturnTo: "/shops"}); err != nil {
 			t.Fatal(err)
 		}
 		if err := repo.LockLoginHandoff(ctx, "hash-1"); err != nil {
@@ -51,7 +51,7 @@ func TestLoginHandoffRepository(t *testing.T) {
 	t.Run("利用者を伴わない結果は、利用者なしで保存できる", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewLoginHandoffRepository(conn)
-		if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: "hash-2", Outcome: domain.OutcomeAccountExists}); err != nil {
+		if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{BinderHash: "binder-hash", CodeHash: "hash-2", Outcome: domain.OutcomeAccountExists}); err != nil {
 			t.Fatal(err)
 		}
 		var userID *string
@@ -64,7 +64,7 @@ func TestLoginHandoffRepository(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewLoginHandoffRepository(conn)
 		for _, h := range []string{"old-1", "old-2", "fresh"} {
-			if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: h, Outcome: domain.OutcomeFailed}); err != nil {
+			if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{BinderHash: "binder-hash", CodeHash: h, Outcome: domain.OutcomeFailed}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -87,7 +87,7 @@ func TestLoginHandoffRepository(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewLoginHandoffRepository(conn)
 		for _, h := range []string{"a", "b", "c"} {
-			if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: h, Outcome: domain.OutcomeFailed}); err != nil {
+			if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{BinderHash: "binder-hash", CodeHash: h, Outcome: domain.OutcomeFailed}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -107,10 +107,11 @@ func TestLoginHandoffRepository(t *testing.T) {
 		alice := dbtest.InsertUserRow(ctx, t, conn, `INSERT INTO users (email, username, password_digest) VALUES ('alice@example.com', 'alice', 'd') RETURNING id`)
 		repo := repository.NewLoginHandoffRepository(conn)
 		cases := map[string]domain.CreateLoginHandoffParams{
-			"サインインの成功なのに利用者がない": {CodeHash: "x1", Outcome: domain.OutcomeSignedIn},
-			"失敗なのに利用者がある":       {CodeHash: "x2", Outcome: domain.OutcomeFailed, UserID: alice},
-			"知らない種類":            {CodeHash: "x3", Outcome: domain.LoginHandoffOutcome("hacked")},
-			"廃止した結び付けの開始の種類":    {CodeHash: "x4", Outcome: domain.LoginHandoffOutcome("link_intent"), UserID: alice},
+			"サインインの成功なのに利用者がない": {BinderHash: "binder-hash", CodeHash: "x1", Outcome: domain.OutcomeSignedIn},
+			"失敗なのに利用者がある":       {BinderHash: "binder-hash", CodeHash: "x2", Outcome: domain.OutcomeFailed, UserID: alice},
+			"知らない種類":            {BinderHash: "binder-hash", CodeHash: "x3", Outcome: domain.LoginHandoffOutcome("hacked")},
+			"結び付けの値が空":          {CodeHash: "x5", Outcome: domain.OutcomeFailed},
+			"廃止した結び付けの開始の種類":    {BinderHash: "binder-hash", CodeHash: "x4", Outcome: domain.LoginHandoffOutcome("link_intent"), UserID: alice},
 		}
 		for name, p := range cases {
 			if err := repo.CreateLoginHandoff(ctx, p); err == nil {
@@ -126,7 +127,7 @@ func TestLoginHandoffRepository(t *testing.T) {
 			if o.NeedsUser() {
 				user = alice
 			}
-			if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: "ok-" + string(o), Outcome: o, UserID: user}); err != nil {
+			if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{BinderHash: "binder-hash", CodeHash: "ok-" + string(o), Outcome: o, UserID: user}); err != nil {
 				t.Errorf("種類 %q を保存できない: %v", o, err)
 			}
 		}
@@ -139,7 +140,7 @@ func TestLoginHandoffRepository(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(pool.Close)
-		if err := repository.NewLoginHandoffRepository(pool).CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: "race", Outcome: domain.OutcomeFailed}); err != nil {
+		if err := repository.NewLoginHandoffRepository(pool).CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{BinderHash: "binder-hash", CodeHash: "race", Outcome: domain.OutcomeFailed}); err != nil {
 			t.Fatal(err)
 		}
 		tx1, err := pool.Begin(ctx)

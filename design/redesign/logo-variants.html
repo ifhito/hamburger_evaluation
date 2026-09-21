@@ -76,6 +76,12 @@
   .pl .fav { gap: 10px; align-items: flex-end; }
   .pl .cr { font-size: 11px; line-height: 1.5; }
   .ph { display: flex; gap: 24px; align-items: flex-start; padding: 12px 0; }
+  .cmpgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 12px; }
+  .cmpcell { padding: 14px; border: 1px solid var(--border); border-radius: 8px; }
+  .cmpbig { display: flex; justify-content: center; padding: 34px 0 30px; }
+  .cmplock { padding: 8px 0 4px; }
+  .cmptxt { margin-top: 12px; font-size: 13px; line-height: 1.8; }
+  .cmptxt b { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -92,15 +98,19 @@
     <div class="rec" id="rec2"></div>
   </div>
   <div id="oneline">
-    <h1 style="margin-top:72px">一筆書きの黄色い線で描く案(1a・1b・1c)</h1>
+    <h1 style="margin-top:72px">一筆書きの黄色い線で描く案(1a・1b・1c・1d)</h1>
     <p class="lead">利用者の要望「ロゴを、一筆書きの黄色い線で描けませんか」への案です。ペンを離さない 1 本の連続した線(丸い端・一定の太さ・マスタード黄)で、BurgerStack を描きます。文字の部分(Burger は太字、Stack は標準の太さ、黒)は、前の案 2 のままです。前の案(1〜3・2a〜2c)は、残してあります。<br><b>最大の課題</b>: 黄色の線は、白地に対して 1.85:1 で、線としては見えにくいことです。そこで、各案を、次の 3 つの置き方で並べて、比べます。<b>(i) 黒い角丸の札の上に黄色の線</b>(黄と黒は 10.20:1)、<b>(ii) 白地に、黄色の線 + 細い黒の縁取り</b>(一筆書きの雰囲気は、崩れる)、<b>(iii) 白地に、太めの黄色の線だけ</b>(太さで補う)。</p>
     <ul class="lead" style="margin-top:6px;padding-left:20px">
       <li><b>1a 蛇行する積み重ね</b>: 線が、右へ(下のバンズ)→ 折り返して左へ(パティ)→ 折り返して右へ(波のチーズ)→ 折り返して左へ、上に丸いドーム(上のバンズ)。4 段の折り返しが積み重ねに見え、全体が「S」(Stack)の字にもなる。</li>
       <li><b>1b バーガーをなぞる線</b>: ドームの上のバンズ → レタスの波 → パティ → 下のバンズを、ペンを離さずになぞった、落書き風のバーガー。</li>
-      <li><b>1c 記号から文字へつながる線</b>: 1a の記号を描いた線が、そのまま「BurgerStack」の下線へ流れる。</li>
+      <li><b>1c 記号から文字へつながる線</b>: 記号を描いた線が、そのまま「BurgerStack」の下線へ流れる。<b>記号は、1a を左右反転した向き</b>です(線の始まりが下線の右端で、折り返しの側が 1a と反対)。</li>
+      <li><b>1d 1c の向きで、下線なし</b>: 1c の記号の形をそのまま使い、下線としっぽを取った案。1a とは、向きが反対です。</li>
     </ul>
+    <h2 style="margin-top:32px">1a と 1d を、同じ大きさ・同じ札・同じ線の太さで、左右に並べたところ</h2>
+    <div id="cmp"></div>
     <h2 style="margin-top:32px">小さいところで、線の折り返しが読めるか(実寸と、画素を 8 倍に拡大した図)</h2>
     <div id="reading2"></div>
+    <p class="lead" style="margin-top:6px">この表は、場所をとるので、1a は 3 つの置き方、1b・1c・1d は(i)黒い札の上だけにしています(1d の(ii)(iii)は、1a の左右反転なので、画素の拡大も同じです。1b・1c の(ii)(iii)は、前の版の画像に載せています)。各案の(ii)(iii)は、下の節に並べてあります。</p>
     <div id="lines"></div>
     <div class="rec" id="rec3"></div>
   </div>
@@ -247,10 +257,12 @@
     // 1b: ドーム(左から右へ)→ レタスの波(右から左へ)→ 左の縁を下りて、パティ(右へ)→ 下のバンズの鉢(右から左へ回り込む)
     b: `M 12 44 C 12 6 108 6 108 44${wv(108, 12, 44, 6, -6)} L 12 58 L 108 58 L 108 68 C 108 86 96 91 84 91 L 36 91 C 24 91 12 86 12 68`,
     // 1c: 1a を逆向きにして、始まりを「下線の右端(xt)」にする。全体を dy だけ下げる(文字の下に下線を通すため)
+    // 1d: 1c の記号の形(1a を左右反転した向き)から、しっぽと下げをなくしたもの。P.c(98, 0) と同じ
+    d: `M 98 90 L 22 90 A 11 11 0 0 1 22 68 L 98 68 A 11 11 0 0 0 98 46${wv(98, 22, 46, 4, 10)} A 11 11 0 0 1 22 24 C 22 0 98 0 98 24`,
     c: (xt, dy = 4) => `M ${xt} ${90 + dy} L 22 ${90 + dy} A 11 11 0 0 1 22 ${68 + dy} L 98 ${68 + dy} A 11 11 0 0 0 98 ${46 + dy}${wv(98, 22, 46 + dy, 4, 10)} A 11 11 0 0 1 22 ${24 + dy} C 22 ${dy} 98 ${dy} 98 ${24 + dy}`,
   };
   // 線の太さ(単位は、記号の座標。高さ 100 のとき)。tile: 黒い札の上 / edge: 黄色の線(+ 両側に 3 の黒) / thick: 太い黄色だけ
-  const W = { a: { tile: 8.5, edge: 8, thick: 12 }, b: { tile: 7.5, edge: 7.5, thick: 10.5 }, c: { tile: 8.5, edge: 8, thick: 12 } };
+  const W = { a: { tile: 8.5, edge: 8, thick: 12 }, b: { tile: 7.5, edge: 7.5, thick: 10.5 }, c: { tile: 8.5, edge: 8, thick: 12 }, d: { tile: 8.5, edge: 8, thick: 12 } };
   const stk = (d, col, w) => `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
   const TILE = `<rect x="-6" y="-8" width="132" height="116" rx="24" fill="${K}"/>`;
   const draw = (d, kind, mode) => (mode === 'tile' ? TILE + stk(d, YEL, W[kind].tile) : mode === 'edge' ? stk(d, K, W[kind].edge + 6) + stk(d, YEL, W[kind].edge) : stk(d, YEL, W[kind].thick));
@@ -276,16 +288,17 @@
   document.fonts.ready.then(() => setTimeout(buildLc, 50));
 
   // ファビコン: 札の上に、記号を置く(1c は、しっぽなしの 1a の形)
-  const favO = (kind, mode, s) => { const d = kind === 'b' ? P.b : P.a, w = { tile: 11, edge: 10, thick: 14 }[mode] * (kind === 'b' ? 0.92 : 1);
+  const favO = (kind, mode, s) => { const tail = kind === 'c' ? 14 : 0, d = kind === 'b' ? P.b : kind === 'a' ? P.a : kind === 'd' ? P.d : P.c(98 + tail, 0), w = { tile: 11, edge: 10, thick: 14 }[mode] * (kind === 'b' ? 0.92 : 1), vw = 120 + tail;
     const bg = mode === 'tile' ? K : '#ffffff', inner = mode === 'tile' ? stk(d, YEL, w) : mode === 'edge' ? stk(d, K, w + 7) + stk(d, YEL, w) : stk(d, YEL, w);
-    return `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="${bg}"/>${mode !== 'tile' ? '<rect x="0.5" y="0.5" width="31" height="31" rx="6.5" fill="none" stroke="#dedcd6"/>' : ''}<svg x="3.5" y="5.5" width="25" height="20.8" viewBox="0 0 120 100">${inner}</svg></svg>`; };
+    const iw = 25 * vw / 120, ix = (32 - iw) / 2 + (kind === 'c' ? -0.5 : 0);
+    return `<svg width="${s}" height="${s}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="${bg}"/>${mode !== 'tile' ? '<rect x="0.5" y="0.5" width="31" height="31" rx="6.5" fill="none" stroke="#dedcd6"/>' : ''}<svg x="${ix}" y="5.5" width="${iw}" height="20.8" viewBox="0 0 ${vw} 100">${inner}</svg></svg>`; };
 
   const PL = [['tile', '(i) 黒い札の上'], ['edge', '(ii) 黒の縁取り'], ['thick', '(iii) 太い黄色だけ']];
-  const K3 = [{ k: 'a', name: '1a 蛇行する積み重ね' }, { k: 'b', name: '1b バーガーをなぞる線' }, { k: 'c', name: '1c 下線へつながる線' }];
+  const K3 = [{ k: 'a', name: '1a 蛇行する積み重ね' }, { k: 'b', name: '1b バーガーをなぞる線' }, { k: 'c', name: '1c 下線へつながる線' }, { k: 'd', name: '1d 1c の向きで、下線なし' }];
   const CRV = { tile: [crRow('黄の線 / 黒い札', YEL, K, '3 以上'), crRow('黒い文字 / 白', K, '#ffffff', 'AA は 4.5 以上')], edge: [crRow('黒の縁取り / 白', K, '#ffffff', '3 以上'), crRow('黄の線 / 黒の縁取り', YEL, K, '3 以上'), crRow('黄の線 / 白(縁取りの外)', YEL, '#ffffff', '3 未満')], thick: [crRow('黄の線 / 白', YEL, '#ffffff', '3 未満。見えにくい'), crRow('黒い文字 / 白', K, '#ffffff', 'AA は 4.5 以上')] };
 
   // ---- 小さいところの読みやすさ ----
-  const RD = [{ id: 'ref2b', name: '参考: 2b(黒の棒)', mk: (h) => Svg(h, B2b) }].concat(K3.flatMap((v) => PL.map(([m, mn]) => ({ id: `${v.k}-${m}`, name: `${v.name.split(' ')[0]} ${mn}`, mk: (h) => sym1(v.k, m, h, v.k === 'c' ? 26 : 0) }))));
+  const RD = [{ id: 'ref2b', name: '参考: 2b(黒の棒)', mk: (h) => Svg(h, B2b) }].concat(K3.flatMap((v) => PL.filter(([m]) => v.k === 'a' || m === 'tile').map(([m, mn]) => ({ id: `${v.k}-${m}`, name: `${v.name.split(' ')[0]} ${mn}`, mk: (h) => sym1(v.k, m, h, v.k === 'c' ? 26 : 0) }))));
   document.getElementById('reading2').innerHTML = RD.map((d) => `
     <div class="rd">
       <div><b>${d.name}</b></div>
@@ -325,15 +338,29 @@
     'b-tile': '16px でも、ドーム・レタスの波・パティ・下のバンズの 4 つが読め、バーガーだと分かる。一筆書きの 3 案のなかで、いちばん読みやすい。',
     'b-edge': '16px では、縁取りで波がにじむが、バーガーの輪郭は読める。黒っぽくなり、黄色い一筆書きらしさが薄れる。',
     'b-thick': '形は読めるが、白に淡く溶ける(1.85:1)。',
-    'c-tile': '記号は 1a と同じ。黒い札のしっぽ(下線)が、16px でも見える。',
+    'c-tile': '記号は、1a を左右反転した向き(1d と同じ形)。黒い札のしっぽ(下線)が、16px でも見える。',
     'c-edge': '1a の(ii)と同じく、16px では、縁取りでにじむ。しっぽも、黒がちになる。',
     'c-thick': 'しっぽの下線が淡く、16px では消えかかる。',
   };
+  Object.assign(SAY2, {
+    'd-tile': '1a を左右反転した形なので、読みやすさは 1a と同じ。20px・16px とも、ドーム・波・パティ・下の線の 4 本と折り返しが読める(波は 16px で点線のようにつぶれ気味)。',
+      });
   Object.keys(SAY2).forEach((k) => { const el = document.getElementById('say2-' + k); if (el) el.textContent = SAY2[k]; });
   document.getElementById('pc-a').innerHTML = '<b>長所</b> 折り返しが「積み重ね」に見え、全体が「S」(Stack)にも見える。評価のバーガー(茶・緑・赤の塗り)とは、絵の系統が違う。1 本の path だけで、実装が軽い。黒い札の上では、16px でも 4 本の線と折り返しが読める。<br><b>弱点</b> バーガーだと分かる手がかりは、ドームと波だけで、記号だけでは「波打つ線」に見える。黄色は白地で 1.85:1 なので、黒い札がほぼ必須になる(縁取りは 16px でにじみ、太い黄色だけは淡い)。';
   document.getElementById('pc-b').innerHTML = '<b>長所</b> バーガーだと、いちばんはっきり分かる。黒い札の上では、16px でも読める。<br><b>弱点</b> 「積み重ね(Stack)」より「バーガーの輪郭」に見える。評価のバーガー(黒い輪郭のバーガー)と形が似ていて、紛らわしい(違いは、黄色の線か、茶・緑の塗りかだけ)。落書き風で、縁の線が重なるので、一筆書きの流れ(線が続くこと)は、見えにくい。';
-  document.getElementById('pc-c').innerHTML = '<b>長所</b> 一筆書きの意味が、いちばん伝わる(記号から文字へ、線が流れる)。<br><b>弱点</b> 文字の幅を測って下線を通すので、実装が重い(文字の幅が変わると、線の長さも合わせる必要がある)。20px 以下の下線は細く、白地では消えかかる。日本語の見出しと並ぶと、英字の下線は、少し飾りが強い。ファビコンは、1a と同じ記号だけになる。';
-  document.getElementById('rec3').innerHTML = '<b>これまでの全案を通じた推奨: 1a(蛇行する積み重ね)を、(i)黒い札の上に置く形</b><br>理由: (1) 黄色の線は、白地で 1.85:1 で見えにくく、黒い札の上(10.20:1)だけが、16px まで確実に読めます(縁取りは 16px でにじみ、太い黄色だけは淡くなります)。(2) 折り返しが「積み重ね」に見え、全体が「S」にも見えるので、名前(BurgerStack)の意味と合います。(3) 評価のバーガーとは、絵の系統が違い(1b は形が似ていて紛らわしい)、1 本の path で実装も軽く、ファビコン・アプリのアイコンにも、そのまま使えます。<br><b>代償</b>: ヘッダーに、黒い札(小さな黒い四角)が入ります。白い地に黒い文字という、いまの画面の中では、いちばん濃い部分になるので、目立ちます。それが強すぎるなら、前回の 2b(黒の棒。黒い札なし)が、次の候補です。<br><b>1b</b>は、バーガーだと、いちばんはっきり分かりますが、評価のバーガーと紛らわしく、一筆書きの流れも見えにくいので、推奨しません。<b>1c</b>は、一筆書きの意味が最も伝わりますが、実装が重く、小さいと下線が消えかかるので、将来の飾りの候補にとどめます。<br><b>置き方</b>: (i)黒い札の上を推奨。(ii)黒の縁取りは、16px でにじみ、一筆書きの雰囲気も崩れるので、推奨しません。(iii)太い黄色だけは、大きい所(サインイン画面の大きなロゴなど)でだけ、使えます。<br><b>オプション(作っていません)</b>: 一筆書きなので、サインイン画面などで、線が「描かれていく」動きを付けられます(<code>stroke-dasharray</code> と <code>stroke-dashoffset</code>。path に <code>pathLength="1"</code> を付ければ、長さを測らずに済みます)。<code>prefers-reduced-motion</code> のときは動かさず、最初から描き終えた形で出します。CSS 数行で軽い一方、丸い端が、描き始めの一瞬に点として見えること、ページを移るたびに動かすとうるさいこと(サインイン画面など、1 回だけ)に注意が要ります。黒い札の上なら、動きも目立ちます。';
+  document.getElementById('pc-d').innerHTML = '<b>長所</b> 1a を左右反転した形。上の 3 段(ドーム・波・パティ)が、上から順に、左でつなぎ、右でつなぐので、「S」の字に見える。線の始まり・終わりが右側(文字の側)に来て、記号から文字へ視線が流れる。1c と違い、下線がないので、実装が軽く、小さくても崩れない。読みやすさは 1a と同じ。<br><b>弱点</b> バーガーの手がかりは、ドームと波だけ(1a と同じ)。黄色は白地で 1.85:1 なので、黒い札がほぼ必須になる。';
+  document.getElementById('pc-c').innerHTML = '<b>長所</b> 一筆書きの意味が、いちばん伝わる(記号から文字へ、線が流れる)。記号の向きは 1a の左右反転で、始まり・終わりが文字の側(右)にある。<br><b>弱点</b> 文字の幅を測って下線を通すので、実装が重い(文字の幅が変わると、線の長さも合わせる必要がある)。20px 以下の下線は細く、白地では消えかかる。日本語の見出しと並ぶと、英字の下線は、少し飾りが強い。ファビコンは、1c の記号の形(1a の左右反転)に、短いしっぽを付けたものにした。';
+  document.getElementById('rec3').innerHTML = '<b>これまでの全案を通じた推奨: 1d(1c の向きで、下線なし)を、(i)黒い札の上に置く形</b><br>理由: (1) 黄色の線は、白地で 1.85:1 で見えにくく、黒い札の上(10.20:1)だけが、16px まで確実に読めます(縁取りは 16px でにじみ、太い黄色だけは淡くなります)。(2) 1d は 1a の左右反転で、読みやすさは同じですが、上の 3 段が S の字に見えるので、名前(Stack)の頭文字とも合います。また、線の終わりが文字の側(右)を向くので、記号から文字へ視線が流れます。1a は、鏡文字の S に見え、線の終わりが文字と反対を向きます。(3) 評価のバーガーとは、絵の系統が違い(1b は形が似ていて紛らわしい)、1 本の path で実装も軽く、ファビコンにもそのまま使えます。1c(下線つき)は、実装が重く、20px 以下で下線が消えかかります。<br><b>代償</b>: ヘッダーに、黒い札(小さな黒い四角)が入ります。白い地に黒い文字という、いまの画面の中では、いちばん濃い部分になるので、目立ちます。それが強すぎるなら、前回の 2b(黒の棒。黒い札なし)が、次の候補です。<br><b>正直な評価</b>: 1a と 1d の差は、向きだけです。S の字への見え方と、視線の流れは 1d が良いと私は考えますが、好みの範囲でもあります。<br><b>置き方</b>: (i)黒い札の上を推奨。(ii)黒の縁取りは、16px でにじみ、一筆書きの雰囲気も崩れるので、推奨しません。(iii)太い黄色だけは、大きい所(サインイン画面の大きなロゴなど)でだけ、使えます。<br><b>オプション(作っていません)</b>: 一筆書きなので、サインイン画面などで、線が「描かれていく」動きを付けられます(<code>stroke-dasharray</code> と <code>stroke-dashoffset</code>。path に <code>pathLength="1"</code> を付ければ、長さを測らずに済みます)。<code>prefers-reduced-motion</code> のときは動かさず、最初から描き終えた形で出します。CSS 数行で軽い一方、丸い端が、描き始めの一瞬に点として見えること、ページを移るたびに動かすとうるさいこと(サインイン画面など、1 回だけ)に注意が要ります。';
+
+  // ---- 1a と 1d の大きな比較(同じ大きさ・同じ札・同じ線の太さ。始まりと終わりの位置に印を付ける) ----
+  const mkPt = ([x, y], t) => `<circle cx="${x}" cy="${y}" r="7.5" fill="#ffffff" stroke="${K}" stroke-width="1.5"/><text x="${x}" y="${y + 3.2}" text-anchor="middle" font-size="9" font-weight="700" font-family="Noto Sans JP, sans-serif" fill="${K}">${t}</text>`;
+  const bigSym = (kind, sp, ep) => `<svg viewBox="0 0 120 100" width="300" height="250" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">${draw(P[kind], kind, 'tile')}${mkPt(sp, '始')}${mkPt(ep, '終')}</svg>`;
+  const CMP = [{ k: 'a', name: '1a', sp: [22, 90], ep: [22, 24], sub: '始まり(下の線の左端)も、終わり(ドームの左の足)も、左側' }, { k: 'd', name: '1d(1c の向き)', sp: [98, 90], ep: [98, 24], sub: '始まり(下の線の右端)も、終わり(ドームの右の足)も、右側' }];
+  document.getElementById('cmp').innerHTML = `<div class="cmpgrid">` + CMP.map((c) => `
+    <div class="cmpcell"><div class="cap"><b>${c.name}</b> ${c.sub}</div>
+      <div class="cmpbig">${bigSym(c.k, c.sp, c.ep)}</div>
+      <div class="cap">文字と並べたところ(高さ 64px)</div><div class="cmplock">${Lo(c.k, 'tile')(64)}</div></div>`).join('') + `</div><p class="pc cmptxt" id="cmptxt"></p>`;
+  document.getElementById('cmptxt').innerHTML = '<b>1a と 1d の違い</b>(1d は、1a を左右反転した形です。線の太さ・大きさ・読みやすさは、同じです)<br>・<b>「S」の字</b>: 上の 3 段(ドーム・波・パティ)を、上から順に見ると、1d は、左でつなぎ、右でつなぐので、S の字になります。1a は、右でつなぎ、左でつなぐので、左右が逆の(鏡文字の)S に見えます。<br>・<b>線の始まりと終わり</b>: 1a は、始まり(下の線の左端)も、終わり(ドームの左の足)も、左側にあり、文字とは反対を向きます。1d は、どちらも右側にあり、文字「BurgerStack」の方を向きます(利用者から、「線の始まりは、もっと柔軟でよい。真ん中から始めてもよい」と聞いたので、始まりの位置そのものは決め手にしていません。線が描かれていく動きを付けるときに、終わりの位置が効いてくる、という程度の差です)。<br>・<b>視線の流れ</b>: 左から右へ読むと、1d は、線の終わりが文字へ向かうので、記号から文字へ流れます。1a は、右側に、丸い折り返しが 2 つ並び、視線が記号の中で止まりがちです。線が描かれていく動きを付けるなら、1d は、描き終わりが文字の隣になります。';
 </script>
 </body>
 </html>

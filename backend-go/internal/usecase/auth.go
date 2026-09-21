@@ -27,9 +27,16 @@ type UserQuery interface {
 	// GetActiveUserByEmail は、指定された email の、discard されていない
 	// ユーザーを、そのパスワードの digest とともに返す。
 	GetActiveUserByEmail(ctx context.Context, email string) (UserCredentials, error)
+	// GetActiveUserByEmailIgnoreCase は、メールが(大文字小文字を区別せずに)一致する、discard されていない
+	// ユーザーを返す。メールの一意性は lower(email) で守られているので、「登録済みか」の確認(signup・
+	// 外部のサービスでの新規登録)は、こちらを使う。
+	GetActiveUserByEmailIgnoreCase(ctx context.Context, email string) (domain.User, error)
 	// GetActiveUserByID は、指定された id の、discard されていないユーザーを
 	// 返す。
 	GetActiveUserByID(ctx context.Context, id string) (domain.User, error)
+	// GetActiveUserHasPassword は、discard されていないユーザーが、パスワードでサインインできるか(digest が
+	// あるか)を返す。ユーザーがいなければ(wrap された)domain.ErrUserNotFound を返す。
+	GetActiveUserHasPassword(ctx context.Context, id string) (bool, error)
 }
 
 // PasswordHasher はパスワードのハッシュ化と検証を行う。

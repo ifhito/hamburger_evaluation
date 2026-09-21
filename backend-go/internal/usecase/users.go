@@ -128,7 +128,8 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 // 順序は、対象の取得(存在しなければ 404。本人でなくても同じ)、domain の本人管理ルール
 // (本人でなければ 403)、そして論理削除である。論理削除と、そのユーザーのレビューが付いている
 // すべてのバーガーの統計の再計算の依頼(バーガー ID の昇順に登録)と、そのユーザーが AI アプリに許可した
-// すべての許可の取り消し(発行済みのトークンも、使えなくなる)は、1 つのトランザクションで行う。
+// すべての許可の取り消し(発行済みのトークンも、使えなくなる)と、外部のアカウント(Google など)との結び付きの削除は、
+// 1 つのトランザクションで行う(結び付きが残ると、その外部のアカウントを、ほかのアカウントに結び付けられない)。
 //
 // ユーザーのレビュー自体は削除しない(レビューの削除日時は書き込まない)。画面から隠すのは、
 // 読み取りの側で、削除済みのユーザーのレビューを除いて行う。あとから行われる統計の再計算も、削除済みの
@@ -146,6 +147,9 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 			return err
 		}
 		if err := tx.OAuthGrants.RevokeAll(ctx, targetID); err != nil {
+			return err
+		}
+		if err := tx.UserIdentities.DiscardAll(ctx, targetID); err != nil {
 			return err
 		}
 		return s.recalc.RequestRecalculationReviewedBy(ctx, tx, targetID)

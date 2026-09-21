@@ -9,12 +9,12 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -33,22 +33,28 @@ const (
 	googleCannotUnlinkMessage  = "Google is your only way to sign in. Add a password before disconnecting it."
 )
 
-// googleFlowCookieName は、1 回のサインインの手続きの間だけ持ち回る値を入れる cookie の名前である。
-const googleFlowCookieName = "google_login_flow"
+// googleFlowCookiePrefix は、1 回のサインインの手続きの間だけ持ち回る値を入れる cookie の名前の前置きである。
+// **手続きごとに別の cookie**(名前に state のハッシュを付ける)にするので、複数のタブで手続きを並行しても、互いを
+// 上書きせず、使い終わった手続きの cookie だけを消せる(Path も、戻りの要求だけに絞れる)。
+const googleFlowCookiePrefix = "google_login_flow_"
+
+// googleHandoffCookiePrefix は、「画面へ渡すコード」を使える相手を確かめる「結び付けの値」を入れる cookie の名前の
+// 前置きである(コードごとに別の cookie)。
+const googleHandoffCookiePrefix = "google_login_handoff_"
 
 // googleFlowCookieTTL は、手続きの間の cookie の有効期間である(Google の画面での操作を待てる長さ)。
 const googleFlowCookieTTL = 10 * time.Minute
 
-// googleFlowMaxFlows は、1 つのブラウザが、同時に進められる手続きの数の上限である(複数のタブで、続けて始めても、
-// 後発が先発を上書きしないため)。超えたら、いちばん古いものから捨てる。
-const googleFlowMaxFlows = 5
-
-// googleFlowCookieMaxValueBytes は、封じた cookie の値の大きさの上限である(ブラウザの上限は、名前・値・属性を含めて
-// 約 4,096 バイト)。超えるときは、いちばん古い手続きから捨てる。
-const googleFlowCookieMaxValueBytes = 3800
-
 // googleFlowCookieInfo は、cookie の暗号鍵を、JWT の秘密から導くときの用途の名前である(鍵の使い回しを避ける)。
 const googleFlowCookieInfo = "google-login-flow-cookie-v1"
+
+// googleCallbackSuffix・googleExchangeSuffix は、Google からの戻り先の path の末尾(この API の /auth/google/callback)と、
+// 結果との交換の path の末尾(/auth/google/exchange)である。公開の path には、前に接頭辞(たとえば /api)が付くことが
+// あるが、末尾は変わらない。
+const (
+	googleCallbackSuffix = "/auth/google/callback"
+	googleExchangeSuffix = "/auth/google/exchange"
+)
 
 // GoogleLoginConfig は、Google でのサインインの窓口の設定である。
 type GoogleLoginConfig struct {
@@ -56,7 +62,8 @@ type GoogleLoginConfig struct {
 	// /auth/google/complete へ戻して渡す。
 	AppBaseURL string
 	// RedirectURL は、Google が認可のあとに利用者を戻す URL(この API の /auth/google/callback の公開 URL)である。
-	// cookie の path と、Secure の判断(https なら付ける)に使う。
+	// path は /auth/google/callback で終わらなければならない(手続きの cookie の Path と、結果との交換の cookie の
+	// Path を、ここから決める)。Secure の判断(https なら付ける)にも使う。
 	RedirectURL string
 	// CookieSecret は、cookie の暗号鍵を導く元になる秘密である(JWT の秘密)。ログに出さない。
 	CookieSecret string
@@ -69,11 +76,15 @@ type GoogleLogin struct {
 	cookie  flowCookie
 }
 
-// NewGoogleLogin は GoogleLogin を組み立てる。cfg が不正(戻り先が URL でない、秘密が空)なときはエラーを返す。
+// NewGoogleLogin は GoogleLogin を組み立てる。cfg が不正(戻り先が URL でない・path が /auth/google/callback で終わらない、
+// 秘密が空)なときはエラーを返す。
 func NewGoogleLogin(logins *usecase.GoogleLogins, cfg GoogleLoginConfig) (*GoogleLogin, error) {
 	redirect, err := url.Parse(cfg.RedirectURL)
 	if err != nil || redirect.Host == "" {
 		return nil, errors.New("google login: redirect URL is invalid")
+	}
+	if !strings.HasSuffix(redirect.Path, googleCallbackSuffix) {
+		return nil, errors.New("google login: redirect URL path must end with " + googleCallbackSuffix)
 	}
 	if cfg.CookieSecret == "" {
 		return nil, errors.New("google login: cookie secret is empty")
@@ -82,11 +93,16 @@ func NewGoogleLogin(logins *usecase.GoogleLogins, cfg GoogleLoginConfig) (*Googl
 	if err != nil {
 		return nil, errors.New("google login: derive cookie key")
 	}
-	path := googleFlowCookiePath(redirect.Path)
+	prefix := strings.TrimSuffix(redirect.Path, googleCallbackSuffix)
 	return &GoogleLogin{
 		logins:  logins,
 		appBase: strings.TrimRight(cfg.AppBaseURL, "/"),
-		cookie:  flowCookie{key: key, path: path, secure: redirect.Scheme == "https"},
+		cookie: flowCookie{
+			key:          key,
+			callbackPath: redirect.Path,
+			exchangePath: prefix + googleExchangeSuffix,
+			secure:       redirect.Scheme == "https",
+		},
 	}, nil
 }
 
@@ -100,37 +116,18 @@ func (g *GoogleLogin) LoginProviders() []string {
 
 // ---- 手続きの間の cookie ----
 
-// googleCallbackSuffix は、Google からの戻り先の path の末尾である(この API の /auth/google/callback)。
-const googleCallbackSuffix = "/auth/google/callback"
-
-// googleFlowCookiePath は、手続きの cookie の Path を、戻り先の path から決める。**開始(/auth/google/start・
-// /me/identities/google/link)と戻り(/auth/google/callback)の、すべての要求に、cookie が送られる**ように、
-// 戻り先から /auth/google/callback を除いた共通の親にする(例: 戻り先が /api/auth/google/callback なら /api、
-// API 専用のホストで /auth/google/callback なら /)。ブラウザは、Path が合わない要求には cookie を送らないので、
-// 戻り先の path だけに絞ると、開始の要求に、先発の手続きの cookie が届かず、後発が先発を上書きしてしまう。
-// 戻り先が /auth/google/callback で終わらないとき(想定外の設定)は、戻り先の path にする(手続きは 1 つだけ持てる)。
-func googleFlowCookiePath(redirectPath string) string {
-	if !strings.HasSuffix(redirectPath, googleCallbackSuffix) {
-		if redirectPath == "" {
-			return "/"
-		}
-		return redirectPath
-	}
-	if parent := strings.TrimSuffix(redirectPath, googleCallbackSuffix); parent != "" {
-		return parent
-	}
-	return "/"
-}
-
 // flowCookie は、進行中の手続き(state・nonce・PKCE の検証値・戻り先・結び付ける利用者)を、暗号化して cookie に
-// 封じる。1 つのブラウザが、複数のタブで続けて手続きを始めても、それぞれが残るように、手続きを最大
-// googleFlowMaxFlows 件まで、1 つの cookie に並べて持つ(state で取り出す)。HttpOnly(画面の JavaScript からは
-// 読めない)・SameSite=Lax(Google からの戻りの移動では付く)で、path を API の入口(開始・結び付け・戻りの共通の親)に限り、使い終わった手続きは
-// 取り除き、空になったら cookie を消す。サーバー側にセッションは持たない。
+// 封じる。**手続きごとに 1 つの cookie**(名前は state から決まる)で、Path は戻りの要求(callbackPath)だけに絞る
+// (開始の要求には、送られない)。HttpOnly(画面の JavaScript からは読めない)・SameSite=Lax(Google からの戻りの
+// 移動では付く)で、使い終わった手続きの cookie は、その場で消す。サーバー側にセッションは持たない。
+//
+// もう 1 種類の cookie(結び付けの値)は、戻りの応答で、手続きを終えたブラウザに設定し、結果との交換
+// (exchangePath)の要求にだけ送られる。「画面へ渡すコード」は URL に載って渡るので、コードだけでは、交換できない。
 type flowCookie struct {
-	key    []byte
-	path   string
-	secure bool
+	key          []byte
+	callbackPath string
+	exchangePath string
+	secure       bool
 }
 
 // flowEntry は、進行中の 1 つの手続きである。
@@ -151,6 +148,13 @@ func (e flowEntry) flow() usecase.GoogleFlow {
 	}
 }
 
+// cookieName は、prefix と、秘密でない識別の値(state・コード)から、cookie の名前を決める(値そのものは名前に出さず、
+// ハッシュの先頭を使う。要求の値がそのまま名前になって、想定外の名前を引かないためでもある)。
+func cookieName(prefix, id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return prefix + hex.EncodeToString(sum[:12])
+}
+
 func (c flowCookie) aead() (cipher.AEAD, error) {
 	block, err := aes.NewCipher(c.key)
 	if err != nil {
@@ -159,12 +163,13 @@ func (c flowCookie) aead() (cipher.AEAD, error) {
 	return cipher.NewGCM(block)
 }
 
-// seal は entries を暗号化して、cookie の値にする。改ざんは、復号のときに検出される。
-func (c flowCookie) seal(entries []flowEntry) (string, error) {
+// seal は entry を暗号化して、cookie の値にする。cookie の名前を認証に含める(別の名前の cookie に、値を移し替えても、
+// 開けない)。改ざんは、復号のときに検出される。
+func (c flowCookie) seal(name string, entry flowEntry) (string, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false) // 戻り先の "&" などを、6 バイトに膨らませない(cookie の大きさの上限のため)
-	if err := enc.Encode(entries); err != nil {
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(entry); err != nil {
 		return "", err
 	}
 	gcm, err := c.aead()
@@ -175,116 +180,87 @@ func (c flowCookie) seal(entries []flowEntry) (string, error) {
 	if _, err := rand.Read(nonce); err != nil {
 		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(gcm.Seal(nonce, nonce, buf.Bytes(), []byte(googleFlowCookieName))), nil
+	return base64.RawURLEncoding.EncodeToString(gcm.Seal(nonce, nonce, buf.Bytes(), []byte(name))), nil
 }
 
-// open は、cookie の値を復号して、期限内の手続きを返す。改ざん・壊れた値は、空を返す。
-func (c flowCookie) open(value string, now time.Time) []flowEntry {
+// open は、cookie の値を復号して、期限内の手続きを返す。改ざん・壊れた値・別の名前の cookie の値・期限切れは、
+// 見つからなかったことを返す。
+func (c flowCookie) open(name, value string, now time.Time) (flowEntry, bool) {
 	raw, err := base64.RawURLEncoding.DecodeString(value)
 	if err != nil {
-		return nil
+		return flowEntry{}, false
 	}
 	gcm, err := c.aead()
 	if err != nil || len(raw) < gcm.NonceSize() {
-		return nil
+		return flowEntry{}, false
 	}
-	plain, err := gcm.Open(nil, raw[:gcm.NonceSize()], raw[gcm.NonceSize():], []byte(googleFlowCookieName))
+	plain, err := gcm.Open(nil, raw[:gcm.NonceSize()], raw[gcm.NonceSize():], []byte(name))
 	if err != nil {
-		return nil
+		return flowEntry{}, false
 	}
-	var entries []flowEntry
-	if json.Unmarshal(plain, &entries) != nil {
-		return nil
+	var e flowEntry
+	if json.Unmarshal(plain, &e) != nil || now.Unix() > e.ExpiresAt {
+		return flowEntry{}, false
 	}
-	live := entries[:0]
-	for _, e := range entries {
-		if now.Unix() <= e.ExpiresAt {
-			live = append(live, e)
-		}
-	}
-	return live
+	return e, true
 }
 
-// read は、リクエストの cookie から、進行中の手続き(期限内)を、始めた順に返す。**同じ名前の cookie が複数
-// 送られてきたときは、すべてを合わせて読む**(重複は state で除く)。ブラウザは、Path が違う同名の cookie
-// (たとえば、cookie の Path を変えたデプロイの直後に、古い Path のまま残っているもの)を、Path が長いものを先に
-// 並べて、すべて送る。先頭の 1 つだけを読むと、新しい cookie の手続きが見つからず、手続きが失敗してしまう。
-func (c flowCookie) read(r *http.Request, now time.Time) []flowEntry {
-	var entries []flowEntry
-	seen := map[string]bool{}
-	for _, cookie := range r.Cookies() {
-		if cookie.Name != googleFlowCookieName {
-			continue
-		}
-		for _, e := range c.open(cookie.Value, now) {
-			if !seen[e.State] {
-				seen[e.State] = true
-				entries = append(entries, e)
-			}
-		}
-	}
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].ExpiresAt < entries[j].ExpiresAt })
-	return entries
+func (c flowCookie) newCookie(name, value, path string, maxAge int) *http.Cookie {
+	return &http.Cookie{Name: name, Value: value, Path: path, MaxAge: maxAge, HttpOnly: true, Secure: c.secure, SameSite: http.SameSiteLaxMode}
 }
 
-// write は、entries を cookie として応答に設定する。件数が googleFlowMaxFlows を超えるとき、または封じた値が
-// googleFlowCookieMaxValueBytes を超えるときは、いちばん古い手続きから捨てる。空なら、cookie を消す。
-// 1 件だけでも大きすぎるときは、エラーを返す。
-func (c flowCookie) write(w http.ResponseWriter, entries []flowEntry) error {
-	if len(entries) > googleFlowMaxFlows {
-		entries = entries[len(entries)-googleFlowMaxFlows:]
-	}
-	if len(entries) == 0 {
-		http.SetCookie(w, c.cookie("", -1))
-		return nil
-	}
-	for {
-		value, err := c.seal(entries)
-		if err != nil {
-			return err
-		}
-		if len(value) <= googleFlowCookieMaxValueBytes {
-			http.SetCookie(w, c.cookie(value, int(googleFlowCookieTTL.Seconds())))
-			return nil
-		}
-		if len(entries) == 1 {
-			return errors.New("google login: flow cookie is too large")
-		}
-		entries = entries[1:]
-	}
-}
-
-func (c flowCookie) cookie(value string, maxAge int) *http.Cookie {
-	return &http.Cookie{
-		Name: googleFlowCookieName, Value: value, Path: c.path, MaxAge: maxAge,
-		HttpOnly: true, Secure: c.secure, SameSite: http.SameSiteLaxMode,
-	}
-}
-
-// add は、新しい手続きを、cookie にすでにある手続きに足して、応答に設定する(先発の手続きは残る)。
-func (c flowCookie) add(w http.ResponseWriter, r *http.Request, flow usecase.GoogleFlow, now time.Time) error {
-	entries := c.read(r, now)
-	entries = append(entries, flowEntry{
+// set は、新しい手続きを、その手続き専用の cookie として応答に設定する(ほかの手続きの cookie には触れない)。
+func (c flowCookie) set(w http.ResponseWriter, flow usecase.GoogleFlow, now time.Time) error {
+	name := cookieName(googleFlowCookiePrefix, flow.Secrets.State)
+	value, err := c.seal(name, flowEntry{
 		State: flow.Secrets.State, Nonce: flow.Secrets.Nonce, Verifier: flow.Secrets.Verifier,
 		ReturnTo: flow.ReturnTo, LinkUserID: flow.LinkUserID, ExpiresAt: now.Add(googleFlowCookieTTL).Unix(),
 	})
-	return c.write(w, entries)
+	if err != nil {
+		return err
+	}
+	http.SetCookie(w, c.newCookie(name, value, c.callbackPath, int(googleFlowCookieTTL.Seconds())))
+	return nil
 }
 
-// take は、state に対応する手続きを取り出し、cookie からその手続きだけを取り除く(1 回の手続きにだけ使う。
-// ほかのタブの手続きは残す)。対応する手続きがなければ、見つからなかったことを返し、cookie は変えない。
+// take は、state に対応する手続きを取り出し、その手続きの cookie を消す(1 回の手続きにだけ使う。ほかのタブの
+// 手続きの cookie は残る)。cookie がない・壊れている・別の秘密で封じた・期限切れ・state が合わないときは、
+// 見つからなかったことを返す(cookie があれば、消す)。
 func (c flowCookie) take(w http.ResponseWriter, r *http.Request, state string, now time.Time) (usecase.GoogleFlow, bool) {
-	entries := c.read(r, now)
-	for i, e := range entries {
-		if state != "" && subtle.ConstantTimeCompare([]byte(e.State), []byte(state)) == 1 {
-			rest := append(append([]flowEntry{}, entries[:i]...), entries[i+1:]...)
-			if err := c.write(w, rest); err != nil {
-				http.SetCookie(w, c.cookie("", -1))
-			}
-			return e.flow(), true
-		}
+	if state == "" {
+		return usecase.GoogleFlow{}, false
 	}
-	return usecase.GoogleFlow{}, false
+	name := cookieName(googleFlowCookiePrefix, state)
+	cookie, err := r.Cookie(name)
+	if err != nil {
+		return usecase.GoogleFlow{}, false
+	}
+	http.SetCookie(w, c.newCookie(name, "", c.callbackPath, -1))
+	e, ok := c.open(name, cookie.Value, now)
+	if !ok || subtle.ConstantTimeCompare([]byte(e.State), []byte(state)) != 1 {
+		return usecase.GoogleFlow{}, false
+	}
+	return e.flow(), true
+}
+
+// setBinder は、「画面へ渡すコード」を使える相手を確かめる「結び付けの値」を、手続きを終えたブラウザに設定する
+// (結果との交換の要求にだけ送られる。有効期間は、コードと同じ)。
+func (c flowCookie) setBinder(w http.ResponseWriter, code, binder string) {
+	http.SetCookie(w, c.newCookie(cookieName(googleHandoffCookiePrefix, code), binder, c.exchangePath, int(domain.LoginHandoffTTL.Seconds())))
+}
+
+// binder は、このコードの「結び付けの値」を、要求の cookie から返す(なければ空)。
+func (c flowCookie) binder(r *http.Request, code string) string {
+	cookie, err := r.Cookie(cookieName(googleHandoffCookiePrefix, code))
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
+}
+
+// clearBinder は、使い終わったコードの「結び付けの値」の cookie を消す。
+func (c flowCookie) clearBinder(w http.ResponseWriter, code string) {
+	http.SetCookie(w, c.newCookie(cookieName(googleHandoffCookiePrefix, code), "", c.exchangePath, -1))
 }
 
 // ---- 窓口 ----
@@ -312,7 +288,7 @@ func (g *GoogleLogin) HandleStart(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 	begin, err := g.logins.Begin(r.Context(), r.URL.Query().Get("return_to"))
 	if err == nil {
-		err = g.cookie.add(w, r, begin.Flow, time.Now())
+		err = g.cookie.set(w, begin.Flow, time.Now())
 	}
 	if err != nil {
 		log.Printf("google login: start: %v", err)
@@ -323,20 +299,29 @@ func (g *GoogleLogin) HandleStart(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleCallback は GET /auth/google/callback を処理する: Google から戻ってきた要求を処理し、結果を入れた
-// 「画面へ渡すコード」を付けて、frontend の結果の画面へ 303 で送る。使った手続きは、成否にかかわらず cookie から取り除く。
+// 「画面へ渡すコード」を付けて、frontend の結果の画面へ 303 で送る。同時に、コードを使える相手を確かめる「結び付けの値」を、
+// このブラウザの cookie に設定する(コードだけでは、交換できない)。使った手続きの cookie は、成否にかかわらず消す。
+//
+// **手続きを始めたブラウザの cookie がない(または、合わない)要求では、何も保存せず**、コードなしで結果の画面へ送る
+// (手続きを始めていない要求で、DB に書き込ませない)。
 func (g *GoogleLogin) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 	q := r.URL.Query()
-	// state に対応する手続きだけを取り出す(ほかのタブの手続きは、cookie に残る)。なければ、空の手続きになり、失敗になる。
-	flow, _ := g.cookie.take(w, r, q.Get("state"), time.Now())
-	code, err := g.logins.Complete(r.Context(), flow, usecase.GoogleCallback{
+	flow, ok := g.cookie.take(w, r, q.Get("state"), time.Now())
+	if !ok {
+		http.Redirect(w, r, g.completeURL(""), http.StatusSeeOther)
+		return
+	}
+	issued, err := g.logins.Complete(r.Context(), flow, usecase.GoogleCallback{
 		Code: q.Get("code"), State: q.Get("state"), ProviderError: q.Get("error"),
 	})
 	if err != nil {
 		log.Printf("google login: callback: %v", err)
-		code = ""
+		http.Redirect(w, r, g.completeURL(""), http.StatusSeeOther)
+		return
 	}
-	http.Redirect(w, r, g.completeURL(code), http.StatusSeeOther)
+	g.cookie.setBinder(w, issued.Code, issued.Binder)
+	http.Redirect(w, r, g.completeURL(issued.Code), http.StatusSeeOther)
 }
 
 type googleExchangeRequest struct {
@@ -354,18 +339,30 @@ type googleLinkedResponse struct {
 	ReturnTo string `json:"return_to"`
 }
 
+// googleFailureResponse は、手続きの失敗(409・400)の応答である。検証済みの戻り先(return_to)を含める(AI アプリの
+// 許可の画面から来た利用者が、失敗のあと、元の要求へ戻れるように。画面は、これをサインインの画面へ渡すだけである)。
+type googleFailureResponse struct {
+	Errors   []string `json:"errors"`
+	ReturnTo string   `json:"return_to"`
+}
+
 // HandleExchange は POST /auth/google/exchange を処理する: 「画面へ渡すコード」を 1 回だけ使って、手続きの結果を返す。
 // サインインの成功は 200(POST /login と同じ本文 + return_to。JWT はここでだけ返す)、結び付けの成功は 200、
-// 重複などは 409、失敗・無効なコードは 400。
+// 重複などは 409、失敗は 400(どちらも、errors と return_to)、無効なコードは 400 である。
+//
+// コードは、手続きを終えたブラウザの cookie にある「結び付けの値」と一緒でなければ使えない(cookie がない・合わない
+// 要求は、無効なコードと同じ 400 になり、コードは消費されない)。コードだけを別のブラウザへ持ち込んでも、
+// 交換できない(ログイン CSRF の防止)。
 func (g *GoogleLogin) HandleExchange(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 	var req googleExchangeRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	res, err := g.logins.Redeem(r.Context(), req.Code)
+	res, err := g.logins.Redeem(r.Context(), req.Code, g.cookie.binder(r, req.Code))
 	if err != nil {
 		if errors.Is(err, domain.ErrLoginHandoffInvalid) {
+			g.cookie.clearBinder(w, req.Code)
 			writeJSON(w, http.StatusBadRequest, errorsResponse{Errors: []string{googleCodeInvalidMessage}})
 			return
 		}
@@ -373,19 +370,23 @@ func (g *GoogleLogin) HandleExchange(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
+	g.cookie.clearBinder(w, req.Code) // コードは使い切った
+	fail := func(status int, message string) {
+		writeJSON(w, status, googleFailureResponse{Errors: []string{message}, ReturnTo: res.ReturnTo})
+	}
 	switch res.Outcome {
 	case domain.OutcomeSignedIn:
 		writeJSON(w, http.StatusOK, googleSignedInResponse{authUserResponse: newAuthUserResponse(res.User, res.Token), ReturnTo: res.ReturnTo})
 	case domain.OutcomeLinked:
 		writeJSON(w, http.StatusOK, googleLinkedResponse{Linked: true, ReturnTo: res.ReturnTo})
 	case domain.OutcomeAccountExists:
-		writeJSON(w, http.StatusConflict, errorsResponse{Errors: []string{googleAccountExistsMessage}})
+		fail(http.StatusConflict, googleAccountExistsMessage)
 	case domain.OutcomeIdentityTaken:
-		writeJSON(w, http.StatusConflict, errorsResponse{Errors: []string{googleIdentityTakenMessage}})
+		fail(http.StatusConflict, googleIdentityTakenMessage)
 	case domain.OutcomeAlreadyLinked:
-		writeJSON(w, http.StatusConflict, errorsResponse{Errors: []string{googleAlreadyLinkedMessage}})
+		fail(http.StatusConflict, googleAlreadyLinkedMessage)
 	default:
-		writeJSON(w, http.StatusBadRequest, errorsResponse{Errors: []string{googleSignInFailedMessage}})
+		fail(http.StatusBadRequest, googleSignInFailedMessage)
 	}
 }
 
@@ -416,7 +417,7 @@ func (g *GoogleLogin) HandleLinkStart(w http.ResponseWriter, r *http.Request) {
 	}
 	begin, err := g.logins.BeginLink(r.Context(), viewer, req.ReturnTo)
 	if err == nil {
-		err = g.cookie.add(w, r, begin.Flow, time.Now())
+		err = g.cookie.set(w, begin.Flow, time.Now())
 	}
 	if err != nil {
 		log.Printf("google login: link start: %v", err)

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BurgerStack ロゴが描かれていく動き(見本)</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #ffffff; --text: #111111; --muted: #5a5a55; --border: #dedcd6; --logo-on-light: #b88f13; --logo-on-dark: #e9b824; }
+  body { margin: 0; padding: 32px 16px 64px; background: var(--bg); color: var(--text); font: 400 15px/1.7 "Noto Sans JP", system-ui, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 24px; line-height: 1.4; }
+  p { color: var(--muted); font-size: 14px; }
+  .bar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 16px 0 24px; }
+  button { min-height: 44px; padding: 0 20px; border: 1px solid #6b6b66; border-radius: 8px; background: #fff; font: inherit; font-weight: 500; cursor: pointer; }
+  button:focus-visible { outline: 3px solid #111; outline-offset: 2px; }
+  .demo { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 24px; border-radius: 12px; align-items: center; }
+  .demo.light { border: 1px solid var(--border); --line: var(--logo-on-light); }
+  .demo.dark { margin-top: 16px; background: #111; color: #fff; --line: var(--logo-on-dark); }
+  .lock { display: inline-flex; align-items: center; gap: 0.4em; font-size: 20px; letter-spacing: .01em; white-space: nowrap; }
+  .lock b { font-weight: 700; } .lock i { font-style: normal; font-weight: 400; }
+  /* 線が描かれていく動き。path に pathLength="1" を付けて、長さを測らずに、dasharray / dashoffset で描く */
+  svg path.draw { stroke: var(--line); stroke-dasharray: 1 2; stroke-dashoffset: 1.02; animation: draw 2.2s cubic-bezier(.4, 0, .2, 1) forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  /* 動きを減らす設定のときは、最初から、描き終えた形で出す */
+  @media (prefers-reduced-motion: reduce) { svg path.draw { animation: none; stroke-dashoffset: 0; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>BurgerStack ロゴが描かれていく動き(見本)</h1>
+  <p>ロゴの記号(レタスの波つきのバーガー。黄色の 1 本の線)が、ペンで描かれるように現れます(SVG の <code>stroke-dashoffset</code>)。OS の「視差効果を減らす」など(<code>prefers-reduced-motion</code>)のときは、動かさず、最初から描き終えた形で出します。<b>実装で使うかどうかは、未決です</b>(利用者が決めます)。白地は深い黄、暗い面は今の黄です。</p>
+  <div class="bar"><button id="replay" type="button">もう一度、描く</button></div>
+  <div class="demo light"><div><svg viewBox="7 6 106 90" width="240" height="204" aria-hidden="true"><path class="draw" pathLength="1" d="M 101 88 C 101.5 89.4 97.5 90.8 90 91.5 C 82.5 92.3 71.5 92.3 60 91.5 C 48.5 90.7 36.8 88.9 28.1 86.5 C 19.5 84.1 14.1 81.1 13.7 78 C 13.3 74.9 18 71.9 26.5 69.5 C 35 67.1 47.4 65.3 60 64.5 C 72.6 63.7 85.4 63.7 94.7 64.5 C 103.9 65.2 109.4 66.6 109.6 68 L 108.7 71.9 C 108.5 72.7 108.1 72.9 107.5 72.5 L 105.8 71 C 105.2 70.6 104.2 71.1 103.3 72.5 L 100.5 76.5 C 99.6 77.8 98.2 78 96.9 76.9 L 93.2 73.6 C 91.9 72.5 90.1 72.8 88.7 74.3 L 84.1 79 C 82.7 80.5 80.6 80.5 78.9 79 L 73.9 74.5 C 72.2 73 70 73 68.2 74.5 L 62.9 79 C 61.2 80.5 58.8 80.4 57.1 78.7 L 51.8 73.4 C 50 71.7 47.8 71.4 46.1 72.7 L 41.1 76.5 C 39.4 77.8 37.3 77.5 35.9 75.7 L 31.3 70.4 C 29.9 68.7 28.1 68.1 26.8 68.9 L 23.1 71.6 C 21.8 72.4 20.4 71.9 19.5 70.4 L 16.7 65.7 C 15.8 64.1 14.8 63.3 14.2 63.5 L 12.5 64.3 C 11.9 64.5 11.5 64 11.3 62.9 L 10.4 58 C 10.6 54.9 16.1 51.9 25.3 49.5 C 34.6 47.1 47.4 45.3 60 44.5 C 72.6 43.7 85 43.7 93.5 44.5 C 102 45.2 106.7 46.6 106.3 48 C 105.9 49.4 100.5 50.8 91.9 51.5 C 83.2 52.3 71.5 52.3 60 51.5 C 48.5 50.7 37.5 48.9 30 46.5 C 22.5 44.1 18.5 41.1 19 38 C 19 22 37.4 9 60 9 C 82.6 9 101 22 101 38" fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div><div class="lock"><svg viewBox="0 0 120 100" width="38.4" height="32" aria-hidden="true"><path class="draw" pathLength="1" d="M 101 88 C 101.5 89.4 97.5 90.8 90 91.5 C 82.5 92.3 71.5 92.3 60 91.5 C 48.5 90.7 36.8 88.9 28.1 86.5 C 19.5 84.1 14.1 81.1 13.7 78 C 13.3 74.9 18 71.9 26.5 69.5 C 35 67.1 47.4 65.3 60 64.5 C 72.6 63.7 85.4 63.7 94.7 64.5 C 103.9 65.2 109.4 66.6 109.6 68 L 108.7 71.9 C 108.5 72.7 108.1 72.9 107.5 72.5 L 105.8 71 C 105.2 70.6 104.2 71.1 103.3 72.5 L 100.5 76.5 C 99.6 77.8 98.2 78 96.9 76.9 L 93.2 73.6 C 91.9 72.5 90.1 72.8 88.7 74.3 L 84.1 79 C 82.7 80.5 80.6 80.5 78.9 79 L 73.9 74.5 C 72.2 73 70 73 68.2 74.5 L 62.9 79 C 61.2 80.5 58.8 80.4 57.1 78.7 L 51.8 73.4 C 50 71.7 47.8 71.4 46.1 72.7 L 41.1 76.5 C 39.4 77.8 37.3 77.5 35.9 75.7 L 31.3 70.4 C 29.9 68.7 28.1 68.1 26.8 68.9 L 23.1 71.6 C 21.8 72.4 20.4 71.9 19.5 70.4 L 16.7 65.7 C 15.8 64.1 14.8 63.3 14.2 63.5 L 12.5 64.3 C 11.9 64.5 11.5 64 11.3 62.9 L 10.4 58 C 10.6 54.9 16.1 51.9 25.3 49.5 C 34.6 47.1 47.4 45.3 60 44.5 C 72.6 43.7 85 43.7 93.5 44.5 C 102 45.2 106.7 46.6 106.3 48 C 105.9 49.4 100.5 50.8 91.9 51.5 C 83.2 52.3 71.5 52.3 60 51.5 C 48.5 50.7 37.5 48.9 30 46.5 C 22.5 44.1 18.5 41.1 19 38 C 19 22 37.4 9 60 9 C 82.6 9 101 22 101 38" fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>Burger</b><i>Stack</i></span></div>
+    <p style="margin-top:8px">左は大きく、右はヘッダーの大きさ(高さ 32px)。</p></div></div>
+  <div class="demo dark"><div><svg viewBox="7 6 106 90" width="240" height="204" aria-hidden="true"><path class="draw" pathLength="1" d="M 101 88 C 101.5 89.4 97.5 90.8 90 91.5 C 82.5 92.3 71.5 92.3 60 91.5 C 48.5 90.7 36.8 88.9 28.1 86.5 C 19.5 84.1 14.1 81.1 13.7 78 C 13.3 74.9 18 71.9 26.5 69.5 C 35 67.1 47.4 65.3 60 64.5 C 72.6 63.7 85.4 63.7 94.7 64.5 C 103.9 65.2 109.4 66.6 109.6 68 L 108.7 71.9 C 108.5 72.7 108.1 72.9 107.5 72.5 L 105.8 71 C 105.2 70.6 104.2 71.1 103.3 72.5 L 100.5 76.5 C 99.6 77.8 98.2 78 96.9 76.9 L 93.2 73.6 C 91.9 72.5 90.1 72.8 88.7 74.3 L 84.1 79 C 82.7 80.5 80.6 80.5 78.9 79 L 73.9 74.5 C 72.2 73 70 73 68.2 74.5 L 62.9 79 C 61.2 80.5 58.8 80.4 57.1 78.7 L 51.8 73.4 C 50 71.7 47.8 71.4 46.1 72.7 L 41.1 76.5 C 39.4 77.8 37.3 77.5 35.9 75.7 L 31.3 70.4 C 29.9 68.7 28.1 68.1 26.8 68.9 L 23.1 71.6 C 21.8 72.4 20.4 71.9 19.5 70.4 L 16.7 65.7 C 15.8 64.1 14.8 63.3 14.2 63.5 L 12.5 64.3 C 11.9 64.5 11.5 64 11.3 62.9 L 10.4 58 C 10.6 54.9 16.1 51.9 25.3 49.5 C 34.6 47.1 47.4 45.3 60 44.5 C 72.6 43.7 85 43.7 93.5 44.5 C 102 45.2 106.7 46.6 106.3 48 C 105.9 49.4 100.5 50.8 91.9 51.5 C 83.2 52.3 71.5 52.3 60 51.5 C 48.5 50.7 37.5 48.9 30 46.5 C 22.5 44.1 18.5 41.1 19 38 C 19 22 37.4 9 60 9 C 82.6 9 101 22 101 38" fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div><div class="lock"><svg viewBox="0 0 120 100" width="38.4" height="32" aria-hidden="true"><path class="draw" pathLength="1" d="M 101 88 C 101.5 89.4 97.5 90.8 90 91.5 C 82.5 92.3 71.5 92.3 60 91.5 C 48.5 90.7 36.8 88.9 28.1 86.5 C 19.5 84.1 14.1 81.1 13.7 78 C 13.3 74.9 18 71.9 26.5 69.5 C 35 67.1 47.4 65.3 60 64.5 C 72.6 63.7 85.4 63.7 94.7 64.5 C 103.9 65.2 109.4 66.6 109.6 68 L 108.7 71.9 C 108.5 72.7 108.1 72.9 107.5 72.5 L 105.8 71 C 105.2 70.6 104.2 71.1 103.3 72.5 L 100.5 76.5 C 99.6 77.8 98.2 78 96.9 76.9 L 93.2 73.6 C 91.9 72.5 90.1 72.8 88.7 74.3 L 84.1 79 C 82.7 80.5 80.6 80.5 78.9 79 L 73.9 74.5 C 72.2 73 70 73 68.2 74.5 L 62.9 79 C 61.2 80.5 58.8 80.4 57.1 78.7 L 51.8 73.4 C 50 71.7 47.8 71.4 46.1 72.7 L 41.1 76.5 C 39.4 77.8 37.3 77.5 35.9 75.7 L 31.3 70.4 C 29.9 68.7 28.1 68.1 26.8 68.9 L 23.1 71.6 C 21.8 72.4 20.4 71.9 19.5 70.4 L 16.7 65.7 C 15.8 64.1 14.8 63.3 14.2 63.5 L 12.5 64.3 C 11.9 64.5 11.5 64 11.3 62.9 L 10.4 58 C 10.6 54.9 16.1 51.9 25.3 49.5 C 34.6 47.1 47.4 45.3 60 44.5 C 72.6 43.7 85 43.7 93.5 44.5 C 102 45.2 106.7 46.6 106.3 48 C 105.9 49.4 100.5 50.8 91.9 51.5 C 83.2 52.3 71.5 52.3 60 51.5 C 48.5 50.7 37.5 48.9 30 46.5 C 22.5 44.1 18.5 41.1 19 38 C 19 22 37.4 9 60 9 C 82.6 9 101 22 101 38" fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>Burger</b><i>Stack</i></span></div>
+    <p style="margin-top:8px;color:#bbb">暗い面の上(今の黄。文字は白)。</p></div></div>
+  <p id="rm" style="margin-top:16px"></p>
+</main>
+<script>
+  document.getElementById('replay').addEventListener('click', () => document.querySelectorAll('path.draw').forEach((p) => { p.style.animation = 'none'; void p.getBoundingClientRect(); p.style.animation = ''; }));
+  const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const note = () => { document.getElementById('rm').textContent = mq.matches ? 'いまは「動きを減らす」設定なので、動かさず、描き終えた形で出しています。' : '「動きを減らす」設定にすると、動かさず、描き終えた形で出ます。'; };
+  note(); mq.addEventListener('change', note);
+</script>
+</body>
+</html>

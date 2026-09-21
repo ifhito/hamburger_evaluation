@@ -18,6 +18,11 @@ var (
 	ErrUnauthenticated = errors.New("unauthenticated")
 	// ErrEmailTaken は、ユーザーの email に対する unique violation を表す。
 	ErrEmailTaken = errors.New("email has already been taken")
+	// ErrInvalidPasswordDigest は、ユーザーの作成で、パスワードの扱いが明示と合わないことを表す
+	// (パスワードなしを明示せずに digest が空、または、パスワードなしを明示したのに digest がある)。
+	// 呼び出し側の不具合で digest が空になったとき、黙って「パスワードでサインインできないアカウント」を
+	// 作らないためのエラーである。
+	ErrInvalidPasswordDigest = errors.New("password digest must be set unless the account is created without a password")
 	// ErrUserNotFound は、lookup に一致する active なユーザーがいないことを
 	// 表す。
 	ErrUserNotFound = errors.New("user not found")

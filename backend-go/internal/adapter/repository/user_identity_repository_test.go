@@ -103,6 +103,28 @@ func TestUserIdentityRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("退会のための一括の削除は、指定した利用者の結び付きだけをすべて消し、1 件もなくてもエラーにしない", func(t *testing.T) {
+		conn, _ := dbtest.New(t)
+		alice := insertTestUser(ctx, t, conn, "alice@example.com")
+		bob := insertTestUser(ctx, t, conn, "bob@example.com")
+		repo := repository.NewUserIdentityRepository(conn)
+		for user, sub := range map[string]string{alice: "sub-a", bob: "sub-b"} {
+			if _, err := repo.CreateUserIdentity(ctx, domain.CreateUserIdentityParams{UserID: user, Provider: domain.ProviderGoogle, ProviderUserID: sub, Email: "x@x.example"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := repo.DiscardUserIdentitiesByUser(ctx, alice); err != nil {
+			t.Fatal(err)
+		}
+		var remaining string
+		if err := conn.QueryRow(ctx, `SELECT user_id FROM user_identities`).Scan(&remaining); err != nil || remaining != bob {
+			t.Fatalf("残った結び付きの持ち主 = %q, %v, want bob", remaining, err)
+		}
+		if err := repo.DiscardUserIdentitiesByUser(ctx, alice); err != nil {
+			t.Fatalf("結び付きがないときの一括の削除 = %v, want エラーなし", err)
+		}
+	})
+
 	t.Run("知らないサービスの名前・空の ID は、DB の制約で保存できない", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		alice := insertTestUser(ctx, t, conn, "alice@example.com")
@@ -136,7 +158,7 @@ func TestUserIdentityRepository(t *testing.T) {
 	t.Run("パスワードなしの利用者を作れる(空文字列の digest は NULL として保存され、DB には空文字列を入れられない)", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		users := repository.NewUserRepository(conn)
-		none, err := users.CreateUser(ctx, domain.CreateUserParams{Email: "g@example.com", Username: "g"})
+		none, err := users.CreateUser(ctx, domain.CreateUserParams{Email: "g@example.com", Username: "g", Passwordless: true})
 		if err != nil {
 			t.Fatalf("パスワードなしの作成: %v", err)
 		}

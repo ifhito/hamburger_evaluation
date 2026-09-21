@@ -18,9 +18,15 @@ Procedure:
    skill (概要 / 関連 Issue / 変更内容 / テスト / レビュー観点 / 備考).
    Report the URL.
 5. Review the PR diff (2–3 relevant lenses). In Claude Code sessions the
-   battery also includes the code-review and ponytail-review skills; from
-   Hermes, run the reviewer pass and note the others as pending.
-6. Verify (V1): send merged, deduped findings to the verifier. Verdicts:
+   battery also includes the code-review and ponytail-review skills;
+   `/code-review` is mandatory there: run it before `gh pr ready` and leave
+   its summary (or the reason it could not run) as a PR comment; name the
+   worktree path in its args (it reviews the calling session's directory
+   otherwise). From
+   Hermes, run the reviewer pass, note the others as pending, and ask the
+   user to run `/code-review` by hand before the PR goes ready.
+6. Verify (V1): send merged, deduped findings (including the unverified
+   `/code-review` findings) to the verifier. Verdicts:
    CONFIRMED / FALSE_POSITIVE / UNCERTAIN with evidence + autoFixSafe.
 7. Triage (V2):
    - auto-fix: CONFIRMED + autoFixSafe → implementer immediately
@@ -35,8 +41,11 @@ Procedure:
 9. Present ONLY user-decision items, ordered P1 (blocks) / P2 (decide now) /
    P3 (optional), each as one question with options + recommendation.
    Max 5 up front. Never re-litigate auto-fixed or discarded items.
-10. Auto-merge (ff), ready-only, or hold — size gate first (~≤400 changed
-    lines excl. generated/lock files = small):
+10. Auto-merge (ff), ready-only, or hold — first, the PR must carry a
+    `/code-review` summary comment (a "could not run" note is not evidence:
+    keep it draft as a P1 until the user runs it by hand or decides to
+    proceed without it); then the size gate (~≤400 changed lines excl.
+    generated/lock files = small):
     - wording-only PRs (Japanese wording fixes: comments, test names, docs;
       no identifier/SQL/API-string/logic change) count as small at any size,
       only when *proven*: changed Go files identical to `main` with comments
@@ -64,5 +73,6 @@ Escalate instead of deciding:
   2-round disagreements.
 
 Final report:
-- PR URL, files changed, validation evidence, review verdicts per round,
+- PR URL, files changed, validation evidence, review verdicts per round
+  (say explicitly if `/code-review` did not run, and why),
   rejected findings with reasons, worktree path.

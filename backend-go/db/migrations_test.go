@@ -387,6 +387,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		// login_handoffs は 000014 で追加された(外部のサービスでのサインインの結果を、画面へ渡すコード)。
 		"login_handoffs/id/uuid/NO",
 		"login_handoffs/code_hash/text/NO",
+		"login_handoffs/binder_hash/text/NO",
 		"login_handoffs/outcome/text/NO",
 		"login_handoffs/user_id/uuid/YES",
 		"login_handoffs/return_to/text/NO",
@@ -555,6 +556,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"login_handoffs/login_handoffs_pkey/p",
 		"login_handoffs/login_handoffs_user_id_fkey/f",
 		"login_handoffs/login_handoffs_code_hash_key/u",
+		"login_handoffs/login_handoffs_binder_hash_check/c",
 		"login_handoffs/login_handoffs_outcome_check/c",
 		"login_handoffs/login_handoffs_user_check/c",
 	}

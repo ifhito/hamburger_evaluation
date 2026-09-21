@@ -12,13 +12,18 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-func testFlowCookie(t *testing.T, secret string) flowCookie {
+func testFlowCookieFor(t *testing.T, redirect, secret string) flowCookie {
 	t.Helper()
-	g, err := NewGoogleLogin(nil, GoogleLoginConfig{AppBaseURL: "http://localhost:5173", RedirectURL: "http://localhost:8080/auth/google/callback", CookieSecret: secret})
+	g, err := NewGoogleLogin(nil, GoogleLoginConfig{AppBaseURL: "http://localhost:5173", RedirectURL: redirect, CookieSecret: secret})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return g.cookie
+}
+
+func testFlowCookie(t *testing.T, secret string) flowCookie {
+	t.Helper()
+	return testFlowCookieFor(t, "http://localhost:8080/api/auth/google/callback", secret)
 }
 
 func testEntry(n string, now time.Time) flowEntry {
@@ -31,44 +36,42 @@ func testEntry(n string, now time.Time) flowEntry {
 func TestFlowCookieSealAndOpen(t *testing.T) {
 	now := time.Now()
 	c := testFlowCookie(t, "cookie-secret-A")
+	const name = "google_login_flow_x"
 
 	t.Run("封じた値は、期限内なら、元の手続きに戻り、中身は平文で見えない", func(t *testing.T) {
-		entries := []flowEntry{testEntry("a", now), testEntry("b", now)}
-		value, err := c.seal(entries)
+		entry := testEntry("a", now)
+		value, err := c.seal(name, entry)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, secret := range []string{"state-value-a", "nonce-value-a", "verifier-value-b", "/shops"} {
+		for _, secret := range []string{"state-value-a", "nonce-value-a", "verifier-value-a", "/shops"} {
 			if strings.Contains(value, secret) {
 				t.Errorf("cookie の値に、平文の %q が含まれている", secret)
 			}
 		}
-		got := c.open(value, now.Add(time.Minute))
-		if len(got) != 2 || got[0] != entries[0] || got[1] != entries[1] {
-			t.Fatalf("got = %+v", got)
+		got, ok := c.open(name, value, now.Add(time.Minute))
+		if !ok || got != entry {
+			t.Fatalf("got = %+v, %v", got, ok)
 		}
 	})
 
 	t.Run("同じ内容でも、封じるたびに、違う値になる", func(t *testing.T) {
-		a, _ := c.seal([]flowEntry{testEntry("a", now)})
-		b, _ := c.seal([]flowEntry{testEntry("a", now)})
+		a, _ := c.seal(name, testEntry("a", now))
+		b, _ := c.seal(name, testEntry("a", now))
 		if a == b {
 			t.Fatal("同じ値になった")
 		}
 	})
 
-	t.Run("有効期間を過ぎた手続きは、開けない(期限内の手続きだけが残る)", func(t *testing.T) {
-		old := testEntry("old", now.Add(-time.Hour))
-		fresh := testEntry("fresh", now)
-		value, _ := c.seal([]flowEntry{old, fresh})
-		got := c.open(value, now)
-		if len(got) != 1 || got[0].State != "state-value-fresh" {
-			t.Fatalf("got = %+v, want 期限内の fresh だけ", got)
+	t.Run("有効期間を過ぎた手続きは、開けない", func(t *testing.T) {
+		value, _ := c.seal(name, testEntry("old", now.Add(-time.Hour)))
+		if _, ok := c.open(name, value, now); ok {
+			t.Fatal("期限切れの手続きを開けてしまった")
 		}
 	})
 
 	t.Run("1 バイトでも書き換えられた値は、開けない", func(t *testing.T) {
-		value, _ := c.seal([]flowEntry{testEntry("a", now)})
+		value, _ := c.seal(name, testEntry("a", now))
 		raw, err := base64.RawURLEncoding.DecodeString(value)
 		if err != nil {
 			t.Fatal(err)
@@ -77,40 +80,61 @@ func TestFlowCookieSealAndOpen(t *testing.T) {
 		for i := range raw {
 			mutated := append([]byte(nil), raw...)
 			mutated[i] ^= 0x01
-			if got := c.open(base64.RawURLEncoding.EncodeToString(mutated), now); len(got) != 0 {
+			if _, ok := c.open(name, base64.RawURLEncoding.EncodeToString(mutated), now); ok {
 				t.Fatalf("%d バイト目を書き換えた値を開けてしまった", i)
 			}
 		}
 	})
 
-	t.Run("別の秘密で封じた値・壊れた値・空の値は、開けない", func(t *testing.T) {
-		other := testFlowCookie(t, "cookie-secret-B")
-		foreign, _ := other.seal([]flowEntry{testEntry("a", now)})
-		for name, v := range map[string]string{"別の秘密": foreign, "空": "", "短すぎる": "abc", "base64 でない": "!!!not-base64!!!"} {
-			if got := c.open(v, now); len(got) != 0 {
-				t.Errorf("%s の値を開けてしまった", name)
-			}
+	t.Run("別の名前の cookie に移し替えた値は、開けない(名前も認証に含めている)", func(t *testing.T) {
+		value, _ := c.seal("google_login_flow_A", testEntry("a", now))
+		if _, ok := c.open("google_login_flow_B", value, now); ok {
+			t.Fatal("別の名前の cookie の値として、開けてしまった")
 		}
 	})
 
-	t.Run("cookie の暗号鍵は、秘密ごとに違い、空の秘密・不正な戻り先は受け付けない", func(t *testing.T) {
-		if _, err := NewGoogleLogin(nil, GoogleLoginConfig{AppBaseURL: "http://x", RedirectURL: "http://localhost:8080/cb", CookieSecret: ""}); err == nil {
-			t.Fatal("空の秘密を受け付けた")
-		}
-		if _, err := NewGoogleLogin(nil, GoogleLoginConfig{AppBaseURL: "http://x", RedirectURL: "not a url", CookieSecret: "s"}); err == nil {
-			t.Fatal("不正な戻り先を受け付けた")
+	t.Run("別の秘密で封じた値・壊れた値・空の値は、開けない", func(t *testing.T) {
+		other := testFlowCookie(t, "cookie-secret-B")
+		foreign, _ := other.seal(name, testEntry("a", now))
+		for label, v := range map[string]string{"別の秘密": foreign, "空": "", "短すぎる": "abc", "base64 でない": "!!!not-base64!!!"} {
+			if _, ok := c.open(name, v, now); ok {
+				t.Errorf("%s の値を開けてしまった", label)
+			}
 		}
 	})
 }
 
-// cookieOf は、応答に設定された、手続きの cookie を返す(なければ nil)。
-func cookieOf(rec *httptest.ResponseRecorder) *http.Cookie {
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == googleFlowCookieName {
-			return c
+func TestNewGoogleLoginRejectsInvalidConfig(t *testing.T) {
+	cases := map[string]GoogleLoginConfig{
+		"空の秘密":       {AppBaseURL: "http://x", RedirectURL: "http://localhost:8080/auth/google/callback", CookieSecret: ""},
+		"URL でない戻り先": {AppBaseURL: "http://x", RedirectURL: "not a url", CookieSecret: "s"},
+		"path が /auth/google/callback で終わらない": {AppBaseURL: "http://x", RedirectURL: "http://localhost:8080/cb", CookieSecret: "s"},
+		"path の末尾に / がある":                     {AppBaseURL: "http://x", RedirectURL: "http://localhost:8080/auth/google/callback/", CookieSecret: "s"},
+		"path が空(根)":                          {AppBaseURL: "http://x", RedirectURL: "http://localhost:8080", CookieSecret: "s"},
+	}
+	for name, cfg := range cases {
+		if _, err := NewGoogleLogin(nil, cfg); err == nil {
+			t.Errorf("%s を受け付けた", name)
 		}
 	}
-	return nil
+}
+
+func TestFlowCookiePaths(t *testing.T) {
+	cases := map[string]struct{ callback, exchange string }{
+		"http://localhost:8080/api/auth/google/callback": {"/api/auth/google/callback", "/api/auth/google/exchange"},
+		"http://localhost:8080/auth/google/callback":     {"/auth/google/callback", "/auth/google/exchange"},
+		"https://x.example/v1/api/auth/google/callback":  {"/v1/api/auth/google/callback", "/v1/api/auth/google/exchange"},
+	}
+	for redirect, want := range cases {
+		c := testFlowCookieFor(t, redirect, "s")
+		if c.callbackPath != want.callback || c.exchangePath != want.exchange {
+			t.Errorf("%s: callback = %q, exchange = %q, want %q・%q", redirect, c.callbackPath, c.exchangePath, want.callback, want.exchange)
+		}
+	}
+}
+
+func flowOf(n string) usecase.GoogleFlow {
+	return usecase.GoogleFlow{Secrets: usecase.GoogleFlowSecrets{State: "state-" + n, Nonce: "nonce-" + n, Verifier: "verifier-" + n}, ReturnTo: "/" + n}
 }
 
 func requestWith(cookies ...*http.Cookie) *http.Request {
@@ -123,157 +147,144 @@ func requestWith(cookies ...*http.Cookie) *http.Request {
 	return req
 }
 
-func flowOf(n string) usecase.GoogleFlow {
-	return usecase.GoogleFlow{Secrets: usecase.GoogleFlowSecrets{State: "state-" + n, Nonce: "nonce-" + n, Verifier: "verifier-" + n}, ReturnTo: "/" + n}
-}
-
-func TestFlowCookieHoldsSeveralFlows(t *testing.T) {
+func TestFlowCookieSetAndTake(t *testing.T) {
 	now := time.Now()
 	c := testFlowCookie(t, "cookie-secret-A")
 
-	t.Run("続けて手続きを始めると、先発の手続きは残り、state で取り出せる(取り出した手続きだけが cookie から消える)", func(t *testing.T) {
-		rec1 := httptest.NewRecorder()
-		if err := c.add(rec1, requestWith(nil), flowOf("one"), now); err != nil {
+	set := func(t *testing.T, n string) *http.Cookie {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		if err := c.set(rec, flowOf(n), now); err != nil {
 			t.Fatal(err)
 		}
-		rec2 := httptest.NewRecorder()
-		if err := c.add(rec2, requestWith(cookieOf(rec1)), flowOf("two"), now); err != nil {
-			t.Fatal(err)
+		cookies := rec.Result().Cookies()
+		if len(cookies) != 1 {
+			t.Fatalf("設定された cookie = %d 件, want 1", len(cookies))
 		}
-		jar := cookieOf(rec2)
+		return cookies[0]
+	}
 
-		rec3 := httptest.NewRecorder()
-		got, ok := c.take(rec3, requestWith(jar), "state-one", now)
-		if !ok || got.ReturnTo != "/one" || got.Secrets.Nonce != "nonce-one" {
-			t.Fatalf("先発の手続き = %+v, %v", got, ok)
+	t.Run("手続きごとに、別の名前の cookie が 1 つ設定され、Path は戻りの要求だけである", func(t *testing.T) {
+		one, two := set(t, "one"), set(t, "two")
+		if one.Name == two.Name || !strings.HasPrefix(one.Name, googleFlowCookiePrefix) {
+			t.Fatalf("名前 = %q・%q, want 手続きごとに違う、%s で始まる名前", one.Name, two.Name, googleFlowCookiePrefix)
 		}
-		rest := c.open(cookieOf(rec3).Value, now)
-		if len(rest) != 1 || rest[0].State != "state-two" {
-			t.Fatalf("残った手続き = %+v, want 後発だけ", rest)
+		if strings.Contains(one.Name, "state-one") {
+			t.Error("cookie の名前に、平文の state が含まれている")
 		}
-
-		rec4 := httptest.NewRecorder()
-		if got, ok := c.take(rec4, requestWith(cookieOf(rec3)), "state-two", now); !ok || got.ReturnTo != "/two" {
-			t.Fatalf("後発の手続き = %+v, %v", got, ok)
+		if one.Path != "/api/auth/google/callback" || !one.HttpOnly || one.SameSite != http.SameSiteLaxMode || one.MaxAge != 600 || one.Secure {
+			t.Fatalf("cookie = %+v", one)
 		}
-		if final := cookieOf(rec4); final == nil || final.MaxAge >= 0 {
-			t.Fatalf("手続きがなくなったら、cookie を消す: %+v", final)
+		secure := testFlowCookieFor(t, "https://api.example.com/auth/google/callback", "s")
+		rec := httptest.NewRecorder()
+		_ = secure.set(rec, flowOf("one"), now)
+		if got := rec.Result().Cookies()[0]; !got.Secure || got.Path != "/auth/google/callback" {
+			t.Fatalf("https の戻り先の cookie = %+v, want Secure・戻り先の path", got)
 		}
 	})
 
-	t.Run("知らない state・空の state では、何も取り出さず、cookie も変えない", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		_ = c.add(rec, requestWith(nil), flowOf("one"), now)
-		jar := cookieOf(rec)
+	t.Run("state で取り出せ、使った手続きの cookie だけが、同じ名前・Path で消える(ほかのタブの手続きは触れない)", func(t *testing.T) {
+		one, two := set(t, "one"), set(t, "two")
+
+		out := httptest.NewRecorder()
+		got, ok := c.take(out, requestWith(one, two), "state-one", now)
+
+		if !ok || got.ReturnTo != "/one" || got.Secrets.Nonce != "nonce-one" || got.Secrets.Verifier != "verifier-one" {
+			t.Fatalf("先発の手続き = %+v, %v", got, ok)
+		}
+		cleared := out.Result().Cookies()
+		if len(cleared) != 1 || cleared[0].Name != one.Name || cleared[0].Path != one.Path || cleared[0].MaxAge >= 0 {
+			t.Fatalf("消した cookie = %+v, want 使った手続きの cookie(同じ名前・Path)だけ", cleared)
+		}
+		if _, ok := c.take(httptest.NewRecorder(), requestWith(two), "state-two", now); !ok {
+			t.Fatal("後発の手続きを取り出せない")
+		}
+	})
+
+	t.Run("知らない state・空の state・cookie がない要求では、何も取り出さず、何も消さない", func(t *testing.T) {
+		one := set(t, "one")
 		for _, state := range []string{"", "state-unknown", "state-on"} {
 			out := httptest.NewRecorder()
-			if _, ok := c.take(out, requestWith(jar), state, now); ok {
+			if _, ok := c.take(out, requestWith(one), state, now); ok {
 				t.Errorf("state %q で取り出せてしまった", state)
 			}
-			if cookieOf(out) != nil {
+			if len(out.Result().Cookies()) != 0 {
 				t.Errorf("state %q: cookie を変えた", state)
 			}
 		}
 	})
 
-	t.Run("同時に持てる手続きは上限まで(超えたら、いちばん古いものから捨てる)", func(t *testing.T) {
-		var jar *http.Cookie
-		for i := 0; i < googleFlowMaxFlows+2; i++ {
-			rec := httptest.NewRecorder()
-			if err := c.add(rec, requestWith(jar), flowOf(string(rune('a'+i))), now); err != nil {
-				t.Fatal(err)
+	t.Run("改ざんされた・別の state の cookie の値・期限切れの手続きは、取り出せず、その cookie は消す", func(t *testing.T) {
+		one, two := set(t, "one"), set(t, "two")
+		tampered := *one
+		tampered.Value = one.Value[:len(one.Value)-2] + "AA"
+		moved := *one // state-two の名前の cookie に、state-one の値を移し替えたもの
+		moved.Name = two.Name
+		expired := httptest.NewRecorder()
+		_ = c.set(expired, flowOf("old"), now.Add(-2*googleFlowCookieTTL))
+		expiredCookie := expired.Result().Cookies()[0]
+
+		for label, tc := range map[string]struct {
+			cookie *http.Cookie
+			state  string
+		}{"改ざん": {&tampered, "state-one"}, "名前の移し替え": {&moved, "state-two"}, "期限切れ": {expiredCookie, "state-old"}} {
+			out := httptest.NewRecorder()
+			if _, ok := c.take(out, requestWith(tc.cookie), tc.state, now); ok {
+				t.Errorf("%s: 取り出せてしまった", label)
 			}
-			jar = cookieOf(rec)
-		}
-		entries := c.open(jar.Value, now)
-		if len(entries) != googleFlowMaxFlows || entries[0].State != "state-c" || entries[len(entries)-1].State != "state-g" {
-			t.Fatalf("残った手続き = %d 件(先頭 %q・末尾 %q), want 上限の %d 件で、古い a・b が捨てられている", len(entries), entries[0].State, entries[len(entries)-1].State, googleFlowMaxFlows)
-		}
-	})
-
-	t.Run("同じ名前の cookie が複数送られてきても(Path が違う古い cookie が残っているとき。ブラウザは、Path が長いものを先に送る)、すべての手続きを合わせて読み、state で取り出せる", func(t *testing.T) {
-		oldRec := httptest.NewRecorder()
-		_ = c.add(oldRec, requestWith(), flowOf("old"), now.Add(-time.Minute)) // 古い Path の cookie に残っていた手続き
-		newRec := httptest.NewRecorder()
-		_ = c.add(newRec, requestWith(), flowOf("new"), now)
-		stale, fresh := cookieOf(oldRec), cookieOf(newRec)
-
-		// 古い cookie が先に来ても、新しい手続きを取り出せる。
-		out := httptest.NewRecorder()
-		got, ok := c.take(out, requestWith(stale, fresh), "state-new", now)
-		if !ok || got.ReturnTo != "/new" {
-			t.Fatalf("新しい手続き = %+v, %v", got, ok)
-		}
-		// 取り出さなかった、古い方の手続きは、書き戻す cookie に残る。
-		rest := c.open(cookieOf(out).Value, now)
-		if len(rest) != 1 || rest[0].State != "state-old" {
-			t.Fatalf("残った手続き = %+v", rest)
-		}
-		// 同じ手続きが、2 つの cookie の両方にあっても、重複しない。
-		dup := c.read(requestWith(fresh, fresh), now)
-		if len(dup) != 1 {
-			t.Fatalf("重複した手続き = %d 件, want 1", len(dup))
-		}
-	})
-
-	t.Run("期限切れの手続きは、新しく始めるときに掃除される", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		_ = c.add(rec, requestWith(nil), flowOf("stale"), now.Add(-2*googleFlowCookieTTL))
-		rec2 := httptest.NewRecorder()
-		if err := c.add(rec2, requestWith(cookieOf(rec)), flowOf("fresh"), now); err != nil {
-			t.Fatal(err)
-		}
-		entries := c.open(cookieOf(rec2).Value, now)
-		if len(entries) != 1 || entries[0].State != "state-fresh" {
-			t.Fatalf("残った手続き = %+v, want fresh だけ", entries)
-		}
-	})
-
-	t.Run("戻り先が長くても、封じた cookie の値は、大きさの上限を超えず、古い手続きから捨てられる(新しい手続きは残る)", func(t *testing.T) {
-		long := "/oauth/authorize?" + strings.Repeat("a=b&", 500) // 2,000 バイト前後(& は、そのままの 1 バイト)
-		if got := domain.SanitizeReturnTo(long); got != long {
-			t.Fatalf("テストの戻り先が、規則を満たさない(%d バイト)", len(long))
-		}
-		var jar *http.Cookie
-		for i := 0; i < googleFlowMaxFlows; i++ {
-			f := flowOf(string(rune('a' + i)))
-			f.ReturnTo = long
-			rec := httptest.NewRecorder()
-			if err := c.add(rec, requestWith(jar), f, now); err != nil {
-				t.Fatal(err)
+			if cleared := out.Result().Cookies(); len(cleared) != 1 || cleared[0].MaxAge >= 0 {
+				t.Errorf("%s: 使えない cookie を消していない: %+v", label, cleared)
 			}
-			jar = cookieOf(rec)
-			if len(jar.Value) > googleFlowCookieMaxValueBytes {
-				t.Fatalf("cookie の値が %d バイト(上限 %d)", len(jar.Value), googleFlowCookieMaxValueBytes)
-			}
-		}
-		entries := c.open(jar.Value, now)
-		if len(entries) == 0 || entries[len(entries)-1].State != "state-e" {
-			t.Fatalf("いちばん新しい手続きが残っていない: %+v", entries)
-		}
-	})
-
-	t.Run("1 件だけでも大きすぎる手続きは、始められない(エラー)", func(t *testing.T) {
-		f := flowOf("huge")
-		f.ReturnTo = strings.Repeat("あ", 5000) // 実際には SanitizeReturnTo が長さで断るが、cookie の側でも上限を守る
-		if err := c.add(httptest.NewRecorder(), requestWith(nil), f, now); err == nil {
-			t.Fatal("大きすぎる手続きを、cookie に設定できてしまった")
 		}
 	})
 }
 
-func TestGoogleFlowCookiePath(t *testing.T) {
-	cases := map[string]string{
-		"/api/auth/google/callback":      "/api",
-		"/auth/google/callback":          "/",
-		"/v1/api/auth/google/callback":   "/v1/api",
-		"":                               "/",
-		"/custom/callback":               "/custom/callback", // 想定外の設定: 戻り先の path のまま(手続きは 1 つだけ)
-		"/api/auth/google/callback/more": "/api/auth/google/callback/more",
-	}
-	for in, want := range cases {
-		if got := googleFlowCookiePath(in); got != want {
-			t.Errorf("googleFlowCookiePath(%q) = %q, want %q", in, got, want)
+func TestBinderCookie(t *testing.T) {
+	c := testFlowCookie(t, "cookie-secret-A")
+
+	t.Run("結び付けの値の cookie は、コードごとに別の名前で、結果との交換の要求にだけ送られ、コードと同じ時間で切れる", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		c.setBinder(rec, "code-one", "binder-one")
+		c.setBinder(rec, "code-two", "binder-two")
+		cookies := rec.Result().Cookies()
+		if len(cookies) != 2 || cookies[0].Name == cookies[1].Name {
+			t.Fatalf("cookie = %+v, want コードごとに別の名前の 2 件", cookies)
 		}
-	}
+		one := cookies[0]
+		if !strings.HasPrefix(one.Name, googleHandoffCookiePrefix) || strings.Contains(one.Name, "code-one") {
+			t.Errorf("名前 = %q", one.Name)
+		}
+		if one.Path != "/api/auth/google/exchange" || !one.HttpOnly || one.SameSite != http.SameSiteLaxMode || one.MaxAge != int(domain.LoginHandoffTTL.Seconds()) || one.Secure {
+			t.Fatalf("cookie = %+v", one)
+		}
+	})
+
+	t.Run("コードに対応する cookie の値だけを返す(ない・別のコードのものは空)", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		c.setBinder(rec, "code-one", "binder-one")
+		c.setBinder(rec, "code-two", "binder-two")
+		req := requestWith(rec.Result().Cookies()...)
+		if got := c.binder(req, "code-one"); got != "binder-one" {
+			t.Errorf("code-one = %q", got)
+		}
+		if got := c.binder(req, "code-two"); got != "binder-two" {
+			t.Errorf("code-two = %q", got)
+		}
+		for _, code := range []string{"code-three", ""} {
+			if got := c.binder(req, code); got != "" {
+				t.Errorf("code %q = %q, want 空", code, got)
+			}
+		}
+	})
+
+	t.Run("使い終わったら、同じ名前・Path で消す", func(t *testing.T) {
+		set := httptest.NewRecorder()
+		c.setBinder(set, "code-one", "binder-one")
+		clear := httptest.NewRecorder()
+		c.clearBinder(clear, "code-one")
+		a, b := set.Result().Cookies()[0], clear.Result().Cookies()[0]
+		if a.Name != b.Name || a.Path != b.Path || b.MaxAge >= 0 {
+			t.Fatalf("設定 %+v・消去 %+v, want 同じ名前・Path で MaxAge < 0", a, b)
+		}
+	})
 }
