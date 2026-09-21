@@ -232,16 +232,28 @@ type reviewResponse struct {
 	CanEdit bool `json:"can_edit"`
 }
 
-// reviewDetailResponse は GET /reviews/{id} の body である。reviewResponse に、viewer が、その review の
-// ショップに review を投稿できるか(can_review。ショップ詳細の can_review と同じ規則)を足したもの。
-// 一覧・作成・更新の応答には含めない(画面が使うのは詳細だけで、ほかでは意味のない false になるため)。
+// shopRefResponse は、レビュー詳細に埋め込まれる、そのレビューのショップである。
+type shopRefResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// reviewDetailResponse は GET /reviews/{id} の body である。reviewResponse に、そのレビューのショップ(shop。
+// viewer に見えるショップがないときは null)と、viewer がそこにレビューを書けるか(can_review。ショップ詳細の
+// can_review と同じ規則)を足したもの。どのショップを返すかは domain.ReviewShopFor が決め、ここは写すだけである。
+// 一覧・作成・更新の応答には含めない(画面が使うのは詳細だけで、ほかでは意味のない null・false になるため)。
 type reviewDetailResponse struct {
 	reviewResponse
-	CanReview bool `json:"can_review"`
+	CanReview bool             `json:"can_review"`
+	Shop      *shopRefResponse `json:"shop"`
 }
 
 func newReviewDetailResponse(detail domain.ReviewDetail) reviewDetailResponse {
-	return reviewDetailResponse{reviewResponse: newReviewResponse(detail), CanReview: detail.CanReview}
+	resp := reviewDetailResponse{reviewResponse: newReviewResponse(detail), CanReview: detail.CanReview}
+	if detail.Shop != nil {
+		resp.Shop = &shopRefResponse{ID: detail.Shop.ID, Name: detail.Shop.Name}
+	}
+	return resp
 }
 
 // newReviewResponse は domain の payload を、shop detail の reviews と共有する

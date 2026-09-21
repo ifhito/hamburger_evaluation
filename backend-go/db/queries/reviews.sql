@@ -114,13 +114,14 @@ SET discarded_at = now(),
 WHERE id = $1 AND discarded_at IS NULL
 RETURNING burger_id;
 
--- name: GetReviewShop :one
--- review が属する shop(review の burger を持つ shop)。review の詳細で、viewer がその shop に
--- review を投稿できるか(can_review)を、ショップ詳細と同じ規則で求めるために使う。
+-- name: ListReviewShops :many
+-- review が属する shop(review の burger を持つ shop すべて。burger は複数の shop にありうる)を、作成の古い順に返す。
+-- review の詳細で、閲覧者にとってのショップと、そこにレビューを書けるか(can_review)を、domain.ReviewShopFor が
+-- 決めるために使う。どの shop を代表にするかは、ここでは決めない。存在しない review・削除済みの review・
+-- shop に紐づかない burger の review は、空の結果になる。
 SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id
 FROM reviews r
 JOIN shops_burgers sb ON sb.burger_id = r.burger_id
 JOIN shops s ON s.id = sb.shop_id
-WHERE r.id = $1
-ORDER BY s.created_at, s.id
-LIMIT 1;
+WHERE r.id = $1 AND r.discarded_at IS NULL
+ORDER BY s.created_at, s.id;

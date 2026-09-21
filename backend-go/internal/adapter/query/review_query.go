@@ -104,21 +104,23 @@ func (r *ReviewQuery) GetShop(ctx context.Context, id string) (domain.Shop, erro
 	return shop, nil
 }
 
-// GetReviewShop は、review が属する shop(review の burger を持つ shop)を返す。
-// review が存在しないときは domain.ErrReviewNotFound を返す。
-func (r *ReviewQuery) GetReviewShop(ctx context.Context, reviewID string) (domain.Shop, error) {
-	row, err := r.q.GetReviewShop(ctx, reviewID)
+// ListReviewShops は、review が属する shop(review の burger を持つ shop すべて)を、作成の古い順に返す。
+// 存在しない review・削除済みの review・shop に紐づかない burger の review は、空の一覧(エラーではない)を返す。
+// どの shop を代表にするかは、ここでは決めない(domain.ReviewShopFor が決める)。
+func (r *ReviewQuery) ListReviewShops(ctx context.Context, reviewID string) ([]domain.Shop, error) {
+	rows, err := r.q.ListReviewShops(ctx, reviewID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Shop{}, fmt.Errorf("get review shop: %w", domain.ErrReviewNotFound)
+		return nil, fmt.Errorf("list review shops: %w", err)
+	}
+	shops := make([]domain.Shop, 0, len(rows))
+	for _, row := range rows {
+		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+		if err != nil {
+			return nil, fmt.Errorf("list review shops: %w", err)
 		}
-		return domain.Shop{}, fmt.Errorf("get review shop: %w", err)
+		shops = append(shops, shop)
 	}
-	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
-	if err != nil {
-		return domain.Shop{}, fmt.Errorf("get review shop: %w", err)
-	}
-	return shop, nil
+	return shops, nil
 }
 
 // GetShopBurger は、burger が shops_burgers 経由でその shop に紐づいている

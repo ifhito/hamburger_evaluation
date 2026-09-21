@@ -120,39 +120,6 @@ func (q *Queries) GetReviewDetail(ctx context.Context, id string) (GetReviewDeta
 	return i, err
 }
 
-const getReviewShop = `-- name: GetReviewShop :one
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id
-FROM reviews r
-JOIN shops_burgers sb ON sb.burger_id = r.burger_id
-JOIN shops s ON s.id = sb.shop_id
-WHERE r.id = $1
-ORDER BY s.created_at, s.id
-LIMIT 1
-`
-
-type GetReviewShopRow struct {
-	ID             string
-	Name           string
-	Status         int16
-	ModerationNote pgtype.Text
-	CreatorID      *string
-}
-
-// review が属する shop(review の burger を持つ shop)。review の詳細で、viewer がその shop に
-// review を投稿できるか(can_review)を、ショップ詳細と同じ規則で求めるために使う。
-func (q *Queries) GetReviewShop(ctx context.Context, id string) (GetReviewShopRow, error) {
-	row := q.db.QueryRow(ctx, getReviewShop, id)
-	var i GetReviewShopRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Status,
-		&i.ModerationNote,
-		&i.CreatorID,
-	)
-	return i, err
-}
-
 const listPublicReviews = `-- name: ListPublicReviews :many
 SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
        u.id AS user_id, u.username AS user_username,
@@ -261,6 +228,53 @@ func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsPa
 			&i.AverageRating,
 			&i.WeightedScore,
 			&i.Confidence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReviewShops = `-- name: ListReviewShops :many
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id
+FROM reviews r
+JOIN shops_burgers sb ON sb.burger_id = r.burger_id
+JOIN shops s ON s.id = sb.shop_id
+WHERE r.id = $1 AND r.discarded_at IS NULL
+ORDER BY s.created_at, s.id
+`
+
+type ListReviewShopsRow struct {
+	ID             string
+	Name           string
+	Status         int16
+	ModerationNote pgtype.Text
+	CreatorID      *string
+}
+
+// review が属する shop(review の burger を持つ shop すべて。burger は複数の shop にありうる)を、作成の古い順に返す。
+// review の詳細で、閲覧者にとってのショップと、そこにレビューを書けるか(can_review)を、domain.ReviewShopFor が
+// 決めるために使う。どの shop を代表にするかは、ここでは決めない。存在しない review・削除済みの review・
+// shop に紐づかない burger の review は、空の結果になる。
+func (q *Queries) ListReviewShops(ctx context.Context, id string) ([]ListReviewShopsRow, error) {
+	rows, err := q.db.Query(ctx, listReviewShops, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReviewShopsRow
+	for rows.Next() {
+		var i ListReviewShopsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
+			&i.ModerationNote,
+			&i.CreatorID,
 		); err != nil {
 			return nil, err
 		}
