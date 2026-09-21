@@ -215,7 +215,7 @@ func TestGetUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC4 他人が閲覧すると公開ビューだけを返し email は body に現れない", func(t *testing.T) {
+	t.Run("他人がプロフィールを閲覧すると、公開ビューだけが返り、メールアドレスは本文に現れない", func(t *testing.T) {
 		tests := []struct {
 			name      string
 			viewerID  string
@@ -277,7 +277,7 @@ func TestGetUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC5 存在しない・退会済み・UUID の正規形でない id は status/body/Content-Type がすべて同一の 404 になる", func(t *testing.T) {
+	t.Run("存在しない・退会済み・UUID の正規形でない id は、ステータス・本文・Content-Type がすべて同一の 404 になる", func(t *testing.T) {
 		const wantBody = `{"error":"User not found"}`
 		const wantContentType = "application/json; charset=utf-8"
 		paths := []string{
@@ -375,9 +375,9 @@ func TestUsersIndexIsNotFound(t *testing.T) {
 	}
 }
 
-// TestUpdateUser は PUT /users/{id} を扱う：AC1（自分自身の更新が GET /users/{id} に
-// 反映される）、AC2（存在する別のユーザーには 403、存在しない id には 404）、
-// AC3（既に使われている email は 422）、そして Rails parity の validation の
+// TestUpdateUser は PUT /users/{id} を扱う：自分自身の更新が GET /users/{id} に
+// 反映されること、存在する別のユーザーには 403、存在しない id には 404、
+// 既に使われている email は 422、そして Rails parity の validation の
 // 境界ケース。
 func TestUpdateUser(t *testing.T) {
 	setup := func(t *testing.T) (*userStoreFake, http.Handler, string, string) {
@@ -388,7 +388,7 @@ func TestUpdateUser(t *testing.T) {
 		return repo, router, token(alice.ID), token(bob.ID)
 	}
 
-	t.Run("AC1 自分自身の username 更新は 200 を返し GET /users/{id} に反映される", func(t *testing.T) {
+	t.Run("自分自身のユーザー名を更新すると 200 が返り、GET /users/{id} にも反映される", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodPut, "/users/"+uid.N(1), `{"user":{"username":"alice2"}}`, aliceAuth)
 		if rec.Code != http.StatusOK {
@@ -404,7 +404,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 存在する別のユーザーの id は 403 を返す", func(t *testing.T) {
+	t.Run("他人のプロフィールの更新は 403 になる", func(t *testing.T) {
 		_, router, _, bobAuth := setup(t)
 		rec := do(router, http.MethodPut, "/users/"+uid.N(1), `{"user":{"username":"hacked"}}`, bobAuth)
 		if rec.Code != http.StatusForbidden || rec.Body.String() != `{"error":"Forbidden"}` {
@@ -412,7 +412,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 存在しない id と非数値の id は所有権に関わらず 404 を返す", func(t *testing.T) {
+	t.Run("存在しない id と UUID の形でない id の更新は、誰が行っても 404 になる", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		for _, path := range []string{"/users/" + uid.N(999), "/users/abc"} {
 			rec := do(router, http.MethodPut, path, `{"user":{"username":"x"}}`, aliceAuth)
@@ -422,7 +422,7 @@ func TestUpdateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 email を別のユーザーの email に変更すると 422 を返す", func(t *testing.T) {
+	t.Run("別のユーザーがすでに使っているメールアドレスに変更しようとすると 422 になる", func(t *testing.T) {
 		_, router, aliceAuth, _ := setup(t)
 		rec := do(router, http.MethodPut, "/users/"+uid.N(1), `{"user":{"email":"bob@example.com"}}`, aliceAuth)
 		if rec.Code != http.StatusUnprocessableEntity {
@@ -534,8 +534,8 @@ func TestUpdateUser(t *testing.T) {
 	})
 }
 
-// TestDeleteUser は DELETE /users/{id} を扱う：AC2 の 403/404 の使い分けと、
-// AC4 の核（body なしの 204、無効になったトークン、GET /users/{id} の 404）。
+// TestDeleteUser は DELETE /users/{id} を扱う：他人には 403、存在しない id には 404 と使い分けることと、
+// 削除の要点（body なしの 204、無効になったトークン、GET /users/{id} の 404）。
 func TestDeleteUser(t *testing.T) {
 	setup := func(t *testing.T) (http.Handler, string, string) {
 		t.Helper()
@@ -545,7 +545,7 @@ func TestDeleteUser(t *testing.T) {
 		return router, token(alice.ID), token(bob.ID)
 	}
 
-	t.Run("AC2 存在する別のユーザーの id は 403 を返す", func(t *testing.T) {
+	t.Run("他人のアカウントの削除は 403 になる", func(t *testing.T) {
 		router, _, bobAuth := setup(t)
 		rec := do(router, http.MethodDelete, "/users/"+uid.N(1), "", bobAuth)
 		if rec.Code != http.StatusForbidden || rec.Body.String() != `{"error":"Forbidden"}` {
@@ -553,7 +553,7 @@ func TestDeleteUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC2 存在しない id と非数値の id は 404 を返す", func(t *testing.T) {
+	t.Run("存在しない id と UUID の形でない id の削除は 404 になる", func(t *testing.T) {
 		router, aliceAuth, _ := setup(t)
 		for _, path := range []string{"/users/" + uid.N(999), "/users/abc"} {
 			rec := do(router, http.MethodDelete, path, "", aliceAuth)
@@ -632,9 +632,9 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
 	auth := usecase.NewAuth(userQuery, hasher, codec, codec)
 	mailer := &mailRecorder{}
-	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)),
-		hasher, mailer, codec, testSignupConfig)
 	unitOfWork := uow.New(conn)
+	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)),
+		unitOfWork, hasher, mailer, codec, testSignupConfig)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(conn, auth, signups,
 		usecase.NewShops(query.NewShopQuery(conn), domain.NewShops(repository.NewShopRepository(conn))),
@@ -676,7 +676,7 @@ func loginAs(router http.Handler, email, password string) *httptest.ResponseReco
 	return do(router, http.MethodPost, "/login", fmt.Sprintf(`{"email":%q,"password":%q}`, email, password), "")
 }
 
-// TestUsersPasswordChangeIntegration は AC6 をエンドツーエンドで扱う：
+// TestUsersPasswordChangeIntegration は、パスワード変更を、入口から出口まで通して扱う：
 // 弱いパスワードへの PUT /users/{id} は 422 で拒否され、旧パスワードのまま
 // ログインできる。規則を満たすパスワードへの更新後は、古いパスワードでは
 // もうログインできず（401）、新しいパスワードではログインできる（200）。
@@ -723,7 +723,7 @@ func TestUsersPasswordChangeIntegration(t *testing.T) {
 }
 
 // TestLoginValidationIntegration は、認証情報の規則の判定が本物の bcrypt・PostgreSQL・
-// router を通しても効くことを固定する（Story #61）。規則を満たす認証情報は 200、
+// router を通しても効くことを固定する。規則を満たす認証情報は 200、
 // 規則を満たさない入力は 422、規則を満たしたうえで誤っている入力は 401 になる。
 func TestLoginValidationIntegration(t *testing.T) {
 	if testing.Short() {
@@ -759,7 +759,7 @@ func TestLoginValidationIntegration(t *testing.T) {
 
 // TestUsersProfileViewsIntegration は、本物の PostgreSQL・repository・JWT を通して、
 // SQL から domain、JSON までの一連で、GET /users/{id} の公開ビューと本人ビューの
-// キー集合が保たれることを確かめる（AC2〜AC5）。fixture は signup した 3 人を共有し、
+// キー集合が保たれることを確かめる。fixture は signup した 3 人を共有し、
 // 最後に 1 人を退会させる。
 func TestUsersProfileViewsIntegration(t *testing.T) {
 	if testing.Short() {
@@ -837,7 +837,7 @@ func TestUsersProfileViewsIntegration(t *testing.T) {
 	})
 }
 
-// TestUserIDsAreUUIDsIntegration は S27 の AC1〜AC3・AC6 を、本物の PostgreSQL・bcrypt・JWT・
+// TestUserIDsAreUUIDsIntegration は、本物の PostgreSQL・bcrypt・JWT・
 // router で固定する：signup と login が返す id は UUID の正規形で、同じユーザーは同じ id になり、
 // トークンの user_id もその id である。GET /users/{uuid} は 200、旧形式の整数や UUID の
 // 正規形でない id は存在しない id と同じ 404 になる。
@@ -893,7 +893,7 @@ type usersFeedItem struct {
 }
 
 // TestUsersDiscardPropagationIntegration は、本物の database に対して
-// HTTP 越しに行う AC4+AC5 退会の波及のシナリオである：ユーザー A は共有の
+// HTTP 越しに行う退会の波及のシナリオである：ユーザー A は共有の
 // burger（B も review している）と単独の burger を review し、account を
 // 削除する。すると下流のすべて（トークン、user の detail、feed、detail、shop の
 // review、burger の統計）が A を忘れ、B はそのまま残る。
@@ -943,7 +943,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	aliceSolo := postReview(aliceAuth, soloID, 5, "only mine")
 	bobShared := postReview(bobAuth, sharedID, 4, "good")
 
-	// AC4：A は自分自身を discard する。空の body を伴う 204 になる。
+	// A は自分自身を discard する。空の body を伴う 204 になる。
 	rec := do(router, http.MethodDelete, "/users/"+aliceID, "", aliceAuth)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want %d (body %s)", rec.Code, http.StatusNoContent, rec.Body)
@@ -970,7 +970,7 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 		t.Errorf("GET /users/%s = %d %s, want 200 %s", bobID, rec.Code, rec.Body, want)
 	}
 
-	// AC5：feed は A の review を隠し、B の review を残し、共有の burger に
+	// feed は A の review を隠し、B の review を残し、共有の burger に
 	// 表示される review_count（1）は feed 上のその burger の review の件数と
 	// 等しくなる。
 	rec = do(router, http.MethodGet, "/reviews", "", "")

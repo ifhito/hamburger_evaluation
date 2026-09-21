@@ -57,8 +57,8 @@ type ListBurgerReviewFactsRow struct {
 }
 
 // 1 つの burger の統計の元になる kept な review。discard 済みの review と、
-// discard 済みの user の review の両方を除外する（issue #15 R4/AC4。story の
-// 決定に従い、Rails の burger.reviews.kept よりも意図的に厳しくしている）。
+// discard 済みの user の review の両方を除外する（決定済みの仕様に従い、
+// Rails の burger.reviews.kept よりも意図的に厳しくしている）。
 // active な shop によるフィルタは行わない。統計はすべての kept な review を
 // 集計する（Rails と同様）。
 func (q *Queries) ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]ListBurgerReviewFactsRow, error) {

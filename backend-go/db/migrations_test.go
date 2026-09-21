@@ -307,7 +307,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burgers/name/text/NO",
 		"burgers/created_at/timestamp with time zone/NO",
 		"burgers/updated_at/timestamp with time zone/NO",
-		// mail_deliveries は 000009（S16）で追加された。
+		// mail_deliveries は 000009 で追加された。
 		"mail_deliveries/id/uuid/NO",
 		"mail_deliveries/kind/text/NO",
 		"mail_deliveries/recipient/text/NO",
@@ -326,7 +326,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"reviews/discarded_at/timestamp with time zone/YES",
 		"reviews/created_at/timestamp with time zone/NO",
 		"reviews/updated_at/timestamp with time zone/NO",
-		// photo_key は 000007（S10）で追加されたので、ordinal position では
+		// photo_key は 000007 で追加されたので、ordinal position では
 		// 最後に来る。
 		"reviews/photo_key/text/YES",
 		"shops/id/uuid/NO",
@@ -338,7 +338,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/updated_at/timestamp with time zone/NO",
 		"shops_burgers/shop_id/uuid/NO",
 		"shops_burgers/burger_id/uuid/NO",
-		// signup_verifications は 000008（S16）で追加された。
+		// signup_verifications は 000008 で追加された。
 		"signup_verifications/id/uuid/NO",
 		"signup_verifications/email/text/NO",
 		"signup_verifications/username/text/NO",

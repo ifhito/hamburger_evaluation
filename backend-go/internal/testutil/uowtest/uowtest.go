@@ -175,6 +175,10 @@ type UoW struct {
 	Reviews domain.ReviewRepository
 	Users   domain.UserRepository
 	Stats   *Stats
+	// SignupVerifications と PendingSignups は、メール確認での登録(確認待ちのロック・読み取り・
+	// 削除)に使う代役である。未設定(nil)のものが使われると panic する。
+	SignupVerifications domain.SignupVerificationRepository
+	PendingSignups      usecase.SignupVerificationQuery
 	// BeginErr を設定すると、Do はトランザクションを開始できずにそのエラーを返す。CommitErr を
 	// 設定すると、fn が成功しても commit に失敗してそのエラーを返す(rollback として数える)。
 	BeginErr, CommitErr error
@@ -197,6 +201,10 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 		Users:       domain.NewUsers(u.Users),
 		BurgerStats: domain.NewBurgerStats(u.Stats),
 		Stats:       u.Stats,
+		// 確認待ち: repository の代役を渡さなかったときは、書き込みオブジェクトの中身が nil になるので、
+		// 使うと panic して、テストが想定していない操作に気づける。
+		SignupVerifications: domain.NewSignupVerifications(u.SignupVerifications),
+		PendingSignups:      u.PendingSignups,
 	}
 	if err := fn(ctx, tx); err != nil {
 		u.Rollbacks++

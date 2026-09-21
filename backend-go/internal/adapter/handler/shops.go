@@ -49,9 +49,9 @@ type shopReviewResponse struct {
 	Rating    int     `json:"rating"`
 	Comment   *string `json:"comment"`
 	CreatedAt string  `json:"created_at"`
-	// PhotoURL は review の写真の公開 URL で、添付がない場合は null である
-	// （S10）。GET /shops/{id} に埋め込まれる review では、この story では
-	// null のままである。Shops usecase は意図的に写真の storage へ配線
+	// PhotoURL は review の写真の公開 URL で、添付がない場合は null である。
+	// GET /shops/{id} に埋め込まれる review では、現状は常に
+	// null である。Shops usecase は意図的に写真の storage へ配線
 	// されていない。
 	PhotoURL *string               `json:"photo_url"`
 	User     *userRefResponse      `json:"user"`

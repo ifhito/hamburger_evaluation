@@ -31,5 +31,5 @@ func newAuth(query usecase.UserQuery, hasher usecase.PasswordHasher, issuer usec
 }
 
 func newSignups(query usecase.UserQuery, repo domain.SignupVerificationRepository, hasher usecase.PasswordHasher, mailer usecase.Mailer, issuer usecase.TokenIssuer, cfg usecase.SignupConfig) *usecase.Signups {
-	return usecase.NewSignups(query, domain.NewSignupVerifications(repo), hasher, mailer, issuer, cfg)
+	return usecase.NewSignups(query, domain.NewSignupVerifications(repo), &uowtest.UoW{SignupVerifications: repo}, hasher, mailer, issuer, cfg)
 }

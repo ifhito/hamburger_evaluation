@@ -127,7 +127,7 @@ func seedShops(creatorID string) *shopStoreFake {
 	}
 }
 
-// TestListShops は HTTP レベルで AC1–AC3 を扱う：見える集合は OptionalAuth の
+// TestListShops は HTTP レベルで、閲覧者ごとの一覧を扱う：見える集合は OptionalAuth の
 // viewer に依存し、body はトップレベルの snake_case の配列で name 順に並ぶ。
 func TestListShops(t *testing.T) {
 	repo := seedShops(uid.N(1))
@@ -139,16 +139,16 @@ func TestListShops(t *testing.T) {
 		wantBody   string
 	}{
 		{
-			name:     "AC1 匿名は active な shop だけが見える",
+			name:     "匿名の閲覧者には、承認済みのショップだけが見える",
 			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"}]`,
 		},
 		{
-			name:       "AC2 creator は自分の pending な shop も status 付きで見える",
+			name:       "作成者には、自分の承認待ちのショップも、状態つきで見える",
 			authHeader: aliceAuth,
 			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending"}]`,
 		},
 		{
-			name:       "AC3 admin はすべての status の shop が見える",
+			name:       "管理者には、すべての状態のショップが見える",
 			authHeader: adminAuth,
 			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active"},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending"},{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected"}]`,
 		},
@@ -272,7 +272,7 @@ func TestGetShopDetail(t *testing.T) {
 	}
 }
 
-// TestGetShopVisibility は AC4 と AC6 を扱う：pending な shop は匿名の
+// TestGetShopVisibility は、詳細の見え方を扱う：pending な shop は匿名の
 // viewer には 404 だが creator と admin には開かれており、未知の id と
 // UUID の正規形でない id は同一の body で 404 になり、失敗は 500 になる。
 func TestGetShopVisibility(t *testing.T) {

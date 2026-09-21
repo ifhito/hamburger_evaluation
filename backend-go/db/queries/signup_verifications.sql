@@ -25,11 +25,18 @@ WHERE signup_verifications.last_sent_at <= now() - make_interval(secs => @resend
 RETURNING id, generation;
 
 -- name: LockSignupVerificationByTokenHash :one
--- 期限内の確認待ちの行をロックして返す。確認の transaction の先頭で使うので、
--- 同じトークンでの並行する確認は直列になり、2 人目は行が消えているのを見る。
-SELECT * FROM signup_verifications
+-- 期限内の確認待ちの行を排他ロックする(行の中身は返さず、ロックできたことだけを id で示す)。
+-- 確認の transaction の先頭で使うので、同じトークンでの並行する確認は直列になり、
+-- 2 人目は行が消えているのを見る。中身の読み取りは GetSignupVerificationByTokenHash が行う。
+SELECT id FROM signup_verifications
 WHERE token_hash = $1 AND expires_at > now()
 FOR UPDATE;
+
+-- name: GetSignupVerificationByTokenHash :one
+-- 期限内の確認待ちの、ユーザーを作るのに必要な内容を読む(ロックはしない。同じ transaction で
+-- 先にロックしているので、ここで読んだ行は、確認が終わるまで変わらない)。
+SELECT id, email, username, password_digest FROM signup_verifications
+WHERE token_hash = $1 AND expires_at > now();
 
 -- name: DeleteSignupVerification :exec
 DELETE FROM signup_verifications WHERE id = $1;
