@@ -26,6 +26,7 @@ export async function mount(ui: ReactElement): Promise<HTMLElement> {
 
 export async function unmount(container: HTMLElement): Promise<void> {
   const i = mounted.findIndex((m) => m.container === container);
+  if (i < 0) return; // すでに外した(または、mount していない)ものは、何もしない(別の root を外さない)
   const [entry] = mounted.splice(i, 1);
   await act(async () => entry.root.unmount());
   entry.container.remove();
