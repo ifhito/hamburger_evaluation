@@ -37,6 +37,12 @@ Procedure:
    Max 5 up front. Never re-litigate auto-fixed or discarded items.
 10. Auto-merge (ff), ready-only, or hold — size gate first (~≤400 changed
     lines excl. generated/lock files = small):
+    - wording-only PRs (Japanese wording fixes: comments, test names, docs;
+      no identifier/SQL/API-string/logic change) count as small at any size,
+      only when *proven*: changed Go files identical to `main` with comments
+      and `t.Run` name literals stripped from the AST, `go test -json` pass
+      list loses nothing except renamed tests (old → new mapping in the PR
+      body), CI green, no conflicts or unanswered comments (user decision).
     - small + no P1/P2: `gh pr ready` → `git push origin feat/<slug>:main`
       (refused unless ff; never force/squash/rebase) → cleanup.
     - large + no P1/P2: `gh pr ready`, do NOT merge; report as

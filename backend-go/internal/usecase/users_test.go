@@ -91,8 +91,8 @@ func TestUsersGet(t *testing.T) {
 	})
 }
 
-// TestUsersUpdateCheckOrder は、issue #16 AC2 の find-then-authorize の順序を
-// 固定する。未知の target は、所有者でない場合でも ErrUserNotFound を返し、
+// TestUsersUpdateCheckOrder は、「先に対象のユーザーを読み込み、そのあとで権限を確かめる」
+// 順序を固定する。未知の target は、所有者でない場合でも ErrUserNotFound を返し、
 // 存在する他人の target は、validation や書き込みの前に ErrForbidden を返す
 // （未設定の updateProfile は、到達すれば panic する）。
 func TestUsersUpdateCheckOrder(t *testing.T) {
@@ -436,9 +436,9 @@ func profileChangesString(c domain.ProfileChanges) string {
 	return fmt.Sprintf("{Username:%s Bio:%s Email:%s PasswordDigest:%s}", deref(c.Username), deref(c.Bio), deref(c.Email), deref(c.PasswordDigest))
 }
 
-// TestUsersUpdateEmailTaken は usecase レベルで AC3 を扱う。repository の
-// unique violation の sentinel が、Rails parity の validation message として
-// 現れる。
+// TestUsersUpdateEmailTaken は、メールアドレスがすでに使われている場合を扱う。repository が返す
+// 一意制約違反の識別用のエラー値(domain.ErrEmailTaken)が、Rails parity の validation message
+// として現れる。
 func TestUsersUpdateEmailTaken(t *testing.T) {
 	query := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
 	repo := &fakeUserRepo{
@@ -451,7 +451,7 @@ func TestUsersUpdateEmailTaken(t *testing.T) {
 	assertValidationError(t, err, []string{"Email has already been taken"})
 }
 
-// TestUsersDelete は削除のフローを固定する。AC2 のチェック順序（404 が
+// TestUsersDelete は削除のフローを固定する。チェック順序（存在しないときの 404 が
 // 403 より先）、本人のみのルール、そして所有者に対する discard の呼び出しで
 // ある。
 func TestUsersDelete(t *testing.T) {
