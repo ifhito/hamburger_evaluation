@@ -124,6 +124,18 @@ describe("authApi の Google でのサインイン", () => {
     expect((failed as ApiError).status).toBe(400);
   });
 
+  it("失敗の応答(409・400)が return_to を含むときは、ApiError の returnTo に入る(ないとき・文字列でないときは undefined)", async () => {
+    respondWith(409, { errors: ["exists"], return_to: "/oauth/authorize?client_id=app-1&state=xyz" });
+    const withReturn = await authApi.exchangeGoogleCode("c").catch((e: unknown) => e);
+    expect((withReturn as ApiError).returnTo).toBe("/oauth/authorize?client_id=app-1&state=xyz");
+
+    respondWith(400, { errors: ["failed"] });
+    expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as ApiError).returnTo).toBeUndefined();
+
+    respondWith(400, { errors: ["failed"], return_to: { evil: true } });
+    expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as ApiError).returnTo).toBeUndefined();
+  });
+
   it("startGoogleLink は POST /me/identities/google/link で、戻り先を snake_case で送り、Google の URL(redirectUrl)を返す", async () => {
     respondWith(200, { redirect_url: "https://accounts.google.com/o/oauth2/v2/auth?state=s" });
     expect(await authApi.startGoogleLink("/users/u1")).toEqual({ redirectUrl: "https://accounts.google.com/o/oauth2/v2/auth?state=s" });

@@ -36,6 +36,13 @@ export function landingPath(returnTo: string, fallback: string): string {
   return returnPathFrom({ from: returnTo }) ?? fallback;
 }
 
+// 失敗の応答が返した戻り先(手続きを始めた画面。backend が確かめたもの)を、サインインの画面へ渡す遷移の state にする。
+// アプリの中のパスだけを渡す(それ以外・なければ、state なし)。パスワードでサインインしたあと、その画面へ戻れる。
+export function signinStateFor(returnTo: string): { from: string } | undefined {
+  const from = returnPathFrom({ from: returnTo });
+  return from ? { from } : undefined;
+}
+
 // backend が返した Google の認可の URL へ、ブラウザを移動してよいか(http・https だけ。javascript: などの
 // スキームだと、ページの中で任意のコードが動いてしまうため)。規則の判断ではなく、ページを開くときの安全のための確認。
 export function isNavigableUrl(target: string): boolean {

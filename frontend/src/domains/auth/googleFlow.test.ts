@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl, isGoogleSignIn, isNavigableUrl, landingPath } from "./googleFlow";
+import { GOOGLE_PROVIDER, googleEnabled, googleStartUrl, isGoogleSignIn, isNavigableUrl, landingPath, signinStateFor } from "./googleFlow";
 import type { GoogleExchangeResponse } from "./types";
 
 describe("googleStartUrl(Google でのサインインを始める URL)", () => {
@@ -69,6 +69,18 @@ describe("isNavigableUrl(Google の URL へ移動してよいか)", () => {
     expect(isNavigableUrl("http://127.0.0.1:9000/authorize?x=1")).toBe(true);
     for (const bad of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "file:///etc/passwd", "not a url", ""]) {
       expect(isNavigableUrl(bad)).toBe(false);
+    }
+  });
+});
+
+describe("signinStateFor(失敗の応答が返した戻り先を、サインイン画面へ渡す state にする)", () => {
+  it("アプリの中のパスは、from として渡す", () => {
+    expect(signinStateFor("/oauth/authorize?client_id=app-1&state=xyz")).toEqual({ from: "/oauth/authorize?client_id=app-1&state=xyz" });
+  });
+
+  it("空・アプリの外・不正な形は、渡さない(state なし)", () => {
+    for (const bad of ["", "https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)"]) {
+      expect(signinStateFor(bad), bad).toBeUndefined();
     }
   });
 });

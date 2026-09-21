@@ -6,7 +6,7 @@ import { authApi } from "../api/authApiClient";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
-import { isGoogleSignIn, landingPath } from "../googleFlow";
+import { isGoogleSignIn, landingPath, signinStateFor } from "../googleFlow";
 import styles from "./auth.module.css";
 
 // Google でのサインインの手続きの結果の受け皿(/auth/google/complete?code=…)。backend が、成功も失敗も、
@@ -19,7 +19,8 @@ export default function GoogleCompletePage() {
   const { user, signInWithResponse } = useAuth();
   const navigate = useNavigate();
   const [code] = useState(() => params.get("code") ?? "");
-  const [error, setError] = useState<string[] | null>(null);
+  // 失敗の内容。returnTo は、backend が失敗の応答に含めた、手続きを始めた画面(なければ空)。
+  const [error, setError] = useState<{ messages: string[]; returnTo: string } | null>(null);
   // コードは単回使用なので、StrictMode の開発時の二重実行でも、交換は 1 回だけ呼ぶ。
   const started = useRef(false);
 
@@ -34,19 +35,23 @@ export default function GoogleCompletePage() {
         // サインインも結び付けも、手続きを始めた画面(なければ既定の画面)へ戻す。
         void navigate(landingPath(res.returnTo, "/reviews"), { replace: true });
       })
-      .catch((e: unknown) => setError(e instanceof ApiError ? e.messages : [t("auth.google.error")]));
+      .catch((e: unknown) =>
+        setError(e instanceof ApiError ? { messages: e.messages, returnTo: e.returnTo ?? "" } : { messages: [t("auth.google.error")], returnTo: "" }),
+      );
   }, [code, navigate, signInWithResponse, t]);
 
   return (
     <Layout title={t("auth.google.complete.title")}>
       {error ? (
         <div className={styles.form}>
-          <ErrorMessage message={error} />
+          <ErrorMessage message={error.messages} />
           <p className={styles.hint}>
             {user ? (
               <Link to={`/users/${user.id}`}>{t("auth.google.complete.backToProfile")}</Link>
             ) : (
-              <Link to="/signin">{t("auth.google.complete.backToSignin")}</Link>
+              <Link to="/signin" state={signinStateFor(error.returnTo)}>
+                {t("auth.google.complete.backToSignin")}
+              </Link>
             )}
           </p>
         </div>
