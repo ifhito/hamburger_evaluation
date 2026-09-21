@@ -133,6 +133,22 @@ func TestUnitOfWorkSignupConfirm(t *testing.T) {
 		}
 	})
 
+	t.Run("確認までの間に、大文字小文字だけが違うメールアドレスのユーザーが作られていても、区別できない失敗になり、ユーザーは重複しない", func(t *testing.T) {
+		w := newSignupWorld(t)
+		w.pending(t, "Case.User@Example.com", "case-token")
+		if _, err := w.pool.Exec(w.ctx, `INSERT INTO users (email, username, password_digest) VALUES ('case.user@example.com', 'existing', 'd')`); err != nil {
+			t.Fatal(err)
+		}
+		_, _, err := w.signups.Confirm(w.ctx, "case-token")
+		if !errors.Is(err, domain.ErrSignupTokenInvalid) {
+			t.Fatalf("err = %v, want ErrSignupTokenInvalid", err)
+		}
+		var n int
+		if err := w.pool.QueryRow(w.ctx, `SELECT count(*) FROM users WHERE lower(email) = 'case.user@example.com'`).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("大文字小文字を無視して同じメールの利用者が %d 人(err %v), want 1", n, err)
+		}
+	})
+
 	t.Run("期限切れ・存在しないトークンは、ユーザーを作らずに失敗し、確認待ちは変わらない", func(t *testing.T) {
 		w := newSignupWorld(t)
 		w.pending(t, "alice@example.com", "tok")

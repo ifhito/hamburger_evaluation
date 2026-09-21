@@ -3,9 +3,8 @@ package repository_test
 import (
 	"context"
 	"errors"
-	"sync"
-	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -21,35 +20,47 @@ func TestLoginHandoffRepository(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	t.Run("保存したコードは、1 回だけ取り出せて、その内容を返し、2 回目は無効になる", func(t *testing.T) {
+	// 期限内のコードは、ロックできて(行を排他ロックする)、削除すると、2 度とロックできない。読み取りは adapter/query が担い、
+	// このテストは依存しないので、内容は SQL で直接確かめる。
+	t.Run("保存したコードは、ロックして削除でき、削除したあとは無効になる", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		alice := dbtest.InsertUserRow(ctx, t, conn, `INSERT INTO users (email, username, password_digest) VALUES ('alice@example.com', 'alice', 'd') RETURNING id`)
 		repo := repository.NewLoginHandoffRepository(conn)
 		if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: "hash-1", Outcome: domain.OutcomeSignedIn, UserID: alice, ReturnTo: "/shops"}); err != nil {
 			t.Fatal(err)
 		}
-		got, err := repo.DiscardLoginHandoff(ctx, "hash-1")
-		if err != nil || got.Outcome != domain.OutcomeSignedIn || got.UserID != alice || got.ReturnTo != "/shops" || !domain.IsUUID(got.ID) {
-			t.Fatalf("got = %+v, err = %v", got, err)
+		if err := repo.LockLoginHandoff(ctx, "hash-1"); err != nil {
+			t.Fatalf("ロック: %v", err)
 		}
-		if _, err := repo.DiscardLoginHandoff(ctx, "hash-1"); !errors.Is(err, domain.ErrLoginHandoffInvalid) {
-			t.Fatalf("2 回目 = %v, want ErrLoginHandoffInvalid", err)
+		var id, outcome, returnTo string
+		var userID *string
+		if err := conn.QueryRow(ctx, `SELECT id, outcome, user_id, return_to FROM login_handoffs WHERE code_hash = 'hash-1'`).Scan(&id, &outcome, &userID, &returnTo); err != nil {
+			t.Fatal(err)
+		}
+		if !domain.IsUUID(id) || outcome != "signed_in" || userID == nil || *userID != alice || returnTo != "/shops" {
+			t.Fatalf("保存された内容: %s %s %v %s", id, outcome, userID, returnTo)
+		}
+		if err := repo.DiscardLoginHandoff(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.LockLoginHandoff(ctx, "hash-1"); !errors.Is(err, domain.ErrLoginHandoffInvalid) {
+			t.Fatalf("削除後のロック = %v, want ErrLoginHandoffInvalid", err)
 		}
 	})
 
-	t.Run("利用者を伴わない結果は、利用者なしで保存・取り出しできる", func(t *testing.T) {
+	t.Run("利用者を伴わない結果は、利用者なしで保存できる", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewLoginHandoffRepository(conn)
 		if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: "hash-2", Outcome: domain.OutcomeAccountExists}); err != nil {
 			t.Fatal(err)
 		}
-		got, err := repo.DiscardLoginHandoff(ctx, "hash-2")
-		if err != nil || got.Outcome != domain.OutcomeAccountExists || got.UserID != "" || got.ReturnTo != "" {
-			t.Fatalf("got = %+v, err = %v", got, err)
+		var userID *string
+		if err := conn.QueryRow(ctx, `SELECT user_id FROM login_handoffs WHERE code_hash = 'hash-2'`).Scan(&userID); err != nil || userID != nil {
+			t.Fatalf("user_id = %v, err = %v, want NULL", userID, err)
 		}
 	})
 
-	t.Run("期限切れのコードは取り出せず、掃除で消える", func(t *testing.T) {
+	t.Run("期限切れのコードはロックできず、掃除で消える", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewLoginHandoffRepository(conn)
 		for _, h := range []string{"old-1", "old-2", "fresh"} {
@@ -60,14 +71,14 @@ func TestLoginHandoffRepository(t *testing.T) {
 		if _, err := conn.Exec(ctx, `UPDATE login_handoffs SET expires_at = now() - interval '1 second' WHERE code_hash LIKE 'old-%'`); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := repo.DiscardLoginHandoff(ctx, "old-1"); !errors.Is(err, domain.ErrLoginHandoffInvalid) {
+		if err := repo.LockLoginHandoff(ctx, "old-1"); !errors.Is(err, domain.ErrLoginHandoffInvalid) {
 			t.Fatalf("期限切れ = %v, want ErrLoginHandoffInvalid", err)
 		}
 		n, err := repo.DiscardExpiredLoginHandoffs(ctx, 10)
 		if err != nil || n != 2 {
-			t.Fatalf("掃除 = %d, %v, want 2 件(old-1 は取り出しに失敗しても行は残っている)", n, err)
+			t.Fatalf("掃除 = %d, %v, want 2 件", n, err)
 		}
-		if _, err := repo.DiscardLoginHandoff(ctx, "fresh"); err != nil {
+		if err := repo.LockLoginHandoff(ctx, "fresh"); err != nil {
 			t.Fatalf("期限内のコードが消えた: %v", err)
 		}
 	})
@@ -91,22 +102,24 @@ func TestLoginHandoffRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("結果の種類と利用者の有無が食い違う行・知らない種類は、DB の制約で保存できない", func(t *testing.T) {
+	t.Run("結果の種類と利用者の有無が食い違う行・知らない種類(廃止した結び付けの開始を含む)は、DB の制約で保存できない", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		alice := dbtest.InsertUserRow(ctx, t, conn, `INSERT INTO users (email, username, password_digest) VALUES ('alice@example.com', 'alice', 'd') RETURNING id`)
 		repo := repository.NewLoginHandoffRepository(conn)
-		for name, p := range map[string]domain.CreateLoginHandoffParams{
+		cases := map[string]domain.CreateLoginHandoffParams{
 			"サインインの成功なのに利用者がない": {CodeHash: "x1", Outcome: domain.OutcomeSignedIn},
 			"失敗なのに利用者がある":       {CodeHash: "x2", Outcome: domain.OutcomeFailed, UserID: alice},
 			"知らない種類":            {CodeHash: "x3", Outcome: domain.LoginHandoffOutcome("hacked")},
-		} {
+			"廃止した結び付けの開始の種類":    {CodeHash: "x4", Outcome: domain.LoginHandoffOutcome("link_intent"), UserID: alice},
+		}
+		for name, p := range cases {
 			if err := repo.CreateLoginHandoff(ctx, p); err == nil {
 				t.Errorf("%s: 保存できてしまった", name)
 			}
 		}
 		// domain が定義する種類は、すべて保存できる(DB の CHECK と食い違わない)。
 		for _, o := range []domain.LoginHandoffOutcome{
-			domain.OutcomeSignedIn, domain.OutcomeLinked, domain.OutcomeLinkIntent, domain.OutcomeAccountExists,
+			domain.OutcomeSignedIn, domain.OutcomeLinked, domain.OutcomeAccountExists,
 			domain.OutcomeIdentityTaken, domain.OutcomeAlreadyLinked, domain.OutcomeFailed,
 		} {
 			user := ""
@@ -119,34 +132,52 @@ func TestLoginHandoffRepository(t *testing.T) {
 		}
 	})
 
-	t.Run("同じコードを並行して使っても、成功するのは 1 回だけである", func(t *testing.T) {
-		conn, dbURL := dbtest.New(t)
-		alice := dbtest.InsertUserRow(ctx, t, conn, `INSERT INTO users (email, username, password_digest) VALUES ('alice@example.com', 'alice', 'd') RETURNING id`)
+	t.Run("コードを使う手順の途中(ロックしたトランザクション)では、同じコードを扱う別のトランザクションは待たされ、削除して確定すると無効になる", func(t *testing.T) {
+		_, dbURL := dbtest.New(t)
 		pool, err := pgxpool.New(ctx, dbURL)
 		if err != nil {
 			t.Fatal(err)
 		}
 		t.Cleanup(pool.Close)
-		repo := repository.NewLoginHandoffRepository(pool)
-		if err := repo.CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: "race", Outcome: domain.OutcomeSignedIn, UserID: alice}); err != nil {
+		if err := repository.NewLoginHandoffRepository(pool).CreateLoginHandoff(ctx, domain.CreateLoginHandoffParams{CodeHash: "race", Outcome: domain.OutcomeFailed}); err != nil {
 			t.Fatal(err)
 		}
-		var ok, invalid atomic.Int32
-		var wg sync.WaitGroup
-		for i := 0; i < 16; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				if _, err := repo.DiscardLoginHandoff(ctx, "race"); err == nil {
-					ok.Add(1)
-				} else if errors.Is(err, domain.ErrLoginHandoffInvalid) {
-					invalid.Add(1)
-				}
-			}()
+		tx1, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
 		}
-		wg.Wait()
-		if ok.Load() != 1 || invalid.Load() != 15 {
-			t.Fatalf("成功 %d 回・無効 %d 回, want 成功 1 回・無効 15 回", ok.Load(), invalid.Load())
+		defer func() { _ = tx1.Rollback(ctx) }()
+		if err := repository.NewLoginHandoffRepository(tx1).LockLoginHandoff(ctx, "race"); err != nil {
+			t.Fatal(err)
+		}
+		var id string
+		if err := tx1.QueryRow(ctx, `SELECT id FROM login_handoffs WHERE code_hash = 'race'`).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+
+		secondDone := make(chan error, 1)
+		go func() {
+			tx2, err := pool.Begin(ctx)
+			if err != nil {
+				secondDone <- err
+				return
+			}
+			defer func() { _ = tx2.Rollback(ctx) }()
+			secondDone <- repository.NewLoginHandoffRepository(tx2).LockLoginHandoff(ctx, "race")
+		}()
+		select {
+		case err := <-secondDone:
+			t.Fatalf("先のトランザクションが終わる前に、2 つ目がロックを取れた: %v", err)
+		case <-time.After(300 * time.Millisecond):
+		}
+		if err := repository.NewLoginHandoffRepository(tx1).DiscardLoginHandoff(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx1.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-secondDone; !errors.Is(err, domain.ErrLoginHandoffInvalid) {
+			t.Fatalf("2 つ目 = %v, want ErrLoginHandoffInvalid(行が消えている)", err)
 		}
 	})
 }

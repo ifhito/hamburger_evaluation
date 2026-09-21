@@ -56,6 +56,8 @@ read -rs GOOGLE_CLIENT_SECRET && export GOOGLE_CLIENT_SECRET   # 入力は画面
 
 `GOOGLE_CLIENT_ID` を設定すると、機能が有効になります。`GOOGLE_CLIENT_SECRET` と `GOOGLE_REDIRECT_URL` は、有効にするなら必須で、足りないと、API は、起動時に、足りない変数の名前(値ではなく)を出して止まります。
 
+**URL の制約**: 有効にするときは、`GOOGLE_REDIRECT_URL` と `APP_BASE_URL` は、**https の URL、または開発用のループバック(`localhost`・`127.0.0.1`・`[::1]`)の http** だけを受け付けます。外部のホストの http だと、認可コードや、1 回限りのコード(ログインの証に交換できる)が、平文で流れるので、起動時に断ります(変数の名前だけが出ます)。
+
 ## 5. データベースを作り直す(初回だけ)
 
 この機能で、`users` の作りが変わりました(パスワードなしのアカウントを作れるようにするため)。まだ実運用前なので、追加の変換ではなく、**最初の定義を直しています**。すでに適用済みの開発用のデータベースには、この変更は反映されないので、作り直します(**中のデータは消えます**。テスト用のデータだけであることを確かめてください)。
@@ -71,13 +73,52 @@ docker compose run --rm seed      # 開発用のデータを入れ直す
 
 ```bash
 cd backend-go && docker compose up -d --build
-cd ../frontend && docker compose up -d --build
 ```
 
-1. <http://localhost:5173/> を開き、サインインの画面に **「Google でサインイン」** のボタンが出ることを確かめます(出なければ、`curl http://localhost:8080/meta` の `login_providers` に `"google"` があるかを見ます。空なら、環境変数が API に届いていません)。
+まず、API が、Google でのサインインを有効にしているかを確かめます(この確認は、画面がなくてもできます)。
+
+```bash
+curl -s http://localhost:8080/meta | python3 -c "import sys,json; print(json.load(sys.stdin)['login_providers'])"
+```
+
+`['google']` と出れば有効です。空(`[]`)なら、環境変数が API に届いていません(手順 4 を見直して、`docker compose up -d` し直します)。
+
+### 6-A. 画面(frontend)が入っているとき(ブラウザで確かめる)
+
+「Google でサインイン」のボタンと、プロフィールの「Google」の欄は、**画面の変更(frontend の PR)が入ってから**使えます。入っていれば、次のとおりです。
+
+```bash
+cd frontend && docker compose up -d --build
+```
+
+1. <http://localhost:5173/> を開き、サインインの画面に **「Sign in with Google」** のボタンが出ることを確かめます。
 2. ボタンを押し、テストユーザーに入れた Google アカウントでサインインします。
 3. 初めてなら、新規登録されて、アプリに戻ります(メールの確認は要りません)。ユーザー名は、Google の名前から決まります。プロフィールで変えられます。
-4. すでに、同じメールアドレスでパスワードのアカウントがあるときは、**自動では結び付けません**。案内が出るので、パスワードでサインインし、プロフィールの「Google」から結び付けます。
+4. すでに、同じメールアドレス(大文字小文字は区別しません)でパスワードのアカウントがあるときは、**自動では結び付けません**。案内が出るので、パスワードでサインインし、プロフィールの「Google」から結び付けます。
+
+### 6-B. 画面がまだ入っていないとき(API だけを、ブラウザと curl で確かめる)
+
+画面がなくても、API だけで、サインインの手続きを確かめられます。
+
+1. ブラウザ(**同じブラウザ**)で、次の URL を開きます。Google のサインインの画面に移ります。
+
+   ```
+   http://localhost:8080/auth/google/start
+   ```
+
+2. テストユーザーに入れた Google アカウントで承認します。API が、結果を入れた**1 回限りのコード**を付けて、アプリの画面の URL(`APP_BASE_URL` の下の `/auth/google/complete?code=…`)へ移します。画面がないので、ブラウザは、エラー(接続できない・404)になりますが、**アドレスバーの `code=` の値**を控えます(60 秒以内に、次へ進んでください)。
+3. コードを交換して、結果を受け取ります。
+
+   ```bash
+   curl -s -X POST http://localhost:8080/auth/google/exchange \
+     -H 'Content-Type: application/json' -d '{"code":"控えたコード"}'
+   ```
+
+   - サインインに成功すると、`id`・`username`・`email` と、ログインの証(`token`)が返ります。その `token` は、`Authorization: Bearer …` に付けて、`GET /me` などで確かめられます。
+   - すでに同じメールのアカウントがあるときは、409 と、案内の文言が返ります(結び付けもサインインもしません)。
+   - 同じコードは 1 回しか使えません(2 回目は 400)。
+
+4. 結び付け(ログイン済みの利用者が、Google を追加する)は、**この方法では、通しで確かめられません**。結び付けの手続きは、認証つきの POST(`POST /me/identities/google/link`)が、**その要求を出したブラウザ**に cookie を設定して始まり、返された Google の URL へ、**同じブラウザ**で移動する作りです(別のブラウザや別の端末で開くと、失敗します。被害者に開かせて、別人のアカウントに結び付ける攻撃を防ぐためです)。画面がないと、この「同じブラウザ」を作れないので、6-A の画面が入ってから、プロフィールの「Google」の欄で確かめてください。
 
 ## うまくいかないとき
 
@@ -85,13 +126,14 @@ cd ../frontend && docker compose up -d --build
 |---|---|
 | `Error 400: redirect_uri_mismatch` | 手順 3 の「承認済みのリダイレクト URI」と、`GOOGLE_REDIRECT_URL` が、完全には一致していません。両方を見比べて、揃えます |
 | `Access blocked: … has not completed the Google verification process` / `Error 403: access_denied` | そのアカウントが「テストユーザー」に入っていません。手順 2 で追加します |
-| ボタンが出ない | `GET /meta` の `login_providers` が空です。API を起動したシェルで、`GOOGLE_CLIENT_ID` を設定してから、`docker compose up -d` し直します |
+| ボタンが出ない | `GET /meta` の `login_providers` が空です。API を起動したシェルで、`GOOGLE_CLIENT_ID` を設定してから、`docker compose up -d` し直します。空でなければ、画面(frontend)が、Google でのサインインの変更を含んでいません(6-A を参照) |
 | サインインが「失敗」になる(手続きの途中で戻される) | 画面を開いた場所と、API の場所を、**`localhost` で統一**します(`127.0.0.1` と混ぜると、手続きの cookie が届きません)。ブラウザの cookie を無効にしていないかも見ます |
 | 起動時に `GOOGLE_… is required` | 有効にしたのに、足りない変数があります(変数の名前だけが出ます) |
 
 ## 本番に公開するとき
 
-- 公開の **https の URL**(例: `https://api.example.com/auth/google/callback`)を、「承認済みのリダイレクト URI」に足し、`GOOGLE_REDIRECT_URL` も、その値にします。`http` は使いません(cookie に Secure が付くのは、`https` のときです)。
+- 公開の **https の URL**(例: `https://app.example.com/api/auth/google/callback`)を、「承認済みのリダイレクト URI」に足し、`GOOGLE_REDIRECT_URL` も、その値にします。`http` は使いません(起動時に断ります。cookie に Secure が付くのは、`https` のときです)。
+- **画面と API は、同じサイト(同じホスト。`/api` を API へ転送する構成)で公開します。** 手続きの cookie は、サインインを始めた画面(`/api/auth/google/start`、または結び付けの `POST /api/me/identities/google/link`)の応答で、そのブラウザに設定され、Google からの戻り(`GOOGLE_REDIRECT_URL`)で、同じホストへ送られます。戻り先のホストが、画面のホストと違うと、cookie が届かず、手続きは、失敗します。
 - 公開ステータスを「本番」にすると、テストユーザー以外でも使えます。今回の 3 つのスコープだけなら、Google の審査は要りません。
 - 秘密の鍵は、環境変数か、ホスティング先の秘密の管理の仕組み(Secret Manager など)で渡します。定期的に作り直せるようにしておきます。
 

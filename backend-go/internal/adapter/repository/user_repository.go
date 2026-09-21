@@ -14,9 +14,13 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// usersEmailUniqueConstraint は、db/migrations/000001_create_users.up.sql の
-// users.email の UNIQUE 制約の名前である。
-const usersEmailUniqueConstraint = "users_email_key"
+// db/migrations/000001_create_users.up.sql の、メールの一意性を守る 2 つの名前である。users_email_key は
+// users.email の UNIQUE 制約(まったく同じ文字列)、users_email_lower_key は lower(email) の一意の索引
+// (大文字小文字だけが違うもの)。どちらの違反も、同じ ErrEmailTaken に対応づける。
+const (
+	usersEmailUniqueConstraint      = "users_email_key"
+	usersEmailLowerUniqueConstraint = "users_email_lower_key"
+)
 
 // pgUniqueViolation は SQLSTATE 23505 である。
 const pgUniqueViolation = "23505"
@@ -127,7 +131,8 @@ func mapUserWriteError(err error) error {
 		return domain.ErrUserNotFound
 	}
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == usersEmailUniqueConstraint {
+	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation &&
+		(pgErr.ConstraintName == usersEmailUniqueConstraint || pgErr.ConstraintName == usersEmailLowerUniqueConstraint) {
 		return domain.ErrEmailTaken
 	}
 	return err

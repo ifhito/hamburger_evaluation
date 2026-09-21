@@ -54,24 +54,32 @@ func (q *Queries) DeleteExpiredLoginHandoffs(ctx context.Context, limit int32) (
 	return result.RowsAffected(), nil
 }
 
-const deleteLoginHandoffByCodeHash = `-- name: DeleteLoginHandoffByCodeHash :one
-DELETE FROM login_handoffs
-WHERE code_hash = $1 AND expires_at > now()
-RETURNING id, outcome, user_id, return_to
+const deleteLoginHandoff = `-- name: DeleteLoginHandoff :exec
+DELETE FROM login_handoffs WHERE id = $1
 `
 
-type DeleteLoginHandoffByCodeHashRow struct {
+func (q *Queries) DeleteLoginHandoff(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteLoginHandoff, id)
+	return err
+}
+
+const getLoginHandoffByCodeHash = `-- name: GetLoginHandoffByCodeHash :one
+SELECT id, outcome, user_id, return_to FROM login_handoffs
+WHERE code_hash = $1 AND expires_at > now()
+`
+
+type GetLoginHandoffByCodeHashRow struct {
 	ID       string
 	Outcome  string
 	UserID   *string
 	ReturnTo string
 }
 
-// 期限内のコードの中身を、削除しながら返す(1 つの文なので、同じコードを並行して使っても、
-// 成功するのは 1 回だけである)。
-func (q *Queries) DeleteLoginHandoffByCodeHash(ctx context.Context, codeHash string) (DeleteLoginHandoffByCodeHashRow, error) {
-	row := q.db.QueryRow(ctx, deleteLoginHandoffByCodeHash, codeHash)
-	var i DeleteLoginHandoffByCodeHashRow
+// 期限内のコードの中身を読む(ロックはしない。同じトランザクションで先にロックしているので、
+// ここで読んだ行は、使い終わるまで変わらない)。
+func (q *Queries) GetLoginHandoffByCodeHash(ctx context.Context, codeHash string) (GetLoginHandoffByCodeHashRow, error) {
+	row := q.db.QueryRow(ctx, getLoginHandoffByCodeHash, codeHash)
+	var i GetLoginHandoffByCodeHashRow
 	err := row.Scan(
 		&i.ID,
 		&i.Outcome,
@@ -79,4 +87,19 @@ func (q *Queries) DeleteLoginHandoffByCodeHash(ctx context.Context, codeHash str
 		&i.ReturnTo,
 	)
 	return i, err
+}
+
+const lockLoginHandoffByCodeHash = `-- name: LockLoginHandoffByCodeHash :one
+SELECT id FROM login_handoffs
+WHERE code_hash = $1 AND expires_at > now()
+FOR UPDATE
+`
+
+// 期限内のコードの行を排他ロックする(中身は返さず、ロックできたことだけを id で示す)。コードを使う
+// トランザクションの先頭で使うので、同じコードでの並行する交換は直列になり、2 人目は行が消えているのを見る。
+func (q *Queries) LockLoginHandoffByCodeHash(ctx context.Context, codeHash string) (string, error) {
+	row := q.db.QueryRow(ctx, lockLoginHandoffByCodeHash, codeHash)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }

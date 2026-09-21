@@ -3,8 +3,12 @@ package repository_test
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -223,6 +227,77 @@ func TestUserRepositoryManagement(t *testing.T) {
 		}
 		if err := repo.DiscardUser(ctx, uid.N(99999)); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrUserNotFound)
+		}
+	})
+}
+
+// TestUserRepositoryEmailUniqueIgnoringCase は、メールの一意性が、大文字小文字を区別せずに、DB の制約で守られる
+// こと(事前の確認だけに頼らない)を、実際の PostgreSQL で確かめる。
+func TestUserRepositoryEmailUniqueIgnoringCase(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed repository test in short mode")
+	}
+	ctx := context.Background()
+
+	t.Run("大文字小文字だけが違うメールの 2 人目は、ErrEmailTaken になり、1 人目は変わらない", func(t *testing.T) {
+		conn, _ := dbtest.New(t)
+		repo := repository.NewUserRepository(conn)
+		if _, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "Alice@Example.com", Username: "first", PasswordDigest: "d"}); err != nil {
+			t.Fatal(err)
+		}
+		_, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "alice@example.COM", Username: "second", PasswordDigest: "d"})
+		if !errors.Is(err, domain.ErrEmailTaken) {
+			t.Fatalf("err = %v, want ErrEmailTaken", err)
+		}
+		if n := countRows(ctx, t, conn, "users"); n != 1 {
+			t.Fatalf("利用者が %d 人", n)
+		}
+	})
+
+	t.Run("退会済みの利用者のメールも、大文字小文字を無視して再利用できない(現行の方針)", func(t *testing.T) {
+		conn, _ := dbtest.New(t)
+		repo := repository.NewUserRepository(conn)
+		gone, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "Gone@Example.com", Username: "gone", PasswordDigest: "d"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.DiscardUser(ctx, gone.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "gone@example.com", Username: "again"}); !errors.Is(err, domain.ErrEmailTaken) {
+			t.Fatalf("err = %v, want ErrEmailTaken", err)
+		}
+	})
+
+	t.Run("大文字小文字違いのメールを並行して登録しても、成功するのは 1 件だけである", func(t *testing.T) {
+		_, dbURL := dbtest.New(t)
+		pool, err := pgxpool.New(ctx, dbURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(pool.Close)
+		repo := repository.NewUserRepository(pool)
+		variants := []string{"Race@Example.com", "race@example.com", "RACE@EXAMPLE.COM", "rAcE@eXaMpLe.CoM"}
+		var ok, taken atomic.Int32
+		var wg sync.WaitGroup
+		for i := 0; i < 16; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: variants[i%len(variants)], Username: "racer", PasswordDigest: "d"})
+				switch {
+				case err == nil:
+					ok.Add(1)
+				case errors.Is(err, domain.ErrEmailTaken):
+					taken.Add(1)
+				default:
+					t.Errorf("想定外のエラー: %v", err)
+				}
+			}()
+		}
+		wg.Wait()
+		if ok.Load() != 1 || taken.Load() != 15 {
+			t.Fatalf("成功 %d・ErrEmailTaken %d, want 成功 1・15", ok.Load(), taken.Load())
 		}
 	})
 }
