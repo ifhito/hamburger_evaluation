@@ -8,7 +8,10 @@
 // adapter/repository が担う。
 //
 // ファイルは集約ごとに 1 つにまとめる（user.go、review.go、shop.go、signup_verification.go、
-// mail_delivery.go、oauth_grant.go、oauth_token_session.go）。1 ファイルの中は
+// mail_delivery.go、oauth_grant.go、oauth_token_session.go）。
+// 集約に属さない規則は、規則ごとのファイルに置く（page.go: 一覧のページ送り、photo.go: 写真の大きさの上限、
+// credentials.go・password.go・email.go など: 入力の検証）。usecase・handler・adapter は、その規則を呼ぶだけで、
+// 件数・上限・丸め・文字数などの数値や判定を、自分では持たない。1 ファイルの中は
 // 「エンティティ・値オブジェクト・規則 → repository の interface（と、その引数だけに使う
 // パラメータ型）→ 書き込みオブジェクト」の順に並べる。エンティティ・値オブジェクト・規則は、
 // repository の interface と書き込みオブジェクトを参照しない。この境界はファイルにも
