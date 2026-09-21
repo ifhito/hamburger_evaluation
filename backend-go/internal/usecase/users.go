@@ -129,9 +129,9 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 // Delete は対象ユーザーのアカウントを soft delete する。load（404。所有者で
 // なくても同じ）、domain の本人管理ルール（403）、そして discard の順で
 // 行い、hard DELETE は決して行わない。discard と、そのユーザーの kept な review が付く
-// すべての burger の統計の再計算（burger_id の昇順）は、1 つのトランザクションで行う。
+// すべての burger の統計の再計算の依頼（burger_id の昇順に登録）は、1 つのトランザクションで行う。
 // ユーザーの review 自体は kept のままで（reviews.discarded_at は書き込まれない。Rails parity。
-// 非表示化は読み取り側の u.discarded_at フィルタで行う）、再計算が、discard 済みの
+// 非表示化は読み取り側の u.discarded_at フィルタで行う）、あとから行われる再計算が、discard 済みの
 // ユーザーの review を統計から外す。
 func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string) error {
 	target, err := s.query.GetActiveUserByID(ctx, targetID)
@@ -145,7 +145,7 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 		if err := tx.Users.Discard(ctx, targetID); err != nil {
 			return err
 		}
-		return s.recalc.RecalculateReviewedBy(ctx, tx, targetID)
+		return s.recalc.RequestRecalculationReviewedBy(ctx, tx, targetID)
 	})
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)

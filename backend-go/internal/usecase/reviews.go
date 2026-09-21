@@ -71,7 +71,8 @@ type ReviewListFilter struct {
 // author に限定された create/edit/delete であり、review ごとに任意で 1 枚の
 // 写真を photos 経由で保存する（S10）。読み取りは query、書き込みは UnitOfWork の中で
 // domain の書き込みオブジェクトを通し、repository には依存しない。review の書き込みと
-// burger の統計の再計算は、1 つの UnitOfWork.Do（同一トランザクション）の中で組み立てる。
+// burger の統計の再計算の依頼は、1 つの UnitOfWork.Do（同一トランザクション）の中で登録する。
+// 統計そのものは、あとからバックグラウンドのワーカーが計算する（書き込みは計算を待たない）。
 type Reviews struct {
 	query  ReviewQuery
 	uow    UnitOfWork
@@ -131,7 +132,7 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id int64) (domai
 // S6 P3-1）。どちらでもない場合は validation の失敗（422）であり、黙って
 // デフォルトを使うことは決してない。レスポンスの detail は、viewer と、
 // 存在確認のために解決した burger から組み立てる。再取得はしない。書き込み（名前の burger の
-// find-or-create を含む）と burger の統計の再計算は、1 つの UnitOfWork.Do の中で行うので、
+// find-or-create を含む）と burger の統計の再計算の依頼の登録は、1 つの UnitOfWork.Do の中で行うので、
 // どの段階で失敗しても、孤立した burger やリンクが commit されることはない。nil でない
 // upload（handler で validate 済み/正規化済み、S10）は、insert の前に新しい
 // ランダムな key で保存される。その後 insert が失敗した場合は、アップロード
@@ -173,18 +174,13 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 			}
 			review.BurgerID = burger.ID
 		}
-		// burger のロックは insert の「前」に取る。insert の FK チェックが burgers 行に
-		// KEY SHARE ロックを取り、その後でそれを FOR UPDATE に昇格させると、同時に走る
-		// 2 つの creator がデッドロックしうるからである。先に取っておけば、再計算の中の
-		// ロックは、コストのかからない再取得になる（行ロックはトランザクションが所有する）。
-		if err := tx.BurgerStats.Lock(ctx, review.BurgerID); err != nil {
-			return err
-		}
 		var err error
 		if created, err = tx.Reviews.Create(ctx, review); err != nil {
 			return err
 		}
-		return s.recalc.Recalculate(ctx, tx, created.BurgerID)
+		// 統計は、ここでは計算せず、再計算の依頼を同じトランザクションで登録する。burger の
+		// 行をロックしないので、同じ burger への他の書き込みを待たない。
+		return s.recalc.RequestRecalculation(ctx, tx, created.BurgerID)
 	})
 	if err != nil {
 		s.deletePhotoBestEffort(ctx, review.PhotoKey)
@@ -238,7 +234,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 		if err != nil {
 			return err
 		}
-		return s.recalc.Recalculate(ctx, tx, updated.BurgerID)
+		return s.recalc.RequestRecalculation(ctx, tx, updated.BurgerID)
 	})
 	if err != nil {
 		if newKey != nil {
@@ -274,7 +270,7 @@ func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) erro
 		if err := tx.Reviews.Discard(ctx, id); err != nil {
 			return err
 		}
-		return s.recalc.Recalculate(ctx, tx, detail.BurgerID)
+		return s.recalc.RequestRecalculation(ctx, tx, detail.BurgerID)
 	})
 	if err != nil {
 		return fmt.Errorf("delete review: %w", err)

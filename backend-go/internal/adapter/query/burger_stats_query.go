@@ -3,6 +3,9 @@ package query
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -71,4 +74,23 @@ func (r *BurgerStatsQuery) ListReviewedBurgerIDsByUser(ctx context.Context, user
 		return nil, fmt.Errorf("list reviewed burger ids by user: %w", err)
 	}
 	return ids, nil
+}
+
+// ListDueRecalcRequests は、再計算の時期が来ている依頼を、上限件数だけ返す。next_attempt_at が
+// なしか now 以前で、失敗の回数が maxAttempts に達していないものが対象である(達したものは
+// 打ち切りで、行は残るが、ここには現れない)。再計算の時期が古い順(すぐのものが先)に並べる。
+func (r *BurgerStatsQuery) ListDueRecalcRequests(ctx context.Context, now time.Time, maxAttempts, batch int) ([]domain.RecalcRequest, error) {
+	rows, err := r.q.ListDueBurgerStatsDirty(ctx, sqlcgen.ListDueBurgerStatsDirtyParams{
+		MaxAttempts: int32(maxAttempts),
+		Now:         pgtype.Timestamptz{Time: now, Valid: true},
+		Batch:       int32(batch),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list due recalc requests: %w", err)
+	}
+	requests := make([]domain.RecalcRequest, 0, len(rows))
+	for _, row := range rows {
+		requests = append(requests, domain.RecalcRequest{BurgerID: row.BurgerID, Version: row.Version, Attempts: int(row.Attempts)})
+	}
+	return requests, nil
 }

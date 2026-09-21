@@ -41,6 +41,39 @@ func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerI
 	return s, true
 }
 
+// StoredRecalcRequest は、テストで読み戻した再計算の依頼(burger_stats_dirty の行)である。
+type StoredRecalcRequest struct {
+	Version       int64
+	Attempts      int
+	NextAttemptAt *time.Time
+	LastError     *string
+}
+
+// FetchRecalcRequest は、burger の再計算の依頼を直接読み取る。依頼がなければ ok は false になる。
+func FetchRecalcRequest(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) (StoredRecalcRequest, bool) {
+	t.Helper()
+	var r StoredRecalcRequest
+	err := conn.QueryRow(ctx,
+		`SELECT version, attempts, next_attempt_at, last_error FROM burger_stats_dirty WHERE burger_id = $1`, burgerID,
+	).Scan(&r.Version, &r.Attempts, &r.NextAttemptAt, &r.LastError)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StoredRecalcRequest{}, false
+	}
+	if err != nil {
+		t.Fatalf("fetch recalc request: %v", err)
+	}
+	return r, true
+}
+
+// CountRecalcRequests は、burger の再計算の依頼の数(0 か 1)を返す。
+func CountRecalcRequests(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) int {
+	t.Helper()
+	if _, ok := FetchRecalcRequest(ctx, t, conn, burgerID); ok {
+		return 1
+	}
+	return 0
+}
+
 // keptReviewFacts は、burger の kept な review のうち kept な user のものを
 // （repository が使うのと同じルールで）domain の fact として読み込み、
 // 各 fact の author の、すべての burger にわたる kept な rating を

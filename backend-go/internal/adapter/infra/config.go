@@ -18,6 +18,11 @@ const (
 	photoStorageDiskMode = "disk"
 	photoStorageS3Mode   = "s3"
 
+	// 統計の再計算のワーカーの既定値。
+	defaultStatsWorkerInterval    = time.Second
+	defaultStatsWorkerBatch       = 20
+	defaultStatsWorkerMaxAttempts = 8
+
 	// SMTP の接続の保護の方式（SMTP_SECURITY）。
 	smtpSecurityStartTLS = "starttls"
 	smtpSecurityTLS      = "tls"
@@ -87,6 +92,15 @@ type Config struct {
 	// AppBaseURL は確認リンクの生成元（frontend の URL）である。APP_BASE_URL、必須。
 	// 末尾の "/" は取り除かれる。
 	AppBaseURL string
+	// StatsWorkerInterval は、統計の再計算のワーカーが、依頼を取りに行く間隔である。
+	// STATS_WORKER_INTERVAL（"1s" のような Go の duration）、既定は 1s。正の値でなければ既定になる。
+	StatsWorkerInterval time.Duration
+	// StatsWorkerBatch は、ワーカーが 1 回に取り出す依頼の上限の件数である。STATS_WORKER_BATCH、
+	// 既定は 20。正の整数でなければ既定になる。
+	StatsWorkerBatch int
+	// StatsWorkerMaxAttempts は、1 つの依頼を、失敗しながら再試行する上限の回数である。
+	// STATS_WORKER_MAX_ATTEMPTS、既定は 8。正の整数でなければ既定になる。
+	StatsWorkerMaxAttempts int
 }
 
 // LoadConfig は getenv を通して設定を読み込む（通常は os.Getenv で、
@@ -166,7 +180,28 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	if err := loadMailConfig(getenv, &cfg); err != nil {
 		return Config{}, err
 	}
+	loadStatsWorkerConfig(getenv, &cfg)
 	return cfg, nil
+}
+
+// loadStatsWorkerConfig は、統計の再計算のワーカーの設定を読み込む。統計はワーカーの設定が
+// 多少おかしくても、アプリ全体を止めるほどのものではないので、不正な値(数値でない・0 以下)は
+// エラーにせず、既定の値にする。
+func loadStatsWorkerConfig(getenv func(string) string, cfg *Config) {
+	cfg.StatsWorkerInterval = defaultStatsWorkerInterval
+	if d, err := time.ParseDuration(getenv("STATS_WORKER_INTERVAL")); err == nil && d > 0 {
+		cfg.StatsWorkerInterval = d
+	}
+	cfg.StatsWorkerBatch = positiveIntOr(getenv("STATS_WORKER_BATCH"), defaultStatsWorkerBatch)
+	cfg.StatsWorkerMaxAttempts = positiveIntOr(getenv("STATS_WORKER_MAX_ATTEMPTS"), defaultStatsWorkerMaxAttempts)
+}
+
+// positiveIntOr は、raw を正の整数として読み、読めなければ fallback を返す。
+func positiveIntOr(raw string, fallback int) int {
+	if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+		return n
+	}
+	return fallback
 }
 
 // loadMailConfig は、確認メールの設定を読み込んで検証し、cfg に書き込む。エラー

@@ -14,12 +14,16 @@ RETURNING *;
 -- 「全件を読んでから上書きする」処理なので、READ COMMITTED では、並行する
 -- 2 つのトランザクションがそれぞれ、相手のコミット前の review が欠けた
 -- スナップショットを読み、後の upsert が古い件数で統計を上書きしてしまう
--- 可能性がある（lost update）。burgers 行への FOR UPDATE により、
--- 2 つ目のトランザクションはここで 1 つ目がコミットするまでブロックされる。
--- その次の文は、その時点でコミット済みの review を見る。
+-- 可能性がある（lost update）。burgers 行へのロックにより、2 つ目のトランザクションは
+-- ここで 1 つ目がコミットするまでブロックされる。その次の文は、その時点でコミット済みの
+-- review を見る。
+-- FOR NO KEY UPDATE にしているのは、レビューの書き込み（reviews.burger_id の外部キーの検査が
+-- 取る FOR KEY SHARE）を止めないためである。再計算どうしは互いにブロックし合うが、
+-- 再計算の最中でも、同じバーガーへのレビューの書き込みは待たされない（書き込みは、再計算の
+-- 依頼を登録するだけで、統計の計算を待たない）。
 SELECT id FROM burgers
 WHERE id = $1
-FOR UPDATE;
+FOR NO KEY UPDATE;
 
 -- name: ListBurgerReviewFacts :many
 -- 1 つの burger の統計の元になる kept な review。discard 済みの review と、

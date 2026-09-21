@@ -118,6 +118,21 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, photos)
 	users := usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, infra.BcryptPasswordHasher{})
 
+	// 統計の再計算は、書き込みの応答を待たせないよう、バックグラウンドのワーカー(goroutine 1 本)が
+	// あとから行う。起動した直後に、前回の停止までに溜まっていた依頼を処理する。停止では、サーバーを
+	// 止めたあとに、処理中のバッチを終えてから止める(順序は、defer が後ろから実行されることを使い、
+	// サーバー停止 → ワーカー停止 → メール送信の停止 → プールを閉じる、になる)。
+	statsWorker := usecase.NewStatsWorker(query.NewBurgerStatsQuery(pool), unitOfWork, recalc, infra.SystemClock{},
+		usecase.StatsWorkerConfig{Batch: cfg.StatsWorkerBatch, MaxAttempts: cfg.StatsWorkerMaxAttempts})
+	statsLoop := infra.StartStatsWorker(statsWorker, cfg.StatsWorkerInterval)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := statsLoop.Stop(ctx); err != nil {
+			log.Printf("stats worker: stop: %v", err)
+		}
+	}()
+
 	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, reviews, users, photoFiles), ready)
 }
 
