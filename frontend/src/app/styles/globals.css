@@ -21,6 +21,21 @@
   /* ロゴ専用の色(UI の部品には使わない)。白い面の上は深い黄、暗い面の上は今のマスタード黄。 */
   --logo-on-light: #b88f13;
   --logo-on-dark: #e9b824;
+  /* リデザインの部品(components/ui/)のトークン。値は design/redesign/mock.css の :root と同じ(uiTokens.test.ts が一致を確かめる)。
+     既存の画面の変数(--color-*・--radius)とは名前を分け、既存の画面の見た目を変えない。
+     黄(--ui-accent)は面の塗りだけに使い、文字・線には使わない。赤(--ui-danger)は削除とエラーだけに使う。 */
+  --ui-bg: #ffffff;
+  --ui-surface-2: #f3f2ee;
+  --ui-border: #dedcd6;
+  --ui-control-border: #6b6b66;
+  --ui-text: #111111;
+  --ui-text-muted: #5a5a55;
+  --ui-accent: #e9b824;
+  --ui-on-accent: #111111;
+  --ui-danger: #b3261e;
+  --ui-danger-surface: #fdf0ef;
+  --ui-radius: 12px;
+  --ui-font: "Noto Sans JP", system-ui, -apple-system, sans-serif;
 }
 
 body {

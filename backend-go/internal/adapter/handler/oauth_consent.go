@@ -24,12 +24,15 @@ type OAuth struct {
 type oauthScopeResponse struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// Writes は、この範囲が、利用者の名前でデータを書き込むものか(domain.OAuthScope.Writes)。画面は、
+	// この値で書き込みの範囲を強調して見せる。知らない範囲の名前には false を返す。
+	Writes bool `json:"writes"`
 }
 
 func scopeResponses(scopes []domain.OAuthScope) []oauthScopeResponse {
 	out := make([]oauthScopeResponse, 0, len(scopes))
 	for _, s := range scopes {
-		out = append(out, oauthScopeResponse{Name: s.Name, Description: s.Description})
+		out = append(out, oauthScopeResponse{Name: s.Name, Description: s.Description, Writes: s.Writes})
 	}
 	return out
 }
@@ -38,11 +41,11 @@ func scopeResponses(scopes []domain.OAuthScope) []oauthScopeResponse {
 func namedScopeResponses(names []string) []oauthScopeResponse {
 	out := make([]oauthScopeResponse, 0, len(names))
 	for _, n := range names {
-		desc := ""
+		item := oauthScopeResponse{Name: n}
 		if s, ok := domain.OAuthScopeByName(n); ok {
-			desc = s.Description
+			item.Description, item.Writes = s.Description, s.Writes
 		}
-		out = append(out, oauthScopeResponse{Name: n, Description: desc})
+		out = append(out, item)
 	}
 	return out
 }

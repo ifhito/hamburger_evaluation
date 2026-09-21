@@ -173,14 +173,18 @@ func (k *oauthKit) exchange(t *testing.T, code, verifier string) map[string]any 
 	return body
 }
 
+// grantScopeJSON は、許可の画面の API と接続済みアプリの一覧に出る、範囲 1 つである(Writes は、キーの有無を見分けるため、ポインタにしてある)。
+type grantScopeJSON struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Writes      *bool  `json:"writes"`
+}
+
 type grantJSON struct {
-	ID         string `json:"id"`
-	ClientID   string `json:"client_id"`
-	ClientName string `json:"client_name"`
-	Scopes     []struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	} `json:"scopes"`
+	ID         string           `json:"id"`
+	ClientID   string           `json:"client_id"`
+	ClientName string           `json:"client_name"`
+	Scopes     []grantScopeJSON `json:"scopes"`
 }
 
 func (k *oauthKit) grants(t *testing.T, userID string) []grantJSON {

@@ -1,0 +1,68 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: var(--ui-font);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ui-text);
+  outline-offset: 2px;
+}
+
+.primary {
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
+
+.secondary {
+  background: var(--ui-bg);
+  border-color: var(--ui-control-border);
+  color: var(--ui-text);
+}
+
+/* 赤は、削除とエラーだけ。色だけに頼らず、「赤の枠 + 赤の文字 + 削除の言葉」で見せる */
+.danger {
+  background: var(--ui-bg);
+  border-color: var(--ui-danger);
+  color: var(--ui-danger);
+}
+
+/* 削除・解除の確認の「削除する」: 赤の面 + 白い文字 */
+.dangerSolid {
+  border-color: var(--ui-danger);
+  background: var(--ui-danger);
+  color: var(--ui-bg);
+}
+
+.dark {
+  background: var(--ui-text);
+  color: var(--ui-bg);
+}
+
+.off {
+  background: var(--ui-surface-2);
+  color: var(--ui-text-muted);
+  cursor: not-allowed;
+}
+
+.offDanger {
+  background: var(--ui-surface-2);
+  color: var(--ui-danger);
+  cursor: not-allowed;
+}
+
+.block {
+  width: 100%;
+}
+
+.wide {
+  padding: 0 28px;
+}
