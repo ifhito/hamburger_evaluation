@@ -77,10 +77,7 @@ type SignupInput struct {
 // メッセージは username、認証情報（domain.ValidateCredentials。email、password の順）、
 // confirmation の順に並ぶ。
 func (in SignupInput) validate() []string {
-	var msgs []string
-	if in.Username == "" {
-		msgs = append(msgs, "Username can't be blank")
-	}
+	msgs := domain.ValidateUsername(in.Username)
 	msgs = append(msgs, domain.ValidateCredentials(in.Email, in.Password)...)
 	if in.PasswordConfirmation != nil && *in.PasswordConfirmation != in.Password {
 		msgs = append(msgs, "Password confirmation doesn't match Password")

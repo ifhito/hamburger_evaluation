@@ -61,8 +61,8 @@ func (in UpdateUserInput) passwordPresent() bool {
 // 更新で 422 になって締め出されないため）。
 func (in UpdateUserInput) validate(currentEmail string) []string {
 	var msgs []string
-	if in.Username != nil && *in.Username == "" {
-		msgs = append(msgs, "Username can't be blank")
+	if in.Username != nil {
+		msgs = append(msgs, domain.ValidateUsername(*in.Username)...)
 	}
 	if in.Email != nil && *in.Email != currentEmail {
 		msgs = append(msgs, domain.ValidateEmail(*in.Email)...)

@@ -32,6 +32,8 @@ func ValidateReviewContent(rating int, comment string) error {
 	}
 	if strings.TrimSpace(comment) == "" {
 		messages = append(messages, "Comment can't be blank")
+	} else if exceedsChars(comment, MaxCommentChars) {
+		messages = append(messages, tooLongMessage("Comment", MaxCommentChars))
 	}
 	if len(messages) > 0 {
 		return &ValidationError{Messages: messages}
@@ -43,10 +45,13 @@ func ValidateReviewContent(rating int, comment string) error {
 // Burger name の presence ルールを強制する。空またはホワイトスペースのみの
 // 名前は拒否される。（Rails は空の名前に対して rescue されない RecordInvalid
 // で応答するが、ここでは適切な validation failure とする。fail loud で 422
-// を返す。）
+// を返す。）名前が MaxBurgerNameChars 文字を超えるときも拒否される。
 func ValidateBurgerName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return &ValidationError{Messages: []string{"Burger name can't be blank"}}
+	}
+	if exceedsChars(name, MaxBurgerNameChars) {
+		return &ValidationError{Messages: []string{tooLongMessage("Burger name", MaxBurgerNameChars)}}
 	}
 	return nil
 }

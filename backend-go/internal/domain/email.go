@@ -8,7 +8,8 @@ import (
 // ValidateEmail は email の形式を検証し、違反の Rails 形式 full message を返す。
 // 有効なら nil を返す。メッセージは API の外部契約なので英語のままである。
 //
-// 空文字列は "Email can't be blank" だけを返す。それ以外は、net/mail の解析が成功し、
+// 空文字列は "Email can't be blank" だけを返し、MaxEmailChars 文字を超えるときは
+// "Email is too long ..." だけを返す（形式の判定より先に上限を見る）。それ以外は、net/mail の解析が成功し、
 // アドレスだけ（表示名・コメント・引用・複数のアドレスを含まない）で、入力と
 // 完全に一致するとき有効とする。前後の空白も許さない（保存する値を黙って
 // 加工しないため）。RFC の完全準拠は目指さない（ドメイン部にドットがなくても有効）。
@@ -23,6 +24,9 @@ import (
 func ValidateEmail(email string) []string {
 	if email == "" {
 		return []string{"Email can't be blank"}
+	}
+	if exceedsChars(email, MaxEmailChars) {
+		return []string{tooLongMessage("Email", MaxEmailChars)}
 	}
 	for _, r := range email {
 		if !unicode.IsPrint(r) {

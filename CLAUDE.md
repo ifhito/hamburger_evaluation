@@ -162,6 +162,24 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `POST /admin/shops/:id/approve` — 申請されたショップの承認
 - `POST /admin/shops/:id/reject` — 申請されたショップの却下
 
+### 入力の上限
+
+テキスト入力には文字数の上限がある。超えると 422 で、`{"errors": ["Comment is too long (maximum is 2000 characters)"]}` のように、他の違反と一緒に列挙される(検証は永続化の前で、失敗したら何も書かれない。JSON と multipart の両方の経路で同じ)。判定は domain だけが持ち(`internal/domain/limits.go` の定数 1 か所)、frontend は判定を持たず、サーバーのメッセージを表示する。
+
+| 項目 | 上限(文字) |
+|---|---|
+| レビューのコメント(`POST /reviews`、`PUT /reviews/:id`) | 2,000 |
+| バーガー名(`burger_name` の経路) | 100 |
+| ショップ名(`POST /shops`、`PUT /admin/shops/:id`) | 100 |
+| ユーザー名(`POST /signup`、`PUT /users/:id`) | 50 |
+| メールアドレス(`POST /signup`、`PUT /users/:id`) | 254 |
+| 管理者の却下メモ(`POST /admin/shops/:id/reject` の `moderation_note`) | 500 |
+
+- 文字数は Unicode の**コードポイント数**で数える(バイト数でも書記素クラスタでもない。日本語は 1 文字、通常の絵文字も 1 文字。結合文字は 1 コードポイントごとに数える)。PostgreSQL の `char_length` と同じ数え方である
+- `PUT` の部分更新は、送られた項目だけを検証する
+- DB にも `CHECK (char_length(...) <= N)` がある(多層防御。マイグレーション 000009)。値は domain の定数と同じで、食い違いは `db/migrations_test.go` が検出する。上限を変えるときは、定数と、新しいマイグレーションの `CHECK` の 2 か所を直す
+- リクエスト body のバイト数の上限は Content-Type で決まる: 既定は 1 MiB。`POST /reviews` と `PUT /reviews/:id` の `multipart/form-data`(写真つき)だけが 6 MiB(写真は別に 5 MiB)。JSON は、レビューの書き込みでも 1 MiB を超えると 413。multipart のテキスト項目は 1 項目 64 KiB(外側のガード。超えると 400)
+
 ### データベーススキーマ
 
 `backend-go/db/migrations/` のマイグレーションで定義された 6 つのテーブル:

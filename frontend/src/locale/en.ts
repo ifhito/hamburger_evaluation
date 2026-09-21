@@ -171,6 +171,7 @@ const en = {
       editTitle: "Edit shop",
       save: "Save",
       editError: "Failed to update the shop.",
+      rejectError: "Failed to reject the shop.",
       filter: {
         all: "All",
         pending: "Pending",

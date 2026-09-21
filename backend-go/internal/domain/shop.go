@@ -27,10 +27,22 @@ type Shop struct {
 
 // ValidateShopName は、shop 名に対して Rails の presence validation を強制
 // する。空またはホワイトスペースのみの名前は、Rails の full message そのまま
-// を *ValidationError に入れて返す。
+// を *ValidationError に入れて返す。名前が MaxShopNameChars 文字を超えるときも拒否される。
 func ValidateShopName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return &ValidationError{Messages: []string{"Name can't be blank"}}
+	}
+	if exceedsChars(name, MaxShopNameChars) {
+		return &ValidationError{Messages: []string{tooLongMessage("Name", MaxShopNameChars)}}
+	}
+	return nil
+}
+
+// ValidateModerationNote は、reject 時の任意の moderation note の上限を検証する。
+// nil（note なし）は有効で、MaxModerationNoteChars 文字を超えるときは *ValidationError を返す。
+func ValidateModerationNote(note *string) error {
+	if note != nil && exceedsChars(*note, MaxModerationNoteChars) {
+		return &ValidationError{Messages: []string{tooLongMessage("Moderation note", MaxModerationNoteChars)}}
 	}
 	return nil
 }
