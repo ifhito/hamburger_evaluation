@@ -20,6 +20,7 @@ Hamburger Evaluation は、ハンバーガーのレビューと評価を行う W
 hamburger_evaluation/
 ├── backend-go/ # Go API (net/http + sqlc + PostgreSQL 16)
 ├── frontend/   # React 19 + TypeScript + Vite
+├── design/     # デザインツール Penpot のローカル環境と、書き出したデザイン(.penpot)
 ├── memory/     # プロジェクトメモ
 ├── plan/       # 計画ドキュメント
 └── plans/      # エージェントが生成した計画
@@ -258,6 +259,25 @@ pnpm run test
 cd frontend
 pnpm run build
 ```
+
+## デザイン (`design/`)
+
+デザインツール Penpot(オープンソース)を、自分の PC で動かすための環境です。アプリ(`backend-go/`・`frontend/`)とは独立していて、アプリの起動・テストには影響しません。使い方の詳細は `design/README.md` を参照してください。
+
+```bash
+# 初回だけ: design/.env を作り、鍵を追記する(design/.env はコミットしない。中身を読まない・出力しない)
+cp design/.env.example design/.env
+printf 'PENPOT_SECRET_KEY=%s\n' "$(openssl rand -base64 48 | tr -d '\n')" >> design/.env
+
+# 起動(http://localhost:9001)/ 停止 / データごと削除
+docker compose -p hamburger-penpot -f design/docker-compose.yml --env-file design/.env up -d
+docker compose -p hamburger-penpot -f design/docker-compose.yml --env-file design/.env down
+docker compose -p hamburger-penpot -f design/docker-compose.yml --env-file design/.env down -v
+```
+
+- 書き出したデザイン(`.penpot`)は `design/files/` に置いて git で保存する(バイナリなので差分は読めない)。
+- ポートは 9001(既存の 8080・5173・5433 と重ならない)。Penpot は複数のコンテナで数 GiB のメモリを使うので、使わないときは `down` する。
+- `design/.env` は秘密(Penpot の鍵)を含む。エージェントは読まない(`.claude/settings.json` の deny 対象)。
 
 ## API と認証
 
