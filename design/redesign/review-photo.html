@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>写真の追加の状態(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="shops">
+<main class="wrap page">
+  <h1 data-en="States of the photo field">写真を追加する画面の状態</h1>
+  <p class="lead" data-en="What the photo field looks like at each step, and the messages the API returns.">写真の欄の、段階ごとの見え方と、API が返すメッセージです。</p>
+  <div class="sample-grid">
+    <div class="sample"><p class="note" data-en="1. No photo yet">1. 写真がまだないとき</p><div class="field"><span class="label" data-en="Photo (optional)">写真 <span class="optional" data-en="(optional)">(任意)</span></span><div class="drop"><b class="title-sm" data-en="Add a photo">写真を追加</b><p class="hint" data-en="JPEG, PNG or WebP, up to 5MB. Large photos are shrunk on your device before sending.">JPEG・PNG・WebP。5MB まで。大きい写真は、送る前に、この端末で小さくします。</p><button type="button" class="btn ghost" data-en="Choose a photo">写真を選ぶ</button></div></div></div>
+    <div class="sample"><p class="note" data-en="2. Shrinking a large photo on the device (progress)">2. 大きい写真を、この端末で小さくしているとき(進行の表示)</p><div class="field"><span class="label" data-en="Photo (optional)">写真 <span class="optional" data-en="(optional)">(任意)</span></span><div class="drop" aria-live="polite"><b class="title-sm" data-en="Shrinking your photo…">写真を小さくしています…</b><div class="bar-track" role="progressbar" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100"><div class="bar-fill" style="width:62%"></div></div><p class="hint" data-en="4.2 MB → about 1 MB. You can post once it is done.">4.2 MB → 約 1 MB。終わると、投稿できます。</p></div></div><button type="button" class="btn off" data-en="Post review (available after shrinking)">レビューを投稿する(小さくしたあとで押せます)</button></div>
+    <div class="sample"><p class="note" data-en="3. A photo is attached">3. 写真が付いたとき</p><div class="field"><span class="label" data-en="Photo (optional)">写真 <span class="optional" data-en="(optional)">(任意)</span></span><div><div class="photo pv" style="--a:#e3c29a;--b:#b98552"><span class="photo-label" data-en="Photo">写真</span></div><div class="pfile"><span class="fname">teriyaki.jpg</span><span class="muted" data-en="4.2 MB → 1.1 MB (shrunk)">4.2 MB → 1.1 MB(小さくしました)</span></div><div class="pbtns"><button type="button" class="btn ghost" data-en="Change photo">写真を変える</button><button type="button" class="btn ghost" data-en="Remove">外す</button></div></div></div></div>
+    <div class="sample"><p class="note" data-en="4. Posting (sending)">4. 投稿しているとき(送信中)</p><button type="button" class="btn off wide" aria-busy="true" data-en="Posting…">投稿しています…</button><p class="hint" data-en="The button is disabled while sending, so it cannot be pressed twice.">送っている間は、押せません(二重に送らないため)。</p></div>
+    <div class="sample"><p class="note" data-en="5. The photo is too large (over 5MB)">5. 写真が大きすぎるとき(5MB を超える)</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not save the review">レビューを保存できませんでした</b><p class="msg">Photo is too large (max 5MB)</p></div></section></div>
+    <div class="sample"><p class="note" data-en="6. The format is not supported, or the file is broken">6. 写真の形式が対応外、または壊れているとき</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not save the review">レビューを保存できませんでした</b><p class="msg">Photo must be a JPEG, PNG, or WebP image</p></div></section></div>
+    <div class="sample"><p class="note" data-en="7. An iPhone HEIC / HEIF photo">7. iPhone の HEIC / HEIF の写真のとき</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not save the review">レビューを保存できませんでした</b><p class="msg">Photo must be a JPEG, PNG, or WebP image (HEIC/HEIF is not supported)</p></div></section></div>
+    <div class="sample"><p class="note" data-en="8. The photo dimensions are too large">8. 写真の縦横が大きすぎるとき</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not save the review">レビューを保存できませんでした</b><p class="msg">Photo dimensions are too large (max 10000px per side and 24 megapixels)</p></div></section></div>
+  </div>
+  <aside class="memo"><b>実装メモ</b><ul><li>・大きい写真は、送る前に、この端末の中で小さくする(長辺かファイルの大きさが上限を超えたときだけ)。上限の値は <code>GET /meta</code> の <code>photo</code> から取る。小さくできなかったときは、元の写真をそのまま送り、backend が判断する。</li><li>・5〜8 の文言(英語)は、backend が返したものをそのまま出す。frontend は、写真が大きすぎるかどうかを判断せず、文言も書き換えない。見出し(「レビューを保存できませんでした」)だけが、画面側の言葉。</li><li>・進行の表示は、小さくするのが一瞬で終わるときは、出さなくてよい(長引くときだけ)。割合ではなく、動く表示でもよい。</li></ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

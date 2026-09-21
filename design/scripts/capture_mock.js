@@ -16,6 +16,35 @@ const SCREENS = [
   { key: 'states', title: '空・読み込み・エラー・404', file: 'states.html', lang: 'ja' },
   { key: 'states-en', title: '空・読み込み・エラー・404(English)', file: 'states.html', lang: 'en' },
 ];
+// 第 1 弾以降の画面。[グループ(Penpot のページ名の元), キー, 画面の名前, HTML, state]。state は、HTML の data-only の切り替え(?state=)。
+// 日本語のあとに、同じ画面の英語版(キーの末尾に -en)も、自動で足す
+const GROUPED = [
+  ['認証', 'signin', 'サインイン', 'signin.html', 'default'],
+  ['認証', 'signin-error', 'サインイン(エラー)', 'signin.html', 'error'],
+  ['認証', 'signup', '新規登録', 'signup.html', 'default'],
+  ['認証', 'signup-error', '新規登録(エラー)', 'signup.html', 'error'],
+  ['認証', 'signup-sent', '確認メールを送った', 'signup.html', 'sent'],
+  ['認証', 'confirm-loading', 'メールの確認(確認中)', 'confirm.html', 'loading'],
+  ['認証', 'confirm-done', 'メールの確認(完了)', 'confirm.html', 'done'],
+  ['認証', 'confirm-error', 'メールの確認(期限切れ・無効)', 'confirm.html', 'error'],
+  ['レビューの投稿・編集', 'review-new', 'レビュー投稿', 'review-new.html', 'default'],
+  ['レビューの投稿・編集', 'review-new-filled', 'レビュー投稿(入力済み)', 'review-new.html', 'filled'],
+  ['レビューの投稿・編集', 'review-new-error', 'レビュー投稿(エラー)', 'review-new.html', 'error'],
+  ['レビューの投稿・編集', 'review-photo', '写真の欄の状態', 'review-photo.html', 'default'],
+  ['レビューの投稿・編集', 'review-edit', 'レビュー編集', 'review-edit.html', 'default'],
+  ['レビューの投稿・編集', 'review-edit-forbidden', 'レビュー編集(編集できない)', 'review-edit.html', 'forbidden'],
+  ['レビューの投稿・編集', 'review-delete', '削除の確認', 'review-detail.html', 'delete'],
+  ['ショップ', 'shop-detail', 'ショップ詳細', 'shop-detail.html', 'default'],
+  ['ショップ', 'shop-detail-pending', 'ショップ詳細(審査待ち)', 'shop-detail.html', 'pending'],
+  ['ショップ', 'shop-detail-rejected', 'ショップ詳細(却下)', 'shop-detail.html', 'rejected'],
+  ['ショップ', 'shop-new', 'ショップ追加', 'shop-new.html', 'default'],
+  ['ショップ', 'shop-new-error', 'ショップ追加(エラー)', 'shop-new.html', 'error'],
+];
+for (const lang of ['ja', 'en']) {
+  for (const [group, key, title, file, state] of GROUPED) {
+    SCREENS.push({ key: lang === 'en' ? key + '-en' : key, title: lang === 'en' ? title + '(English)' : title, file, lang, state, group });
+  }
+}
 const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }];
 
 (async () => {
@@ -26,18 +55,20 @@ const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }
     for (const sc of SCREENS) {
       const ctx = await browser.newContext({ viewport: { width: size.w, height: size.h }, locale: sc.lang === 'en' ? 'en-US' : 'ja-JP' });
       const page = await ctx.newPage();
-      await page.goto(`file://${MOCK_DIR}/${sc.file}?lang=${sc.lang}`, { waitUntil: 'networkidle' });
+      await page.goto(`file://${MOCK_DIR}/${sc.file}?lang=${sc.lang}${sc.state ? '&state=' + sc.state : ''}`, { waitUntil: 'networkidle' });
       await page.evaluate(() => document.fonts.ready);
       const font = await page.evaluate(() => document.fonts.check('16px "Noto Sans JP"'));
       await page.waitForTimeout(300);
       const data = await page.evaluate(extract);
       const name = `${sc.key}-${size.key}`;
-      fs.writeFileSync(`${OUT}/${name}.json`, JSON.stringify({ key: sc.key, title: sc.title, size: size.key, viewport: size.w, url: sc.file, ...data }));
+      fs.writeFileSync(`${OUT}/${name}.json`, JSON.stringify({ key: sc.key, title: sc.title, size: size.key, viewport: size.w, url: sc.file + (sc.state ? '?state=' + sc.state : ''), group: sc.group || null, ...data }));
       await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
       result.push({ name, nodes: data.nodes.length, w: data.width, h: data.height, notoLoaded: font });
       await ctx.close();
     }
   }
+  // build_redesign.py が読む、画面の一覧(グループごとに Penpot のページを作る)
+  fs.writeFileSync(`${OUT}/screens.json`, JSON.stringify(SCREENS.map(({ key, title, group }) => ({ key, title, group: group || null }))));
   // 値のページ(色・コントラスト・文字)
   const ctx = await browser.newContext({ viewport: { width: 1320, height: 900 } });
   const page = await ctx.newPage();

@@ -45,9 +45,25 @@ def main() -> None:
     fb.add({"type": "add-page", "id": page_pc, "name": "画面(PC)"})
     fb.add({"type": "add-page", "id": page_mob, "name": "画面(モバイル)"})
     fb.add({"type": "add-page", "id": page_icons, "name": "評価アイコンの比較"})
+    # 第 1 弾以降の画面: グループごと・PC/モバイルごとに、Penpot のページを作る(capture_mock.js が書いた screens.json のとおり)
+    screens_all = json.loads((cap_dir / "screens.json").read_text())
+    groups: dict[str, list] = {}
+    for sc in screens_all:
+        if sc["group"]:
+            groups.setdefault(sc["group"], []).append(sc)
+    group_pages: dict[tuple, tuple] = {}
+    for g in groups:
+        for size_key, label in (("pc", "PC"), ("mobile", "モバイル")):
+            pid = str(uuid.uuid4())
+            group_pages[(g, size_key)] = (pid, f"{g}({label})")
+            fb.add({"type": "add-page", "id": pid, "name": f"{g}({label})"})
     fb.flush()
 
     caps = {f"{k}-{size}": load(f"{k}-{size}") for k, _ in SCREENS for size in ("pc", "mobile")}
+    for scs in groups.values():
+        for sc in scs:
+            for size in ("pc", "mobile"):
+                caps[f"{sc['key']}-{size}"] = load(f"{sc['key']}-{size}")
     tokens_cap = load("tokens")
     icons_cap = load("rating-icons")
     values = json.loads((cap_dir / "tokens-values.json").read_text())
@@ -102,10 +118,28 @@ def main() -> None:
             x += c["viewport"] + 160
     fb.flush()
 
+    # 第 1 弾以降の画面。日本語の行の下に、英語の行を並べる
+    for (g, size_key), (pid, page_name) in group_pages.items():
+        rows = [[sc for sc in groups[g] if not sc["key"].endswith("-en")], [sc for sc in groups[g] if sc["key"].endswith("-en")]]
+        y = 0
+        for row in rows:
+            x, row_h = 0, 0
+            for sc in row:
+                c = caps[f"{sc['key']}-{size_key}"]
+                name = f"{sc['title']} / {'PC' if size_key == 'pc' else 'モバイル'}"
+                frame = d.frame(pid, name, x, y, c["viewport"], c["height"], c["bg"])
+                place(d, pid, c["nodes"], x, y, frame)
+                fb.flush()
+                screen_map.append({"screen": sc["title"], "key": sc["key"], "size": size_key, "page": page_name, "frame": name, "url": c["url"], "shapes": len(c["nodes"])})
+                x += c["viewport"] + 160
+                row_h = max(row_h, c["height"])
+            y += row_h + 240
+    fb.flush()
+
     # 画像にするときの対象に、値のページと比較のページも入れる(render_penpot.js が、この一覧を使う)
     screen_map.append({"screen": "デザインの値", "key": "tokens", "size": "pc", "page": "値", "frame": "デザインの値", "url": "tokens.html", "shapes": len(tokens_cap["nodes"])})
     screen_map.append({"screen": "評価アイコンの比較", "key": "rating-icons", "size": "pc", "page": "評価アイコンの比較", "frame": "評価アイコンの比較", "url": "rating-icons.html", "shapes": len(icons_cap["nodes"])})
-    info = {"fileId": fid, "name": args.name, "pages": {"値": page_value, "画面(PC)": page_pc, "画面(モバイル)": page_mob, "評価アイコンの比較": page_icons}, "screens": screen_map,
+    info = {"fileId": fid, "name": args.name, "pages": {"値": page_value, "画面(PC)": page_pc, "画面(モバイル)": page_mob, "評価アイコンの比較": page_icons, **{name: pid for pid, name in group_pages.values()}}, "screens": screen_map,
             "colors": len(values["tokens"]), "typographies": len(typos)}
     if args.map_out:
         Path(args.map_out).write_text(json.dumps(info, ensure_ascii=False, indent=1))
