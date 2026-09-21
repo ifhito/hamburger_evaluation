@@ -1,0 +1,36 @@
+# 検証用の上書き設定。docker-compose.yml の api-go は DATABASE_URL と SMTP_HOST を
+# 直に書いているため、外部サービス(Neon / R2 / Resend など)へ向けるにはこの上書きが要る。
+#
+# 使い方:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   cp .env.example .env          # 秘密はこちらに書く(.env は gitignore 済み)
+#   docker compose up api-go      # override は自動で読み込まれる
+#
+# このファイル自体は gitignore されない。値は書かず、${VAR} の参照だけにすること。
+services:
+  api-go:
+    environment:
+      # --- Phase 1: DB を外部へ向ける ---
+      # 例: postgres://user:pass@ep-xxx.ap-southeast-1.aws.neon.tech/dbname?sslmode=require
+      # ローカル db の既定は sslmode=disable。マネージドは require が要ることが多い。
+      DATABASE_URL: ${DATABASE_URL}
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-5}
+
+      # --- Phase 2: 写真を S3 互換ストレージへ ---
+      PHOTO_STORAGE: ${PHOTO_STORAGE:-disk}
+      PHOTO_S3_ENDPOINT: ${PHOTO_S3_ENDPOINT:-}
+      PHOTO_S3_BUCKET: ${PHOTO_S3_BUCKET:-}
+      PHOTO_S3_ACCESS_KEY_ID: ${PHOTO_S3_ACCESS_KEY_ID:-}
+      PHOTO_S3_SECRET_ACCESS_KEY: ${PHOTO_S3_SECRET_ACCESS_KEY:-}
+      PHOTO_PUBLIC_BASE_URL: ${PHOTO_PUBLIC_BASE_URL:-}
+
+      # --- Phase 3: メールを外部 SMTP へ(既定はローカルの mailpit) ---
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURITY: ${SMTP_SECURITY:-none}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-noreply@hamburger.example.com}
+
+      # --- ワーカーの間隔(無料枠の DB では緩めることを検討) ---
+      STATS_WORKER_INTERVAL: ${STATS_WORKER_INTERVAL:-1s}
