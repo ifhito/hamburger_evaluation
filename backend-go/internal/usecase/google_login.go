@@ -184,21 +184,8 @@ func (g *GoogleLogins) resolve(ctx context.Context, flow GoogleFlow, cb GoogleCa
 }
 
 func (g *GoogleLogins) signIn(ctx context.Context, ident domain.ExternalIdentity) (domain.LoginHandoffOutcome, string) {
-	linked, err := g.query.GetIdentityByProviderUserID(ctx, ident.Provider, ident.ProviderUserID)
-	switch {
-	case err == nil:
-		user, err := g.users.GetActiveUserByID(ctx, linked.UserID)
-		if err != nil {
-			// 退会済みの利用者の結び付きでは、サインインさせない。
-			if !errors.Is(err, domain.ErrUserNotFound) {
-				log.Printf("google login: get linked user: %v", err)
-			}
-			return domain.OutcomeFailed, ""
-		}
-		return domain.OutcomeSignedIn, user.ID
-	case !errors.Is(err, domain.ErrIdentityNotFound):
-		log.Printf("google login: get identity: %v", err)
-		return domain.OutcomeFailed, ""
+	if outcome, userID, done := g.signInLinked(ctx, ident); done {
+		return outcome, userID
 	}
 
 	// 結び付きがない: 同じメールの利用者がいれば、自動では結び付けない(他人のアカウントへの侵入を防ぐ)。
@@ -210,7 +197,7 @@ func (g *GoogleLogins) signIn(ctx context.Context, ident domain.ExternalIdentity
 	}
 
 	var user domain.User
-	err = g.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
+	err := g.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		var err error
 		user, err = tx.Users.Create(ctx, domain.CreateUserParams{
 			Email:    ident.Email,
@@ -229,13 +216,45 @@ func (g *GoogleLogins) signIn(ctx context.Context, ident domain.ExternalIdentity
 	switch {
 	case err == nil:
 		return domain.OutcomeSignedIn, user.ID
-	case errors.Is(err, domain.ErrEmailTaken):
-		// 確認から作成までの間に、同じメールの利用者ができた(または、退会済みのメール)。
-		return domain.OutcomeAccountExists, ""
+	case errors.Is(err, domain.ErrEmailTaken), errors.Is(err, domain.ErrIdentityTaken):
+		// 同じ Google アカウントの初回のサインインが並行して、先に作られた(負けた側)ときは、結び付きを引き直して、
+		// サインインさせる。「メールが使われている」と案内すると、パスワードを持たない本人のアカウントなのに、
+		// パスワードでのサインインを勧めてしまう。
+		if outcome, userID, done := g.signInLinked(ctx, ident); done {
+			return outcome, userID
+		}
+		if errors.Is(err, domain.ErrEmailTaken) {
+			// 確認から作成までの間に、別のメールの利用者ができた(または、退会済みのメール)。
+			return domain.OutcomeAccountExists, ""
+		}
+		log.Printf("google login: create user: %v", err)
+		return domain.OutcomeFailed, ""
 	default:
 		log.Printf("google login: create user: %v", err)
 		return domain.OutcomeFailed, ""
 	}
+}
+
+// signInLinked は、外部のアカウント(sub)がすでに利用者に結び付いているとき、その利用者としてのサインインの
+// 結果を返す(done が true)。結び付きがなければ、done は false である。退会済みの利用者の結び付きでは、
+// サインインさせない(失敗として返す)。
+func (g *GoogleLogins) signInLinked(ctx context.Context, ident domain.ExternalIdentity) (outcome domain.LoginHandoffOutcome, userID string, done bool) {
+	linked, err := g.query.GetIdentityByProviderUserID(ctx, ident.Provider, ident.ProviderUserID)
+	switch {
+	case err == nil:
+		user, err := g.users.GetActiveUserByID(ctx, linked.UserID)
+		if err != nil {
+			if !errors.Is(err, domain.ErrUserNotFound) {
+				log.Printf("google login: get linked user: %v", err)
+			}
+			return domain.OutcomeFailed, "", true
+		}
+		return domain.OutcomeSignedIn, user.ID, true
+	case !errors.Is(err, domain.ErrIdentityNotFound):
+		log.Printf("google login: get identity: %v", err)
+		return domain.OutcomeFailed, "", true
+	}
+	return "", "", false
 }
 
 func (g *GoogleLogins) link(ctx context.Context, userID string, ident domain.ExternalIdentity) (domain.LoginHandoffOutcome, string) {

@@ -60,8 +60,14 @@ type kitOptions struct {
 	issuer func(usecase.TokenIssuer) usecase.TokenIssuer
 	// txUsers は、トランザクションの中で、ユーザーを読む窓口を包む(DB の一時的なエラーを起こすため)。
 	txUsers func(usecase.UserQuery) usecase.UserQuery
+	// identityQuery は、結び付きを読む窓口を包む(並行する手続きの、読み取りと書き込みの間に割り込むため)。
+	identityQuery func(usecase.IdentityQuery) usecase.IdentityQuery
 	// maxConns は、DB の接続プールの上限である(0 なら、既定)。並行する処理が、接続を取り合って止まらないことを確かめるため、小さくする。
 	maxConns int32
+}
+
+func withIdentityQuery(fn func(usecase.IdentityQuery) usecase.IdentityQuery) func(*kitOptions) {
+	return func(o *kitOptions) { o.identityQuery = fn }
 }
 
 func withMaxConns(n int32) func(*kitOptions) {
@@ -126,6 +132,35 @@ func (f *flakyUsers) GetActiveUserByID(ctx context.Context, id string) (domain.U
 	return f.UserQuery.GetActiveUserByID(ctx, id)
 }
 
+// rendezvousIdentities は、結び付きを読む窓口を包んで、「結び付きがない」と返された手続きを、n 件が揃うまで待たせる。
+// 並行する手続きが、どちらも「まだ結び付きがない」と見てから、書き込みに進むことを、確実に起こすためにある
+// (揃ったあとの読み取りは、待たされない)。
+type rendezvousIdentities struct {
+	usecase.IdentityQuery
+	n       int
+	arrived atomic.Int32
+	release chan struct{}
+	once    sync.Once
+}
+
+func newRendezvousIdentities(n int) *rendezvousIdentities {
+	return &rendezvousIdentities{n: n, release: make(chan struct{})}
+}
+
+func (r *rendezvousIdentities) GetIdentityByProviderUserID(ctx context.Context, provider, subject string) (domain.UserIdentity, error) {
+	got, err := r.IdentityQuery.GetIdentityByProviderUserID(ctx, provider, subject)
+	if errors.Is(err, domain.ErrIdentityNotFound) {
+		if int(r.arrived.Add(1)) >= r.n {
+			r.once.Do(func() { close(r.release) })
+		}
+		select {
+		case <-r.release:
+		case <-time.After(5 * time.Second):
+		}
+	}
+	return got, err
+}
+
 func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	t.Helper()
 	var ko kitOptions
@@ -166,9 +201,13 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	if ko.issuer != nil {
 		loginIssuer = ko.issuer(codec)
 	}
+	var identityQuery usecase.IdentityQuery = query.NewUserIdentityQuery(pool)
+	if ko.identityQuery != nil {
+		identityQuery = ko.identityQuery(identityQuery)
+	}
 	logins := usecase.NewGoogleLogins(
 		googleauth.New(googleauth.Config{ClientID: googleTestClientID, ClientSecret: googleTestClientSecret, RedirectURL: googleTestRedirect, Issuer: idp.URL}),
-		query.NewUserIdentityQuery(pool), userQuery, loginUoW,
+		identityQuery, userQuery, loginUoW,
 		domain.NewLoginHandoffs(repository.NewLoginHandoffRepository(pool)),
 		domain.NewUserIdentities(repository.NewUserIdentityRepository(pool)),
 		loginIssuer,
@@ -551,6 +590,43 @@ func TestGoogleSignIn(t *testing.T) {
 		var n int
 		if err := k.conn.QueryRow(context.Background(), `SELECT count(*) FROM users WHERE lower(email) = 'racer@gmail.example'`).Scan(&n); err != nil || n != 1 {
 			t.Fatalf("大文字小文字を無視して同じメールの利用者が %d 人(err %v), want 1", n, err)
+		}
+	})
+
+	t.Run("同じ Google アカウントの初回のサインインが並行しても、両方が同じ利用者としてサインインでき、「パスワードでサインインしてください」とは案内されない", func(t *testing.T) {
+		rendezvous := newRendezvousIdentities(2)
+		k := newGoogleKit(t, withIdentityQuery(func(inner usecase.IdentityQuery) usecase.IdentityQuery {
+			rendezvous.IdentityQuery = inner
+			return rendezvous
+		}))
+		first := k.authorize(t, "")
+		second := k.authorize(t, "")
+
+		codes := make([]string, 2)
+		var wg sync.WaitGroup
+		for i, p := range []pendingCallback{first, second} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				codes[i] = k.callback(t, p, p.cookies, plainRun()).code
+			}()
+		}
+		wg.Wait()
+
+		ids := map[string]bool{}
+		for i, code := range codes {
+			rec := k.exchange(code)
+			body := decodeExchange(t, rec)
+			if rec.Code != http.StatusOK || body.Token == "" {
+				t.Fatalf("%d 番目の手続き = %d %s, want サインインの成功(負けた側が、誤った案内になっていないか)", i+1, rec.Code, rec.Body)
+			}
+			ids[body.ID] = true
+		}
+		if len(ids) != 1 {
+			t.Fatalf("同じ Google アカウントなのに、別の利用者としてサインインした: %v", ids)
+		}
+		if k.count(t, "users") != 3 || k.count(t, "user_identities") != 1 {
+			t.Fatalf("利用者 %d 人・結び付き %d 件, want 3 人・1 件", k.count(t, "users"), k.count(t, "user_identities"))
 		}
 	})
 
