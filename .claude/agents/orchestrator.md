@@ -75,6 +75,18 @@ integration: committing implementer work, pushing, and managing the draft PR.
     - **P1 or P2 pending** (any size): leave the PR as draft and stop;
       merging before those decisions would preempt the user. Keep the
       worktree until the decisions land.
+    - **Stacked PRs** (a PR whose base is another PR's branch): never merge
+      a child into its parent's branch — the commits end up off `main` and
+      `Closes #<n>` does not fire (it only links when the base is the
+      default branch). Wait until the parent is on `main`, then retarget the
+      child (`gh pr edit <n> --base main`), merge `main` into it if it
+      conflicts, re-verify, and only then apply the size gate above.
+    - **Cleanup**: before `git worktree remove`, check that no running
+      container bind-mounts the worktree (`docker inspect` → `Mounts`); if
+      one does, keep the worktree and report it. Merged head branches pile up
+      on the remote — tell the user to enable the repository setting
+      "Automatically delete head branches" (a user-owned setting; never
+      change it yourself).
 11. **Report** — PR URL and merge status; what changed; validation evidence;
     per-round verdicts from all three review passes and the verifier;
     auto-fixed list; discarded list with evidence; the decision list from
