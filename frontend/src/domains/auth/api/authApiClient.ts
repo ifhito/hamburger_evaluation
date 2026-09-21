@@ -1,18 +1,23 @@
 import { buildApiClient } from "../../../api/client/buildApiClient";
 import { getToken } from "../storage";
 import type {
+  AuthUserResponse,
   CurrentUserResponse,
-  SignupRequest,
-  SignupResponse,
   LoginRequest,
   LoginResponse,
+  SignupAcceptedResponse,
+  SignupRequest,
 } from "../types";
 
 export const authApiClient = buildApiClient(getToken);
 
 export const authApi = {
-  async signup(data: SignupRequest): Promise<SignupResponse> {
-    const res = await authApiClient.post<SignupResponse>("/signup", data);
+  async signup(data: SignupRequest): Promise<SignupAcceptedResponse> {
+    const res = await authApiClient.post<SignupAcceptedResponse>("/signup", data);
+    return res.data;
+  },
+  async confirmSignup(token: string): Promise<AuthUserResponse> {
+    const res = await authApiClient.post<AuthUserResponse>("/signup/confirm", { token });
     return res.data;
   },
   async login(data: LoginRequest): Promise<LoginResponse> {

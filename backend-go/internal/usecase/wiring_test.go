@@ -21,6 +21,10 @@ func newUsers(query usecase.UserQuery, repo domain.UserRepository, hasher usecas
 	return usecase.NewUsers(query, domain.NewUsers(repo), hasher)
 }
 
-func newAuth(query usecase.UserQuery, repo domain.UserRepository, hasher usecase.PasswordHasher, issuer usecase.TokenIssuer, verifier usecase.TokenVerifier) *usecase.Auth {
-	return usecase.NewAuth(query, domain.NewUsers(repo), hasher, issuer, verifier)
+func newAuth(query usecase.UserQuery, hasher usecase.PasswordHasher, issuer usecase.TokenIssuer, verifier usecase.TokenVerifier) *usecase.Auth {
+	return usecase.NewAuth(query, hasher, issuer, verifier)
+}
+
+func newSignups(query usecase.UserQuery, repo domain.SignupVerificationRepository, hasher usecase.PasswordHasher, mailer usecase.Mailer, issuer usecase.TokenIssuer, cfg usecase.SignupConfig) *usecase.Signups {
+	return usecase.NewSignups(query, domain.NewSignupVerifications(repo), hasher, mailer, issuer, cfg)
 }

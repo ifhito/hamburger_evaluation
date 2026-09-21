@@ -133,6 +133,12 @@ func TestRunShutsDownCleanly(t *testing.T) {
 		PhotoStorage:       "disk",
 		PhotoDiskDir:       t.TempDir(),
 		PhotoPublicBaseURL: "/photos",
+		// 確認メールの設定（S16）。このテストはメールを送らないので、送信先は到達不能なままでよい。
+		SMTPHost:     "127.0.0.1",
+		SMTPPort:     1,
+		SMTPSecurity: "none",
+		MailFrom:     "noreply@example.com",
+		AppBaseURL:   "http://localhost:5173",
 	}
 
 	addrCh := make(chan string, 1)

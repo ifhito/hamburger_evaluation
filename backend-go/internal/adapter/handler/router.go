@@ -30,14 +30,15 @@ type route struct {
 // （Go 1.22 の ServeMux は最も限定的なパターンを優先するので、登録順に関わらず
 // catch-all の "/" より優先される）、s3 モードでは nil で、写真の URL は
 // 代わりに bucket の公開ドメインを指す。
-func NewRouter(db Pinger, auth *usecase.Auth, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler) http.Handler {
+func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	if photoFiles != nil {
 		mux.Handle("GET /photos/", http.StripPrefix("/photos/", photoFiles))
 	}
 	registerRoutes(mux, []route{
 		{path: "/up", methods: map[string]http.HandlerFunc{http.MethodGet: handleHealth(db)}},
-		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(auth)}},
+		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(signups)}},
+		{path: "/signup/confirm", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignupConfirm(signups)}},
 		{path: "/login", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogin(auth)}},
 		{path: "/logout", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogout}, middleware: RequireAuth(auth)},
 		{path: "/me", methods: map[string]http.HandlerFunc{http.MethodGet: handleMe}, middleware: RequireAuth(auth)},

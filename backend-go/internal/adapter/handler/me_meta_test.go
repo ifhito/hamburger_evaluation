@@ -80,7 +80,7 @@ func TestMeta(t *testing.T) {
 	}
 }
 
-// TestAuthResponsesCarryCanModerate は、login と signup の応答も、GET /me と同じ
+// TestAuthResponsesCarryCanModerate は、login と signup の確認の応答も、GET /me と同じ
 // can_moderate を返すことを固定する(frontend は admin から権限を導かない。S32)。
 func TestAuthResponsesCarryCanModerate(t *testing.T) {
 	repo, auth, _ := newAuthKit()
@@ -104,13 +104,26 @@ func TestAuthResponsesCarryCanModerate(t *testing.T) {
 			}
 		})
 	}
-	t.Run("signup", func(t *testing.T) {
-		rec := do(router, http.MethodPost, "/signup", `{"username":"carol","email":"carol@example.com","password":"Password123!"}`, "")
+	// signup の確認(POST /signup/confirm)の応答も、GET /me と同じ can_moderate を返す。
+	// 確認で得たトークンで GET /me を呼ぶと、同じユーザー・同じ can_moderate になる(確認 → ログイン状態の復元)。
+	t.Run("signup の確認", func(t *testing.T) {
+		kit := newSignupKit(t)
+		rec := do(kit.router, http.MethodPost, "/signup",
+			`{"username":"carol","email":"carol@example.com","password":"Password123!","password_confirmation":"Password123!"}`, "")
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("signup status = %d, want 202 (body %s)", rec.Code, rec.Body)
+		}
+		rec = do(kit.router, http.MethodPost, "/signup/confirm", confirmBody(kit.mailer.lastToken(t)), "")
 		if rec.Code != http.StatusCreated {
-			t.Fatalf("status = %d, want 201 (body %s)", rec.Code, rec.Body)
+			t.Fatalf("confirm status = %d, want 201 (body %s)", rec.Code, rec.Body)
 		}
 		if !strings.Contains(rec.Body.String(), `"can_moderate":false`) {
-			t.Errorf("body = %s, want can_moderate false", rec.Body)
+			t.Errorf("confirm body = %s, want can_moderate false", rec.Body)
+		}
+		token := decodeAuthUser(t, rec.Body.Bytes()).Token
+		me := do(kit.router, http.MethodGet, "/me", "", "Bearer "+token)
+		if me.Code != http.StatusOK || !strings.Contains(me.Body.String(), `"username":"carol"`) || !strings.Contains(me.Body.String(), `"can_moderate":false`) {
+			t.Errorf("GET /me = %d %s, want 200 の carol(can_moderate false)", me.Code, me.Body)
 		}
 	})
 }

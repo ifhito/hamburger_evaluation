@@ -42,7 +42,7 @@ cd backend-go && docker compose run --rm sqlc generate
   なぜ: `TEST_DATABASE_URL` がないとテストは黙ってスキップされ、検証したつもりになるため。
 
 - 認証は custom JWT Bearer token を使う。
-  なぜ: 現行実装が login/signup のレスポンス token と axios interceptor を前提にしているため。
+  なぜ: 現行実装が login と signup の確認(`POST /signup/confirm`)のレスポンス token と axios interceptor を前提にしているため。
 
 - Backend はクリーンアーキテクチャ(handler → usecase → domain)を守り、`domain` は標準ライブラリだけを import する。
   なぜ: 評価ロジックや値オブジェクトを HTTP や DB 永続化の詳細から分離するため。
@@ -70,7 +70,7 @@ cd backend-go && docker compose run --rm sqlc generate
 
 ## 対象外
 
-- `.env`, `.env.*`, `backend-go/.env*`, `frontend/.env*`, `secrets/**` の読み書き。
+- `.env`, `.env.*`, `backend-go/.env*`, `frontend/.env*`, `design/.env*`, `secrets/**` の読み書き。
 - ユーザーが明示していない `SETUP.md`, `plans/*.md`, `memory/*`, `plan/*` の変更。
 - 無関係なファイルの stage / commit / push。
 - `git push --force`, destructive reset, production deploy, secret rotation。

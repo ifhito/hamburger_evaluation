@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { useSignupForm } from "../hooks/useAuthForm";
@@ -13,23 +12,38 @@ import styles from "./auth.module.css";
 export default function SignupPage() {
   const { t } = useTranslation();
   const { signup } = useAuth();
-  const navigate = useNavigate();
   const { register, handleSubmit } = useSignupForm();
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  // 確認メールの送信を申し込んだあとは、送り先を表示する(登録済みでも同じ画面。応答が同じなので区別できない)。
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
   const onSubmit = handleSubmit(async (data) => {
     setIsLoading(true);
     setServerError(null);
     try {
       await signup(data);
-      void navigate("/reviews");
+      setSentTo(data.email);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("auth.signup.error")]);
     } finally {
       setIsLoading(false);
     }
   });
+
+  if (sentTo !== null) {
+    return (
+      <Layout title={t("auth.signup.sent.title")}>
+        <div className={styles.form}>
+          <p>{t("auth.signup.sent.message", { email: sentTo })}</p>
+          <p className={styles.hint}>{t("auth.signup.sent.hint")}</p>
+          <Button type="button" variant="secondary" onClick={() => setSentTo(null)}>
+            {t("auth.signup.sent.back")}
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title={t("auth.signup.title")}>
