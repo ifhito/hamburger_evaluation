@@ -78,7 +78,7 @@ describe("googleEnabled(API が、画面と別のオリジンにあるとき)", 
   });
 
   it("画面のオリジンが分からない環境(サーバー側の描画など)では、判断せず、meta の内容だけで決める", () => {
-    expect(googleEnabled(google, "https://api.example.com/api", undefined)).toBe(true);
-    expect(googleEnabled({ loginProviders: [] }, "https://api.example.com/api", undefined)).toBe(false);
+    expect(googleEnabled(google, "https://api.example.com/api", null)).toBe(true);
+    expect(googleEnabled({ loginProviders: [] }, "https://api.example.com/api", null)).toBe(false);
   });
 });
