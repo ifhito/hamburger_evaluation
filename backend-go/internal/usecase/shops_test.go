@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // fakeShopQuery は、手書きの usecase.ShopQuery の test double である。
@@ -80,8 +81,6 @@ func (f *fakeShopRepo) UpdateShopStatus(ctx context.Context, id int64, status do
 	return f.updateShopStatus(ctx, id, status, note)
 }
 
-func int64Ptr(v int64) *int64 { return &v }
-
 // TestShopsListPagination は、フォールバック規則を固定する。page の
 // デフォルトは 1、per_page のデフォルトは 20、per_page は 100 が上限で、
 // いずれもエラーにならない。
@@ -122,7 +121,7 @@ func TestShopsListPagination(t *testing.T) {
 // TestShopsListVisibilityDescriptor は、List が viewer から記述子を導出し、
 // それを変更せずに ShopQuery へ渡すことをアサートする。
 func TestShopsListVisibilityDescriptor(t *testing.T) {
-	admin := domain.User{ID: 5, Admin: true}
+	admin := domain.User{ID: uid.N(5), Admin: true}
 	var got domain.ShopVisibility
 	query := &fakeShopQuery{
 		listShops: func(_ context.Context, vis domain.ShopVisibility, _ string, _, _ int32) ([]domain.Shop, error) {
@@ -142,10 +141,10 @@ func TestShopsListVisibilityDescriptor(t *testing.T) {
 // detail を返し、隠された shop と未知の id はどちらも
 // domain.ErrShopNotFound を返す（usecase レベルでの AC4 と AC6）。
 func TestShopsGet(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"}
-	admin := domain.User{ID: 2, Admin: true}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	admin := domain.User{ID: uid.N(2), Admin: true}
 	pending := domain.ShopDetail{
-		Shop:    domain.Shop{ID: 10, Name: "Pending Shack", Status: domain.ShopStatusPending, CreatorID: int64Ptr(alice.ID)},
+		Shop:    domain.Shop{ID: 10, Name: "Pending Shack", Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID)},
 		Creator: &domain.UserRef{ID: alice.ID, Username: "alice"},
 	}
 	reviews := []domain.ShopReview{{ID: 3, Rating: 4, CreatedAt: time.Now()}}
@@ -210,7 +209,7 @@ func TestShopsGet(t *testing.T) {
 // する pending の shop を返し、空白の name は repository に触れずに validation
 // に失敗する（fake は panic する）。
 func TestShopsCreate(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
 
 	t.Run("viewer を creator とする pending の shop を作成する", func(t *testing.T) {
 		repo := &fakeShopRepo{
@@ -225,7 +224,7 @@ func TestShopsCreate(t *testing.T) {
 		}
 		want := domain.ShopDetail{
 			Shop: domain.Shop{
-				ID: 42, Name: "New Shack", Status: domain.ShopStatusPending, CreatorID: int64Ptr(alice.ID),
+				ID: 42, Name: "New Shack", Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID),
 			},
 			Creator: &domain.UserRef{ID: alice.ID, Username: "alice"},
 		}
@@ -258,7 +257,7 @@ func TestShopsCreate(t *testing.T) {
 // admin でない viewer に対して、repository へのアクセスの前に
 // domain.ErrForbidden を返す（ゼロ値の fake はどの呼び出しでも panic する）。
 func TestShopsAdminForbidden(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"} // 認証済みだが admin ではない
+	alice := domain.User{ID: uid.N(1), Username: "alice"} // 認証済みだが admin ではない
 	shops := newShops(&fakeShopQuery{}, &fakeShopRepo{})
 	ctx := context.Background()
 
@@ -284,7 +283,7 @@ func TestShopsAdminForbidden(t *testing.T) {
 // フィルタになり、status なしはすべてを意味し、未知の status は ShopQuery を
 // 呼ばずに空の結果へ short-circuit する。
 func TestShopsAdminList(t *testing.T) {
-	admin := domain.User{ID: 2, Admin: true}
+	admin := domain.User{ID: uid.N(2), Admin: true}
 	ctx := context.Background()
 
 	t.Run("status のフィルタはそのまま repository に渡される", func(t *testing.T) {
@@ -337,11 +336,11 @@ func TestShopsAdminList(t *testing.T) {
 // だけを永続化し（遷移では status/note、rename では name。fake はそれ以外の
 // 書き込みで panic する）、未知の id は domain.ErrShopNotFound を返す。
 func TestShopsModeration(t *testing.T) {
-	admin := domain.User{ID: 2, Admin: true}
+	admin := domain.User{ID: uid.N(2), Admin: true}
 	ctx := context.Background()
 	rejected := domain.ShopDetail{
-		Shop:    domain.Shop{ID: 10, Name: "Shack", Status: domain.ShopStatusRejected, ModerationNote: strPtr("old note"), CreatorID: int64Ptr(1)},
-		Creator: &domain.UserRef{ID: 1, Username: "alice"},
+		Shop:    domain.Shop{ID: 10, Name: "Shack", Status: domain.ShopStatusRejected, ModerationNote: strPtr("old note"), CreatorID: strPtr(uid.N(1))},
+		Creator: &domain.UserRef{ID: uid.N(1), Username: "alice"},
 	}
 	getRejected := func(_ context.Context, id int64) (domain.ShopDetail, error) {
 		if id == rejected.ID {

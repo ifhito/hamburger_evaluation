@@ -61,7 +61,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, params domain.CreateUse
 // トランザクションは rollback されるので、一部のフィールドだけが適用される
 // ことはない）。指定されたフィールドがゼロ個の場合は、現在の user を単純に
 // 参照するだけである（200 の no-op、Rails parity）。
-func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, changes domain.ProfileChanges) (domain.User, error) {
+func (r *UserRepository) UpdateUserProfile(ctx context.Context, id string, changes domain.ProfileChanges) (domain.User, error) {
 	if changes.Username == nil && changes.Email == nil && changes.PasswordDigest == nil {
 		return r.activeUserByID(ctx, id)
 	}
@@ -103,7 +103,7 @@ func (r *UserRepository) UpdateUserProfile(ctx context.Context, id int64, change
 // Rails parity。非表示化は読み取り側の u.discarded_at フィルタで行う）。
 // ただし、ListBurgerReviewFacts が discard 済みの user の review を除外する
 // ので、再計算によって、それらの review は stats から外れる。
-func (r *UserRepository) DiscardUser(ctx context.Context, id int64) error {
+func (r *UserRepository) DiscardUser(ctx context.Context, id string) error {
 	return withTx(ctx, r.db, "discard user", func(q *sqlcgen.Queries) error {
 		if _, err := q.DiscardUser(ctx, id); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -145,7 +145,7 @@ func mapUserWriteError(err error) error {
 // または domain.ErrUserNotFound を返す。UpdateUserProfile の no-op（変更する
 // フィールドがゼロ個の場合）のための、書き込みの内部の lookup であり、
 // domain.UserRepository には含まれない（読み取りは usecase.UserQuery）。
-func (r *UserRepository) activeUserByID(ctx context.Context, id int64) (domain.User, error) {
+func (r *UserRepository) activeUserByID(ctx context.Context, id string) (domain.User, error) {
 	row, err := r.q.GetActiveUserByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

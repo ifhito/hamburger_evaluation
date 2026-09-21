@@ -14,6 +14,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -36,7 +37,7 @@ type reviewStoreFake struct {
 	shops                 map[int64]domain.Shop
 	links                 map[int64][]int64 // shopID -> 紐づく burger の id
 	burgers               map[int64]domain.ShopReviewBurger
-	usernames             map[int64]string
+	usernames             map[string]string
 	seq                   int64
 	reviews               map[int64]*fakeStoredReview
 	err                   error
@@ -54,7 +55,7 @@ func newReviewStoreFake() *reviewStoreFake {
 		shops:     map[int64]domain.Shop{},
 		links:     map[int64][]int64{},
 		burgers:   map[int64]domain.ShopReviewBurger{},
-		usernames: map[int64]string{},
+		usernames: map[string]string{},
 		reviews:   map[int64]*fakeStoredReview{},
 	}
 }
@@ -254,10 +255,10 @@ const (
 // （activeShopID と active2ShopID）、（creatorID が作成した）pending な shop、
 // rejected な shop。そして、Cheese burger（統計あり）は上記 4 件すべての shop に
 // 紐づき、Plain burger（統計なし）は pending な shop のみに紐づく。
-func seedReviewWorld(creatorID int64) *reviewStoreFake {
+func seedReviewWorld(creatorID string) *reviewStoreFake {
 	repo := newReviewStoreFake()
 	repo.shops[activeShopID] = domain.Shop{ID: activeShopID, Name: "Active Diner", Status: domain.ShopStatusActive}
-	repo.shops[pendingShopID] = domain.Shop{ID: pendingShopID, Name: "Alice Pending", Status: domain.ShopStatusPending, CreatorID: shopPtr(creatorID)}
+	repo.shops[pendingShopID] = domain.Shop{ID: pendingShopID, Name: "Alice Pending", Status: domain.ShopStatusPending, CreatorID: &creatorID}
 	repo.shops[rejectedShopID] = domain.Shop{ID: rejectedShopID, Name: "Rejected Grill", Status: domain.ShopStatusRejected}
 	repo.shops[active2ShopID] = domain.Shop{ID: active2ShopID, Name: "Second Diner", Status: domain.ShopStatusActive}
 	repo.burgers[cheeseBurgerID] = domain.ShopReviewBurger{
@@ -297,11 +298,11 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewStoreFake) (router http.Han
 	repo.usernames[alice.ID] = "alice"
 	repo.usernames[bob.ID] = "bob"
 	repo.usernames[admin.ID] = "root"
-	token := func(id int64) string {
+	token := func(id string) string {
 		t.Helper()
 		tok, err := codec.Issue(id)
 		if err != nil {
-			t.Fatalf("issue token for %d: %v", id, err)
+			t.Fatalf("issue token for %s: %v", id, err)
 		}
 		return "Bearer " + tok
 	}
@@ -319,13 +320,13 @@ func newPhotoReviewsRouter(t *testing.T, repo *reviewStoreFake) (router http.Han
 // creator と admin は pending な shop に投稿できる。
 func TestCreateReview(t *testing.T) {
 	t.Run("AC1 認証済みユーザーが active な shop に投稿すると 201 を返し、一覧と詳細に現れる", func(t *testing.T) {
-		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"Tasty","shop_id":%d,"burger_id":%d}}`, activeShopID, cheeseBurgerID)
 		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
+		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -349,7 +350,7 @@ func TestCreateReview(t *testing.T) {
 	})
 
 	t.Run("AC2 review 可否のルール: rejected は全員 403、pending は creator と admin のみ投稿できる", func(t *testing.T) {
-		router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(1))
+		router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		post := func(auth string, shopID int64) *doResult {
 			body := fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d,"burger_id":%d}}`, shopID, cheeseBurgerID)
 			rec := do(router, http.MethodPost, "/reviews", body, auth)
@@ -381,7 +382,7 @@ func TestCreateReview(t *testing.T) {
 	})
 
 	t.Run("未知の shop と shop に紐づいていない burger はそれぞれの 404 body を返す", func(t *testing.T) {
-		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		rec := do(router, http.MethodPost, "/reviews",
 			fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":999,"burger_id":%d}}`, cheeseBurgerID), aliceAuth)
 		if rec.Code != http.StatusNotFound || rec.Body.String() != `{"error":"Shop not found"}` {
@@ -396,14 +397,14 @@ func TestCreateReview(t *testing.T) {
 	})
 
 	t.Run("burger_name は shop にある同名の burger を再利用する (S6 P3-1)", func(t *testing.T) {
-		repo := seedReviewWorld(1)
+		repo := seedReviewWorld(uid.N(1))
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"Tasty","shop_id":%d,"burger_name":"Cheese"}}`, activeShopID)
 		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
+		want := `{"id":1,"rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the existing Cheese burger %s", got, want)
@@ -414,7 +415,7 @@ func TestCreateReview(t *testing.T) {
 	})
 
 	t.Run("未知の burger_name は burger とその link を作成する (S6 P3-1)", func(t *testing.T) {
-		repo := seedReviewWorld(1)
+		repo := seedReviewWorld(uid.N(1))
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := fmt.Sprintf(`{"review":{"rating":5,"comment":"New","shop_id":%d,"burger_name":"Veggie"}}`, activeShopID)
 		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
@@ -422,7 +423,7 @@ func TestCreateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
 		// 作成された burger（fake の id 7）の統計はゼロである。
-		want := `{"id":1,"rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
+		want := `{"id":1,"rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":7,"name":"Veggie","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the created burger %s", got, want)
@@ -433,7 +434,7 @@ func TestCreateReview(t *testing.T) {
 	})
 
 	t.Run("正の burger_id は burger_name より優先される", func(t *testing.T) {
-		repo := seedReviewWorld(1)
+		repo := seedReviewWorld(uid.N(1))
 		router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"Both","shop_id":%d,"burger_id":%d,"burger_name":"Veggie"}}`,
 			activeShopID, cheeseBurgerID)
@@ -441,7 +442,7 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		want := `{"id":1,"rating":4,"comment":"Both","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":1,"username":"alice"},` +
+		want := `{"id":1,"rating":4,"comment":"Both","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the burger_id burger %s", got, want)
@@ -452,7 +453,7 @@ func TestCreateReview(t *testing.T) {
 	})
 
 	t.Run("burger_id も使える burger_name も無い場合は 422 を返す", func(t *testing.T) {
-		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		bodies := map[string]string{
 			"burger_id も burger_name も無い":    fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d}}`, activeShopID),
 			"空白のみの burger_name":              fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%d,"burger_name":"  "}}`, activeShopID),
@@ -472,7 +473,7 @@ func TestCreateReview(t *testing.T) {
 	})
 
 	t.Run("AC4 検証エラーは正確なメッセージ付きで 422 を返す", func(t *testing.T) {
-		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		post := func(rating int, comment string) *doResult {
 			body := fmt.Sprintf(`{"review":{"rating":%d,"comment":%q,"shop_id":%d,"burger_id":%d}}`,
 				rating, comment, activeShopID, cheeseBurgerID)
@@ -532,7 +533,7 @@ func seedFeed(t *testing.T, router http.Handler, aliceAuth string) (cheeseReview
 // 提供されている burger の review だけが現れ（active な link が重複していても
 // それぞれちょうど 1 回だけ）、新しい順で、pagination される。
 func TestListReviews(t *testing.T) {
-	repo := seedReviewWorld(1)
+	repo := seedReviewWorld(uid.N(1))
 	router, aliceAuth, _, _ := newReviewsRouter(t, repo)
 	cheeseReviewID, plainReviewID := seedFeed(t, router, aliceAuth)
 
@@ -542,7 +543,7 @@ func TestListReviews(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 		want := fmt.Sprintf(`[{"id":%d,"rating":4,"comment":"On cheese","created_at":"2024-06-01T12:01:00Z",`+
-			`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}]`,
+			`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}]`,
 			cheeseReviewID)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -610,7 +611,7 @@ func TestListReviews(t *testing.T) {
 // fail-loud な 422（rating/shop_id については Rails の、黙って 0 に cast する
 // 挙動からの意図的な乖離。user_id は Rails に対応物がなく同じ形に揃えている）。
 func TestListReviewsFilters(t *testing.T) {
-	repo := seedReviewWorld(1)
+	repo := seedReviewWorld(uid.N(1))
 	router, aliceAuth, bobAuth, _ := newReviewsRouter(t, repo)
 	// review 1：rating 4 の "On cheese"（Cheese、active な shop）。review 2：
 	// rating 4 の "On plain"（Plain、pending のみ、feed からは隠される）。
@@ -672,15 +673,15 @@ func TestListReviewsFilters(t *testing.T) {
 	t.Run("user_id はその user の公開 review だけを残す", func(t *testing.T) {
 		// alice（id 1）の pending な shop だけの review（onPlain）は、user_id を
 		// 指定しても公開ルールにより現れない。
-		get(t, "?user_id=1", []string{smoky, onCheese}, []string{bobs, onPlain})
-		get(t, "?user_id=2", []string{bobs}, []string{smoky, onCheese, onPlain})
+		get(t, "?user_id="+uid.N(1), []string{smoky, onCheese}, []string{bobs, onPlain})
+		get(t, "?user_id="+uid.N(2), []string{bobs}, []string{smoky, onCheese, onPlain})
 	})
 
-	t.Run("user_id は整数として usecase に渡される", func(t *testing.T) {
+	t.Run("user_id は UUID の文字列として usecase に渡される", func(t *testing.T) {
 		repo.listFilters = nil
-		get(t, "?user_id=42", nil, nil)
-		if len(repo.listFilters) != 1 || repo.listFilters[0].UserID == nil || *repo.listFilters[0].UserID != 42 {
-			t.Errorf("filters = %+v, want exactly one with UserID 42", repo.listFilters)
+		get(t, "?user_id="+uid.N(42), nil, nil)
+		if len(repo.listFilters) != 1 || repo.listFilters[0].UserID == nil || *repo.listFilters[0].UserID != uid.N(42) {
+			t.Errorf("filters = %+v, want exactly one with UserID %s", repo.listFilters, uid.N(42))
 		}
 	})
 
@@ -694,12 +695,12 @@ func TestListReviewsFilters(t *testing.T) {
 
 	t.Run("filter は AND で結合される", func(t *testing.T) {
 		get(t, fmt.Sprintf("?shop_id=%d&rating=5&keyword=veggie", active2ShopID), []string{smoky}, []string{onCheese})
-		get(t, "?user_id=1&rating=4", []string{onCheese}, []string{smoky, bobs})
-		get(t, "?user_id=2&rating=4", nil, []string{onCheese, smoky, bobs})
+		get(t, "?user_id="+uid.N(1)+"&rating=4", []string{onCheese}, []string{smoky, bobs})
+		get(t, "?user_id="+uid.N(2)+"&rating=4", nil, []string{onCheese, smoky, bobs})
 	})
 
 	t.Run("一致なしは null ではなく空の JSON 配列を返す", func(t *testing.T) {
-		for _, query := range []string{"?rating=2", "?keyword=zzz", "?shop_id=999", "?user_id=999", "?rating=5&keyword=cheese"} {
+		for _, query := range []string{"?rating=2", "?keyword=zzz", "?shop_id=999", "?user_id=" + uid.N(999), "?rating=5&keyword=cheese"} {
 			rec := do(router, http.MethodGet, "/reviews"+query, "", "")
 			if rec.Code != http.StatusOK || rec.Body.String() != `[]` {
 				t.Errorf("GET /reviews%s = %d %s, want 200 []", query, rec.Code, rec.Body)
@@ -711,7 +712,7 @@ func TestListReviewsFilters(t *testing.T) {
 		get(t, "?rating=&keyword=&shop_id=&user_id=", []string{smoky, onCheese}, []string{onPlain})
 	})
 
-	t.Run("整数でない rating と shop_id と user_id は 422 で明示的に失敗し、usecase を呼ばない", func(t *testing.T) {
+	t.Run("整数でない rating と shop_id、UUID の正規形でない user_id は 422 で明示的に失敗し、usecase を呼ばない", func(t *testing.T) {
 		tests := []struct {
 			query    string
 			wantBody string
@@ -719,14 +720,15 @@ func TestListReviewsFilters(t *testing.T) {
 			{query: "?rating=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
 			{query: "?rating=4.5", wantBody: `{"errors":["Rating must be an integer"]}`},
 			{query: "?shop_id=abc", wantBody: `{"errors":["Shop id must be an integer"]}`},
-			{query: "?user_id=abc", wantBody: `{"errors":["User id must be an integer"]}`},
-			{query: "?user_id=1.5", wantBody: `{"errors":["User id must be an integer"]}`},
-			// int64 を超える値も整数として受け付けない。
-			{query: "?user_id=9223372036854775808", wantBody: `{"errors":["User id must be an integer"]}`},
+			{query: "?user_id=abc", wantBody: `{"errors":["User id must be a valid UUID"]}`},
+			// 旧形式の整数、大文字の UUID、ハイフンのない UUID は、正規形ではないので受け付けない。
+			{query: "?user_id=1", wantBody: `{"errors":["User id must be a valid UUID"]}`},
+			{query: "?user_id=0B0E3A5C-8D54-4C1A-9F33-2A9D6F1C7E10", wantBody: `{"errors":["User id must be a valid UUID"]}`},
+			{query: "?user_id=0b0e3a5c8d544c1a9f332a9d6f1c7e10", wantBody: `{"errors":["User id must be a valid UUID"]}`},
 			// パースの順序は rating、shop_id、user_id である。
 			{query: "?rating=abc&shop_id=abc&user_id=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
 			{query: "?shop_id=abc&user_id=abc", wantBody: `{"errors":["Shop id must be an integer"]}`},
-			{query: "?rating=4&shop_id=1&user_id=abc", wantBody: `{"errors":["User id must be an integer"]}`},
+			{query: "?rating=4&shop_id=1&user_id=abc", wantBody: `{"errors":["User id must be a valid UUID"]}`},
 		}
 		repo.listFilters = nil
 		for _, tt := range tests {
@@ -769,7 +771,7 @@ func containsJSONID(t *testing.T, body string, id int64) bool {
 // TestGetReviewNotFound は一様な review の 404 を扱う：未知の id、数値でない
 // id、discard 済みの review は、まったく同じ body を共有する。
 func TestGetReviewNotFound(t *testing.T) {
-	router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+	router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
 	if rec := do(router, http.MethodDelete, fmt.Sprintf("/reviews/%d", cheeseReviewID), "", aliceAuth); rec.Code != http.StatusNoContent {
 		t.Fatalf("seed delete: status = %d (body %s)", rec.Code, rec.Body)
@@ -791,7 +793,7 @@ func TestGetReviewNotFound(t *testing.T) {
 // 変更が反映される。それ以外の全員（admin を含む）は 403 になり、validation の
 // 失敗は 422、未知の review は 404 になる。
 func TestUpdateReview(t *testing.T) {
-	router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(1))
+	router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
 	path := fmt.Sprintf("/reviews/%d", cheeseReviewID)
 	editBody := `{"review":{"rating":5,"comment":"Even better"}}`
@@ -811,7 +813,7 @@ func TestUpdateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 		want := fmt.Sprintf(`{"id":%d,"rating":5,"comment":"Even better","created_at":"2024-06-01T12:01:00Z",`+
-			`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
+			`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
 			cheeseReviewID)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -846,7 +848,7 @@ func TestUpdateReview(t *testing.T) {
 // body に含まれる shop_id/burger_id は黙って無視される。response（とその後の
 // GET）は、rating/comment だけが更新された元の burger を示し続ける。
 func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
-	router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+	router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
 	path := fmt.Sprintf("/reviews/%d", cheeseReviewID)
 
@@ -859,7 +861,7 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
 	want := fmt.Sprintf(`{"id":%d,"rating":2,"comment":"Tampered","created_at":"2024-06-01T12:01:00Z",`+
-		`"photo_url":null,"user":{"id":1,"username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
+		`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":5,"name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}}`,
 		cheeseReviewID)
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want the original burger with updated content %s", got, want)
@@ -882,7 +884,7 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 // author だけであり（204、body なし）、その後、その review は detail と
 // feed から消え、2 回目の delete は 404 になる。
 func TestDeleteReview(t *testing.T) {
-	router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(1))
+	router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	cheeseReviewID, _ := seedFeed(t, router, aliceAuth)
 	path := fmt.Sprintf("/reviews/%d", cheeseReviewID)
 
@@ -919,7 +921,7 @@ func TestDeleteReview(t *testing.T) {
 // 書き込みは repository へのアクセスより前に拒否され、一方で読み取りは
 // 開かれたままである。
 func TestReviewsRequireAuth(t *testing.T) {
-	router, _, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+	router, _, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	const unauthorized = `{"error":"Unauthorized"}`
 
 	tests := []struct {

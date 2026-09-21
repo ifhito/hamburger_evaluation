@@ -16,6 +16,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -43,8 +44,8 @@ func TestReviewRepository(t *testing.T) {
 	reviewQuery := query.NewReviewQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
-	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
-	carol := insertRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
+	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+	carol := insertUserRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
 	// status のコード：0=pending、1=active、2=rejected。
@@ -429,11 +430,11 @@ func TestReviewRepositoryListByUser(t *testing.T) {
 	reviewQuery := query.NewReviewQuery(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
-	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
-	bob := insertRow(ctx, t, conn, insertUser, "bob@example.com", "bob", false)
-	carol := insertRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
-	dave := insertRow(ctx, t, conn, insertUser, "dave@example.com", "dave", false)
-	erin := insertRow(ctx, t, conn, insertUser, "erin@example.com", "erin", false)
+	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+	bob := insertUserRow(ctx, t, conn, insertUser, "bob@example.com", "bob", false)
+	carol := insertUserRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
+	dave := insertUserRow(ctx, t, conn, insertUser, "dave@example.com", "dave", false)
+	erin := insertUserRow(ctx, t, conn, insertUser, "erin@example.com", "erin", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
 	// status のコード：0=pending、1=active、2=rejected。
@@ -481,7 +482,7 @@ func TestReviewRepositoryListByUser(t *testing.T) {
 		}
 		return reviewIDs(reviews)
 	}
-	byUser := func(id int64) usecase.ReviewListFilter { return usecase.ReviewListFilter{UserID: &id} }
+	byUser := func(id string) usecase.ReviewListFilter { return usecase.ReviewListFilter{UserID: &id} }
 
 	t.Run("AC1 UserID はその user の公開 review だけを新しい順に pagination して返す", func(t *testing.T) {
 		if got, want := list(t, byUser(alice), 20, 0), aliceIDs[:20]; !reflect.DeepEqual(got, want) {
@@ -527,7 +528,7 @@ func TestReviewRepositoryListByUser(t *testing.T) {
 		if got := list(t, byUser(carol), 100, 0); !reflect.DeepEqual(got, []int64{}) {
 			t.Errorf("discarded carol = %v, want empty", got)
 		}
-		if got := list(t, byUser(999999), 100, 0); !reflect.DeepEqual(got, []int64{}) {
+		if got := list(t, byUser(uid.N(999999)), 100, 0); !reflect.DeepEqual(got, []int64{}) {
 			t.Errorf("unknown user = %v, want empty", got)
 		}
 	})
@@ -571,7 +572,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 	repo := repository.NewReviewRepository(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
-	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
 	shopA := insertRow(ctx, t, conn, insertShop, "Shop A", 1, nil, alice)
@@ -672,7 +673,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 	t.Run("insert に失敗しても孤立した burger や link は commit されない", func(t *testing.T) {
 		// 未知の author は、burger と link の insert の後で reviews.user_id の
 		// FK に違反する。トランザクション全体が rollback されなければならない。
-		review := domain.Review{Rating: 4, AuthorID: 99999}
+		review := domain.Review{Rating: 4, AuthorID: uid.N(99999)}
 		if _, _, err := repo.CreateReviewForNamedBurger(ctx, shopA, "Ghost", review); err == nil {
 			t.Fatal("CreateReviewForNamedBurger returned nil error, want the FK failure")
 		}
@@ -682,7 +683,7 @@ func TestReviewRepositoryCreateReviewForNamedBurger(t *testing.T) {
 		if got := countRows(t, `SELECT count(*) FROM shops_burgers sb JOIN burgers b ON b.id = sb.burger_id WHERE b.name = 'Ghost'`); got != 0 {
 			t.Errorf("Ghost link rows = %d, want none", got)
 		}
-		if got := countRows(t, `SELECT count(*) FROM reviews WHERE user_id = 99999`); got != 0 {
+		if got := countRows(t, `SELECT count(*) FROM reviews WHERE user_id = $1`, uid.N(99999)); got != 0 {
 			t.Errorf("review rows = %d, want none", got)
 		}
 	})
@@ -732,7 +733,7 @@ func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID
 	type factRow struct {
 		rating    int16
 		createdAt time.Time
-		userID    int64
+		userID    string
 	}
 	var factRows []factRow
 	for rows.Next() {
@@ -758,7 +759,7 @@ func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID
 
 // keptRatingsOf は、user の、すべての burger にわたる kept な rating を id の
 // 昇順で返す（reviewer-trust の履歴）。
-func keptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID int64) []float64 {
+func keptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID string) []float64 {
 	t.Helper()
 	rows, err := conn.Query(ctx,
 		`SELECT rating FROM reviews WHERE user_id = $1 AND discarded_at IS NULL ORDER BY id`, userID)
@@ -807,7 +808,7 @@ func requireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, b
 }
 
 // mustCreateReview は repository を通して review を構築し永続化する。
-func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID, burgerID int64) domain.Review {
+func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID string, burgerID int64) domain.Review {
 	t.Helper()
 	review, err := domain.NewReview(rating, comment, authorID, burgerID)
 	if err != nil {
@@ -834,8 +835,8 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 	repo := repository.NewReviewRepository(conn)
 
 	insertUser := `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
-	alice := insertRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
-	bob := insertRow(ctx, t, conn, insertUser, "bob@example.com", "bob", false)
+	alice := insertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
+	bob := insertUserRow(ctx, t, conn, insertUser, "bob@example.com", "bob", false)
 
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
 	burger := insertRow(ctx, t, conn, insertBurger, "Stats Burger")
@@ -899,7 +900,7 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 
 	t.Run("AC4 discard 済みの user の review と履歴は除外される", func(t *testing.T) {
 		ac4Burger := insertRow(ctx, t, conn, insertBurger, "AC4 Burger")
-		carl := insertRow(ctx, t, conn, insertUser, "carl@example.com", "carl", false)
+		carl := insertUserRow(ctx, t, conn, insertUser, "carl@example.com", "carl", false)
 		aliceAC4 := mustCreateReview(ctx, t, repo, 5, "mine stays", alice, ac4Burger)
 		mustCreateReview(ctx, t, repo, 2, "mine vanishes", carl, ac4Burger)
 		if got := requireConsistentStats(ctx, t, conn, ac4Burger); got.ReviewCount != 2 {
@@ -943,8 +944,8 @@ func TestReviewRepositoryBurgerStats(t *testing.T) {
 		t.Cleanup(pool.Close)
 		poolRepo := repository.NewReviewRepository(pool)
 
-		dave := insertRow(ctx, t, conn, insertUser, "dave@example.com", "dave", false)
-		erin := insertRow(ctx, t, conn, insertUser, "erin@example.com", "erin", false)
+		dave := insertUserRow(ctx, t, conn, insertUser, "dave@example.com", "dave", false)
+		erin := insertUserRow(ctx, t, conn, insertUser, "erin@example.com", "erin", false)
 
 		// FOR UPDATE による直列化がなければ、2 つのトランザクションはどちらも
 		// 相手の review が欠けたスナップショットを読み、後の upsert が
@@ -1029,7 +1030,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 	repo := repository.NewReviewRepository(conn)
 	reviewQuery := query.NewReviewQuery(conn)
 
-	alice := insertRow(ctx, t, conn,
+	alice := insertUserRow(ctx, t, conn,
 		`INSERT INTO users (email, username, password_digest) VALUES ($1, $2, 'x') RETURNING id`,
 		"alice@example.com", "alice")
 	shop := insertRow(ctx, t, conn,

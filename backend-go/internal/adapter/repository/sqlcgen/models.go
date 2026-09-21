@@ -28,7 +28,7 @@ type Review struct {
 	ID          int64
 	Rating      int16
 	Comment     pgtype.Text
-	UserID      int64
+	UserID      string
 	BurgerID    int64
 	DiscardedAt pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
@@ -41,7 +41,7 @@ type Shop struct {
 	Name           string
 	Status         int16
 	ModerationNote pgtype.Text
-	CreatorID      pgtype.Int8
+	CreatorID      *string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -52,7 +52,7 @@ type ShopsBurger struct {
 }
 
 type SignupVerification struct {
-	ID             pgtype.UUID
+	ID             string
 	Email          string
 	Username       string
 	PasswordDigest string
@@ -63,7 +63,7 @@ type SignupVerification struct {
 }
 
 type User struct {
-	ID             int64
+	ID             string
 	Email          string
 	Username       string
 	PasswordDigest string

@@ -54,7 +54,7 @@ RETURNING id
 // 列を限定した soft delete：discarded_at にタイムスタンプを設定するだけで、
 // しかも 1 回だけ行う。すでに discard 済みの user はどの行にもマッチせず、
 // not found として現れる（DiscardReview に対応する）。
-func (q *Queries) DiscardUser(ctx context.Context, id int64) (int64, error) {
+func (q *Queries) DiscardUser(ctx context.Context, id string) (string, error) {
 	row := q.db.QueryRow(ctx, discardUser, id)
 	err := row.Scan(&id)
 	return id, err
@@ -86,7 +86,7 @@ SELECT id, email, username, password_digest, admin, discarded_at, created_at, up
 WHERE id = $1 AND discarded_at IS NULL
 `
 
-func (q *Queries) GetActiveUserByID(ctx context.Context, id int64) (User, error) {
+func (q *Queries) GetActiveUserByID(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRow(ctx, getActiveUserByID, id)
 	var i User
 	err := row.Scan(
@@ -107,7 +107,7 @@ SELECT id, email, username, password_digest, admin, discarded_at, created_at, up
 WHERE id = $1
 `
 
-func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
+func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRow(ctx, getUser, id)
 	var i User
 	err := row.Scan(
@@ -132,7 +132,7 @@ RETURNING id, email, username, password_digest, admin, discarded_at, created_at,
 `
 
 type UpdateUserEmailParams struct {
-	ID    int64
+	ID    string
 	Email string
 }
 
@@ -163,7 +163,7 @@ RETURNING id, email, username, password_digest, admin, discarded_at, created_at,
 `
 
 type UpdateUserPasswordDigestParams struct {
-	ID             int64
+	ID             string
 	PasswordDigest string
 }
 
@@ -194,7 +194,7 @@ RETURNING id, email, username, password_digest, admin, discarded_at, created_at,
 `
 
 type UpdateUserUsernameParams struct {
-	ID       int64
+	ID       string
 	Username string
 }
 

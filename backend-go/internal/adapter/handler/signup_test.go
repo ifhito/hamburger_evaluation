@@ -17,6 +17,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -188,8 +189,8 @@ func TestSignupConfirmFlow(t *testing.T) {
 		t.Fatalf("confirm status = %d, want 201 (body %s)", rec.Code, rec.Body)
 	}
 	user := decodeAuthUser(t, rec.Body.Bytes())
-	if user.ID != 1 || user.Username != "alice" || user.Email != "alice@example.com" || user.Admin || user.Token == "" {
-		t.Errorf("confirm body = %+v, want id=1 alice alice@example.com admin=false と token", user)
+	if user.ID != uid.N(1) || user.Username != "alice" || user.Email != "alice@example.com" || user.Admin || user.Token == "" {
+		t.Errorf("confirm body = %+v, want id=%s alice alice@example.com admin=false と token", user, uid.N(1))
 	}
 	if rec := do(kit.router, http.MethodPost, "/logout", "", "Bearer "+user.Token); rec.Code != http.StatusOK {
 		t.Errorf("logout status = %d, want 200", rec.Code)

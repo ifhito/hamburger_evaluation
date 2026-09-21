@@ -109,7 +109,7 @@ func TestSignupVerificationRepository(t *testing.T) {
 		if err != nil {
 			t.Fatalf("確認 returned error: %v", err)
 		}
-		if user.ID == 0 || user.Username != "alice" || user.Email != "Alice@Example.com" || user.Admin {
+		if !domain.IsUUID(user.ID) || user.Username != "alice" || user.Email != "Alice@Example.com" || user.Admin {
 			t.Errorf("作られた user = %+v", user)
 		}
 		var digest string

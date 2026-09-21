@@ -84,7 +84,8 @@ backend-go/
 
 - **:8080** で待ち受け、ヘルスチェックは `GET /up`。
 - 専用の Postgres を使う (ホストのポートは 5433)。
-- 認証は **JWT**。ログイン時にトークンを返し、以降は `Authorization: Bearer <token>` で送る。`JWT_SECRET` が未設定だと起動時にエラーで落ちる(fail-loud)ため、`docker compose up` の前に export する。
+- ユーザーの ID は **UUID**(小文字・ハイフン区切りの正規形。DB の `gen_random_uuid()` が v4 で生成する)。URL・API・JWT(`user_id` claim)・frontend では、この文字列をそのまま扱う。正規形でない ID(大文字・ハイフンなし・整数)は、パスの `{id}` では存在しないものと同じ 404、`user_id` クエリでは 422 にする(形式の判定は `domain.IsUUID` だけが持ち、frontend は判定しない)。shop・burger・review の ID は、当面は連番の bigint(S29・S30 で UUID にする)。
+- 認証は **JWT**。ログイン時にトークンを返し、以降は `Authorization: Bearer <token>` で送る。`user_id` が数値の旧形式のトークンは無効(401)。`JWT_SECRET` が未設定だと起動時にエラーで落ちる(fail-loud)ため、`docker compose up` の前に export する。
 - signup は**メール確認つき**で、確認メールの送信設定(`SMTP_HOST`・`SMTP_PORT`・`MAIL_FROM`・`APP_BASE_URL`)が欠けていると起動時に落ちる。開発では compose の Mailpit が受け取る(`docker compose up` で足りる。Web UI は http://localhost:8025)。詳細は「signup の確認メール」。
 
 ### signup の確認メール
@@ -189,7 +190,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `POST /shops` — ショップの申請 (要認証)
 
 **レビュー**
-- `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリで、そのユーザーの公開レビューだけに絞り込める。`page` / `per_page` の扱いは `GET /shops` と同じ)
+- `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリ(ユーザーの UUID。正規形でなければ 422 `User id must be a valid UUID`)で、そのユーザーの公開レビューだけに絞り込める。`page` / `per_page` の扱いは `GET /shops` と同じ)
 - `GET /reviews/:id` — レビュー 1 件の取得
 - `POST /reviews` — レビューの投稿 (要認証)
 - `PUT /reviews/:id` — レビューの更新 (要認証)
@@ -199,7 +200,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `GET /photos/*` — ディスクに保存されたレビュー写真を配信 (認証不要。末尾が `/` のディレクトリ path は一覧せず 404、末尾 `/` なしは 301 で `/` 付きへ転送されてから 404)。`PHOTO_STORAGE` が `disk` (既定) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 
 **ユーザー**
-- `GET /users/:id` — ユーザーを 1 人取得 (認証は任意。存在しない・退会済み・整数でない id は同一の 404。本人が閲覧したときだけ email・admin を含む)
+- `GET /users/:id` — ユーザーを 1 人取得 (認証は任意。存在しない・退会済み・UUID の正規形でない id は同一の 404。本人が閲覧したときだけ email・admin を含む)
 - `PUT /users/:id` — ユーザーの更新 (要認証。本人のみ。usecase で判定。email を変更するときは、signup と同じ形式の検証を行う)
 - `DELETE /users/:id` — ユーザーの削除 (要認証。本人のみ。usecase で判定)
 
@@ -213,7 +214,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 `backend-go/db/migrations/` のマイグレーションで定義された 7 つのテーブル:
 
-- **users** — id, email, username, password_digest, admin フラグ, 論理削除 (discarded_at)
+- **users** — id (uuid), email, username, password_digest, admin フラグ, 論理削除 (discarded_at)
 - **shops** — name, モデレーション状態 (pending / active / rejected), moderation_note, 申請者への FK
 - **burgers** — 中間テーブル経由でショップに紐づくバーガー
 - **shops_burgers** *(中間テーブル)* — shop_id (FK), burger_id (FK)

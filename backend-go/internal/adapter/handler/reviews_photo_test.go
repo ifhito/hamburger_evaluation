@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // jpegBytes は、末尾を 0 で size バイトまで埋めた、デコード可能な JPEG を返す
@@ -138,7 +140,7 @@ func createPhotoReview(t *testing.T, router http.Handler, auth string, photo []b
 // ファイルが disk 上に置かれ、detail エンドポイントが同じ photo_url を
 // そのまま返し、photo 自体が GET /photos/ の配下で配信される。
 func TestCreateReviewWithPhoto(t *testing.T) {
-	router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
+	router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	id, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 2_000_000))
 
 	if !strings.HasPrefix(photoURL, "/photos/reviews/") || !strings.HasSuffix(photoURL, ".jpg") {
@@ -170,7 +172,7 @@ func TestCreateReviewWithPhoto(t *testing.T) {
 // 宣言された PDF は 422 "unsupported" である。判定するのは magic bytes であり、
 // 宣言では決してない。photo part の重複は不正な body（400）である。
 func TestCreateReviewPhotoRejections(t *testing.T) {
-	router, _, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
+	router, _, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	fields := map[string]string{
 		"rating":    "4",
 		"comment":   "Tasty",
@@ -245,7 +247,7 @@ func TestCreateReviewPhotoRejections(t *testing.T) {
 // TestDeleteReviewWithPhoto は S10 AC4 を扱う：photo 付きの review を削除すると
 // 204 を返し、disk 上のファイルを best-effort で削除する。
 func TestDeleteReviewWithPhoto(t *testing.T) {
-	router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
+	router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	id, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 	path := photoPath(t, photoDir, photoURL)
 	if _, err := os.Stat(path); err != nil {
@@ -267,7 +269,7 @@ func TestDeleteReviewWithPhoto(t *testing.T) {
 // photo に手を触れない。
 func TestUpdateReviewPhoto(t *testing.T) {
 	t.Run("AC5 新しい photo は url とファイルを入れ替える", func(t *testing.T) {
-		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
+		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		id, oldURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 		oldPath := photoPath(t, photoDir, oldURL)
 
@@ -295,7 +297,7 @@ func TestUpdateReviewPhoto(t *testing.T) {
 	})
 
 	t.Run("photo を含まない JSON の update は photo を保持する", func(t *testing.T) {
-		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
+		router, photoDir, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		id, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 
 		rec := do(router, http.MethodPut, fmt.Sprintf("/reviews/%d", id),
@@ -320,7 +322,7 @@ func TestUpdateReviewPhoto(t *testing.T) {
 // 検証する：エンコードされた ".." のパスは 400/404 を返し、photo dir の外の
 // ファイルは決して返さない。
 func TestPhotoTraversal(t *testing.T) {
-	router, photoDir, _, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
+	router, photoDir, _, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	secret := filepath.Join(filepath.Dir(photoDir), "secret.txt")
 	if err := os.WriteFile(secret, []byte("top secret"), 0o600); err != nil {
 		t.Fatalf("write secret fixture: %v", err)
@@ -344,7 +346,7 @@ func TestPhotoTraversal(t *testing.T) {
 // すなわちマウントの root と、保存済みファイルを含む既存の reviews/
 // サブディレクトリは、404 を返し、保存済みの key を決して列挙しない。
 func TestPhotoDirectoryRequests(t *testing.T) {
-	router, _, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(1))
+	router, _, aliceAuth, _, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	// 保存済みの photo によって、reviews/ サブディレクトリがファイル付きで
 	// 存在することが保証される。
 	_, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
@@ -366,7 +368,7 @@ func TestPhotoDirectoryRequests(t *testing.T) {
 // なしで上限を通過したことを示す）、6 MiB を超える body は 413 で拒否し、
 // それ以外のすべての route はグローバルな 1 MiB の上限を保つ。
 func TestReviewBodyLimit(t *testing.T) {
-	router, _, _, _ := newReviewsRouter(t, seedReviewWorld(1))
+	router, _, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 	twoMiB := strings.Repeat("a", 2<<20)
 	sevenMiB := strings.Repeat("a", 7<<20)
 

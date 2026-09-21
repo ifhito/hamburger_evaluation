@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -14,12 +15,12 @@ func ptr[T any](v T) *T { return &v }
 // 匿名の viewer は active な shop のみ見え、通常のユーザーは自分が作成した
 // shop（どの status でも）も見え、admin はすべて見える。
 func TestShopVisibility(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"}
-	admin := domain.User{ID: 2, Username: "root", Admin: true}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	admin := domain.User{ID: uid.N(2), Username: "root", Admin: true}
 
 	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
 	pendingOwn := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
-	pendingOther := domain.Shop{ID: 12, Status: domain.ShopStatusPending, CreatorID: ptr(int64(99))}
+	pendingOther := domain.Shop{ID: 12, Status: domain.ShopStatusPending, CreatorID: ptr(uid.N(99))}
 	rejectedNoCreator := domain.Shop{ID: 13, Status: domain.ShopStatusRejected}
 
 	tests := []struct {
@@ -54,9 +55,9 @@ func TestShopVisibility(t *testing.T) {
 // shop は認証済みの誰でも reviewable であり、pending な shop はその creator か
 // admin のみが reviewable である。
 func TestShopCanBeReviewedBy(t *testing.T) {
-	alice := domain.User{ID: 1, Username: "alice"}
-	bob := domain.User{ID: 2, Username: "bob"}
-	admin := domain.User{ID: 3, Username: "root", Admin: true}
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	bob := domain.User{ID: uid.N(2), Username: "bob"}
+	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
 
 	activeShop := domain.Shop{ID: 10, Status: domain.ShopStatusActive}
 	pendingOwn := domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: ptr(alice.ID)}
@@ -91,7 +92,7 @@ func TestShopCanBeReviewedBy(t *testing.T) {
 // ホワイトスペースのみの名前は、Rails のメッセージそのままで失敗する。
 func TestNewShopSubmission(t *testing.T) {
 	t.Run("有効な名前なら creator 付きの pending な shop になる", func(t *testing.T) {
-		shop, err := domain.NewShopSubmission("New Shack", 7)
+		shop, err := domain.NewShopSubmission("New Shack", uid.N(7))
 		if err != nil {
 			t.Fatalf("NewShopSubmission returned error: %v", err)
 		}
@@ -101,14 +102,14 @@ func TestNewShopSubmission(t *testing.T) {
 		if shop.ModerationNote != nil {
 			t.Errorf("ModerationNote = %v, want nil", *shop.ModerationNote)
 		}
-		if shop.CreatorID == nil || *shop.CreatorID != 7 {
-			t.Errorf("CreatorID = %v, want 7", shop.CreatorID)
+		if shop.CreatorID == nil || *shop.CreatorID != uid.N(7) {
+			t.Errorf("CreatorID = %v, want %v", shop.CreatorID, uid.N(7))
 		}
 	})
 
 	for _, name := range []string{"", "   ", "\t\n"} {
 		t.Run("空または空白のみの名前 "+name+" は検証エラーになる", func(t *testing.T) {
-			_, err := domain.NewShopSubmission(name, 7)
+			_, err := domain.NewShopSubmission(name, uid.N(7))
 			var vErr *domain.ValidationError
 			if !errors.As(err, &vErr) {
 				t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -180,10 +181,10 @@ func TestShopVisibilityFor(t *testing.T) {
 	if vis := domain.ShopVisibilityFor(nil); vis.ViewAll || vis.ViewerID != nil {
 		t.Errorf("anonymous descriptor = %+v, want zero", vis)
 	}
-	if vis := domain.ShopVisibilityFor(&domain.User{ID: 7}); vis.ViewAll || vis.ViewerID == nil || *vis.ViewerID != 7 {
-		t.Errorf("user descriptor = %+v, want ViewerID=7", vis)
+	if vis := domain.ShopVisibilityFor(&domain.User{ID: uid.N(7)}); vis.ViewAll || vis.ViewerID == nil || *vis.ViewerID != uid.N(7) {
+		t.Errorf("user descriptor = %+v, want ViewerID=%s", vis, uid.N(7))
 	}
-	if vis := domain.ShopVisibilityFor(&domain.User{ID: 7, Admin: true}); !vis.ViewAll || vis.ViewerID != nil {
+	if vis := domain.ShopVisibilityFor(&domain.User{ID: uid.N(7), Admin: true}); !vis.ViewAll || vis.ViewerID != nil {
 		t.Errorf("admin descriptor = %+v, want ViewAll", vis)
 	}
 }

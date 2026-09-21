@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -63,7 +64,7 @@ var notRegistered = &fakeUserQuery{
 
 var alreadyRegistered = &fakeUserQuery{
 	getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
-		return usecase.UserCredentials{User: domain.User{ID: 7, Username: "alice", Email: "a@example.com"}, PasswordDigest: "digest(existing)"}, nil
+		return usecase.UserCredentials{User: domain.User{ID: uid.N(7), Username: "alice", Email: "a@example.com"}, PasswordDigest: "digest(existing)"}, nil
 	},
 }
 
@@ -361,7 +362,7 @@ func TestSignupsConfirm(t *testing.T) {
 		var gotHash string
 		repo := &fakeSignupRepo{confirm: func(_ context.Context, tokenHash string) (domain.User, error) {
 			gotHash = tokenHash
-			return domain.User{ID: 5, Username: "alice", Email: "a@example.com"}, nil
+			return domain.User{ID: uid.N(5), Username: "alice", Email: "a@example.com"}, nil
 		}}
 		user, token, err := newSignups(notRegistered, repo, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig).
 			Confirm(context.Background(), "raw-token")
@@ -371,11 +372,11 @@ func TestSignupsConfirm(t *testing.T) {
 		if gotHash != domain.HashSignupToken("raw-token") {
 			t.Errorf("repository へ渡した値 = %q, want HashSignupToken(raw-token)", gotHash)
 		}
-		if want := (domain.User{ID: 5, Username: "alice", Email: "a@example.com"}); user != want {
+		if want := (domain.User{ID: uid.N(5), Username: "alice", Email: "a@example.com"}); user != want {
 			t.Errorf("user = %+v, want %+v", user, want)
 		}
-		if token != "token-for-5" {
-			t.Errorf("token = %q, want token-for-5", token)
+		if want := "token-for-" + uid.N(5); token != want {
+			t.Errorf("token = %q, want %q", token, want)
 		}
 	})
 

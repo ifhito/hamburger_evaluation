@@ -8,3 +8,14 @@ sql:
         package: "sqlcgen"
         out: "internal/adapter/repository/sqlcgen"
         sql_package: "pgx/v5"
+        # uuid はドメインと同じく正規形の文字列で扱う(NULL 許容の列は *string)。
+        # pgtype.UUID を adapter の中に広げないため。
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              type: "string"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true

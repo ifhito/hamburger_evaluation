@@ -10,18 +10,19 @@ import (
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 var (
-	usersViewer = domain.User{ID: 1, Username: "alice", Email: "alice@example.com"}
-	usersOther  = domain.User{ID: 2, Username: "bob", Email: "bob@example.com"}
+	usersViewer = domain.User{ID: uid.N(1), Username: "alice", Email: "alice@example.com"}
+	usersOther  = domain.User{ID: uid.N(2), Username: "bob", Email: "bob@example.com"}
 )
 
 // activeUsersByID は、指定されたユーザーを返し、それ以外のすべての id には
 // domain.ErrUserNotFound を返す getByID の振る舞いを返す。
-func activeUsersByID(users ...domain.User) func(context.Context, int64) (domain.User, error) {
-	return func(_ context.Context, id int64) (domain.User, error) {
+func activeUsersByID(users ...domain.User) func(context.Context, string) (domain.User, error) {
+	return func(_ context.Context, id string) (domain.User, error) {
 		for _, u := range users {
 			if u.ID == id {
 				return u, nil
@@ -47,14 +48,14 @@ func selfProfile(u domain.User) domain.UserProfile {
 // TestUsersGet は、詳細が viewer ごとのビューで返ることと、存在しない
 // ユーザーと discard 済みのユーザーが ErrUserNotFound になることを固定する。
 func TestUsersGet(t *testing.T) {
-	admin := domain.User{ID: 3, Username: "root", Email: "root@example.com", Admin: true}
+	admin := domain.User{ID: uid.N(3), Username: "root", Email: "root@example.com", Admin: true}
 	query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther, admin)}
 	users := newUsers(query, &fakeUserRepo{}, fakeHasher{})
 
 	tests := []struct {
 		name   string
 		viewer *domain.User
-		id     int64
+		id     string
 		want   domain.UserProfile
 	}{
 		{name: "匿名の viewer には公開ビューを返す", viewer: nil, id: usersViewer.ID, want: publicProfile(usersViewer)},
@@ -79,7 +80,7 @@ func TestUsersGet(t *testing.T) {
 		// fake は activeUsersByID に含まれない id（discard 済みを含む）に対して、
 		// query と同じく wrap した ErrUserNotFound を返す。
 		for _, viewer := range []*domain.User{nil, &usersViewer, &admin} {
-			got, err := users.Get(context.Background(), viewer, 999)
+			got, err := users.Get(context.Background(), viewer, uid.N(999))
 			if !errors.Is(err, domain.ErrUserNotFound) {
 				t.Errorf("Get error = %v, want %v", err, domain.ErrUserNotFound)
 			}
@@ -98,7 +99,7 @@ func TestUsersUpdateCheckOrder(t *testing.T) {
 	query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
 	users := newUsers(query, &fakeUserRepo{}, fakeHasher{})
 
-	if _, err := users.Update(context.Background(), usersViewer, 999, usecase.UpdateUserInput{}); !errors.Is(err, domain.ErrUserNotFound) {
+	if _, err := users.Update(context.Background(), usersViewer, uid.N(999), usecase.UpdateUserInput{}); !errors.Is(err, domain.ErrUserNotFound) {
 		t.Errorf("unknown target error = %v, want %v", err, domain.ErrUserNotFound)
 	}
 	// 他人の target に対しては、不正な入力であっても 403 で応答され、
@@ -240,7 +241,7 @@ func TestPasswordRuleParity(t *testing.T) {
 
 			updateQuery := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
 			updateRepo := &fakeUserRepo{
-				updateProfile: func(context.Context, int64, domain.ProfileChanges) (domain.User, error) {
+				updateProfile: func(context.Context, string, domain.ProfileChanges) (domain.User, error) {
 					return usersViewer, nil
 				},
 			}
@@ -325,12 +326,12 @@ func TestUsersUpdateChanges(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var gotID int64
+			var gotID string
 			var gotChanges domain.ProfileChanges
 			stored := domain.User{ID: usersViewer.ID, Username: "stored", Email: "stored@example.com"}
 			query := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
 			repo := &fakeUserRepo{
-				updateProfile: func(_ context.Context, id int64, changes domain.ProfileChanges) (domain.User, error) {
+				updateProfile: func(_ context.Context, id string, changes domain.ProfileChanges) (domain.User, error) {
 					gotID, gotChanges = id, changes
 					return stored, nil
 				},
@@ -352,7 +353,7 @@ func TestUsersUpdateChanges(t *testing.T) {
 				t.Errorf("Update = %+v, want the stored user %+v", got, stored)
 			}
 			if gotID != usersViewer.ID {
-				t.Errorf("repository id = %d, want %d", gotID, usersViewer.ID)
+				t.Errorf("repository id = %s, want %s", gotID, usersViewer.ID)
 			}
 			if !reflect.DeepEqual(gotChanges, tt.wantChanges) {
 				t.Errorf("repository changes = %s, want %s", profileChangesString(gotChanges), profileChangesString(tt.wantChanges))
@@ -379,7 +380,7 @@ func TestUsersUpdateEmailRule(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			query := &fakeUserQuery{getByID: activeUsersByID(legacy)}
 			repo := &fakeUserRepo{
-				updateProfile: func(context.Context, int64, domain.ProfileChanges) (domain.User, error) {
+				updateProfile: func(context.Context, string, domain.ProfileChanges) (domain.User, error) {
 					return legacy, nil
 				},
 			}
@@ -418,7 +419,7 @@ func profileChangesString(c domain.ProfileChanges) string {
 func TestUsersUpdateEmailTaken(t *testing.T) {
 	query := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
 	repo := &fakeUserRepo{
-		updateProfile: func(context.Context, int64, domain.ProfileChanges) (domain.User, error) {
+		updateProfile: func(context.Context, string, domain.ProfileChanges) (domain.User, error) {
 			return domain.User{}, fmt.Errorf("update user profile: email: %w", domain.ErrEmailTaken)
 		},
 	}
@@ -433,7 +434,7 @@ func TestUsersUpdateEmailTaken(t *testing.T) {
 func TestUsersDelete(t *testing.T) {
 	t.Run("未知の target は所有者でなくても ErrUserNotFound を返す", func(t *testing.T) {
 		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
-		if err := newUsers(query, &fakeUserRepo{}, fakeHasher{}).Delete(context.Background(), usersViewer, 999); !errors.Is(err, domain.ErrUserNotFound) {
+		if err := newUsers(query, &fakeUserRepo{}, fakeHasher{}).Delete(context.Background(), usersViewer, uid.N(999)); !errors.Is(err, domain.ErrUserNotFound) {
 			t.Errorf("error = %v, want %v", err, domain.ErrUserNotFound)
 		}
 	})
@@ -446,16 +447,16 @@ func TestUsersDelete(t *testing.T) {
 	})
 
 	t.Run("本人は自分自身を discard できる", func(t *testing.T) {
-		var discarded int64
+		var discarded string
 		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
 		repo := &fakeUserRepo{
-			discard: func(_ context.Context, id int64) error { discarded = id; return nil },
+			discard: func(_ context.Context, id string) error { discarded = id; return nil },
 		}
 		if err := newUsers(query, repo, fakeHasher{}).Delete(context.Background(), usersViewer, usersViewer.ID); err != nil {
 			t.Fatalf("Delete returned error: %v", err)
 		}
 		if discarded != usersViewer.ID {
-			t.Errorf("discarded id = %d, want %d", discarded, usersViewer.ID)
+			t.Errorf("discarded id = %s, want %s", discarded, usersViewer.ID)
 		}
 	})
 }

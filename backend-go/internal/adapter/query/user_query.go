@@ -43,7 +43,7 @@ func (r *UserQuery) GetActiveUserByEmail(ctx context.Context, email string) (use
 
 // GetActiveUserByID は、指定された id を持つ discard されていない user を
 // 返す。または domain.ErrUserNotFound を返す。
-func (r *UserQuery) GetActiveUserByID(ctx context.Context, id int64) (domain.User, error) {
+func (r *UserQuery) GetActiveUserByID(ctx context.Context, id string) (domain.User, error) {
 	row, err := r.q.GetActiveUserByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -12,10 +12,10 @@ import styles from "./userUpdate.module.css";
 
 export default function UserUpdatePage() {
   const { t } = useTranslation();
-  const { id } = useParams<{ id: string }>();
+  const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user: authUser, logout, refreshUser } = useAuth();
-  const { update } = useUpdateUser(Number(id));
+  const { update } = useUpdateUser(id);
   const { destroy } = useDeleteUser();
 
   const [username, setUsername] = useState(authUser?.username ?? "");
@@ -62,7 +62,7 @@ export default function UserUpdatePage() {
     if (!confirm(t("users.update.deleteConfirm"))) return;
     setIsDeleting(true);
     try {
-      await destroy(Number(id));
+      await destroy(id);
       await logout();
       void navigate("/reviews");
     } catch (e) {

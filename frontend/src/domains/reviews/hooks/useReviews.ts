@@ -11,7 +11,7 @@ function buildKey(params: ReviewSearchParams | undefined, page: number): string 
   const qs = new URLSearchParams();
   if (params?.rating !== undefined) qs.set("rating", String(params.rating));
   if (params?.keyword) qs.set("keyword", params.keyword);
-  if (params?.userId !== undefined) qs.set("user_id", String(params.userId));
+  if (params?.userId !== undefined) qs.set("user_id", params.userId);
   qs.set("page", String(page));
   qs.set("per_page", String(PER_PAGE));
   return `/reviews?${qs.toString()}`;

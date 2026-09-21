@@ -17,7 +17,7 @@ WHERE id = $1;
 SELECT id, name, status, moderation_note, creator_id FROM shops
 WHERE (sqlc.arg(view_all)::boolean
        OR status = 1
-       OR creator_id = sqlc.narg(viewer_id)::bigint)
+       OR creator_id = sqlc.narg(viewer_id)::uuid)
   AND (sqlc.narg(name_pattern)::text IS NULL OR name ILIKE sqlc.narg(name_pattern)::text)
 ORDER BY name, id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);

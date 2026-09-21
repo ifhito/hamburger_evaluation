@@ -1,5 +1,5 @@
 export interface AuthUser {
-  id: number;
+  id: string;
   username: string;
   email: string;
   admin: boolean;
@@ -21,7 +21,7 @@ export interface SignupAcceptedResponse {
 
 // ログインと、signup の確認(POST /signup/confirm)が返す本文。
 export interface AuthUserResponse {
-  id: number;
+  id: string;
   username: string;
   email: string;
   admin: boolean;

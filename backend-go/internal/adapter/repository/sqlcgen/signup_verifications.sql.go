@@ -7,8 +7,6 @@ package sqlcgen
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const deleteExpiredSignupVerifications = `-- name: DeleteExpiredSignupVerifications :execrows
@@ -35,7 +33,7 @@ const deleteSignupVerification = `-- name: DeleteSignupVerification :exec
 DELETE FROM signup_verifications WHERE id = $1
 `
 
-func (q *Queries) DeleteSignupVerification(ctx context.Context, id pgtype.UUID) error {
+func (q *Queries) DeleteSignupVerification(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, deleteSignupVerification, id)
 	return err
 }
@@ -98,7 +96,7 @@ type UpsertSignupVerificationParams struct {
 // 前回の送信から resend_interval_seconds 以内なら何も変えず、行を返さない(呼び出し側は
 // 「送信を見送った」と扱う)。判定と書き込みが 1 文なので、並行する signup でも
 // 送信の間隔は破られない。時刻はすべて DB の now() を使い、アプリとの時計のずれを避ける。
-func (q *Queries) UpsertSignupVerification(ctx context.Context, arg UpsertSignupVerificationParams) (pgtype.UUID, error) {
+func (q *Queries) UpsertSignupVerification(ctx context.Context, arg UpsertSignupVerificationParams) (string, error) {
 	row := q.db.QueryRow(ctx, upsertSignupVerification,
 		arg.Email,
 		arg.Username,
@@ -107,7 +105,7 @@ func (q *Queries) UpsertSignupVerification(ctx context.Context, arg UpsertSignup
 		arg.TtlSeconds,
 		arg.ResendIntervalSeconds,
 	)
-	var id pgtype.UUID
+	var id string
 	err := row.Scan(&id)
 	return id, err
 }

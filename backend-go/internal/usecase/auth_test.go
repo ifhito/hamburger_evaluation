@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -16,7 +17,7 @@ import (
 // fail-loud する。
 type fakeUserQuery struct {
 	getByEmail func(ctx context.Context, email string) (usecase.UserCredentials, error)
-	getByID    func(ctx context.Context, id int64) (domain.User, error)
+	getByID    func(ctx context.Context, id string) (domain.User, error)
 }
 
 func (f *fakeUserQuery) GetActiveUserByEmail(ctx context.Context, email string) (usecase.UserCredentials, error) {
@@ -26,7 +27,7 @@ func (f *fakeUserQuery) GetActiveUserByEmail(ctx context.Context, email string) 
 	return f.getByEmail(ctx, email)
 }
 
-func (f *fakeUserQuery) GetActiveUserByID(ctx context.Context, id int64) (domain.User, error) {
+func (f *fakeUserQuery) GetActiveUserByID(ctx context.Context, id string) (domain.User, error) {
 	if f.getByID == nil {
 		panic("unexpected GetActiveUserByID call")
 	}
@@ -38,8 +39,8 @@ func (f *fakeUserQuery) GetActiveUserByID(ctx context.Context, id int64) (domain
 // フローの外での書き込みに対して、テストは fail-loud する。
 type fakeUserRepo struct {
 	createUser    func(ctx context.Context, params domain.CreateUserParams) (domain.User, error)
-	updateProfile func(ctx context.Context, id int64, changes domain.ProfileChanges) (domain.User, error)
-	discard       func(ctx context.Context, id int64) error
+	updateProfile func(ctx context.Context, id string, changes domain.ProfileChanges) (domain.User, error)
+	discard       func(ctx context.Context, id string) error
 }
 
 func (f *fakeUserRepo) CreateUser(ctx context.Context, params domain.CreateUserParams) (domain.User, error) {
@@ -49,14 +50,14 @@ func (f *fakeUserRepo) CreateUser(ctx context.Context, params domain.CreateUserP
 	return f.createUser(ctx, params)
 }
 
-func (f *fakeUserRepo) UpdateUserProfile(ctx context.Context, id int64, changes domain.ProfileChanges) (domain.User, error) {
+func (f *fakeUserRepo) UpdateUserProfile(ctx context.Context, id string, changes domain.ProfileChanges) (domain.User, error) {
 	if f.updateProfile == nil {
 		panic("unexpected UpdateUserProfile call")
 	}
 	return f.updateProfile(ctx, id, changes)
 }
 
-func (f *fakeUserRepo) DiscardUser(ctx context.Context, id int64) error {
+func (f *fakeUserRepo) DiscardUser(ctx context.Context, id string) error {
 	if f.discard == nil {
 		panic("unexpected DiscardUser call")
 	}
@@ -99,15 +100,15 @@ func (h *recordingHasher) Compare(digest, password string) error {
 
 type fakeIssuer struct{}
 
-func (fakeIssuer) Issue(userID int64) (string, error) {
-	return fmt.Sprintf("token-for-%d", userID), nil
+func (fakeIssuer) Issue(userID string) (string, error) {
+	return "token-for-" + userID, nil
 }
 
 type fakeVerifier struct {
-	verify func(token string) (int64, error)
+	verify func(token string) (string, error)
 }
 
-func (f fakeVerifier) Verify(token string) (int64, error) { return f.verify(token) }
+func (f fakeVerifier) Verify(token string) (string, error) { return f.verify(token) }
 
 func strPtr(s string) *string { return &s }
 
@@ -125,7 +126,7 @@ func assertValidationError(t *testing.T, err error, wantMsgs []string) {
 }
 
 func TestAuthLogin(t *testing.T) {
-	activeUser := domain.User{ID: 7, Username: "alice", Email: "a@example.com"}
+	activeUser := domain.User{ID: uid.N(7), Username: "alice", Email: "a@example.com"}
 	query := &fakeUserQuery{
 		getByEmail: func(_ context.Context, email string) (usecase.UserCredentials, error) {
 			if email != "a@example.com" {
@@ -143,7 +144,7 @@ func TestAuthLogin(t *testing.T) {
 		wantErr   error
 		wantToken string
 	}{
-		{name: "正しい認証情報なら token を返す", email: "a@example.com", password: "Password123!", wantToken: "token-for-7"},
+		{name: "正しい認証情報なら token を返す", email: "a@example.com", password: "Password123!", wantToken: "token-for-" + uid.N(7)},
 		{name: "password が誤っていると invalid credentials になる", email: "a@example.com", password: "Wrongpass1!", wantErr: domain.ErrInvalidCredentials},
 		{name: "未知の email だと invalid credentials になる", email: "b@example.com", password: "Password123!", wantErr: domain.ErrInvalidCredentials},
 	}
@@ -242,9 +243,9 @@ func TestAuthLogin(t *testing.T) {
 }
 
 func TestAuthAuthenticateToken(t *testing.T) {
-	activeUser := domain.User{ID: 7, Username: "alice", Email: "a@example.com"}
+	activeUser := domain.User{ID: uid.N(7), Username: "alice", Email: "a@example.com"}
 	query := &fakeUserQuery{
-		getByID: func(_ context.Context, id int64) (domain.User, error) {
+		getByID: func(_ context.Context, id string) (domain.User, error) {
 			if id != activeUser.ID {
 				// 未知のユーザーと discard 済みのユーザーは、query の
 				// 境界ではどちらも "not found" になる。
@@ -253,17 +254,17 @@ func TestAuthAuthenticateToken(t *testing.T) {
 			return activeUser, nil
 		},
 	}
-	verifier := fakeVerifier{verify: func(token string) (int64, error) {
+	verifier := fakeVerifier{verify: func(token string) (string, error) {
 		switch token {
 		case "valid-active":
 			return activeUser.ID, nil
 		case "valid-discarded":
-			return 8, nil
+			return uid.N(8), nil
 		default:
 			// 改ざんされた、期限切れの、アルゴリズムが誤っているトークンの
 			// 代役であり、これらはすべて本物の verifier に拒否される
 			// （infra の JWT テストを参照）。
-			return 0, errors.New("invalid token")
+			return "", errors.New("invalid token")
 		}
 	}}
 	auth := newAuth(query, fakeHasher{}, fakeIssuer{}, verifier)
@@ -298,7 +299,7 @@ func TestAuthAuthenticateToken(t *testing.T) {
 	t.Run("repository の失敗は unauthenticated にならずそのまま伝播する", func(t *testing.T) {
 		repoErr := errors.New("connection lost")
 		failing := &fakeUserQuery{
-			getByID: func(context.Context, int64) (domain.User, error) {
+			getByID: func(context.Context, string) (domain.User, error) {
 				return domain.User{}, repoErr
 			},
 		}

@@ -240,8 +240,8 @@ func recalculateBurgerStats(ctx context.Context, q *sqlcgen.Queries, burgerID in
 	}
 	// 重複を除いた fact の author の reviewer-trust の履歴：各 author の、
 	// すべての burger にわたる kept な rating を user ごとにまとめたもの。
-	historyByUser := make(map[int64][]float64, len(rows))
-	userIDs := make([]int64, 0, len(rows))
+	historyByUser := make(map[string][]float64, len(rows))
+	userIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
 		if _, seen := historyByUser[row.UserID]; !seen {
 			historyByUser[row.UserID] = nil
