@@ -1,36 +1,5 @@
 <!doctype html>
-<html lang="ja">
-<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>サインイン + Google(リデザインの見本)</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="mock.css">
-<link rel="stylesheet" href="google-login.css">
-</head>
-<body data-auth="out" data-active="signin" data-gkind="signin" data-gplace="bottom">
-<main class="wrap auth">
-  <div class="photo" style="--a:#e3c29a;--b:#b98552"><span class="photo-label" data-en="Photo">写真</span></div>
-  <div class="auth-main">
-    <h1 data-en="Sign in">サインイン</h1>
-    <p class="lead" data-en="Sign in to write and edit your reviews.">レビューを書く・編集するには、サインインしてください。</p>
-    <form class="form">
-      <div id="gtop"></div>
-      <div class="notice" data-only="oauth"><b>サインインして、接続を続けてください</b><span>終わると、許可の画面に戻ります。</span></div>
-      <div data-only="error"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not sign in">サインインできませんでした</b><p class="msg">Invalid email or password</p></div></section></div>
-      <div class="field"><label class="label" for="email" data-en="Email">メールアドレス</label><input class="input" id="email" type="email" data-only="default oauth busy" placeholder="you@example.com" autocomplete="email"><input class="input" id="email" type="email" data-only="error" value="alice@example.com" autocomplete="email"></div>
-      <div class="field"><label class="label" for="password" data-en="Password">パスワード</label><input class="input" id="password" type="password" data-only="default oauth busy" autocomplete="current-password"><input class="input" id="password" type="password" data-only="error" value="password1" autocomplete="current-password"></div>
-      <button type="button" class="btn primary block" data-en="Sign in">サインイン</button>
-      <div id="gbot"></div>
-      <p class="linkline"><span data-en="Don't have an account?">アカウントをお持ちでないとき</span> <a href="#" data-en="Sign up">新規登録</a></p>
-    </form>
-    <aside class="memo"><b>実装メモ</b><ul><li>・Google のボタンは、<code>GET /meta</code> の <code>login_providers</code> に <code>google</code> があるときだけ出す(取得できていない間・使えないときは、何も出さない。値を推測しない)。ボタンは、API の開始の URL(<code>/auth/google/start</code>)へ移動するリンク(a)。</li><li>・押したあと、Google の画面へ移動するまでの間は、ボタンを押せなくして「Google に移動しています…」と出す(二重に開始しない)。</li><li>・戻り先(許可の画面など)は、いまのサインインと同じく、アプリの中の画面の遷移に持たせ、開始の URL の <code>return_to</code> に付ける。付けてよい値(アプリの中のパスだけ)の判断は backend。</li><li>・ボタンの見た目(色・高さ・角丸)・文言・置き場所は、<a href="google-login.html">google-login.html</a> の案から、利用者が選ぶ。この画面は、その推奨の案を置いた見本。</li><li>・エラーの文言(<code>Invalid email or password</code> など)は、API が返したものをそのまま出す。文言も判定も、frontend は持たない(いまの API の文言は英語)。見出し(「サインインできませんでした」)だけが、画面側の言葉。</li><li>・メールアドレスの形式・パスワードの強さの判定は backend だけ。入力の途中では判定しない(サインインを押したときの応答で出す)。</li><li>・幅 720px 以下では、写真を出さず、フォームだけにする。</li><li>・許可の画面(アプリの接続)へ、サインインしていない人が来たときは、サインイン画面へ送り、サインインしたあとで、許可の画面へ戻す。この画面の上の説明(「サインインして、接続を続けてください」)は、案(いまのアプリは、何も出さない)。戻り先は、URL ではなく、アプリの中の画面の遷移に持たせる。</li></ul></aside>
-  </div>
-</main>
-<script src="rating-icons.js"></script>
-<script src="mock.js"></script>
-<script src="google-login.js"></script>
-</body>
-</html>
+<title>signin.html へ移動</title>
+<!-- 最終版は signin.html に統合した。比べた案の表(google-login.html)の埋め込みが、この URL を使うので、query を引き継いで移す -->
+<script>location.replace("signin.html" + location.search);</script>
