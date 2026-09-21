@@ -329,6 +329,7 @@ docker compose -p hamburger-penpot -f design/docker-compose.yml --env-file desig
 ```
 
 - 書き出したデザイン(`.penpot`)は `design/files/` に置いて git で保存する(バイナリなので差分は読めない)。
+- いまの画面を再現したデザインは `design/files/hamburger-evaluation.penpot`(画面・部品・色と文字のスタイル)。画面を変えたら、`design/scripts/` で作り直す(手順は `design/README.md` の「いまの画面から作り直す」)。
 - ポートは 9001(既存の 8080・5173・5433 と重ならない)。Penpot は複数のコンテナで数 GiB のメモリを使うので、使わないときは `down` する。
 - `design/.env` は秘密(Penpot の鍵)を含む。エージェントは読まない(`.claude/settings.json` の deny 対象)。
 
