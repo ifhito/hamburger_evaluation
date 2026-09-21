@@ -133,9 +133,12 @@ export function GoogleConnection({
     try {
       await authApi.unlinkGoogle();
     } catch (e) {
-      setActionError(e instanceof ApiError ? e.messages : [t("auth.google.profile.disconnectError")]);
-      setBusy(null);
-      return;
+      // 別のタブなどで、すでに解除済み(404)なら、解除できたものとして扱う(同じ結果になっている)。
+      if (!(e instanceof ApiError && e.status === 404)) {
+        setActionError(e instanceof ApiError ? e.messages : [t("auth.google.profile.disconnectError")]);
+        setBusy(null);
+        return;
+      }
     }
     // 解除は済んだ。このあとの再取得の成否は、解除の成否とは別(失敗しても、解除できたことは変わらない)。
     await removeProvider(GOOGLE_PROVIDER);

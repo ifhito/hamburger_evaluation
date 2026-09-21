@@ -203,4 +203,32 @@ describe("GoogleConnection(プロフィールの Google の連携。一覧の取
     await eventually(() => expect(page.textContent).toContain("Cannot start now."));
     expect(page.textContent).not.toContain("Google disconnected.");
   });
+
+  it("別のタブなどで、すでに解除済み(解除が 404)のときは、解除できたものとして扱い、キャッシュから外して、再取得する(生の「not found」は出さない)", async () => {
+    listIdentities.mockResolvedValueOnce(connected).mockResolvedValue(notConnected);
+    unlinkGoogle.mockRejectedValue(new ApiError(["not found"], 404));
+    const page = await show();
+    await eventually(() => expect(page.textContent).toContain("Connected as carol@gmail.example"));
+
+    await click(need(byText(page, "button", "Disconnect"), "Disconnect"));
+
+    await eventually(() => expect(page.textContent).toContain("Google disconnected."));
+    expect(page.textContent).not.toContain("not found");
+    expect(page.textContent).not.toContain("Connected as");
+    expect(byText(page, "button", "Connect Google")).toBeDefined();
+    await eventually(() => expect(listIdentities).toHaveBeenCalledTimes(2));
+  });
+
+  it("解除の失敗が 404 以外(422・500 など)のときは、これまでどおり、連携の表示を残して、失敗を出す", async () => {
+    listIdentities.mockResolvedValue(connected);
+    unlinkGoogle.mockRejectedValue(new ApiError(["internal server error"], 500));
+    const page = await show();
+    await eventually(() => expect(page.textContent).toContain("Connected as carol@gmail.example"));
+
+    await click(need(byText(page, "button", "Disconnect"), "Disconnect"));
+
+    await eventually(() => expect(page.textContent).toContain("internal server error"));
+    expect(page.textContent).toContain("Connected as carol@gmail.example");
+    expect(page.textContent).not.toContain("Google disconnected.");
+  });
 });
