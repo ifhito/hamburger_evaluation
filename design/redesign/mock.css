@@ -158,3 +158,107 @@ time { font-size: 14px; color: var(--text-muted); }
   .panel { padding: 40px 16px; }
   .panel .state-title { font-size: 24px; }
 }
+
+/* ---- 第 1 弾で足した部品(サインイン・レビューの投稿・ショップの追加ほか)。新しい色は足さない ---- */
+body { position: relative; }
+.lead { margin-bottom: 24px; color: var(--text-muted); }
+.form { display: flex; flex-direction: column; gap: 20px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.label { font-size: 14px; font-weight: 500; line-height: 1.5; }
+.optional { font-weight: 400; color: var(--text-muted); }
+.hint { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+.ph { color: var(--text-muted); }
+.counter { font-size: 13px; line-height: 1.6; text-align: right; color: var(--text-muted); }
+.input.area { height: auto; min-height: 160px; padding: 12px 16px; line-height: 1.7; }
+.btn.block { width: 100%; }
+.btn.wide { padding: 0 28px; }
+.btn.off { border-color: transparent; background: var(--surface-2); color: var(--text-muted); }
+.btn.danger-solid { border-color: var(--danger); background: var(--danger); color: var(--bg); }
+.linkline { font-size: 14px; color: var(--text-muted); }
+.linkline a, .textlink { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.textlink { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 500; }
+/* 箇条書きの「・」は、文字として書く(Penpot に写すとき、リストの印は、文字ではないので落ちるため) */
+.alert ul, .memo ul { margin: 2px 0 0; padding-left: 0; list-style: none; line-height: 1.6; }
+.alert li, .memo li { padding-left: 1em; text-indent: -1em; }
+
+/* サインイン・新規登録: PC は、左に写真、右にフォーム。モバイルは、フォームだけ */
+.auth { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; padding: 48px 0 96px; }
+.auth .photo { height: 640px; padding-top: 0; align-items: center; border-radius: 16px; }
+.auth-main { width: min(440px, 100%); margin-inline: auto; }
+.auth-main h1 { margin-bottom: 8px; }
+.status { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(560px, 100%); margin: 0 auto; padding: 72px 0 96px; text-align: center; }
+.status h1 { font-size: 28px; }
+
+/* レビューの投稿・編集: PC は、左に入力、右に写真 */
+.formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+.shopline { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-bottom: 24px; font-size: 14px; color: var(--text-muted); }
+.shopline b { font-size: 16px; font-weight: 700; color: var(--text); }
+.actions-row { display: flex; gap: 12px; padding-top: 8px; }
+
+/* 評価の入力: 水位のバーガー + 選んだ数字 + 数字のボタン(ラジオボタンの集まり。押せるのは、数字のボタン) */
+.ratingpick { display: flex; flex-direction: column; gap: 16px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); }
+.rp-view { display: flex; align-items: center; gap: 20px; }
+.rp-num { display: flex; align-items: baseline; gap: 6px; }
+.rp-num b { font-size: 48px; font-weight: 700; line-height: 1; }
+.rp-of { font-size: 14px; color: var(--text-muted); }
+.rp-steps { display: flex; gap: 8px; }
+.step { flex: 1; min-width: 44px; height: 44px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--bg); font-size: 16px; font-weight: 700; }
+.step.on { border-color: var(--text); background: var(--text); color: var(--bg); }
+
+/* 写真の追加: 空・小さくしている途中・付いた */
+.drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 280px; padding: 24px; border: 1px solid var(--control-border); border-radius: var(--radius); background: var(--surface-2); text-align: center; }
+.drop .title-sm { font-weight: 700; }
+.pv { height: 280px; padding-top: 0; align-items: center; border-radius: var(--radius); }
+.pfile { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 12px; margin-top: 12px; font-size: 14px; }
+.pfile .fname { font-weight: 500; }
+.pbtns { display: flex; gap: 12px; margin-top: 12px; }
+.bar-track { width: min(320px, 100%); height: 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--control-border); }
+.bar-fill { height: 6px; border-radius: 3px; background: var(--text); }
+
+/* 状態の見本の並び(見出しつき) */
+.sample { display: flex; flex-direction: column; gap: 12px; margin-bottom: 40px; }
+.sample .note { margin: 0; }
+.sample-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px 48px; }
+
+/* ダイアログ(削除の確認): 後ろの画面を暗くして、中央に置く */
+.scrim { position: absolute; inset: 0; background: rgba(17, 17, 17, 0.55); }
+.dialog { position: absolute; top: 280px; left: 0; right: 0; width: min(440px, 100% - 32px); margin-inline: auto; padding: 28px; border-radius: 16px; background: var(--bg); }
+.dialog h2 { margin-bottom: 8px; }
+.dialog p { margin-bottom: 24px; color: var(--text-muted); }
+.dialog .actions-row { justify-content: flex-end; padding-top: 0; }
+
+/* ショップの詳細・追加 */
+.notice { margin-bottom: 24px; padding: 16px 20px; border: 1px solid var(--text); border-radius: 8px; background: var(--surface-2); line-height: 1.7; }
+.form .notice { margin-bottom: 0; }
+.notice b { display: block; font-weight: 700; }
+.shop-hero { height: 360px; padding-top: 0; align-items: center; border-radius: 16px; }
+.shop-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 28px 0 8px; }
+.shop-title h1 { font-size: 36px; }
+.shop-summary { display: flex; align-items: center; gap: 24px; padding: 12px 0 32px; }
+.shop-summary .btn { margin-left: auto; }
+.reviews.solo { grid-template-columns: repeat(2, 1fr); }
+.rcard .name-sm { font-size: 18px; font-weight: 700; line-height: 1.4; }
+
+/* 実装メモ(画面の下に付ける注記。アプリの見た目ではない) */
+.memo { width: 100%; text-align: left; margin-top: 56px; padding: 16px 20px; border-radius: 8px; background: var(--surface-2); font-size: 13px; line-height: 1.7; color: var(--text-muted); }
+.memo b { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 700; color: var(--text); }
+
+@media (max-width: 720px) {
+  .auth { grid-template-columns: 1fr; gap: 0; padding: 24px 0 64px; }
+  .auth .photo { display: none; }
+  .status { padding: 40px 0 64px; }
+  .formgrid { grid-template-columns: 1fr; gap: 20px; }
+  .rp-view { gap: 12px; }
+  .rp-steps { gap: 6px; }
+  .drop { min-height: 220px; }
+  .pv { height: 220px; }
+  .sample-grid { grid-template-columns: 1fr; gap: 24px; }
+  .dialog { top: 200px; padding: 20px; }
+  .shop-hero { height: 220px; border-radius: 12px; }
+  .shop-title { padding-top: 20px; }
+  .shop-title h1 { font-size: 28px; }
+  .shop-summary { flex-direction: column; align-items: flex-start; gap: 12px; padding-bottom: 24px; }
+  .shop-summary .btn { width: 100%; margin-left: 0; }
+  .reviews.solo { grid-template-columns: 1fr; }
+  .memo { margin-top: 40px; }
+}

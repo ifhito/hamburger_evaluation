@@ -1,13 +1,19 @@
 // 見本の HTML の共通の処理: ヘッダーを差し込み(data-no-header の画面は除く)、バーガーの評価を組み、?lang=en なら data-en の文字に置き換える。
 (() => {
-  const lang = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ja';
+  const params = new URLSearchParams(location.search);
+  const lang = params.get('lang') === 'en' ? 'en' : 'ja';
+  // ?state=xxx: data-only="a b" の要素は、state が a か b のときだけ残す(state がなければ default)。1 つの HTML から、状態違いの画面を作る
+  const state = params.get('state') || 'default';
+  document.querySelectorAll('[data-only]').forEach((e) => { if (!e.dataset.only.split(' ').includes(state)) e.remove(); });
+  if (lang === 'en') document.querySelectorAll('.memo').forEach((e) => e.remove()); // 実装メモは、日本語の画面にだけ付ける
   document.documentElement.lang = lang;
   const active = document.body.dataset.active || '';
   const tab = (key, ja, en) =>
     `<a class="tab${active === key ? ' active' : ''}" href="#"><span data-en="${en}">${ja}</span>${active === key ? '<i class="uline"></i>' : ''}</a>`;
+  const out = document.body.dataset.auth === 'out'; // サインインしていない人のヘッダー(サインイン・新規登録が並ぶ)
   const header = `<header class="site-header"><div class="wrap bar">
     <a class="wordmark" href="#"><span>Hamburger</span><span class="wm-pill">Evaluation</span></a>
-    <nav class="tabs">${tab('shops', 'ショップ', 'Shops')}${tab('reviews', 'レビュー', 'Reviews')}<a class="tab" href="#">alice</a>${tab('', 'サインアウト', 'Sign out')}</nav>
+    <nav class="tabs">${tab('shops', 'ショップ', 'Shops')}${tab('reviews', 'レビュー', 'Reviews')}${out ? tab('signin', 'サインイン', 'Sign in') + tab('signup', '新規登録', 'Sign up') : '<a class="tab" href="#">alice</a>' + tab('', 'サインアウト', 'Sign out')}</nav>
     <div class="lang"><button class="lang-btn${lang === 'ja' ? ' on' : ''}">JA</button><button class="lang-btn${lang === 'en' ? ' on' : ''}">EN</button></div>
   </div></header><div class="rule"></div>`;
   if (!document.body.hasAttribute('data-no-header')) document.body.insertAdjacentHTML('afterbegin', header);
