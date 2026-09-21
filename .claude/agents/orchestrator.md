@@ -31,9 +31,28 @@ integration: committing implementer work, pushing, and managing the draft PR.
    soon as it exists, and keep the body updated as fix rounds land.
 5. **Review battery** — run all three passes against the PR diff:
    a. `reviewer` agent with the 2–3 `focused-review` lenses the diff touches.
-   b. `code-review` skill targeting the PR number (default effort).
+   b. `code-review` skill (`/code-review`) on the PR diff against `main`
+      (default effort). **Mandatory — never skipped, never replaced by your
+      own reading.** Run it before `gh pr ready`, then leave the evidence on
+      the PR as a comment (`gh pr comment`): a summary of its findings, or
+      the exact reason it could not run (and ask the user to run
+      `/code-review` by hand). Its output says its findings are unverified —
+      they go through V1 like every other finding. **Name the worktree in
+      the skill args** (absolute path + the diff command
+      `git -C <path> diff $(git -C <path> merge-base origin/main HEAD)` after
+      `git fetch origin`; other directories out of scope): the skill reviews
+      the calling session's own working directory, so without it a worktree
+      PR silently gets the main checkout reviewed instead (observed). Verify
+      the target the skill reports equals your worktree and its diff is not
+      empty; **a review of another tree (or an empty diff) counts as NOT run
+      — never post it as evidence.** Use the default effort (never `ultra`).
+      The skill runs as a background fork and takes 10–25 minutes for a
+      mid-size diff: keep your turn open and wait with short commands
+      (`date && sleep 25`; a command that starts with a long `sleep` is
+      blocked) until its result arrives.
    c. `ponytail:ponytail-review` skill on the diff (over-engineering pass).
-6. **Verify (V1)** — merge and dedupe findings from all three passes, then
+6. **Verify (V1)** — merge and dedupe findings from all three passes
+   (including the unverified `code-review` findings), then
    send them to the `verifier` agent. Each returns CONFIRMED /
    FALSE_POSITIVE / UNCERTAIN with evidence, corrected severity, and an
    autoFixSafe judgment. No unverified finding moves forward.
@@ -70,6 +89,11 @@ integration: committing implementer work, pushing, and managing the draft PR.
       -json` pass list loses nothing except renamed tests (old → new mapping
       in the PR body), CI is green, and there are no conflicts or unanswered
       comments (user decision).
+    - **Before any `gh pr ready`**: the PR must carry the step 5b evidence
+      a `code-review` **summary comment** (findings, verdicts, fixes). A
+      comment that only says it "could not run" is NOT evidence: the PR stays
+      draft as a P1 (the user runs `/code-review` by hand, or decides to
+      proceed without it), even if it is small.
     - **Small + no P1/P2 pending** (P3-only or none): finish the branch —
       `gh pr ready`, then fast-forward main with
       `git push origin feat/<slug>:main` (a plain push: refused unless main
@@ -96,7 +120,8 @@ integration: committing implementer work, pushing, and managing the draft PR.
       "Automatically delete head branches" (a user-owned setting; never
       change it yourself).
 11. **Report** — PR URL and merge status; what changed; validation evidence;
-    per-round verdicts from all three review passes and the verifier;
+    per-round verdicts from all three review passes (say explicitly if
+    `code-review` did not run, and why) and the verifier;
     auto-fixed list; discarded list with evidence; the decision list from
     step 9; worktree path (or its removal). A merged PR closes its story
     issue via `Closes #<n>` — confirm with `gh pr view`.

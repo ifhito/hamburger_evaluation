@@ -177,3 +177,6 @@ pnpm run test
 - backend のみの依頼なら frontend や未追跡ドキュメントを巻き込まない。
 - commit 前に `git diff --check` または `git diff --cached --check` を確認する。
 - PR 更新時は push 後に `gh pr view` などで PR 状態を確認する。
+- PR を ready にする前に、`/code-review` を実行し、結果の要約を PR のコメントに残す(詳細は
+  `CLAUDE.md` の「Git と PR のワークフロー」)。実行できなかったときは ready にせず、利用者に
+  手動での実行を頼む。
