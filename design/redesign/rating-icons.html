@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>評価のバーガーの比較(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { width: 1440px; padding: 40px; }
+  h2 { margin: 48px 0 8px; }
+  .lead { margin-top: 8px; font-size: 14px; line-height: 1.7; color: var(--text-muted); }
+  .grid7 { display: grid; grid-template-columns: 200px repeat(7, 1fr); gap: 12px; align-items: end; padding: 12px 0; }
+  .grid7 .head { align-self: center; font-size: 14px; line-height: 1.5; }
+  .grid7 .head b { display: block; font-weight: 700; }
+  .grid7 .head span { color: var(--text-muted); }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .cell b { font-size: 14px; font-weight: 700; line-height: 1; }
+  .cellhead { text-align: center; font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .row { display: flex; gap: 16px; margin-bottom: 8px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+  .row .label { width: 420px; }
+  .row .num { width: 140px; font-weight: 700; }
+  .row .sw { display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border: 1px solid var(--control-border); border-radius: 3px; }
+  .note { margin: 16px 0 0; font-size: 14px; line-height: 1.7; }
+</style>
+</head>
+<body data-no-header>
+<h1>評価のバーガーの比較(リデザインのラフ)</h1>
+<p class="lead">線画のバーガーを、評価の分だけ下から塗ります。<b>案 B(水位)を採用</b>しました。1 つのバーガー全体を、下から「評価 ÷ 最大値」の高さまで、水位のように塗ります。案 A(部品ごと)は、比べるための参考として残しています(下から 1 点 = 1 部品。半分は、その部品の左半分)。どちらも、数字を必ずそばに書きます(形や色だけで伝えません)。塗りの色は、このアイコンの中だけ、控えめな本物の色です。「白黒」の行は、色が見えなくても、塗った所と塗っていない所が見分けられるかの確認です。案 B の小(40px)と極小(24px)は、ちぢれたレタスやトマトの輪切りなどの細部をやめて、部品を太くした<b>簡略版の線画</b>にしています(細部は、大と中だけ)。案 A は、参考なので、どの大きさでも同じ線画です。</p>
+
+<div id="sections"></div>
+
+<h2>色と、白い背景との比(実測)</h2>
+<p class="lead">部品の境目は、黒い輪郭(白に対して 18.88:1)で伝えます。塗りの色は、白に対して 3:1 に届かないものが多いので、色だけには頼りません。輪郭の外側(水位より上)は、灰色の輪郭と白い面です。</p>
+<div id="colors" style="margin-top:16px"></div>
+<p class="note muted" id="summary"></p>
+
+<script src="rating-icons.js"></script>
+<script>
+const SCORES = [0, 1, 2, 3, 4, 4.5, 5];
+const SIZES = [['lg', '大(幅 160px)', 'レビュー詳細の平均・空と読み込み中の画面'], ['md', '中(幅 64px)', 'ショップ一覧・レビュー一覧のカード'], ['sm', '小(幅 40px)', 'レビュー詳細の 1 件ごと(案 B は簡略版の線画)'], ['xs', '極小(幅 24px)', 'いまの画面では使っていない、いちばん小さい大きさ(案 B は 3 部品の簡略版)']];
+const ROWS = [['B', false, '案 B(採用)', '色'], ['B', true, '案 B(採用)', '白黒'], ['A', false, '案 A(参考)', '色'], ['A', true, '案 A(参考)', '白黒']];
+document.getElementById('sections').innerHTML = SIZES.map(([size, title, use]) => `
+  <h2>${title} <span class="muted" style="font-size:14px;font-weight:400">${use}</span></h2>
+  <div class="rule"></div>
+  <div class="grid7"><span></span>${SCORES.map((s) => `<span class="cellhead">評価 ${s}</span>`).join('')}</div>
+  ${ROWS.map(([variant, gray, name, tone]) => `<div class="rule"></div><div class="grid7"><span class="head"><b>${name}</b><span>${tone}</span></span>${SCORES.map((s) =>
+    `<span class="cell"><span class="burger" data-variant="${variant}" data-size="${size}" data-score="${s}"${gray ? ' data-gray' : ''}></span><b>${s}</b></span>`).join('')}</div>`).join('')}`).join('');
+
+// 色の表
+const ratioOf = (a, b) => { const chan = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; const lum = (h) => { const [r, g, bl] = [1, 3, 5].map((i) => chan(parseInt(h.slice(i, i + 2), 16))); return 0.2126 * r + 0.7152 * g + 0.0722 * bl; }; const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const B = window.Burger, WHITE = '#ffffff';
+const FILLS = [['下・上のバンズ', B.COLOR.bun], ['パティ', B.COLOR.patty], ['チーズ(差し色のマスタード黄)', B.COLOR.cheese], ['レタス', B.COLOR.lettuce], ['トマト', B.COLOR.tomato]];
+const pairs = [
+  { label: '輪郭(黒) / 白い背景(図形は 3:1 以上)', fg: B.INK, bg: WHITE, need: 3 },
+  { label: '水位より上の輪郭(灰色) / 白い背景(図形は 3:1 以上)', fg: B.EMPTY, bg: WHITE, need: 3 },
+];
+const fillRows = FILLS.map(([name, c]) => ({ name, color: c, vsWhite: ratioOf(c, WHITE), vsInk: ratioOf(c, B.INK), gray: B.grayOf(c), grayVsWhite: ratioOf(B.grayOf(c), WHITE) }));
+const rd = (v) => (Math.round(v * 100) / 100).toFixed(2);
+window.__iconContrast = { pairs: pairs.map((p) => ({ ...p, ratio: rd(ratioOf(p.fg, p.bg)), pass: ratioOf(p.fg, p.bg) >= p.need })), fills: fillRows.map((f) => ({ ...f, vsWhite: rd(f.vsWhite), vsInk: rd(f.vsInk), grayVsWhite: rd(f.grayVsWhite) })) };
+document.getElementById('colors').innerHTML =
+  window.__iconContrast.pairs.map((p) => `<div class="row"><span class="label"><i class="sw" style="background:${p.fg}"></i>${p.label}</span><span class="num">${p.ratio}:1</span><span>${p.need}:1 以上 ${p.pass ? '○' : '×'}</span></div>`).join('') +
+  window.__iconContrast.fills.map((f) => `<div class="row"><span class="label"><i class="sw" style="background:${f.color}"></i>${f.name} ${f.color}</span><span class="num">白 ${f.vsWhite}:1</span><span>黒の輪郭との比 ${f.vsInk}:1 ・ 白黒にすると ${f.gray}(白との比 ${f.grayVsWhite}:1)</span></div>`).join('');
+document.getElementById('summary').textContent = '塗りの色は、白との比が 3:1 に届くものが少ないので、輪郭(黒)と、塗ってある / ない(灰色の輪郭と白い面)の違いで、見分けます。数字は必ず、アイコンのそばに書きます。';
+</script>
+<script src="mock.js"></script>
+</body>
+</html>

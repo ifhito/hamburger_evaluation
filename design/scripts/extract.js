@@ -1,4 +1,4 @@
-// 画面(HTML)の見た目を、長方形と文字の一覧(JSON)にする。ページの中で page.evaluate に渡して実行する(自己完結した関数)。
+// 画面(HTML)の見た目を、長方形と文字(と、評価のバーガーのパス)の一覧(JSON)にする。ページの中で page.evaluate に渡して実行する(自己完結した関数)。
 // capture.js(いまの画面)と capture_mock.js(リデザインの見本)が使う。
 // ページの中で実行する: 見えている要素を、長方形と文字の一覧にする。
 module.exports = function extract() {
@@ -72,6 +72,11 @@ module.exports = function extract() {
     if (r.width === 0 && r.height === 0) return;
     const tag = el.tagName.toLowerCase();
     if (tag === 'script' || tag === 'style' || tag === 'option') return;
+    // 評価のバーガー(rating-icons.js が作った SVG)。図形の一覧(パスと塗りと輪郭)を、そのまま Penpot のパスにする
+    if (tag === 'svg' && el.__icon) {
+      nodes.push({ kind: 'icon', tag, name: el.__icon.name, ctl: group, x: r.left + sx, y: r.top + sy, w: r.width, h: r.height, icon: el.__icon });
+      return;
+    }
     const isControl = ['button', 'input', 'textarea', 'select'].includes(tag);
     const g = isControl ? ++ctl : group;
     const bg = rgba(cs.backgroundColor);

@@ -10,9 +10,8 @@
   --text-muted: #5a5a55;
   --accent: #e9b824;
   --on-accent: #111111;
-  --burger-bun: #ebe8de;
-  --burger-veggie: #a8a8a1;
-  --burger-empty: #767671;
+  --danger: #b3261e;
+  --danger-surface: #fdf0ef;
   --radius: 12px;
 }
 * { box-sizing: border-box; margin: 0; }
@@ -54,30 +53,15 @@ select.input { appearance: none; padding-right: 40px; }
 .btn { height: 44px; padding: 0 20px; border: 1px solid transparent; border-radius: 8px; font-size: 14px; font-weight: 500; }
 .btn.primary { background: var(--accent); color: var(--on-accent); }
 .btn.ghost { background: var(--bg); border-color: var(--control-border); color: var(--text); }
+/* 赤は、削除とエラーだけに使う。色だけに頼らない: 削除は「赤の枠 + 赤の文字 + 「削除」の言葉」、エラーは「赤の枠 + 左の赤い帯 + アイコン + 文言」 */
+.btn.danger { background: var(--bg); border-color: var(--danger); color: var(--danger); }
 .chip { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border: 1px solid var(--text); border-radius: 14px; background: var(--bg); font-size: 12px; font-weight: 500; color: var(--text); }
 .chip.accent { border-color: transparent; background: var(--accent); color: var(--on-accent); }
 
-/* バーガーの段数で見せる評価。下から、バンズ・パティ・チーズ(黄)・野菜・上のバンズの 5 段。
-   塗ってある段が評価の数(半分は、その段の左半分だけ塗る)。数字は、必ずそばに書く(形だけで伝えない)。
-   塗った段は黒い輪郭、空の段は灰色の輪郭と白い面。段を作る数は、実装では /meta の評価の最大値から決める。 */
-.burger { --u: 1px; --bw: 1px; display: inline-flex; flex-direction: column; align-items: center; gap: var(--u); width: calc(var(--u) * 44); flex: none; }
-.burger.lg { --u: 2px; --bw: 2px; }
-.burger .l { position: relative; display: block; border: var(--bw) solid var(--burger-empty); background: var(--bg); }
-.burger .l.on { border-color: var(--text); }
-.burger .l5 { width: 82%; height: calc(var(--u) * 8); border-radius: calc(var(--u) * 14) calc(var(--u) * 14) calc(var(--u) * 2) calc(var(--u) * 2); }
-.burger .l4 { width: 90%; height: calc(var(--u) * 5); border-radius: calc(var(--u) * 3); }
-.burger .l3 { width: 100%; height: calc(var(--u) * 4); border-radius: var(--u); }
-.burger .l2 { width: 96%; height: calc(var(--u) * 7); border-radius: calc(var(--u) * 3); }
-.burger .l1 { width: 100%; height: calc(var(--u) * 6); border-radius: calc(var(--u) * 2) calc(var(--u) * 2) calc(var(--u) * 5) calc(var(--u) * 5); }
-.burger .l1.on, .burger .l5.on { background: var(--burger-bun); }
-.burger .l2.on { background: var(--text); }
-.burger .l3.on { background: var(--accent); }
-.burger .l4.on { background: var(--burger-veggie); }
-.burger .hf { position: absolute; left: calc(var(--bw) * -1); top: calc(var(--bw) * -1); bottom: calc(var(--bw) * -1); width: calc(50% + var(--bw)); border: var(--bw) solid var(--text); border-radius: inherit; border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.burger .l1 .hf, .burger .l5 .hf { background: var(--burger-bun); }
-.burger .l2 .hf { background: var(--text); }
-.burger .l3 .hf { background: var(--accent); }
-.burger .l4 .hf { background: var(--burger-veggie); }
+/* 評価のバーガー: 線画のバーガーを、評価の分だけ水位のように下から塗る(rating-icons.js が SVG を組む)。数字は、必ずそばに書く(形や色だけで伝えない)。
+   段の数ではなく連続値で塗る。評価の最大値は、実装では /meta の rating.max から決める。 */
+.burger { display: inline-block; flex: none; line-height: 0; }
+.burger svg { display: block; }
 .rate { display: inline-flex; align-items: center; gap: 12px; }
 .rate b { font-size: 18px; font-weight: 700; line-height: 1; }
 
@@ -129,6 +113,13 @@ time { font-size: 14px; color: var(--text-muted); }
 .who .grow { margin-right: auto; }
 .who .grow b { display: block; font-weight: 700; line-height: 1.4; }
 .actions { display: flex; gap: 12px; }
+
+/* エラーの表示: 赤の枠 + 左の帯 + 「!」のアイコン + 文言(API が返した文言は、そのまま出す) */
+.alert { position: relative; display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 16px 26px; border: 1px solid var(--danger); border-radius: 8px; background: var(--danger-surface); }
+.alert .band { position: absolute; left: -1px; top: -1px; bottom: -1px; width: 6px; border-radius: 8px 0 0 8px; background: var(--danger); }
+.alert .mark { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 12px; background: var(--danger); color: var(--bg); font-size: 14px; font-weight: 700; line-height: 1; }
+.alert .alert-title { display: block; font-weight: 700; line-height: 1.5; color: var(--danger); }
+.alert .msg { margin-top: 2px; line-height: 1.6; color: var(--text); }
 
 /* 空・読み込み中・見つからないときの画面(文言の見本) */
 .note { margin: 40px 0 12px; font-size: 14px; color: var(--text-muted); }

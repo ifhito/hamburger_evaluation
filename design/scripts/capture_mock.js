@@ -13,8 +13,8 @@ const SCREENS = [
   { key: 'reviews', title: 'レビュー一覧', file: 'reviews.html', lang: 'ja' },
   { key: 'review-detail', title: 'レビュー詳細', file: 'review-detail.html', lang: 'ja' },
   { key: 'shops-en', title: 'ショップ一覧(English)', file: 'shops.html', lang: 'en' },
-  { key: 'states', title: '空・読み込み・404', file: 'states.html', lang: 'ja' },
-  { key: 'states-en', title: '空・読み込み・404(English)', file: 'states.html', lang: 'en' },
+  { key: 'states', title: '空・読み込み・エラー・404', file: 'states.html', lang: 'ja' },
+  { key: 'states-en', title: '空・読み込み・エラー・404(English)', file: 'states.html', lang: 'en' },
 ];
 const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }];
 
@@ -49,7 +49,22 @@ const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }
   fs.writeFileSync(`${OUT}/tokens.json`, JSON.stringify({ key: 'tokens', title: 'デザインの値', size: 'pc', viewport: 1320, url: 'tokens.html', ...data }));
   fs.writeFileSync(`${OUT}/tokens-values.json`, JSON.stringify(tokens, null, 1));
   await page.screenshot({ path: `${OUT}/tokens.png`, fullPage: true });
+  // 評価のバーガーの比較のページ(案 B と案 A、大きさ 4 つ、色と白黒。アイコンは、パスの一覧として取る)
+  const ictx = await browser.newContext({ viewport: { width: 1520, height: 900 } });
+  const ipage = await ictx.newPage();
+  await ipage.goto(`file://${MOCK_DIR}/rating-icons.html`, { waitUntil: 'networkidle' });
+  await ipage.evaluate(() => document.fonts.ready);
+  await ipage.waitForTimeout(300);
+  const idata = await ipage.evaluate(extract);
+  fs.writeFileSync(`${OUT}/rating-icons.json`, JSON.stringify({ key: 'rating-icons', title: '評価のバーガーの比較', size: 'pc', viewport: 1520, url: 'rating-icons.html', ...idata }));
+  await ipage.screenshot({ path: `${OUT}/rating-icons.png`, fullPage: true });
+  // 評価のバーガーの自己確認: 評価 0 は全部白抜き、5 は水位の境目なし、2.5 は途中の部品に水位の境目がある。壊れたら、ここで止める
+  const chk = await ipage.evaluate(() => {
+    const r = (v, size = 'md') => window.Burger.resolve({ variant: 'B', value: v, size }).shapes;
+    return { empty0: r(0).every((s) => s.fill && s.fill.color === '#ffffff'), full5: r(5).every((s) => !(s.fill && s.fill.axis)), mid: r(2.5).some((s) => s.fill && s.fill.axis === 'y'), simple: [r(3, 'sm').length, r(3, 'xs').length] };
+  });
+  if (!chk.empty0 || !chk.full5 || !chk.mid) throw new Error('評価のバーガーの自己確認に失敗: ' + JSON.stringify(chk));
   await browser.close();
   console.log(JSON.stringify(result));
-  console.log(JSON.stringify(tokens.contrast.map((c) => `${c.used === false ? '不使用' : c.pass ? 'OK ' : 'NG '}${c.ratio}:1 ${c.label}`), null, 1));
+  console.log(JSON.stringify(tokens.contrast.map((c) => `${c.used === false ? '不使用' : c.used === 'ref' ? '参考 ' : c.pass ? 'OK ' : 'NG '}${c.ratio}:1 ${c.label}`), null, 1));
 })();

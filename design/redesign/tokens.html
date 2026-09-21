@@ -25,13 +25,13 @@
   .samples { display: flex; gap: 48px; align-items: center; }
   .focus-ring { padding: 2px; border: 2px solid var(--text); border-radius: 10px; }
   .tap { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--control-border); border-radius: 8px; font-size: 12px; }
-  .burgers { display: flex; gap: 40px; align-items: flex-end; }
+  .burgers { display: flex; gap: 16px; align-items: flex-end; }
   .burgers .rate { flex-direction: column; align-items: center; gap: 8px; }
 </style>
 </head>
 <body data-no-header>
 <h1>デザインの値(リデザインのラフ)</h1>
-<p class="muted" style="margin-top:8px">白い背景・黒い文字・マスタード黄は「塗り」だけ・現代的なゴシック(Noto Sans JP)。値は案で、確認して調整する。</p>
+<p class="muted" style="margin-top:8px">白い背景・黒い文字・マスタード黄は「塗り」だけ・赤は削除とエラーだけ・現代的なゴシック(Noto Sans JP)。値は案で、確認して調整する。</p>
 
 <h2>色</h2>
 <div class="swatches" id="swatches"></div>
@@ -39,17 +39,17 @@
 <h2>文字と背景のコントラスト(WCAG AA。実測)</h2>
 <div id="contrast"></div>
 
-<h2>評価のバーガー(下から、バンズ・パティ・チーズ・野菜・上のバンズ。半分は、その段の左半分だけ塗る。数字は必ずそばに書く)</h2>
+<h2>評価のバーガー(1 つの線画を、下から「評価 ÷ 最大値」の高さまで塗る。数字は必ずそばに書く)</h2>
 <div class="burgers">
-  <span class="rate"><span class="burger lg" data-score="0"></span><b>0</b></span>
-  <span class="rate"><span class="burger lg" data-score="1"></span><b>1</b></span>
-  <span class="rate"><span class="burger lg" data-score="2"></span><b>2</b></span>
-  <span class="rate"><span class="burger lg" data-score="3"></span><b>3</b></span>
-  <span class="rate"><span class="burger lg" data-score="4"></span><b>4</b></span>
-  <span class="rate"><span class="burger lg" data-score="4.5"></span><b>4.5</b></span>
-  <span class="rate"><span class="burger lg" data-score="5"></span><b>5</b></span>
-  <span class="rate"><span class="burger" data-score="4.5"></span><b>4.5</b></span>
+  <span class="rate"><span class="burger" data-size="lg" data-score="0"></span><b>0</b></span>
+  <span class="rate"><span class="burger" data-size="lg" data-score="1"></span><b>1</b></span>
+  <span class="rate"><span class="burger" data-size="lg" data-score="2"></span><b>2</b></span>
+  <span class="rate"><span class="burger" data-size="lg" data-score="3"></span><b>3</b></span>
+  <span class="rate"><span class="burger" data-size="lg" data-score="4"></span><b>4</b></span>
+  <span class="rate"><span class="burger" data-size="lg" data-score="4.7"></span><b>4.7</b></span>
+  <span class="rate"><span class="burger" data-size="lg" data-score="5"></span><b>5</b></span>
 </div>
+<p class="muted" style="font-size:14px;margin-top:12px">水位は連続値です(4.7 は 94%。4.5 は 90%)。数字と同じ 1 桁に丸めた値で塗るので、数字と水位はずれません。最大値(5)は、実装では <code>GET /meta</code> の <code>rating.max</code> から決めます。小さい大きさ(幅 40px 以下)は、細部を省いた簡略版の線画です(比較表は「評価のバーガーの比較」のページ)。</p>
 
 <h2>文字のスタイル(Noto Sans JP)</h2>
 <div id="types"></div>
@@ -61,6 +61,7 @@
   <p class="muted" style="font-size:14px">黒の 2px の枠(内側との間 2px)。押せる部分は 44px 以上。</p>
 </div>
 
+<script src="rating-icons.js"></script>
 <script>
 const root = getComputedStyle(document.documentElement);
 const v = (n) => root.getPropertyValue(n).trim();
@@ -69,20 +70,25 @@ const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lum = (h) => { const [r, g, b] = rgb(h).map(chan); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
+const BC = window.Burger.COLOR;
 const TOKENS = [
   ['background', '--bg', 'ページの背景・カードの背景・入力欄の背景'],
   ['surface-2', '--surface-2', '選択中のカード・写真なしの場所・読み込み中の灰色の棒'],
   ['border', '--border', '区切り線・カードの枠(飾り)'],
   ['control-border', '--control-border', '入力欄・ボタンの枠(部品の境界)'],
-  ['text', '--text', '本文・見出し・リンク・選択中の下線と枠・バーガーの輪郭とパティ'],
+  ['text', '--text', '本文・見出し・リンク・選択中の下線と枠・バーガーの輪郭'],
   ['text-muted', '--text-muted', '補足の文字(日付・件数)'],
   ['accent', '--accent', '差し色(マスタード黄)。塗りだけ: 押せるボタンの面・札の面・ロゴの面・バーガーのチーズ'],
   ['on-accent', '--on-accent', '黄色い面の上の文字(黒)'],
-  ['burger-bun', '--burger-bun', 'バーガーのバンズの面'],
-  ['burger-veggie', '--burger-veggie', 'バーガーの野菜の面'],
-  ['burger-empty', '--burger-empty', 'バーガーの空の段の輪郭'],
+  ['burger-bun', BC.bun, '評価のバーガー: バンズの塗り(アイコンの中だけ、控えめな本物の色)'],
+  ['burger-patty', BC.patty, '評価のバーガー: パティの塗り'],
+  ['burger-lettuce', BC.lettuce, '評価のバーガー: レタスの塗り(チーズは accent の黄色)'],
+  ['burger-tomato', BC.tomato, '評価のバーガー: トマトの塗り'],
+  ['burger-empty', window.Burger.EMPTY, '評価のバーガー: 水位より上の輪郭(灰色)'],
+  ['danger', '--danger', '赤。削除とエラーだけに使う(ほかには使わない)。削除ボタンの枠と文字・エラーの枠と帯と「!」の面と見出し'],
+  ['danger-surface', '--danger-surface', 'エラーの表示の薄い赤の背景(文字は黒)'],
 ];
-const tokens = TOKENS.map(([name, cssVar, usage]) => ({ name, cssVar, value: v(cssVar), usage }));
+const tokens = TOKENS.map(([name, src, usage]) => ({ name, src, value: src.startsWith('#') ? src : v(src), usage }));
 document.getElementById('swatches').innerHTML = tokens.map((t) =>
   `<div class="swatch"><div class="swatch-box" style="background:${t.value}"></div><p><b>${t.name}</b> ${t.value}</p><p class="muted">${t.usage}</p></div>`).join('');
 
@@ -98,18 +104,28 @@ const PAIRS = [
   ['言語切替の選んだ側の文字(白) / 黒の面', v('--bg'), v('--text'), 4.5, true],
   [`写真の仮の場所の文字(黒) / 暗い側の色 ${PHOTO_DARKEST}`, v('--text'), PHOTO_DARKEST, 4.5, true],
   ['入力欄・ボタンの枠 / ページの背景(部品の境界は 3:1)', v('--control-border'), v('--bg'), 3, true],
-  ['バーガー・キーボードで選んだ枠・選択中の枠(黒) / ページの背景(図形は 3:1)', v('--text'), v('--bg'), 3, true],
+  ['バーガーの輪郭・キーボードで選んだ枠・選択中の枠(黒) / ページの背景(図形は 3:1)', v('--text'), v('--bg'), 3, true],
   ['選択中のカードの枠(黒) / カードの背景(図形は 3:1)', v('--text'), v('--surface-2'), 3, true],
-  ['バーガーの空の段の輪郭 / ページの背景(図形は 3:1)', v('--burger-empty'), v('--bg'), 3, true],
+  ['バーガーの水位より上の輪郭(灰色) / ページの背景(図形は 3:1)', window.Burger.EMPTY, v('--bg'), 3, true],
+  ['削除ボタンの赤い文字 / 白い面', v('--danger'), v('--bg'), 4.5, true],
+  ['削除ボタンの赤い枠・エラーの赤い枠と帯 / ページの背景(部品の境界は 3:1)', v('--danger'), v('--bg'), 3, true],
+  ['エラーの見出しの赤い文字 / 薄い赤の背景', v('--danger'), v('--danger-surface'), 4.5, true],
+  ['エラーの文言の黒い文字 / 薄い赤の背景', v('--text'), v('--danger-surface'), 4.5, true],
+  ['エラーの「!」の白い文字 / 赤の面', v('--bg'), v('--danger'), 4.5, true],
+  ['エラーの赤い枠・帯 / 薄い赤の背景(図形は 3:1)', v('--danger'), v('--danger-surface'), 3, true],
   ['黄色の文字 / ページの背景', v('--accent'), v('--bg'), 4.5, false],
   ['黄色の線・枠 / ページの背景', v('--accent'), v('--bg'), 3, false],
+  ['(参考)バーガーの塗り: バンズ / 白い背景。色だけに頼らず、黒い輪郭と数字で伝える', BC.bun, v('--bg'), 3, 'ref'],
+  ['(参考)バーガーの塗り: パティ / 白い背景', BC.patty, v('--bg'), 3, 'ref'],
+  ['(参考)バーガーの塗り: レタス / 白い背景', BC.lettuce, v('--bg'), 3, 'ref'],
+  ['(参考)バーガーの塗り: トマト / 白い背景', BC.tomato, v('--bg'), 3, 'ref'],
 ];
 const contrast = PAIRS.map(([label, fg, bg, need, used]) => {
   const r = ratio(fg, bg);
-  return { label, fg, bg, ratio: Math.round(r * 100) / 100, need, used, pass: used ? r >= need : null };
+  return { label, fg, bg, ratio: Math.round(r * 100) / 100, need, used, pass: used === true ? r >= need : null };
 });
 document.getElementById('contrast').innerHTML = contrast.map((c) =>
-  `<div class="row"><span class="label">${c.label}</span><span class="ratio">${c.ratio.toFixed(2)}:1</span><span class="need">${c.need} 以上</span><span class="ok">${c.used ? (c.pass ? '○' : '×') : '使わない'}</span></div>`).join('');
+  `<div class="row"><span class="label">${c.label}</span><span class="ratio">${c.ratio.toFixed(2)}:1</span><span class="need">${c.need} 以上</span><span class="ok">${c.used === 'ref' ? '参考' : c.used ? (c.pass ? '○' : '×') : '使わない'}</span></div>`).join('');
 
 const TYPES = [
   ['32px / 700', 32, 700, 'ショップ  Shops'], ['28px / 700(モバイルの見出し)', 28, 700, 'ショップ  Shops'],

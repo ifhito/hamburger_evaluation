@@ -208,6 +208,43 @@ class Design:
         }
         self.add_obj(page, obj)
 
+    def icon(self, page: str, n: dict, ox: float, oy: float, frame: str, parent: str) -> None:
+        """評価のバーガー(SVG のパスの一覧)を、Penpot のパス図形にする。M・L・C・Z の絶対座標だけを受け取る。
+        塗りは、単色か、軸に沿った硬い境目のグラデーション(水位・半分)、白抜き。輪郭の太さは、アイコンの拡大率に合わせる。"""
+        ic = n["icon"]
+        k = n["w"] / ic["vb"][0]
+        gid = self.group(page, n["name"], frame, (ox + n["x"], oy + n["y"], n["w"], n["h"]))
+        px = lambda x: round(ox + n["x"] + x * k, 3)
+        py = lambda y: round(oy + n["y"] + y * k, 3)
+        for s in ic["shapes"]:
+            toks = re.findall(r"[MLCZ]|-?[\d.]+", s["d"])
+            content, i = [], 0
+            while i < len(toks):
+                c = toks[i]; i += 1
+                if c in "ML":
+                    content.append({"command": "move-to" if c == "M" else "line-to", "params": {"x": px(float(toks[i])), "y": py(float(toks[i + 1]))}}); i += 2
+                elif c == "C":
+                    v = [float(t) for t in toks[i:i + 6]]; i += 6
+                    content.append({"command": "curve-to", "params": {"c1x": px(v[0]), "c1y": py(v[1]), "c2x": px(v[2]), "c2y": py(v[3]), "x": px(v[4]), "y": py(v[5])}})
+                else:
+                    content.append({"command": "close-path", "params": {}})
+            bx, by, bw, bh = s["bbox"]
+            f = s["fill"]
+            if not f:
+                fills = []
+            elif "axis" in f:
+                x1, y1, x2, y2 = (0, 1, 0, 0) if f["axis"] == "y" else (0, 0, 1, 0)
+                t = f["t"]
+                stops = [(f["color"], 0), (f["color"], t), ("#ffffff", min(1, t + 0.0001)), ("#ffffff", 1)]
+                fills = [{"fillColorGradient": {"type": "linear", "startX": x1, "startY": y1, "endX": x2, "endY": y2, "width": 1,
+                                                "stops": [{"color": c, "opacity": 1, "offset": round(o, 4)} for c, o in stops]}, "fillOpacity": 1}]
+            else:
+                fills = [self.fill(f["color"])]
+            obj = {"id": str(uuid.uuid4()), "name": s["part"], "type": "path", "parentId": gid, "frameId": frame, "content": content, "fills": fills,
+                   "strokes": [{"strokeColor": s["stroke"], "strokeOpacity": 1, "strokeWidth": round(s["sw"] * k, 3), "strokeStyle": "solid", "strokeAlignment": "center"}],
+                   **geom(px(bx), py(by), bw * k, bh * k)}
+            self.add_obj(page, obj)
+
 
 def est_width(text: str, size: float, weight: int = 400) -> float:
     """文字の幅の目安。値のページの文字は、実際に測った幅がないので、全角は 1 文字 = 文字の大きさ、半角は約 0.55 倍で数える。"""
@@ -244,6 +281,8 @@ def place(d: Design, page: str, nodes: list[dict], ox: float, oy: float, frame: 
             parent = groups[n["ctl"]]
         if n["kind"] == "rect":
             d.rect(page, n, ox, oy, frame, parent, n["name"])
+        elif n["kind"] == "icon":
+            d.icon(page, n, ox, oy, frame, parent)
         else:
             d.text(page, n, ox, oy, frame, parent)
 

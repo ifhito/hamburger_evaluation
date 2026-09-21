@@ -12,17 +12,8 @@
   </div></header><div class="rule"></div>`;
   if (!document.body.hasAttribute('data-no-header')) document.body.insertAdjacentHTML('afterbegin', header);
 
-  // バーガーの評価: data-score(0〜5)を、いちばん近い 0.5 に丸めて、上の段から並べる。data-decor があれば、飾りとして読み上げない
-  document.querySelectorAll('.burger').forEach((el) => {
-    const score = Math.round(parseFloat(el.dataset.score || '0') * 2) / 2;
-    el.innerHTML = [5, 4, 3, 2, 1].map((n) => {
-      const full = score >= n;
-      const half = !full && score >= n - 0.5;
-      return `<i class="l l${n}${full ? ' on' : ''}">${half ? '<b class="hf"></b>' : ''}</i>`;
-    }).join('');
-    if (el.hasAttribute('data-decor')) el.setAttribute('aria-hidden', 'true');
-    else { el.setAttribute('role', 'img'); el.setAttribute('aria-label', lang === 'en' ? `${el.dataset.score} out of 5` : `5 段階中 ${el.dataset.score}`); }
-  });
+  // バーガーの評価: data-score(数字に出す値)・data-size(lg / md / sm / xs)から、線画のバーガーを水位のように塗る(rating-icons.js)。data-decor があれば、飾りとして読み上げない
+  document.querySelectorAll('.burger').forEach((el) => window.Burger.mount(el, lang));
 
   if (lang === 'en') {
     document.querySelectorAll('[data-en]').forEach((e) => { e.textContent = e.dataset.en; });

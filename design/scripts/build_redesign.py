@@ -20,7 +20,7 @@ WEIGHTS = (400, 500, 700)
 BASELINE = 1.0
 WEIGHT_NAME = {"400": "標準", "500": "中", "700": "太字"}
 # (キー, 画面の名前)。PC とモバイルの両方に、この順で並べる
-SCREENS = [("shops", "ショップ一覧"), ("reviews", "レビュー一覧"), ("review-detail", "レビュー詳細"), ("shops-en", "ショップ一覧(English)"), ("states", "空・読み込み・404"), ("states-en", "空・読み込み・404(English)")]
+SCREENS = [("shops", "ショップ一覧"), ("reviews", "レビュー一覧"), ("review-detail", "レビュー詳細"), ("shops-en", "ショップ一覧(English)"), ("states", "空・読み込み・エラー・404"), ("states-en", "空・読み込み・エラー・404(English)")]
 
 
 def main() -> None:
@@ -40,14 +40,16 @@ def main() -> None:
     fid = api.call("create-file", {"name": args.name, "projectId": prof["defaultProjectId"]})["id"]
     page_value = api.call("get-file", {"id": fid})["data"]["pages"][0]
     fb = FileBuilder(api, fid)
-    page_pc, page_mob = str(uuid.uuid4()), str(uuid.uuid4())
+    page_pc, page_mob, page_icons = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
     fb.add({"type": "mod-page", "id": page_value, "name": "値"})
     fb.add({"type": "add-page", "id": page_pc, "name": "画面(PC)"})
     fb.add({"type": "add-page", "id": page_mob, "name": "画面(モバイル)"})
+    fb.add({"type": "add-page", "id": page_icons, "name": "評価アイコンの比較"})
     fb.flush()
 
     caps = {f"{k}-{size}": load(f"{k}-{size}") for k, _ in SCREENS for size in ("pc", "mobile")}
     tokens_cap = load("tokens")
+    icons_cap = load("rating-icons")
     values = json.loads((cap_dir / "tokens-values.json").read_text())
 
     # 色のスタイル(見本の CSS の変数)。同じ値は、先に書いたほうにひも付ける
@@ -61,7 +63,7 @@ def main() -> None:
     def weight_of(w) -> str:
         return str(min(WEIGHTS, key=lambda x: abs(x - int(w))))
     first: dict[tuple, float] = {}
-    for c in [*caps.values(), tokens_cap]:
+    for c in [*caps.values(), tokens_cap, icons_cap]:
         for n in c["nodes"]:
             if n["kind"] == "text":
                 st = n["style"]
@@ -82,6 +84,11 @@ def main() -> None:
     place(d, page_value, tokens_cap["nodes"], 0, 0, frame)
     fb.flush()
 
+    # 評価のバーガーの比較のページ
+    frame = d.frame(page_icons, "評価アイコンの比較", 0, 0, icons_cap["viewport"], icons_cap["height"], icons_cap["bg"])
+    place(d, page_icons, icons_cap["nodes"], 0, 0, frame)
+    fb.flush()
+
     screen_map = []
     for size_key, page in (("pc", page_pc), ("mobile", page_mob)):
         x = 0
@@ -95,7 +102,10 @@ def main() -> None:
             x += c["viewport"] + 160
     fb.flush()
 
-    info = {"fileId": fid, "name": args.name, "pages": {"値": page_value, "画面(PC)": page_pc, "画面(モバイル)": page_mob}, "screens": screen_map,
+    # 画像にするときの対象に、値のページと比較のページも入れる(render_penpot.js が、この一覧を使う)
+    screen_map.append({"screen": "デザインの値", "key": "tokens", "size": "pc", "page": "値", "frame": "デザインの値", "url": "tokens.html", "shapes": len(tokens_cap["nodes"])})
+    screen_map.append({"screen": "評価アイコンの比較", "key": "rating-icons", "size": "pc", "page": "評価アイコンの比較", "frame": "評価アイコンの比較", "url": "rating-icons.html", "shapes": len(icons_cap["nodes"])})
+    info = {"fileId": fid, "name": args.name, "pages": {"値": page_value, "画面(PC)": page_pc, "画面(モバイル)": page_mob, "評価アイコンの比較": page_icons}, "screens": screen_map,
             "colors": len(values["tokens"]), "typographies": len(typos)}
     if args.map_out:
         Path(args.map_out).write_text(json.dumps(info, ensure_ascii=False, indent=1))
