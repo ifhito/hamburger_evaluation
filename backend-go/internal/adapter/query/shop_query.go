@@ -61,7 +61,7 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 
 // GetShopWithCreator は shop とその creator を返す（Reviews は空のまま）。
 // または domain.ErrShopNotFound を返す。
-func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error) {
+func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error) {
 	row, err := r.q.GetShopWithCreator(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -85,7 +85,7 @@ func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id int64) (domain.Sh
 // うち author（user）も discard されていないものを、author、burger、stats
 // とともに新しい順（created_at desc、id desc）に返す。discard 済みの user の
 // （まだ kept な）review は含まれない。単一の JOIN クエリである（N+1 なし）。
-func (r *ShopQuery) ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error) {
+func (r *ShopQuery) ListShopReviews(ctx context.Context, shopID string) ([]domain.ShopReview, error) {
 	rows, err := r.q.ListShopReviews(ctx, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("list shop reviews: %w", err)

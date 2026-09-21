@@ -5,7 +5,7 @@ import type { Shop } from "../api/types";
 
 function page(hasMore: boolean, count = 1): Page<Shop> {
   return {
-    items: Array.from({ length: count }, (_, i) => ({ id: i + 1, name: `Shop ${i + 1}`, status: "active" as const })),
+    items: Array.from({ length: count }, (_, i) => ({ id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`, name: `Shop ${i + 1}`, status: "active" as const })),
     hasMore,
   };
 }
@@ -32,22 +32,22 @@ describe("getKey", () => {
 
 const viewer3 = "00000000-0000-4000-8000-000000000003";
 const viewer4 = "00000000-0000-4000-8000-000000000004";
+const shop2 = "00000000-0000-4000-8000-000000000002";
 
 describe("shopDetailKey", () => {
   it("id と viewerId を含む配列キーを返す", () => {
-    expect(shopDetailKey(2, viewer3)).toEqual(["/shops", 2, viewer3]);
-    expect(shopDetailKey(2, null)).toEqual(["/shops", 2, null]);
+    expect(shopDetailKey(shop2, viewer3)).toEqual(["/shops", shop2, viewer3]);
+    expect(shopDetailKey(shop2, null)).toEqual(["/shops", shop2, null]);
   });
 
   it("閲覧者が違えば(未ログイン含む)別のキーになる", () => {
-    expect(shopDetailKey(2, viewer3)).not.toEqual(shopDetailKey(2, null));
-    expect(shopDetailKey(2, viewer3)).not.toEqual(shopDetailKey(2, viewer4));
+    expect(shopDetailKey(shop2, viewer3)).not.toEqual(shopDetailKey(shop2, null));
+    expect(shopDetailKey(shop2, viewer3)).not.toEqual(shopDetailKey(shop2, viewer4));
   });
 
   it("enabled が false、または id が空なら null を返す", () => {
-    expect(shopDetailKey(2, viewer3, false)).toBeNull();
+    expect(shopDetailKey(shop2, viewer3, false)).toBeNull();
     expect(shopDetailKey(undefined, viewer3)).toBeNull();
-    expect(shopDetailKey(0, viewer3)).toBeNull();
-    expect(shopDetailKey(NaN, viewer3)).toBeNull();
+    expect(shopDetailKey("", viewer3)).toBeNull();
   });
 });

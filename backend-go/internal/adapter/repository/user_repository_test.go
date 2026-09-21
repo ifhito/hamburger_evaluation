@@ -102,15 +102,15 @@ func TestUserRepositoryManagement(t *testing.T) {
 	// alice の両方が review し、"solo" は victim だけが review した。退会後の統計の再計算と、
 	// 読み取りでの見え方は、トランザクションを持つ usecase を通して、adapter/uow のテストが
 	// 確かめている(このテストが確かめるのは、書き込みの結果だけ)。
-	shop := dbtest.InsertRow(ctx, t, conn,
+	shop := dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
 	insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-	shared := dbtest.InsertRow(ctx, t, conn, insertBurger, "Shared")
-	solo := dbtest.InsertRow(ctx, t, conn, insertBurger, "Solo")
-	for _, burgerID := range []int64{shared, solo} {
+	shared := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Shared")
+	solo := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Solo")
+	for _, burgerID := range []string{shared, solo} {
 		if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shop, burgerID); err != nil {
-			t.Fatalf("link shop %d burger %d: %v", shop, burgerID, err)
+			t.Fatalf("link shop %s burger %s: %v", shop, burgerID, err)
 		}
 	}
 	mustCreateReview(ctx, t, reviewRepo, 2, "meh", victim, shared)

@@ -26,7 +26,7 @@ type StoredBurgerStats struct {
 
 // FetchBurgerStats は、burger_stats の行を SQL で直接読み取る。行がなければ、2 つ目の戻り値が
 // false になる。
-func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) (StoredBurgerStats, bool) {
+func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) (StoredBurgerStats, bool) {
 	t.Helper()
 	var s StoredBurgerStats
 	err := conn.QueryRow(ctx,
@@ -47,7 +47,7 @@ func FetchBurgerStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerI
 // (domain.ReviewFact)にして返す。各値には、そのレビューの投稿者が、すべてのバーガーに付けた
 // 有効な評価を、投稿者の信頼度の計算に使う履歴として添える。本番の読み取りの実装を使わずに
 // 期待値を作ることで、実装の取り違えを検算で見つけられるようにしている。
-func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) []domain.ReviewFact {
+func keptReviewFacts(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) []domain.ReviewFact {
 	t.Helper()
 	rows, err := conn.Query(ctx,
 		`SELECT r.rating, r.created_at, r.user_id
@@ -112,11 +112,11 @@ func KeptRatingsOf(ctx context.Context, t *testing.T, conn *pgx.Conn, userID str
 // ちょうど一致することを確かめ、その行を返す。行がなかったり、値が違っていたりすると、テストを
 // 失敗させる。小数も厳密に比較する。同じ入力を同じ計算に通せば、まったく同じ値になるはずで、
 // 再計算の時刻を保存の精度(マイクロ秒)に切り詰めているのも、この検算が一致するようにするため。
-func RequireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID int64) StoredBurgerStats {
+func RequireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, burgerID string) StoredBurgerStats {
 	t.Helper()
 	got, ok := FetchBurgerStats(ctx, t, conn, burgerID)
 	if !ok {
-		t.Fatalf("バーガー %d の統計の行(burger_stats)がない", burgerID)
+		t.Fatalf("バーガー %s の統計の行(burger_stats)がない", burgerID)
 	}
 	facts := keptReviewFacts(ctx, t, conn, burgerID)
 	score := domain.CalculateBurgerScore(facts, got.CalculatedAt)

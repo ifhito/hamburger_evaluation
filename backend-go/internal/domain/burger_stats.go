@@ -179,7 +179,7 @@ func clampFloat(value, low, high float64) float64 {
 // BurgerStat は、バーガー 1 件の統計である。削除されていないレビューの件数・平均評価・加重スコア・
 // 信頼度と、それを計算した時刻を持つ。統計テーブル(burger_stats)の 1 行に保存される。
 type BurgerStat struct {
-	BurgerID      int64
+	BurgerID      string
 	ReviewCount   int64
 	AverageRating float64
 	WeightedScore float64
@@ -192,7 +192,7 @@ type BurgerStat struct {
 // データベースには触れない純粋な計算で、レビューが 0 件のときは、件数も平均もスコアも 0 の統計になる。
 // 計算時刻(CalculatedAt)には、スコアの計算に使った now をそのまま入れる。保存された値から後で
 // 検算するとき、同じ時刻で計算し直せるようにするため。
-func CalculateBurgerStat(burgerID int64, facts []ReviewFact, now time.Time) BurgerStat {
+func CalculateBurgerStat(burgerID string, facts []ReviewFact, now time.Time) BurgerStat {
 	score := CalculateBurgerScore(facts, now)
 	return BurgerStat{
 		BurgerID:      burgerID,
@@ -224,7 +224,7 @@ type BurgerStatRepository interface {
 	//
 	// このメソッドは値を返さず、行も変更しない。書き込みの前に行う排他制御であって、読み取りでは
 	// ない(そのため、Repository のメソッド名として Lock を許している)。
-	LockBurgerStat(ctx context.Context, burgerID int64) error
+	LockBurgerStat(ctx context.Context, burgerID string) error
 	// UpdateBurgerStat は、バーガーの統計の行を stat の値で置き換える(行がなければ作る)。
 	UpdateBurgerStat(ctx context.Context, stat BurgerStat) error
 }
@@ -245,7 +245,7 @@ func NewBurgerStats(repo BurgerStatRepository) *BurgerStats {
 }
 
 // Lock は、バーガーの統計を 1 つずつ順番に計算し直せるように、バーガーの行をロックする。
-func (s *BurgerStats) Lock(ctx context.Context, burgerID int64) error {
+func (s *BurgerStats) Lock(ctx context.Context, burgerID string) error {
 	return s.repo.LockBurgerStat(ctx, burgerID)
 }
 

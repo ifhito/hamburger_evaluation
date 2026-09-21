@@ -18,8 +18,8 @@ import (
 // fail-loud する。
 type fakeShopQuery struct {
 	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error)
-	getShopWithCreator     func(ctx context.Context, id int64) (domain.ShopDetail, error)
-	listShopReviews        func(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
+	getShopWithCreator     func(ctx context.Context, id string) (domain.ShopDetail, error)
+	listShopReviews        func(ctx context.Context, shopID string) ([]domain.ShopReview, error)
 	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
 }
 
@@ -30,14 +30,14 @@ func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility
 	return f.listShops(ctx, vis, keyword, limit, offset)
 }
 
-func (f *fakeShopQuery) GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error) {
+func (f *fakeShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error) {
 	if f.getShopWithCreator == nil {
 		panic("unexpected GetShopWithCreator call")
 	}
 	return f.getShopWithCreator(ctx, id)
 }
 
-func (f *fakeShopQuery) ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error) {
+func (f *fakeShopQuery) ListShopReviews(ctx context.Context, shopID string) ([]domain.ShopReview, error) {
 	if f.listShopReviews == nil {
 		panic("unexpected ListShopReviews call")
 	}
@@ -56,8 +56,8 @@ func (f *fakeShopQuery) ListShopsForModeration(ctx context.Context, status *doma
 // fail-loud する。
 type fakeShopRepo struct {
 	createShop       func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
-	updateShopName   func(ctx context.Context, id int64, name string) (domain.Shop, error)
-	updateShopStatus func(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error)
+	updateShopName   func(ctx context.Context, id string, name string) (domain.Shop, error)
+	updateShopStatus func(ctx context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error)
 }
 
 func (f *fakeShopRepo) CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error) {
@@ -67,14 +67,14 @@ func (f *fakeShopRepo) CreateShop(ctx context.Context, shop domain.Shop) (domain
 	return f.createShop(ctx, shop)
 }
 
-func (f *fakeShopRepo) UpdateShopName(ctx context.Context, id int64, name string) (domain.Shop, error) {
+func (f *fakeShopRepo) UpdateShopName(ctx context.Context, id string, name string) (domain.Shop, error) {
 	if f.updateShopName == nil {
 		panic("unexpected UpdateShopName call")
 	}
 	return f.updateShopName(ctx, id, name)
 }
 
-func (f *fakeShopRepo) UpdateShopStatus(ctx context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
+func (f *fakeShopRepo) UpdateShopStatus(ctx context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error) {
 	if f.updateShopStatus == nil {
 		panic("unexpected UpdateShopStatus call")
 	}
@@ -144,19 +144,19 @@ func TestShopsGet(t *testing.T) {
 	alice := domain.User{ID: uid.N(1), Username: "alice"}
 	admin := domain.User{ID: uid.N(2), Admin: true}
 	pending := domain.ShopDetail{
-		Shop:    domain.Shop{ID: 10, Name: "Pending Shack", Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID)},
+		Shop:    domain.Shop{ID: uid.N(10), Name: "Pending Shack", Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID)},
 		Creator: &domain.UserRef{ID: alice.ID, Username: "alice"},
 	}
 	reviews := []domain.ShopReview{{ID: 3, Rating: 4, CreatedAt: time.Now()}}
 
 	query := &fakeShopQuery{
-		getShopWithCreator: func(_ context.Context, id int64) (domain.ShopDetail, error) {
+		getShopWithCreator: func(_ context.Context, id string) (domain.ShopDetail, error) {
 			if id == pending.ID {
 				return pending, nil
 			}
 			return domain.ShopDetail{}, domain.ErrShopNotFound
 		},
-		listShopReviews: func(_ context.Context, shopID int64) ([]domain.ShopReview, error) {
+		listShopReviews: func(_ context.Context, shopID string) ([]domain.ShopReview, error) {
 			return reviews, nil
 		},
 	}
@@ -188,7 +188,7 @@ func TestShopsGet(t *testing.T) {
 	})
 
 	t.Run("未知の id は ErrShopNotFound を返す", func(t *testing.T) {
-		if _, err := shops.Get(context.Background(), &admin, 999); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := shops.Get(context.Background(), &admin, uid.N(999)); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("Get error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
@@ -196,7 +196,7 @@ func TestShopsGet(t *testing.T) {
 	t.Run("review の query が失敗したらそのエラーが伝播する", func(t *testing.T) {
 		failing := &fakeShopQuery{
 			getShopWithCreator: query.getShopWithCreator,
-			listShopReviews: func(_ context.Context, _ int64) ([]domain.ShopReview, error) {
+			listShopReviews: func(_ context.Context, _ string) ([]domain.ShopReview, error) {
 				return nil, io.ErrUnexpectedEOF
 			},
 		}
@@ -215,7 +215,7 @@ func TestShopsCreate(t *testing.T) {
 	t.Run("viewer を creator とする pending の shop を作成する", func(t *testing.T) {
 		repo := &fakeShopRepo{
 			createShop: func(_ context.Context, shop domain.Shop) (domain.Shop, error) {
-				shop.ID = 42
+				shop.ID = uid.N(42)
 				return shop, nil
 			},
 		}
@@ -225,7 +225,7 @@ func TestShopsCreate(t *testing.T) {
 		}
 		want := domain.ShopDetail{
 			Shop: domain.Shop{
-				ID: 42, Name: "New Shack", Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID),
+				ID: uid.N(42), Name: "New Shack", Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID),
 			},
 			Creator: &domain.UserRef{ID: alice.ID, Username: "alice"},
 		}
@@ -267,9 +267,9 @@ func TestShopsAdminForbidden(t *testing.T) {
 		call func() error
 	}{
 		{name: "AdminList は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminList(ctx, alice, ""); return err }},
-		{name: "AdminUpdateName は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminUpdateName(ctx, alice, 1, "x"); return err }},
-		{name: "Approve は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Approve(ctx, alice, 1); return err }},
-		{name: "Reject は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Reject(ctx, alice, 1, nil); return err }},
+		{name: "AdminUpdateName は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminUpdateName(ctx, alice, uid.N(1), "x"); return err }},
+		{name: "Approve は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Approve(ctx, alice, uid.N(1)); return err }},
+		{name: "Reject は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Reject(ctx, alice, uid.N(1), nil); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -340,10 +340,10 @@ func TestShopsModeration(t *testing.T) {
 	admin := domain.User{ID: uid.N(2), Admin: true}
 	ctx := context.Background()
 	rejected := domain.ShopDetail{
-		Shop:    domain.Shop{ID: 10, Name: "Shack", Status: domain.ShopStatusRejected, ModerationNote: strPtr("old note"), CreatorID: strPtr(uid.N(1))},
+		Shop:    domain.Shop{ID: uid.N(10), Name: "Shack", Status: domain.ShopStatusRejected, ModerationNote: strPtr("old note"), CreatorID: strPtr(uid.N(1))},
 		Creator: &domain.UserRef{ID: uid.N(1), Username: "alice"},
 	}
-	getRejected := func(_ context.Context, id int64) (domain.ShopDetail, error) {
+	getRejected := func(_ context.Context, id string) (domain.ShopDetail, error) {
 		if id == rejected.ID {
 			return rejected, nil
 		}
@@ -351,7 +351,7 @@ func TestShopsModeration(t *testing.T) {
 	}
 	// statusWrite は 1 回の UpdateShopStatus の呼び出しの引数を記録する。
 	type statusWrite struct {
-		id     int64
+		id     string
 		status domain.ShopStatus
 		note   *string
 	}
@@ -363,7 +363,7 @@ func TestShopsModeration(t *testing.T) {
 	// テストが panic する。
 	statusRepoFor := func(got *statusWrite) *fakeShopRepo {
 		return &fakeShopRepo{
-			updateShopStatus: func(_ context.Context, id int64, status domain.ShopStatus, note *string) (domain.Shop, error) {
+			updateShopStatus: func(_ context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error) {
 				*got = statusWrite{id: id, status: status, note: note}
 				stored := rejected.Shop
 				stored.Status = status
@@ -380,7 +380,7 @@ func TestShopsModeration(t *testing.T) {
 			t.Fatalf("Approve returned error: %v", err)
 		}
 		if write.id != rejected.ID || write.status != domain.ShopStatusActive || write.note != nil {
-			t.Errorf("status write = %+v, want id %d, active, nil note", write, rejected.ID)
+			t.Errorf("status write = %+v, want id %s, active, nil note", write, rejected.ID)
 		}
 		if got.Status != domain.ShopStatusActive || got.Name != rejected.Name || !reflect.DeepEqual(got.Creator, rejected.Creator) {
 			t.Errorf("detail = %+v, want active shop with unchanged name and creator", got)
@@ -395,7 +395,7 @@ func TestShopsModeration(t *testing.T) {
 			t.Fatalf("Reject returned error: %v", err)
 		}
 		if write.id != rejected.ID || write.status != domain.ShopStatusRejected || write.note != note {
-			t.Errorf("status write = %+v, want id %d, rejected, the note", write, rejected.ID)
+			t.Errorf("status write = %+v, want id %s, rejected, the note", write, rejected.ID)
 		}
 		if got.ModerationNote != note {
 			t.Errorf("detail note = %v, want %v", got.ModerationNote, note)
@@ -403,12 +403,12 @@ func TestShopsModeration(t *testing.T) {
 	})
 
 	t.Run("AdminUpdateName は name だけを永続化する", func(t *testing.T) {
-		var gotID int64
+		var gotID string
 		var gotName string
 		// updateShopStatus は未設定のままなので、status/note に触れる rename が
 		// あればテストが panic する。
 		repo := &fakeShopRepo{
-			updateShopName: func(_ context.Context, id int64, name string) (domain.Shop, error) {
+			updateShopName: func(_ context.Context, id string, name string) (domain.Shop, error) {
 				gotID, gotName = id, name
 				stored := rejected.Shop
 				stored.Name = name
@@ -420,7 +420,7 @@ func TestShopsModeration(t *testing.T) {
 			t.Fatalf("AdminUpdateName returned error: %v", err)
 		}
 		if gotID != rejected.ID || gotName != "Renamed" {
-			t.Errorf("name write = (%d, %q), want (%d, Renamed)", gotID, gotName, rejected.ID)
+			t.Errorf("name write = (%s, %q), want (%s, Renamed)", gotID, gotName, rejected.ID)
 		}
 		if got.Name != "Renamed" || got.Status != rejected.Status {
 			t.Errorf("detail = %+v, want renamed with status unchanged", got)
@@ -441,9 +441,9 @@ func TestShopsModeration(t *testing.T) {
 		// 失敗した後の書き込みはどれもテストを panic させる。
 		shops := newShops(rejectedQuery, &fakeShopRepo{})
 		for name, call := range map[string]func() error{
-			"Approve":         func() error { _, err := shops.Approve(ctx, admin, 999); return err },
-			"Reject":          func() error { _, err := shops.Reject(ctx, admin, 999, nil); return err },
-			"AdminUpdateName": func() error { _, err := shops.AdminUpdateName(ctx, admin, 999, "x"); return err },
+			"Approve":         func() error { _, err := shops.Approve(ctx, admin, uid.N(999)); return err },
+			"Reject":          func() error { _, err := shops.Reject(ctx, admin, uid.N(999), nil); return err },
+			"AdminUpdateName": func() error { _, err := shops.AdminUpdateName(ctx, admin, uid.N(999), "x"); return err },
 		} {
 			if err := call(); !errors.Is(err, domain.ErrShopNotFound) {
 				t.Errorf("%s error = %v, want %v", name, err, domain.ErrShopNotFound)
@@ -458,29 +458,29 @@ func TestShopsGetCanReview(t *testing.T) {
 	alice := domain.User{ID: uid.N(1), Username: "alice"}
 	bob := domain.User{ID: uid.N(2), Username: "bob"}
 	admin := domain.User{ID: uid.N(3), Username: "root", Admin: true}
-	byStatus := map[int64]domain.ShopDetail{
-		10: {Shop: domain.Shop{ID: 10, Status: domain.ShopStatusActive}},
-		11: {Shop: domain.Shop{ID: 11, Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID)}},
-		12: {Shop: domain.Shop{ID: 12, Status: domain.ShopStatusRejected, CreatorID: strPtr(alice.ID)}},
+	byStatus := map[string]domain.ShopDetail{
+		uid.N(10): {Shop: domain.Shop{ID: uid.N(10), Status: domain.ShopStatusActive}},
+		uid.N(11): {Shop: domain.Shop{ID: uid.N(11), Status: domain.ShopStatusPending, CreatorID: strPtr(alice.ID)}},
+		uid.N(12): {Shop: domain.Shop{ID: uid.N(12), Status: domain.ShopStatusRejected, CreatorID: strPtr(alice.ID)}},
 	}
 	query := &fakeShopQuery{
-		getShopWithCreator: func(_ context.Context, id int64) (domain.ShopDetail, error) { return byStatus[id], nil },
-		listShopReviews:    func(context.Context, int64) ([]domain.ShopReview, error) { return nil, nil },
+		getShopWithCreator: func(_ context.Context, id string) (domain.ShopDetail, error) { return byStatus[id], nil },
+		listShopReviews:    func(context.Context, string) ([]domain.ShopReview, error) { return nil, nil },
 	}
 	shops := newShops(query, &fakeShopRepo{})
 
 	tests := []struct {
 		name   string
 		viewer *domain.User
-		id     int64
+		id     string
 		want   bool
 	}{
-		{name: "匿名は active な shop でも false", viewer: nil, id: 10, want: false},
-		{name: "ログイン済みの一般ユーザーは active な shop で true", viewer: &bob, id: 10, want: true},
-		{name: "creator は自分の pending な shop で true", viewer: &alice, id: 11, want: true},
-		{name: "admin は pending な shop で true", viewer: &admin, id: 11, want: true},
-		{name: "creator は rejected な shop でも false", viewer: &alice, id: 12, want: false},
-		{name: "admin は rejected な shop でも false", viewer: &admin, id: 12, want: false},
+		{name: "匿名は active な shop でも false", viewer: nil, id: uid.N(10), want: false},
+		{name: "ログイン済みの一般ユーザーは active な shop で true", viewer: &bob, id: uid.N(10), want: true},
+		{name: "creator は自分の pending な shop で true", viewer: &alice, id: uid.N(11), want: true},
+		{name: "admin は pending な shop で true", viewer: &admin, id: uid.N(11), want: true},
+		{name: "creator は rejected な shop でも false", viewer: &alice, id: uid.N(12), want: false},
+		{name: "admin は rejected な shop でも false", viewer: &admin, id: uid.N(12), want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -501,7 +501,7 @@ func TestShopsListHasMore(t *testing.T) {
 	for _, want := range []bool{true, false} {
 		query := &fakeShopQuery{
 			listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.Shop, bool, error) {
-				return []domain.Shop{{ID: 1}}, want, nil
+				return []domain.Shop{{ID: uid.N(1)}}, want, nil
 			},
 		}
 		_, got, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", 1, 20)

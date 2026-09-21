@@ -113,7 +113,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	}
 
 	type burgerSpec struct {
-		shopID int64
+		shopID string
 		name   string
 	}
 	specs := []burgerSpec{
@@ -124,7 +124,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		{freshness, "クラシックバーガー"},
 		{freshness, "テリヤキバーガー"},
 	}
-	burgers := make([]int64, len(specs))
+	burgers := make([]string, len(specs))
 	for i, spec := range specs {
 		id, err := seedBurger(ctx, tx, spec.shopID, spec.name)
 		if err != nil {
@@ -194,21 +194,21 @@ func seedUser(ctx context.Context, tx pgx.Tx, email, username string, admin bool
 
 // seedShop は name で shop を探し（seed の natural key である。schema には
 // これに対する unique 制約がない）、なければ与えられた status で作成する。
-func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID string) (int64, error) {
-	var id int64
+func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID string) (string, error) {
+	var id string
 	err := tx.QueryRow(ctx, `SELECT id FROM shops WHERE name = $1`, name).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return 0, fmt.Errorf("find shop %s: %w", name, err)
+		return "", fmt.Errorf("find shop %s: %w", name, err)
 	}
 	err = tx.QueryRow(ctx,
 		`INSERT INTO shops (name, status, creator_id) VALUES ($1, $2, $3) RETURNING id`,
 		name, status, creatorID,
 	).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("insert shop %s: %w", name, err)
+		return "", fmt.Errorf("insert shop %s: %w", name, err)
 	}
 	return id, nil
 }
@@ -216,8 +216,8 @@ func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creator
 // seedBurger は shops_burgers を経由して name で shop の burger を探し
 // （CreateReviewForNamedBurger が使うのと同じ shop ごとの natural key）、
 // なければ burger とその link を作成する。
-func seedBurger(ctx context.Context, tx pgx.Tx, shopID int64, name string) (int64, error) {
-	var id int64
+func seedBurger(ctx context.Context, tx pgx.Tx, shopID string, name string) (string, error) {
+	var id string
 	err := tx.QueryRow(ctx,
 		`SELECT b.id FROM burgers b
 		 JOIN shops_burgers sb ON sb.burger_id = b.id
@@ -228,17 +228,17 @@ func seedBurger(ctx context.Context, tx pgx.Tx, shopID int64, name string) (int6
 		return id, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return 0, fmt.Errorf("find burger %s of shop %d: %w", name, shopID, err)
+		return "", fmt.Errorf("find burger %s of shop %s: %w", name, shopID, err)
 	}
 	err = tx.QueryRow(ctx, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, name).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("insert burger %s: %w", name, err)
+		return "", fmt.Errorf("insert burger %s: %w", name, err)
 	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
 		shopID, id,
 	); err != nil {
-		return 0, fmt.Errorf("link burger %d to shop %d: %w", id, shopID, err)
+		return "", fmt.Errorf("link burger %s to shop %s: %w", id, shopID, err)
 	}
 	return id, nil
 }
@@ -246,7 +246,7 @@ func seedBurger(ctx context.Context, tx pgx.Tx, shopID int64, name string) (int6
 // seedReview は、ユーザーがその burger に対する kept な review をすでに持って
 // いない限り review を挿入する（seed の natural key。アプリ自体は複数件を
 // 許可する）。
-func seedReview(ctx context.Context, tx pgx.Tx, userID string, burgerID int64, rating int16, comment string) error {
+func seedReview(ctx context.Context, tx pgx.Tx, userID string, burgerID string, rating int16, comment string) error {
 	var exists bool
 	err := tx.QueryRow(ctx,
 		`SELECT EXISTS (
@@ -256,7 +256,7 @@ func seedReview(ctx context.Context, tx pgx.Tx, userID string, burgerID int64, r
 		userID, burgerID,
 	).Scan(&exists)
 	if err != nil {
-		return fmt.Errorf("find review (user %s, burger %d): %w", userID, burgerID, err)
+		return fmt.Errorf("find review (user %s, burger %s): %w", userID, burgerID, err)
 	}
 	if exists {
 		return nil
@@ -265,7 +265,7 @@ func seedReview(ctx context.Context, tx pgx.Tx, userID string, burgerID int64, r
 		`INSERT INTO reviews (rating, comment, user_id, burger_id) VALUES ($1, $2, $3, $4)`,
 		rating, comment, userID, burgerID,
 	); err != nil {
-		return fmt.Errorf("insert review (user %s, burger %d): %w", userID, burgerID, err)
+		return fmt.Errorf("insert review (user %s, burger %s): %w", userID, burgerID, err)
 	}
 	return nil
 }
@@ -277,7 +277,7 @@ func seedReview(ctx context.Context, tx pgx.Tx, userID string, burgerID int64, r
 // calculator を使うので、seed された stats はアプリが保存するものと一致する。
 // FOR UPDATE ロックはない。seed は 1 回限りのツールで、同時に書き込むものが
 // いないからである。
-func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) error {
+func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID string) error {
 	rows, err := tx.Query(ctx,
 		`SELECT r.rating, r.created_at, r.user_id
 		 FROM reviews r
@@ -287,7 +287,7 @@ func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) erro
 		burgerID,
 	)
 	if err != nil {
-		return fmt.Errorf("list facts for burger %d: %w", burgerID, err)
+		return fmt.Errorf("list facts for burger %s: %w", burgerID, err)
 	}
 	type factRow struct {
 		rating    int16
@@ -299,13 +299,13 @@ func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) erro
 		var row factRow
 		if err := rows.Scan(&row.rating, &row.createdAt, &row.userID); err != nil {
 			rows.Close()
-			return fmt.Errorf("scan fact for burger %d: %w", burgerID, err)
+			return fmt.Errorf("scan fact for burger %s: %w", burgerID, err)
 		}
 		factRows = append(factRows, row)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("list facts for burger %d: %w", burgerID, err)
+		return fmt.Errorf("list facts for burger %s: %w", burgerID, err)
 	}
 
 	// Reviewer-trust の履歴：各 fact の author がすべての burger にわたって
@@ -364,7 +364,7 @@ func recalculateBurgerStats(ctx context.Context, tx pgx.Tx, burgerID int64) erro
 		     calculated_at = EXCLUDED.calculated_at`,
 		burgerID, int64(len(facts)), domain.AverageRating(facts), score.WeightedAverage, score.Confidence, now,
 	); err != nil {
-		return fmt.Errorf("upsert stats for burger %d: %w", burgerID, err)
+		return fmt.Errorf("upsert stats for burger %s: %w", burgerID, err)
 	}
 	return nil
 }

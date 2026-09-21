@@ -49,7 +49,7 @@ DELETE FROM shops
 WHERE id = $1
 `
 
-func (q *Queries) DeleteShop(ctx context.Context, id int64) error {
+func (q *Queries) DeleteShop(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, deleteShop, id)
 	return err
 }
@@ -59,7 +59,7 @@ SELECT id, name, status, moderation_note, creator_id, created_at, updated_at FRO
 WHERE id = $1
 `
 
-func (q *Queries) GetShop(ctx context.Context, id int64) (Shop, error) {
+func (q *Queries) GetShop(ctx context.Context, id string) (Shop, error) {
 	row := q.db.QueryRow(ctx, getShop, id)
 	var i Shop
 	err := row.Scan(
@@ -83,7 +83,7 @@ WHERE s.id = $1
 `
 
 type GetShopWithCreatorRow struct {
-	ID              int64
+	ID              string
 	Name            string
 	Status          int16
 	ModerationNote  pgtype.Text
@@ -91,7 +91,7 @@ type GetShopWithCreatorRow struct {
 	CreatorUsername pgtype.Text
 }
 
-func (q *Queries) GetShopWithCreator(ctx context.Context, id int64) (GetShopWithCreatorRow, error) {
+func (q *Queries) GetShopWithCreator(ctx context.Context, id string) (GetShopWithCreatorRow, error) {
 	row := q.db.QueryRow(ctx, getShopWithCreator, id)
 	var i GetShopWithCreatorRow
 	err := row.Scan(
@@ -126,7 +126,7 @@ type ListShopReviewsRow struct {
 	CreatedAt     pgtype.Timestamptz
 	UserID        string
 	UserUsername  string
-	BurgerID      int64
+	BurgerID      string
 	BurgerName    string
 	ReviewCount   pgtype.Int8
 	AverageRating pgtype.Float8
@@ -137,7 +137,7 @@ type ListShopReviewsRow struct {
 // その shop の、discard されていない user の、discard されていない review。
 // 新しい順。u.discarded_at フィルタは、discard 済みの user の（まだ kept な）
 // review を shop 詳細から隠す（S8）。
-func (q *Queries) ListShopReviews(ctx context.Context, shopID int64) ([]ListShopReviewsRow, error) {
+func (q *Queries) ListShopReviews(ctx context.Context, shopID string) ([]ListShopReviewsRow, error) {
 	rows, err := q.db.Query(ctx, listShopReviews, shopID)
 	if err != nil {
 		return nil, err
@@ -189,7 +189,7 @@ type ListShopsParams struct {
 }
 
 type ListShopsRow struct {
-	ID             int64
+	ID             string
 	Name           string
 	Status         int16
 	ModerationNote pgtype.Text
@@ -245,7 +245,7 @@ ORDER BY s.created_at DESC, s.id DESC
 `
 
 type ListShopsForModerationRow struct {
-	ID              int64
+	ID              string
 	Name            string
 	Status          int16
 	ModerationNote  pgtype.Text
@@ -295,7 +295,7 @@ RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
 `
 
 type UpdateShopParams struct {
-	ID             int64
+	ID             string
 	Name           string
 	Status         int16
 	ModerationNote pgtype.Text
@@ -330,7 +330,7 @@ RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
 `
 
 type UpdateShopNameParams struct {
-	ID   int64
+	ID   string
 	Name string
 }
 
@@ -361,7 +361,7 @@ RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
 `
 
 type UpdateShopStatusParams struct {
-	ID             int64
+	ID             string
 	Status         int16
 	ModerationNote pgtype.Text
 }

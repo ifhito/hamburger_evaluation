@@ -30,7 +30,7 @@ var _ usecase.BurgerStatsQuery = (*BurgerStatsQuery)(nil)
 // 削除済みのユーザーが書いたものを除く)を、計算用の値(domain.ReviewFact)にして返す。それぞれの
 // 値には、そのレビューの投稿者が、すべてのバーガーに付けた有効な評価を、投稿者の信頼度を計算する
 // ための履歴として添える。
-func (r *BurgerStatsQuery) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error) {
+func (r *BurgerStatsQuery) ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]domain.ReviewFact, error) {
 	rows, err := r.q.ListBurgerReviewFacts(ctx, burgerID)
 	if err != nil {
 		return nil, fmt.Errorf("list burger review facts: %w", err)
@@ -68,7 +68,7 @@ func (r *BurgerStatsQuery) ListBurgerReviewFacts(ctx context.Context, burgerID i
 // ListReviewedBurgerIDsByUser は、ユーザーの有効なレビューが付いているバーガーの ID を、重複なしで
 // 昇順に返す。昇順にそろえるのは、複数のバーガーを続けてロックする再計算が、別の処理と逆の順序に
 // なって互いを待ち合わない(デッドロックしない)ようにするため。並び順は SQL の ORDER BY が保証する。
-func (r *BurgerStatsQuery) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]int64, error) {
+func (r *BurgerStatsQuery) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]string, error) {
 	ids, err := r.q.ListUserKeptReviewBurgerIDs(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list reviewed burger ids by user: %w", err)

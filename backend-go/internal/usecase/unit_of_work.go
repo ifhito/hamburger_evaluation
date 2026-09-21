@@ -19,10 +19,10 @@ type BurgerStatsQuery interface {
 	// にして返す。削除済みのレビューと、削除済みのユーザーが書いたレビューは含めない。それぞれの
 	// 値には、そのレビューの投稿者が、すべてのバーガーに付けた有効な評価(投稿者の信頼度の計算に使う)
 	// を添える。
-	ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error)
+	ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]domain.ReviewFact, error)
 	// ListReviewedBurgerIDsByUser は、ユーザーの有効なレビューが付いているバーガーの ID を、重複なしで
 	// 昇順に返す。ユーザーが退会したとき、統計を計算し直す対象を知るために使う。
-	ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]int64, error)
+	ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]string, error)
 }
 
 // Tx は、UnitOfWork.Do の中で使う、同じトランザクションに結び付いた書き込みと読み取りの組である
@@ -78,7 +78,7 @@ func NewBurgerStatsRecalculator(clock Clock) *BurgerStatsRecalculator {
 // 別々の処理が同じバーガーを逆の順序でロックすると、互いに相手のロックを待ち合って止まる
 // (デッドロック)ため。対象のレビューが 0 件でも、件数 0 の統計を保存する(統計の行が
 // なくなると、画面に出す値が決まらなくなる)。
-func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burgerID int64) error {
+func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burgerID string) error {
 	if err := tx.BurgerStats.Lock(ctx, burgerID); err != nil {
 		return fmt.Errorf("recalculate burger stats: lock burger: %w", err)
 	}
@@ -100,6 +100,10 @@ func (r *BurgerStatsRecalculator) Recalculate(ctx context.Context, tx Tx, burger
 // バーガー ID の昇順に計算し直す(ユーザーの退会で使う)。昇順にするのは、同時に退会する 2 人の
 // レビューが同じバーガーに付いていても、ロックの順序がそろってデッドロックしないため。読み取りの
 // 実装も昇順で返すが、その順序に頼らず、ここで並べ直す。
+//
+// バーガーの ID は、小文字・ハイフン区切りの決まった形の UUID(文字列)なので、文字列として
+// 昇順に並べても、データベースの uuid 型の昇順と同じ順序になる。読み取り(SQL の ORDER BY)の
+// 並び順と、ここでの並べ直しの順序が食い違って、逆の順序でロックしてしまうことはない。
 func (r *BurgerStatsRecalculator) RecalculateReviewedBy(ctx context.Context, tx Tx, userID string) error {
 	burgerIDs, err := tx.Stats.ListReviewedBurgerIDsByUser(ctx, userID)
 	if err != nil {

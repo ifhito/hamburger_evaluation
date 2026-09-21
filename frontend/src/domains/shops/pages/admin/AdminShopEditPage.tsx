@@ -14,7 +14,7 @@ export default function AdminShopEditPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const shopId = Number(id);
+  const shopId = id ?? "";
 
   const { data: shops, isLoading } = useAdminShops();
   const shop = shops?.find((s) => s.id === shopId);

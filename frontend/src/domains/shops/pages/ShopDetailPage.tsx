@@ -14,7 +14,7 @@ export default function ShopDetailPage() {
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
   // レビューを書けるか(canReview)は backend が返す。閲覧者ごとに違うので、認証状態が確定してから取得する
-  const { data: shop, isLoading, error } = useShopDetail(Number(id), user?.id ?? null, {
+  const { data: shop, isLoading, error } = useShopDetail(id, user?.id ?? null, {
     enabled: !authLoading,
   });
 

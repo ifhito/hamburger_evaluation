@@ -65,7 +65,7 @@ func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Revie
 // 検索から作成までの複数の文を 1 つにまとめるので、途中で失敗しても、作りかけのバーガーや結び付けが
 // 残ることはない。ただし、その後のレビューの登録まで同じトランザクションにするのは、呼び出し側
 // (UnitOfWork。まとめて 1 つのトランザクションにする範囲を、usecase が指定する仕組み)の役目である。
-func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID int64, burgerName string) (domain.ShopReviewBurger, error) {
+func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID string, burgerName string) (domain.ShopReviewBurger, error) {
 	var burger domain.ShopReviewBurger
 	err := withTx(ctx, r.db, "create shop burger", func(q *sqlcgen.Queries) error {
 		found, err := q.GetShopBurgerByNameWithStats(ctx, sqlcgen.GetShopBurgerByNameWithStatsParams{

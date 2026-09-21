@@ -34,7 +34,7 @@ func ShopStatusCode(status domain.ShopStatus) (int16, error) {
 
 // Shop は sqlc の shop のカラムを domain のエンティティに変換し、
 // smallint の status をデコードする（0=pending、1=active、2=rejected）。
-func Shop(id int64, name string, status int16, note pgtype.Text, creatorID *string) (domain.Shop, error) {
+func Shop(id string, name string, status int16, note pgtype.Text, creatorID *string) (domain.Shop, error) {
 	shop := domain.Shop{ID: id, Name: name}
 	switch status {
 	case 0:
@@ -46,7 +46,7 @@ func Shop(id int64, name string, status int16, note pgtype.Text, creatorID *stri
 	default:
 		// CHECK 制約が保たれている限り到達しない。保たれていなければ
 		// fail loudly する。
-		return domain.Shop{}, fmt.Errorf("shop %d: unknown status code %d", id, status)
+		return domain.Shop{}, fmt.Errorf("shop %s: unknown status code %d", id, status)
 	}
 	if note.Valid {
 		n := note.String
@@ -58,7 +58,7 @@ func Shop(id int64, name string, status int16, note pgtype.Text, creatorID *stri
 
 // ShopReviewBurger は、stats つき burger の sqlc のカラムを domain の
 // ペイロードに変換する。stats のカラムは LEFT JOIN 由来で NULL になりうる。
-func ShopReviewBurger(id int64, name string, averageRating pgtype.Float8, reviewCount pgtype.Int8, weightedScore, confidence pgtype.Float8) domain.ShopReviewBurger {
+func ShopReviewBurger(id string, name string, averageRating pgtype.Float8, reviewCount pgtype.Int8, weightedScore, confidence pgtype.Float8) domain.ShopReviewBurger {
 	return domain.ShopReviewBurger{
 		ID:   id,
 		Name: name,

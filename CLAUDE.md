@@ -85,7 +85,7 @@ backend-go/
 
 - **:8080** で待ち受け、ヘルスチェックは `GET /up`。
 - 専用の Postgres を使う (ホストのポートは 5433)。
-- ユーザーの ID は **UUID**(小文字・ハイフン区切りの正規形。DB の `gen_random_uuid()` が v4 で生成する)。URL・API・JWT(`user_id` claim)・frontend では、この文字列をそのまま扱う。正規形でない ID(大文字・ハイフンなし・整数)は、パスの `{id}` では存在しないものと同じ 404、`user_id` クエリでは 422 にする(形式の判定は `domain.IsUUID` だけが持ち、frontend は判定しない)。shop・burger・review の ID は、当面は連番の bigint(S29・S30 で UUID にする)。
+- ユーザー・shop・burger の ID は **UUID**(小文字・ハイフン区切りの正規形。DB の `gen_random_uuid()` が v4 で生成する)。URL・API・JWT(`user_id` claim)・frontend では、この文字列をそのまま扱う。正規形でない ID(大文字・ハイフンなし・整数)は、パスの `{id}`(`/users/{id}`・`/shops/{id}`・`/admin/shops/{id}`)では存在しないものと同じ 404、クエリ(`user_id`・`shop_id`)と `POST /reviews` の本文(`shop_id`・`burger_id`。空は「指定なし」で、`shop_id` がなければ 404、`burger_id` がなければ `burger_name` の経路)では 422(`User id must be a valid UUID` など)にする(形式の判定は `domain.IsUUID` だけが持ち、frontend は判定しない)。一覧の並びは、id ではなく `created_at` や `name` と、同値の決着のための `id` で決める(UUID の id は作成順ではない)。review の ID は、当面は連番の bigint(別の変更で UUID にする)。
 - 認証は **JWT**。ログイン時にトークンを返し、以降は `Authorization: Bearer <token>` で送る。`user_id` が数値の旧形式のトークンは無効(401)。`JWT_SECRET` が未設定だと起動時にエラーで落ちる(fail-loud)ため、`docker compose up` の前に export する。
 - signup は**メール確認つき**で、確認メールの送信設定(`SMTP_HOST`・`SMTP_PORT`・`MAIL_FROM`・`APP_BASE_URL`)が欠けていると起動時に落ちる。開発では compose の Mailpit が受け取る(`docker compose up` で足りる。Web UI は http://localhost:8025)。詳細は「signup の確認メール」。
 
@@ -238,11 +238,11 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 `backend-go/db/migrations/` のマイグレーションで定義された 8 つのテーブル:
 
 - **users** — id (uuid), email, username, bio (自己紹介文。書かれていなければ空文字), password_digest, admin フラグ, 論理削除 (discarded_at)
-- **shops** — name, モデレーション状態 (pending / active / rejected), moderation_note, 申請者への FK
-- **burgers** — 中間テーブル経由でショップに紐づくバーガー
-- **shops_burgers** *(中間テーブル)* — shop_id (FK), burger_id (FK)
+- **shops** — id (uuid), name, モデレーション状態 (pending / active / rejected), moderation_note, 申請者への FK
+- **burgers** — id (uuid), 中間テーブル経由でショップに紐づくバーガー
+- **shops_burgers** *(中間テーブル)* — shop_id (FK, uuid), burger_id (FK, uuid)
 - **reviews** — rating, comment, user への FK, burger への FK, photo_key (写真の保存キー。任意), 論理削除 (discarded_at)
-- **burger_stats** — バーガーごとの、レビュー由来の集計値
+- **burger_stats** — burger_id (uuid), バーガーごとの、レビュー由来の集計値
 - **signup_verifications** — メール確認を待っている signup(uuid の主キー。email は入力どおり保存し、大文字小文字を区別せず一意。username、bcrypt 済みの password_digest、確認トークンの SHA-256(token_hash)、expires_at、last_sent_at、generation(確認メールを出した回数。冪等キーに使う))。users とは独立で、外部キーを持たない
 - **mail_deliveries** — メール送信の記録(uuid の主キー。kind、recipient、idempotency_key(一意)、status(pending / sent / failed)、failure_kind、attempts、last_error、sent_at)。本文・確認トークン・パスワードは保存しない
 

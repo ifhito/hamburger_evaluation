@@ -1,6 +1,6 @@
 -- status: 0=pending, 1=active, 2=rejected
 CREATE TABLE shops (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     name text NOT NULL,
     status smallint NOT NULL CHECK (status IN (0, 1, 2)),
     moderation_note text,

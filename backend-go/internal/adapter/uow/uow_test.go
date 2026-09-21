@@ -39,7 +39,7 @@ type world struct {
 	ctx     context.Context
 	conn    *pgx.Conn
 	dbURL   string
-	shop    int64
+	shop    string
 	unit    *uow.UnitOfWork
 	recalc  *usecase.BurgerStatsRecalculator
 	reviews *usecase.Reviews
@@ -65,18 +65,18 @@ func newWorld(t *testing.T) *world {
 	w.queries.shop = query.NewShopQuery(conn)
 	w.reviews = usecase.NewReviews(w.queries.review, w.unit, w.recalc, photos)
 	w.users = usecase.NewUsers(query.NewUserQuery(conn), domain.NewUsers(repository.NewUserRepository(conn)), w.unit, w.recalc, infra.BcryptPasswordHasher{})
-	w.shop = dbtest.InsertRow(ctx, t, conn,
+	w.shop = dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
 	return w
 }
 
 // burger は、ショップに結び付いたバーガーを作って、その ID を返す。
-func (w *world) burger(t *testing.T, name string) int64 {
+func (w *world) burger(t *testing.T, name string) string {
 	t.Helper()
-	id := dbtest.InsertRow(w.ctx, t, w.conn, insertBurger, name)
+	id := dbtest.InsertUUIDRow(w.ctx, t, w.conn, insertBurger, name)
 	if _, err := w.conn.Exec(w.ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, w.shop, id); err != nil {
-		t.Fatalf("ショップ %d とバーガー %d の結び付けに失敗した: %v", w.shop, id, err)
+		t.Fatalf("ショップ %s とバーガー %s の結び付けに失敗した: %v", w.shop, id, err)
 	}
 	return id
 }
@@ -89,7 +89,7 @@ func (w *world) user(t *testing.T, name string) domain.User {
 }
 
 // review は、usecase を通してレビューを投稿する(統計の再計算まで、本番と同じトランザクションで行われる)。
-func (w *world) review(t *testing.T, viewer domain.User, burgerID int64, rating int, comment string) domain.ReviewDetail {
+func (w *world) review(t *testing.T, viewer domain.User, burgerID string, rating int, comment string) domain.ReviewDetail {
 	t.Helper()
 	detail, err := w.reviews.Create(w.ctx, viewer, w.shop, burgerID, "", rating, comment, nil)
 	if err != nil {
@@ -346,7 +346,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	alice := w.user(t, "alice")
-	shopB := dbtest.InsertRow(ctx, t, conn,
+	shopB := dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Shop B", 1, nil, nil)
 
@@ -368,9 +368,9 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 	burgersNamed := func(t *testing.T, name string) int64 {
 		return countRows(t, `SELECT count(*) FROM burgers WHERE name = $1`, name)
 	}
-	named := func(t *testing.T, viewer domain.User, shopID int64, name string) domain.ReviewDetail {
+	named := func(t *testing.T, viewer domain.User, shopID string, name string) domain.ReviewDetail {
 		t.Helper()
-		detail, err := w.reviews.Create(ctx, viewer, shopID, 0, name, 4, "via name", nil)
+		detail, err := w.reviews.Create(ctx, viewer, shopID, "", name, 4, "via name", nil)
 		if err != nil {
 			t.Fatalf("投稿に失敗した: %v", err)
 		}
@@ -384,7 +384,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 			t.Errorf("応答のバーガー = %+v, want 投稿前の統計を持つバーガー %+v", created.Burger, want)
 		}
 		if created.ID == 0 || created.BurgerID != cheese || created.CreatedAt.IsZero() {
-			t.Errorf("作成されたレビュー = %+v, want バーガー %d に付いた、保存済みのレビュー", created.Review, cheese)
+			t.Errorf("作成されたレビュー = %+v, want バーガー %s に付いた、保存済みのレビュー", created.Review, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 1 {
 			t.Errorf("Cheese のバーガーの行数 = %d, want 重複なしの 1", got)
@@ -405,7 +405,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 			t.Errorf("バーガー = %+v, want 投稿前の統計が 0", *burger)
 		}
 		if created.BurgerID != burger.ID {
-			t.Errorf("レビューのバーガー = %d, want %d", created.BurgerID, burger.ID)
+			t.Errorf("レビューのバーガー = %s, want %s", created.BurgerID, burger.ID)
 		}
 		if got := countRows(t, `SELECT count(*) FROM shops_burgers WHERE shop_id = $1 AND burger_id = $2`, w.shop, burger.ID); got != 1 {
 			t.Errorf("ショップとの結び付けの行数 = %d, want 1", got)
@@ -418,7 +418,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 	t.Run("別のショップに同じ名前のバーガーがあっても、投稿したショップ用に別のバーガーを作る", func(t *testing.T) {
 		burger := named(t, alice, shopB, "Cheese").Burger
 		if burger == nil || burger.ID == cheese {
-			t.Fatalf("バーガー = %+v, want 最初のショップの Cheese(%d)とは別に、新しく作られた行", burger, cheese)
+			t.Fatalf("バーガー = %+v, want 最初のショップの Cheese(%s)とは別に、新しく作られた行", burger, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 2 {
 			t.Errorf("Cheese のバーガーの行数 = %d, want ショップごとに 1 つずつの 2", got)
@@ -436,7 +436,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 		// 存在しないユーザーの投稿は、バーガーとショップとの結び付けを作ったあと、レビューの登録で
 		// 外部キー(reviews.user_id)に違反して失敗する。そのとき、作ったバーガーも巻き戻る必要がある。
 		ghost := domain.User{ID: uid.N(99999), Username: "ghost"}
-		if _, err := w.reviews.Create(ctx, ghost, w.shop, 0, "Ghost", 4, "ok", nil); err == nil {
+		if _, err := w.reviews.Create(ctx, ghost, w.shop, "", "Ghost", 4, "ok", nil); err == nil {
 			t.Fatal("投稿が成功した。外部キー違反で失敗するはず")
 		}
 		if got := burgersNamed(t, "Ghost"); got != 0 {
@@ -571,7 +571,7 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 		// ロックするので、2 人が互いに逆の順序でロックして待ち合う(デッドロック)ことがない。
 		// たまたま順番が合って失敗を見逃さないよう、5 回繰り返す。
 		for i := 0; i < 5; i++ {
-			burgers := make([]int64, 4)
+			burgers := make([]string, 4)
 			for j := range burgers {
 				burgers[j] = w.burger(t, fmt.Sprintf("Overlap %d-%d", i, j))
 			}
@@ -598,7 +598,7 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 			}
 			for _, id := range burgers {
 				if stats := dbtest.RequireConsistentStats(ctx, t, conn, id); stats.ReviewCount != 0 {
-					t.Fatalf("%d 回目のバーガー %d: 統計 = %+v, want 2 人のレビューがどちらも除かれた件数 0", i, id, stats)
+					t.Fatalf("%d 回目のバーガー %s: 統計 = %+v, want 2 人のレビューがどちらも除かれた件数 0", i, id, stats)
 				}
 			}
 		}

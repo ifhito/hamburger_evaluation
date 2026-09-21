@@ -6,7 +6,7 @@ const photo = new File(["x"], "burger.jpg", { type: "image/jpeg" });
 describe("toCreateFormData", () => {
   it("API に合わせた snake_case のキーだけを、photo を最後にして並べる", () => {
     const form = toCreateFormData(
-      { rating: 4, comment: "うまい", shopId: 7, burgerName: "チーズバーガー" },
+      { rating: 4, comment: "うまい", shopId: "00000000-0000-4000-8000-000000000007", burgerName: "チーズバーガー" },
       photo
     );
 
@@ -15,13 +15,13 @@ describe("toCreateFormData", () => {
 
   it("数値は文字列化され、photo は File のまま入る", () => {
     const form = toCreateFormData(
-      { rating: 4, comment: "うまい", shopId: 7, burgerName: "チーズバーガー" },
+      { rating: 4, comment: "うまい", shopId: "00000000-0000-4000-8000-000000000007", burgerName: "チーズバーガー" },
       photo
     );
 
     expect(form.get("rating")).toBe("4");
     expect(form.get("comment")).toBe("うまい");
-    expect(form.get("shop_id")).toBe("7");
+    expect(form.get("shop_id")).toBe("00000000-0000-4000-8000-000000000007");
     expect(form.get("burger_name")).toBe("チーズバーガー");
     expect(form.get("photo")).toBeInstanceOf(File);
   });

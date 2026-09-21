@@ -34,11 +34,11 @@ type ReviewQuery interface {
 	GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error)
 	// GetShop は素の shop の行（creator なし、review なし）を返すか、
 	// （wrap された）domain.ErrShopNotFound を返す。
-	GetShop(ctx context.Context, id int64) (domain.Shop, error)
+	GetShop(ctx context.Context, id string) (domain.Shop, error)
 	// GetShopBurger は、burger が shops_burgers 経由でその shop に紐づいて
 	// いるときに限り、stats つき（まだ計算されていなければゼロ）の burger を
 	// 返し、そうでなければ（wrap された）domain.ErrBurgerNotFound を返す。
-	GetShopBurger(ctx context.Context, shopID, burgerID int64) (domain.ShopReviewBurger, error)
+	GetShopBurger(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error)
 }
 
 // ReviewListFilter は、GET /reviews の省略可能なクエリフィルタを保持する。
@@ -58,7 +58,7 @@ type ReviewListFilter struct {
 	// だけを残す（Rails の shops_and_burgers の join）。ただし対象の shop 自身も
 	// active でなければならず、active でない（または存在しない）shop の id を
 	// 指定すると結果は空になる。
-	ShopID *int64
+	ShopID *string
 	// UserID は、その user が書いた review だけを残す（本 API の拡張で、Rails の
 	// ReviewQuery にはない）。公開ルールは維持される：discard 済みの review や
 	// user、active な shop に紐づかない burger の review は、UserID を指定しても
@@ -140,7 +140,7 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id int64) (domai
 // ランダムな key で保存される。その後 insert が失敗した場合は、アップロード
 // したばかりの blob を best-effort で削除するので、リクエストより長く残る
 // 孤立ファイルはない。
-func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burgerID int64, burgerName string, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
+func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burgerID string, burgerName string, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
 	shop, err := s.query.GetShop(ctx, shopID)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
@@ -149,14 +149,14 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 		return domain.ReviewDetail{}, domain.ErrForbidden
 	}
 	var burger domain.ShopReviewBurger
-	if burgerID > 0 {
+	if burgerID != "" {
 		if burger, err = s.query.GetShopBurger(ctx, shopID, burgerID); err != nil {
 			return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
 		}
 	} else if err := domain.ValidateBurgerName(burgerName); err != nil {
 		return domain.ReviewDetail{}, err
 	}
-	// burgerID が 0 以下のとき（burger_name の経路）は、この BurgerID は
+	// burgerID が空のとき（burger_name の経路）は、この BurgerID は
 	// 使われない。永続化の実装が transaction 内で burger を解決して上書きする。
 	review, err := domain.NewReview(rating, comment, viewer.ID, burgerID)
 	if err != nil {
@@ -167,7 +167,7 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	}
 	var created domain.Review
 	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
-		if burgerID <= 0 {
+		if burgerID == "" {
 			// バーガー名で投稿する場合は、このトランザクションの中で、名前のバーガーを探し、
 			// なければ作る。返るバーガーの統計は、この投稿より前の値である。
 			var err error

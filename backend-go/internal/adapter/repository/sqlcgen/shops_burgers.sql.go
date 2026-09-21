@@ -17,8 +17,8 @@ VALUES ($1, $2)
 `
 
 type CreateShopBurgerParams struct {
-	ShopID   int64
-	BurgerID int64
+	ShopID   string
+	BurgerID string
 }
 
 func (q *Queries) CreateShopBurger(ctx context.Context, arg CreateShopBurgerParams) error {
@@ -32,8 +32,8 @@ WHERE shop_id = $1 AND burger_id = $2
 `
 
 type DeleteShopBurgerParams struct {
-	ShopID   int64
-	BurgerID int64
+	ShopID   string
+	BurgerID string
 }
 
 func (q *Queries) DeleteShopBurger(ctx context.Context, arg DeleteShopBurgerParams) error {
@@ -48,17 +48,17 @@ FROM burgers b
 JOIN shops_burgers sb ON sb.burger_id = b.id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
 WHERE sb.shop_id = $1 AND b.name = $2
-ORDER BY b.id
+ORDER BY b.created_at, b.id
 LIMIT 1
 `
 
 type GetShopBurgerByNameWithStatsParams struct {
-	ShopID int64
+	ShopID string
 	Name   string
 }
 
 type GetShopBurgerByNameWithStatsRow struct {
-	ID            int64
+	ID            string
 	Name          string
 	ReviewCount   pgtype.Int8
 	AverageRating pgtype.Float8
@@ -70,8 +70,8 @@ type GetShopBurgerByNameWithStatsRow struct {
 // （review 投稿時の burger_name による検索。Rails の
 // shop.burgers.find_by(name:) に対応する）と、その統計
 // （まだ計算されていなければ NULL）。find-or-create の find 側である。
-// shop 内で名前の一意性を強制するものは何もないので、最小の id のものが
-// 決定的に採用される。
+// shop 内で名前の一意性を強制するものは何もないので、作成が最も古いもの
+// (同時刻なら id が小さいもの)が決定的に採用される。
 func (q *Queries) GetShopBurgerByNameWithStats(ctx context.Context, arg GetShopBurgerByNameWithStatsParams) (GetShopBurgerByNameWithStatsRow, error) {
 	row := q.db.QueryRow(ctx, getShopBurgerByNameWithStats, arg.ShopID, arg.Name)
 	var i GetShopBurgerByNameWithStatsRow
@@ -96,12 +96,12 @@ WHERE sb.shop_id = $1 AND b.id = $2
 `
 
 type GetShopBurgerWithStatsParams struct {
-	ShopID   int64
-	BurgerID int64
+	ShopID   string
+	BurgerID string
 }
 
 type GetShopBurgerWithStatsRow struct {
-	ID            int64
+	ID            string
 	Name          string
 	ReviewCount   pgtype.Int8
 	AverageRating pgtype.Float8
@@ -127,12 +127,15 @@ func (q *Queries) GetShopBurgerWithStats(ctx context.Context, arg GetShopBurgerW
 }
 
 const listShopBurgersByShop = `-- name: ListShopBurgersByShop :many
-SELECT shop_id, burger_id FROM shops_burgers
-WHERE shop_id = $1
-ORDER BY burger_id
+SELECT sb.shop_id, sb.burger_id FROM shops_burgers sb
+JOIN burgers b ON b.id = sb.burger_id
+WHERE sb.shop_id = $1
+ORDER BY b.created_at, b.id
 `
 
-func (q *Queries) ListShopBurgersByShop(ctx context.Context, shopID int64) ([]ShopsBurger, error) {
+// burger の並びは、作成が古い順(同時刻は id で決定的に)。id は UUID なので、
+// id だけでは作成順にならない。
+func (q *Queries) ListShopBurgersByShop(ctx context.Context, shopID string) ([]ShopsBurger, error) {
 	rows, err := q.db.Query(ctx, listShopBurgersByShop, shopID)
 	if err != nil {
 		return nil, err

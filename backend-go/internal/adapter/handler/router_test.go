@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // pingerFake は handler.Pinger の手書きの fake であり、Ping のたびに err を
@@ -99,12 +100,12 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 		{name: "GET /signup は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/signup", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 		{name: "GET /signup/confirm は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/signup/confirm", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 		{name: "DELETE /shops は 405 を返し Allow は GET, POST になる", method: http.MethodDelete, path: "/shops", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
-		{name: "DELETE /shops/1 は 405 を返し Allow は GET になる", method: http.MethodDelete, path: "/shops/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
+		{name: "DELETE /shops/1 は 405 を返し Allow は GET になる", method: http.MethodDelete, path: "/shops/" + uid.N(1), wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodGet},
 		{name: "PATCH /reviews は 405 を返し Allow は GET, POST になる", method: http.MethodPatch, path: "/reviews", wantStatus: http.StatusMethodNotAllowed, wantAllow: "GET, POST"},
 		{name: "PATCH /reviews/1 は 405 を返し Allow は DELETE, GET, PUT になる", method: http.MethodPatch, path: "/reviews/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, GET, PUT"},
 		{name: "POST /users は未登録なので 405 ではなく 404 を返す", method: http.MethodPost, path: "/users", wantStatus: http.StatusNotFound},
 		{name: "POST /users/1 は 405 を返し Allow は DELETE, GET, PUT になる", method: http.MethodPost, path: "/users/1", wantStatus: http.StatusMethodNotAllowed, wantAllow: "DELETE, GET, PUT"},
-		{name: "GET /admin/shops/1/approve は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/admin/shops/1/approve", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
+		{name: "GET /admin/shops/1/approve は 405 を返し Allow は POST になる", method: http.MethodGet, path: "/admin/shops/" + uid.N(1) + "/approve", wantStatus: http.StatusMethodNotAllowed, wantAllow: http.MethodPost},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

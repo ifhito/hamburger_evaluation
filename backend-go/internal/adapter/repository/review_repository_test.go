@@ -19,7 +19,7 @@ type reviewRow struct {
 	Rating      int16
 	Comment     *string
 	UserID      string
-	BurgerID    int64
+	BurgerID    string
 	CreatedAt   time.Time
 	DiscardedAt *time.Time
 	PhotoKey    *string
@@ -53,7 +53,7 @@ func TestReviewRepository(t *testing.T) {
 	alice := dbtest.InsertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
 	carol := dbtest.InsertUserRow(ctx, t, conn, insertUser, "carol@example.com", "carol", false)
 
-	cheese := dbtest.InsertRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
+	cheese := dbtest.InsertUUIDRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
 
 	insertReview := `INSERT INTO reviews (rating, comment, user_id, burger_id, discarded_at, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
@@ -163,10 +163,10 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 	alice := dbtest.InsertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice", false)
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
-	shopA := dbtest.InsertRow(ctx, t, conn, insertShop, "Shop A", 1, nil, alice)
-	shopB := dbtest.InsertRow(ctx, t, conn, insertShop, "Shop B", 1, nil, nil)
+	shopA := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Shop A", 1, nil, alice)
+	shopB := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Shop B", 1, nil, nil)
 
-	cheese := dbtest.InsertRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
+	cheese := dbtest.InsertUUIDRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
 	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopA, cheese); err != nil {
 		t.Fatalf("link shop A cheese: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 		return countRows(t, `SELECT count(*) FROM burgers WHERE name = $1`, name)
 	}
 
-	mustShopBurger := func(t *testing.T, shopID int64, name string) domain.ShopReviewBurger {
+	mustShopBurger := func(t *testing.T, shopID string, name string) domain.ShopReviewBurger {
 		t.Helper()
 		burger, err := repo.CreateShopBurger(ctx, shopID, name)
 		if err != nil {
@@ -200,7 +200,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 	t.Run("同じショップに同名のバーガーがあれば、新しく作らずにそれを返し、統計は呼び出し前の値のままである", func(t *testing.T) {
 		burger := mustShopBurger(t, shopA, "Cheese")
 		if burger.ID != cheese {
-			t.Fatalf("burger id = %d, want the existing Cheese %d", burger.ID, cheese)
+			t.Fatalf("burger id = %s, want the existing Cheese %s", burger.ID, cheese)
 		}
 		want := domain.ShopReviewBurger{ID: cheese, Name: "Cheese", AverageRating: 4.0, ReviewCount: 2, WeightedScore: 3.9, Confidence: 0.7}
 		if !reflect.DeepEqual(burger, want) {
@@ -224,14 +224,14 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 		}
 		// 同じ名前をもう一度解決すると、いま作った burger を再利用する。
 		if again := mustShopBurger(t, shopA, "Veggie"); again.ID != burger.ID {
-			t.Errorf("second resolve = %d, want the same Veggie %d", again.ID, burger.ID)
+			t.Errorf("second resolve = %s, want the same Veggie %s", again.ID, burger.ID)
 		}
 	})
 
 	t.Run("別のショップに同じ名前のバーガーがあっても、指定したショップ用に別のバーガーを作る", func(t *testing.T) {
 		burger := mustShopBurger(t, shopB, "Cheese")
 		if burger.ID == cheese {
-			t.Fatalf("burger id = %d, want a new row distinct from shop A's Cheese %d", burger.ID, cheese)
+			t.Fatalf("burger id = %s, want a new row distinct from shop A's Cheese %s", burger.ID, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 2 {
 			t.Errorf("Cheese burger rows = %d, want 2 (one per shop)", got)
@@ -244,10 +244,43 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 			t.Errorf("shop A link rows = %d, want its original Cheese and Veggie", got)
 		}
 	})
+
+	t.Run("ショップの中に同じ名前のバーガーが複数あるとき、作成が最も古いものが選ばれ、作成が同時刻なら id の小さいものが選ばれる", func(t *testing.T) {
+		// id は UUID なので、id の大小は作成の順序を表さない。作成の新しい方を先に insert して、
+		// 選び方が id の生成の順序に依存していないことを確かめる。
+		shopC := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Shop C", 1, nil, nil)
+		insertTwin := `INSERT INTO burgers (name, created_at) VALUES ($1, $2) RETURNING id`
+		link := func(burgerID string) {
+			t.Helper()
+			if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopC, burgerID); err != nil {
+				t.Fatalf("link shop C burger %s: %v", burgerID, err)
+			}
+		}
+		newer := dbtest.InsertUUIDRow(ctx, t, conn, insertTwin, "Twin", time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC))
+		older := dbtest.InsertUUIDRow(ctx, t, conn, insertTwin, "Twin", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+		link(newer)
+		link(older)
+		if burger := mustShopBurger(t, shopC, "Twin"); burger.ID != older {
+			t.Errorf("burger id = %s, want the earliest created %s (newer %s)", burger.ID, older, newer)
+		}
+
+		sameTime := time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC)
+		tieA := dbtest.InsertUUIDRow(ctx, t, conn, insertTwin, "Tie", sameTime)
+		tieB := dbtest.InsertUUIDRow(ctx, t, conn, insertTwin, "Tie", sameTime)
+		link(tieA)
+		link(tieB)
+		smaller := tieA
+		if tieB < tieA {
+			smaller = tieB
+		}
+		if burger := mustShopBurger(t, shopC, "Tie"); burger.ID != smaller {
+			t.Errorf("burger id = %s, want the smaller id %s of the same-time burgers", burger.ID, smaller)
+		}
+	})
 }
 
 // mustCreateReview は repository を通して review を構築し永続化する。
-func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID string, burgerID int64) domain.Review {
+func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID string, burgerID string) domain.Review {
 	t.Helper()
 	review, err := domain.NewReview(rating, comment, authorID, burgerID)
 	if err != nil {
@@ -275,7 +308,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 	alice := dbtest.InsertUserRow(ctx, t, conn,
 		`INSERT INTO users (email, username, password_digest) VALUES ($1, $2, 'x') RETURNING id`,
 		"alice@example.com", "alice")
-	burger := dbtest.InsertRow(ctx, t, conn,
+	burger := dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO burgers (name) VALUES ($1) RETURNING id`, "Cheese")
 
 	comment := "Tasty"

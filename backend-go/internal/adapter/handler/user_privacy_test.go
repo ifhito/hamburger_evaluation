@@ -91,14 +91,14 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 		}
 	}
 
-	createShop := func(auth, name string) int64 {
+	createShop := func(auth, name string) string {
 		t.Helper()
 		rec := do(router, http.MethodPost, "/shops", fmt.Sprintf(`{"shop":{"name":%q}}`, name), auth)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("create shop %s: status = %d (body %s)", name, rec.Code, rec.Body)
 		}
 		var resp struct {
-			ID int64 `json:"id"`
+			ID string `json:"id"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode shop: %v", err)
@@ -107,12 +107,12 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 	}
 	// X の shop は root が承認して active にする。Y の shop は pending のままにする。
 	xShop := createShop(xAuth, "Xavier Active Burgers")
-	if rec := do(router, http.MethodPost, fmt.Sprintf("/admin/shops/%d/approve", xShop), "", rootAuth); rec.Code != http.StatusOK {
+	if rec := do(router, http.MethodPost, fmt.Sprintf("/admin/shops/%s/approve", xShop), "", rootAuth); rec.Code != http.StatusOK {
 		t.Fatalf("approve shop: status = %d (body %s)", rec.Code, rec.Body)
 	}
 	yShop := createShop(yAuth, "Yuki Pending Burgers")
 
-	var burgerID int64
+	var burgerID string
 	if err := conn.QueryRow(ctx, `INSERT INTO burgers (name) VALUES ('Audit Burger') RETURNING id`).Scan(&burgerID); err != nil {
 		t.Fatalf("insert burger: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 	}
 	postReview := func(auth string, rating int) int64 {
 		t.Helper()
-		body := fmt.Sprintf(`{"review":{"rating":%d,"comment":"audit review","shop_id":%d,"burger_id":%d}}`, rating, xShop, burgerID)
+		body := fmt.Sprintf(`{"review":{"rating":%d,"comment":"audit review","shop_id":%q,"burger_id":%q}}`, rating, xShop, burgerID)
 		rec := do(router, http.MethodPost, "/reviews", body, auth)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("post review: status = %d (body %s)", rec.Code, rec.Body)
@@ -150,6 +150,9 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 
 	type endpoint struct {
 		path string
+		// label は、テスト名に使う表示である。path に実行のたびに変わる id が入るとき、テスト名を一定にする
+		// （X のショップは 1、Y のショップは 2 と表す）。
+		label string
 		// byViewer は viewer の名前をキーにした期待値で、キーがない viewer には
 		// defaults を使う。
 		defaults auditWant
@@ -180,12 +183,14 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 		},
 		{
 			// active な shop：creator と 2 件の review の author。
-			path:     fmt.Sprintf("/shops/%d", xShop),
+			path:     fmt.Sprintf("/shops/%s", xShop),
+			label:    "/shops/1",
 			defaults: auditWant{status: http.StatusOK, items: -1, refs: []string{"xavier", "xavier", "yuki"}},
 		},
 		{
 			// pending な shop は creator と admin にだけ見える。見えない viewer は 404。
-			path:     fmt.Sprintf("/shops/%d", yShop),
+			path:     fmt.Sprintf("/shops/%s", yShop),
+			label:    "/shops/2",
 			defaults: auditWant{status: http.StatusNotFound, items: -1},
 			byViewer: map[string]auditWant{
 				"投稿者 X (admin)": {status: http.StatusOK, items: -1, refs: []string{"yuki"}},
@@ -211,7 +216,11 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 			if !ok {
 				want = ep.defaults
 			}
-			t.Run(fmt.Sprintf("GET %s を %s が取得しても email と admin は現れない", ep.path, v.name), func(t *testing.T) {
+			name := ep.path
+			if ep.label != "" {
+				name = ep.label
+			}
+			t.Run(fmt.Sprintf("GET %s を %s が取得しても email と admin は現れない", name, v.name), func(t *testing.T) {
 				rec := do(router, http.MethodGet, ep.path, "", v.auth)
 				if rec.Code != want.status {
 					t.Fatalf("status = %d, want %d (body %s)", rec.Code, want.status, rec.Body)

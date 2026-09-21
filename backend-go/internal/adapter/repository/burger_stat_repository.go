@@ -31,7 +31,7 @@ var _ domain.BurgerStatRepository = (*BurgerStatRepository)(nil)
 // 同じバーガーの統計を同時に計算し直す処理が、互いの追加分を知らないまま上書きして、更新を
 // 取りこぼすのを防ぐ(詳しくは、そのクエリのコメントを参照)。トランザクションがすでに持っている
 // ロックを取り直しても、待たされない。
-func (r *BurgerStatRepository) LockBurgerStat(ctx context.Context, burgerID int64) error {
+func (r *BurgerStatRepository) LockBurgerStat(ctx context.Context, burgerID string) error {
 	if _, err := r.q.LockBurgerForStats(ctx, burgerID); err != nil {
 		return fmt.Errorf("lock burger stat: %w", err)
 	}

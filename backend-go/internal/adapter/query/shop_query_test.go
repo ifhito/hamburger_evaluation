@@ -19,8 +19,8 @@ import (
 // 用意し、書き込みの adapter/repository には依存しない（書き込みは repository のテストが担う）。
 
 // shopIDs は、順序に依存しない比較のために shop の id を取り出す。
-func shopIDs(shops []domain.Shop) []int64 {
-	ids := make([]int64, 0, len(shops))
+func shopIDs(shops []domain.Shop) []string {
+	ids := make([]string, 0, len(shops))
 	for _, s := range shops {
 		ids = append(ids, s.ID)
 	}
@@ -28,7 +28,7 @@ func shopIDs(shops []domain.Shop) []int64 {
 	return ids
 }
 
-func sortedIDs(ids ...int64) []int64 {
+func sortedIDs(ids ...string) []string {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	return ids
 }
@@ -61,17 +61,17 @@ func TestShopQuery(t *testing.T) {
 
 	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`
 	// status のコード：0=pending、1=active、2=rejected。
-	deltaDiner := dbtest.InsertRow(ctx, t, conn, insertShop, "Delta Diner", 1, nil, carol)
-	alicePending := dbtest.InsertRow(ctx, t, conn, insertShop, "Alpha Pending", 0, nil, alice)
-	golfRejected := dbtest.InsertRow(ctx, t, conn, insertShop, "Golf Grill", 2, "needs fixes", nil)
-	pctBeef := dbtest.InsertRow(ctx, t, conn, insertShop, "100% Beef", 1, nil, nil)
-	xBeef := dbtest.InsertRow(ctx, t, conn, insertShop, "100x Beef", 1, nil, nil)
-	underScore := dbtest.InsertRow(ctx, t, conn, insertShop, "Under_score", 1, nil, nil)
-	underX := dbtest.InsertRow(ctx, t, conn, insertShop, "UnderXscore", 1, nil, nil)
-	backslash := dbtest.InsertRow(ctx, t, conn, insertShop, `Back\slash Cafe`, 1, nil, nil)
-	orderA1 := dbtest.InsertRow(ctx, t, conn, insertShop, "Order Cafe A", 1, nil, nil)
-	orderA2 := dbtest.InsertRow(ctx, t, conn, insertShop, "Order Cafe A", 1, nil, nil)
-	orderB := dbtest.InsertRow(ctx, t, conn, insertShop, "Order Cafe B", 1, nil, nil)
+	deltaDiner := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Delta Diner", 1, nil, carol)
+	alicePending := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Alpha Pending", 0, nil, alice)
+	golfRejected := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Golf Grill", 2, "needs fixes", nil)
+	pctBeef := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "100% Beef", 1, nil, nil)
+	xBeef := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "100x Beef", 1, nil, nil)
+	underScore := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Under_score", 1, nil, nil)
+	underX := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "UnderXscore", 1, nil, nil)
+	backslash := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, `Back\slash Cafe`, 1, nil, nil)
+	orderA1 := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Order Cafe A", 1, nil, nil)
+	orderA2 := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Order Cafe A", 1, nil, nil)
+	orderB := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Order Cafe B", 1, nil, nil)
 
 	activeIDs := sortedIDs(deltaDiner, pctBeef, xBeef, underScore, underX, backslash, orderA1, orderA2, orderB)
 
@@ -96,7 +96,7 @@ func TestShopQuery(t *testing.T) {
 
 	t.Run("AC2 creator には自分の pending な shop が status 付きで追加で見える", func(t *testing.T) {
 		shops := list(t, aliceVis, "", 100, 0)
-		want := sortedIDs(append([]int64{alicePending}, activeIDs...)...)
+		want := sortedIDs(append([]string{alicePending}, activeIDs...)...)
 		if got := shopIDs(shops); !reflect.DeepEqual(got, want) {
 			t.Fatalf("ids = %v, want %v", got, want)
 		}
@@ -108,7 +108,7 @@ func TestShopQuery(t *testing.T) {
 	})
 
 	t.Run("AC3 admin はすべての status の shop を見られる", func(t *testing.T) {
-		want := sortedIDs(append([]int64{alicePending, golfRejected}, activeIDs...)...)
+		want := sortedIDs(append([]string{alicePending, golfRejected}, activeIDs...)...)
 		if got := shopIDs(list(t, adminVis, "", 100, 0)); !reflect.DeepEqual(got, want) {
 			t.Errorf("ids = %v, want %v", got, want)
 		}
@@ -120,8 +120,10 @@ func TestShopQuery(t *testing.T) {
 		if got := shopNames(shops); !reflect.DeepEqual(got, wantNames) {
 			t.Fatalf("names = %v, want %v", got, wantNames)
 		}
-		if shops[0].ID != orderA1 || shops[1].ID != orderA2 {
-			t.Errorf("same-name ids = %d,%d, want %d,%d (id asc)", shops[0].ID, shops[1].ID, orderA1, orderA2)
+		// id は UUID なので、同名の 2 件の並びは、id の昇順（文字列としての昇順）になる。
+		wantSame := sortedIDs(orderA1, orderA2)
+		if shops[0].ID != wantSame[0] || shops[1].ID != wantSame[1] {
+			t.Errorf("same-name ids = %s,%s, want %s,%s (id asc)", shops[0].ID, shops[1].ID, wantSame[0], wantSame[1])
 		}
 	})
 
@@ -233,19 +235,19 @@ func TestShopQuery(t *testing.T) {
 	})
 
 	t.Run("AC6 存在しない shop id は ErrShopNotFound になる", func(t *testing.T) {
-		if _, err := shopQuery.GetShopWithCreator(ctx, 99999); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := shopQuery.GetShopWithCreator(ctx, uid.N(99999)); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
 
 	t.Run("ListShopReviews は user、burger、stats を join して順序どおりに返す", func(t *testing.T) {
 		insertBurger := `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
-		cheese := dbtest.InsertRow(ctx, t, conn, insertBurger, "Cheese")
-		plain := dbtest.InsertRow(ctx, t, conn, insertBurger, "Plain")
-		other := dbtest.InsertRow(ctx, t, conn, insertBurger, "Other")
-		mustLink := func(shopID, burgerID int64) {
+		cheese := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Cheese")
+		plain := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Plain")
+		other := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Other")
+		mustLink := func(shopID, burgerID string) {
 			if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shopID, burgerID); err != nil {
-				t.Fatalf("link shop %d burger %d: %v", shopID, burgerID, err)
+				t.Fatalf("link shop %s burger %s: %v", shopID, burgerID, err)
 			}
 		}
 		mustLink(deltaDiner, cheese)
@@ -332,30 +334,37 @@ func TestShopModerationQuery(t *testing.T) {
 	// instant を共有するので、id desc が同順位を解消しなければならない。
 	tOld := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	tNew := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
-	old1 := dbtest.InsertRow(ctx, t, conn, insertShop, "Old One", 1, nil, alice, tOld)
-	old2 := dbtest.InsertRow(ctx, t, conn, insertShop, "Old Two", 2, "needs fixes", nil, tOld)
-	newest := dbtest.InsertRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
+	old1 := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Old One", 1, nil, alice, tOld)
+	old2 := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Old Two", 2, "needs fixes", nil, tOld)
+	newest := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
 
 	t.Run("ListShopsForModeration は created_at 降順、次に id 降順に並べる", func(t *testing.T) {
 		shops, err := shopQuery.ListShopsForModeration(ctx, nil)
 		if err != nil {
 			t.Fatalf("ListShopsForModeration returned error: %v", err)
 		}
-		ids := make([]int64, 0, len(shops))
+		ids := make([]string, 0, len(shops))
 		for _, s := range shops {
 			ids = append(ids, s.ID)
 		}
-		if want := []int64{newest, old2, old1}; !reflect.DeepEqual(ids, want) {
+		// old1 と old2 は created_at が同じなので、id の降順（UUID は文字列としての降順）で並ぶ。
+		sameOld := sortedIDs(old1, old2)
+		if want := []string{newest, sameOld[1], sameOld[0]}; !reflect.DeepEqual(ids, want) {
 			t.Fatalf("ids = %v, want %v", ids, want)
 		}
-		if !reflect.DeepEqual(shops[0].Creator, &domain.UserRef{ID: alice, Username: "alice"}) {
-			t.Errorf("creator = %+v, want alice", shops[0].Creator)
+		// old1 と old2 の並びは id で決まるので、位置ではなく id で取り出す。
+		byID := map[string]domain.ShopDetail{}
+		for _, s := range shops {
+			byID[s.ID] = s
 		}
-		if shops[1].Creator != nil {
-			t.Errorf("creatorless shop creator = %+v, want nil", shops[1].Creator)
+		if !reflect.DeepEqual(byID[newest].Creator, &domain.UserRef{ID: alice, Username: "alice"}) {
+			t.Errorf("creator = %+v, want alice", byID[newest].Creator)
 		}
-		if shops[1].ModerationNote == nil || *shops[1].ModerationNote != "needs fixes" {
-			t.Errorf("note = %v, want needs fixes", shops[1].ModerationNote)
+		if byID[old2].Creator != nil {
+			t.Errorf("creatorless shop creator = %+v, want nil", byID[old2].Creator)
+		}
+		if note := byID[old2].ModerationNote; note == nil || *note != "needs fixes" {
+			t.Errorf("note = %v, want needs fixes", note)
 		}
 	})
 

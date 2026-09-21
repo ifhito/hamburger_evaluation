@@ -21,11 +21,11 @@ type ShopQuery interface {
 	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error)
 	// GetShopWithCreator は shop とその creator を返す。Reviews は空の
 	// ままである。
-	GetShopWithCreator(ctx context.Context, id int64) (domain.ShopDetail, error)
+	GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error)
 	// ListShopReviews は、shop の burger に対する discard されていない review
 	// （author が discard 済みの user である review は除く）を、新しい順に
 	// 返す（created_at desc、id desc）。
-	ListShopReviews(ctx context.Context, shopID int64) ([]domain.ShopReview, error)
+	ListShopReviews(ctx context.Context, shopID string) ([]domain.ShopReview, error)
 	// ListShopsForModeration は、creator つきのすべての shop（Reviews は
 	// 空のまま）を新しい順（created_at desc、id desc）に返す。任意で 1 つの
 	// status に絞り込める（nil = すべて）。
@@ -61,7 +61,7 @@ func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, p
 // 返す。存在しない shop と隠された shop は、どちらも domain.ErrShopNotFound を
 // 返すので、存在の有無は漏れない。CanReview には、viewer（nil = 匿名）が
 // この shop に review を投稿できるか（domain の reviewable ルール）を設定する。
-func (s *Shops) Get(ctx context.Context, viewer *domain.User, id int64) (domain.ShopDetail, error) {
+func (s *Shops) Get(ctx context.Context, viewer *domain.User, id string) (domain.ShopDetail, error) {
 	detail, err := s.query.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("get shop: %w", err)
@@ -126,7 +126,7 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 // parity）。admin でない viewer には、どの id が存在するかを探れないよう、
 // lookup の前に domain.ErrForbidden を返す。空白の name は
 // *ValidationError である。
-func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int64, name string) (domain.ShopDetail, error) {
+func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id string, name string) (domain.ShopDetail, error) {
 	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
 	}
@@ -151,7 +151,7 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id int6
 // Approve は shop を activate し、moderation note を消去して（domain の
 // 遷移）、公開して見えるようにする。admin でない viewer には、lookup の前に
 // domain.ErrForbidden を返す。
-func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (domain.ShopDetail, error) {
+func (s *Shops) Approve(ctx context.Context, viewer domain.User, id string) (domain.ShopDetail, error) {
 	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
 	}
@@ -161,7 +161,7 @@ func (s *Shops) Approve(ctx context.Context, viewer domain.User, id int64) (doma
 // Reject は、任意の moderation note つきで shop を reject し、公開の一覧から
 // 隠す。admin でない viewer には、lookup の前に domain.ErrForbidden を返す。
 // note が上限を超えるときは、lookup の前に *domain.ValidationError（422）を返す。
-func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *string) (domain.ShopDetail, error) {
+func (s *Shops) Reject(ctx context.Context, viewer domain.User, id string, note *string) (domain.ShopDetail, error) {
 	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
 	}
@@ -178,7 +178,7 @@ func (s *Shops) Reject(ctx context.Context, viewer domain.User, id int64, note *
 // moderation note だけを永続化し、保存された行を持つ detail を返す。
 // カラム限定の書き込みなので、古いスナップショットから並行する rename を
 // 元に戻すことはない。
-func (s *Shops) moderate(ctx context.Context, id int64, transition func(domain.Shop) domain.Shop) (domain.ShopDetail, error) {
+func (s *Shops) moderate(ctx context.Context, id string, transition func(domain.Shop) domain.Shop) (domain.ShopDetail, error) {
 	detail, err := s.query.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("moderate shop: %w", err)

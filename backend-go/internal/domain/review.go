@@ -16,9 +16,10 @@ type Review struct {
 	// いないときは nil である（S10）。key はここでは不透明な値であり、URL は
 	// usecase が photo storage を介して組み立てる。domain 自身が組み立てる
 	// ことは決してない。
-	PhotoKey  *string
-	AuthorID  string
-	BurgerID  int64
+	PhotoKey *string
+	AuthorID string
+	// BurgerID は burger の UUID の正規形である。
+	BurgerID  string
 	CreatedAt time.Time
 }
 
@@ -81,7 +82,7 @@ func ValidateBurgerName(name string) error {
 // review を組み立てる。comment は渡された値のまま保存され（存在のみが
 // validate される）、ユーザーのテキストを決して trim しない Rails に合わせて
 // いる。
-func NewReview(rating int, comment string, authorID string, burgerID int64) (Review, error) {
+func NewReview(rating int, comment string, authorID string, burgerID string) (Review, error) {
 	if err := ValidateReviewContent(rating, comment); err != nil {
 		return Review{}, err
 	}
@@ -138,7 +139,7 @@ type ReviewRepository interface {
 	// 指定した投稿で、usecase の ReviewQuery.GetShopBurger が返す値と同じ意味になる。
 	// バーガーと結び付けの作成は、呼び出し側のトランザクションに含まれる。レビューの登録に失敗したとき、
 	// 作りかけのバーガーが残らないよう、呼び出し側は同じトランザクションでレビューの登録まで行う。
-	CreateShopBurger(ctx context.Context, shopID int64, burgerName string) (ShopReviewBurger, error)
+	CreateShopBurger(ctx context.Context, shopID string, burgerName string) (ShopReviewBurger, error)
 	// UpdateReviewContent は、削除されていないレビューの評価とコメントだけを更新し、更新後のレビューを
 	// 返す。レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す。
 	// 更新する列を評価とコメントに絞っているので、削除の目印(discarded_at)を書き換えることはない。
@@ -181,7 +182,7 @@ func (s *Reviews) Create(ctx context.Context, review Review) (Review, error) {
 
 // CreateShopBurger は、ショップのバーガーのうち、名前が指定とちょうど一致するものを返す(なければ、
 // バーガーを作ってショップと結び付ける)。返すバーガーの統計は、この呼び出しの前の値である。
-func (s *Reviews) CreateShopBurger(ctx context.Context, shopID int64, burgerName string) (ShopReviewBurger, error) {
+func (s *Reviews) CreateShopBurger(ctx context.Context, shopID string, burgerName string) (ShopReviewBurger, error) {
 	return s.repo.CreateShopBurger(ctx, shopID, burgerName)
 }
 

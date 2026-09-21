@@ -12,15 +12,15 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// shopNotFoundMessage は、存在しない shop と隠された shop（および数値でない
-// id）に共通の 404 body であり、shop が存在するかどうかをレスポンスから
+// shopNotFoundMessage は、存在しない shop と隠された shop（および UUID の
+// 正規形でない id）に共通の 404 body であり、shop が存在するかどうかをレスポンスから
 // 決して明かさないようにする。
 const shopNotFoundMessage = "Shop not found"
 
 // shopResponse は GET /shops のトップレベル配列の要素 1 つである
 // （frontend の Shop、domains/shops/api/types.ts。ワイヤ上は snake_case）。
 type shopResponse struct {
-	ID     int64  `json:"id"`
+	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
 }
@@ -30,7 +30,7 @@ type shopResponse struct {
 // （domain の reviewable ルール）で、匿名は false。frontend は、この値で「レビューを書く」
 // ボタンを出し分ける。
 type shopDetailResponse struct {
-	ID             int64                `json:"id"`
+	ID             string               `json:"id"`
 	Name           string               `json:"name"`
 	Status         string               `json:"status"`
 	ModerationNote *string              `json:"moderation_note"`
@@ -59,7 +59,7 @@ type shopReviewResponse struct {
 }
 
 type reviewBurgerResponse struct {
-	ID            int64   `json:"id"`
+	ID            string  `json:"id"`
 	Name          string  `json:"name"`
 	AverageRating float64 `json:"average_rating"`
 	ReviewCount   int64   `json:"review_count"`
@@ -137,12 +137,11 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 }
 
 // handleGetShop は GET /shops/{id} を処理する：creator と reviews を伴う
-// shop の詳細、または未知、隠された、数値でない id に対する統一された 404。
+// shop の詳細、または未知、隠された、UUID の正規形でない id に対する統一された 404。
 func handleGetShop(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			writeError(w, http.StatusNotFound, shopNotFoundMessage)
+		id, ok := shopIDPathValue(w, r)
+		if !ok {
 			return
 		}
 		detail, err := shops.Get(r.Context(), viewerPtr(r), id)

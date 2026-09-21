@@ -82,11 +82,11 @@ func TestRatingRange(t *testing.T) {
 // 無効な入力は review を返さずに ValidationError を表に出す。
 func TestNewReview(t *testing.T) {
 	t.Run("有効な入力から review を作る", func(t *testing.T) {
-		review, err := domain.NewReview(4, " Tasty ", uid.N(7), 9)
+		review, err := domain.NewReview(4, " Tasty ", uid.N(7), uid.N(9))
 		if err != nil {
 			t.Fatalf("NewReview returned error: %v", err)
 		}
-		if review.Rating != 4 || review.AuthorID != uid.N(7) || review.BurgerID != 9 {
+		if review.Rating != 4 || review.AuthorID != uid.N(7) || review.BurgerID != uid.N(9) {
 			t.Errorf("review = %+v, want rating 4, author 7, burger 9", review)
 		}
 		if review.Comment == nil || *review.Comment != " Tasty " {
@@ -95,7 +95,7 @@ func TestNewReview(t *testing.T) {
 	})
 
 	t.Run("無効な入力は検証エラーになる", func(t *testing.T) {
-		_, err := domain.NewReview(0, "", uid.N(7), 9)
+		_, err := domain.NewReview(0, "", uid.N(7), uid.N(9))
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)

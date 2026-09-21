@@ -11,6 +11,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // このファイルは adapter/repository の DB 統合テストである。書き込み（CUD）の結果は、
@@ -26,13 +27,13 @@ type shopRow struct {
 }
 
 // readShopRow は shops の行を直接読み取る。
-func readShopRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id int64) shopRow {
+func readShopRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id string) shopRow {
 	t.Helper()
 	var r shopRow
 	if err := conn.QueryRow(ctx,
 		`SELECT name, status, moderation_note, creator_id FROM shops WHERE id = $1`, id,
 	).Scan(&r.Name, &r.Status, &r.Note, &r.CreatorID); err != nil {
-		t.Fatalf("select shop %d: %v", id, err)
+		t.Fatalf("select shop %s: %v", id, err)
 	}
 	return r
 }
@@ -57,7 +58,7 @@ func TestShopModerationRepository(t *testing.T) {
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`
 	// status のコード：0=pending、1=active、2=rejected。
 	tNew := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
-	newest := dbtest.InsertRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
+	newest := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
 
 	t.Run("CreateShop は creator 付きの pending な shop を永続化する", func(t *testing.T) {
 		submission, err := domain.NewShopSubmission("Fresh Shack", alice)
@@ -68,7 +69,7 @@ func TestShopModerationRepository(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateShop returned error: %v", err)
 		}
-		if created.ID == 0 || created.Status != domain.ShopStatusPending || created.ModerationNote != nil {
+		if created.ID == "" || created.Status != domain.ShopStatusPending || created.ModerationNote != nil {
 			t.Errorf("created = %+v, want generated id, pending, nil note", created)
 		}
 		// 保存された行：pending（0）・note なし・creator は alice。
@@ -114,7 +115,7 @@ func TestShopModerationRepository(t *testing.T) {
 	})
 
 	t.Run("カラム単位の書き込みは並行する更新を巻き戻さない", func(t *testing.T) {
-		shop := dbtest.InsertRow(ctx, t, conn, insertShop, "Race Shack", 0, nil, alice, tNew)
+		shop := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Race Shack", 0, nil, alice, tNew)
 
 		// lost-update の回帰、方向 1：古い rename 側は、並行する approve の
 		// 前にスナップショットを読んだ。旧来の行全体の書き込みは status を
@@ -155,14 +156,14 @@ func TestShopModerationRepository(t *testing.T) {
 	})
 
 	t.Run("UpdateShopName に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
-		_, err := repo.UpdateShopName(ctx, 99999, "x")
+		_, err := repo.UpdateShopName(ctx, uid.N(99999), "x")
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
 
 	t.Run("UpdateShopStatus に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
-		_, err := repo.UpdateShopStatus(ctx, 99999, domain.ShopStatusActive, nil)
+		_, err := repo.UpdateShopStatus(ctx, uid.N(99999), domain.ShopStatusActive, nil)
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}

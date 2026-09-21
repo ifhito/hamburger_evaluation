@@ -12,7 +12,6 @@ package uowtest
 
 import (
 	"context"
-	"strconv"
 	"sync"
 	"time"
 
@@ -50,10 +49,10 @@ type Stats struct {
 	// Saved は、保存された統計である(保存された順)。
 	Saved []domain.BurgerStat
 	// Facts は、統計の元データの読み取り(ListBurgerReviewFacts)が返す内容を決める。
-	Facts func(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error)
+	Facts func(ctx context.Context, burgerID string) ([]domain.ReviewFact, error)
 	// ReviewedBy は、ユーザーがレビューしたバーガーの一覧の読み取り(ListReviewedBurgerIDsByUser)が
 	// 返す内容を決める。
-	ReviewedBy func(ctx context.Context, userID string) ([]int64, error)
+	ReviewedBy func(ctx context.Context, userID string) ([]string, error)
 	// LockErr と SaveErr を設定すると、それぞれロックと保存がそのエラーで失敗する。
 	LockErr, SaveErr error
 }
@@ -75,15 +74,15 @@ func (s *Stats) record(op string) {
 func (s *Stats) Note(op string) { s.record(op) }
 
 // LockBurgerStat は、ロックの呼び出しを記録する(LockErr があればそのエラーで失敗する)。
-func (s *Stats) LockBurgerStat(_ context.Context, burgerID int64) error {
-	s.record("lock:" + itoa(burgerID))
+func (s *Stats) LockBurgerStat(_ context.Context, burgerID string) error {
+	s.record("lock:" + burgerID)
 	return s.LockErr
 }
 
 // UpdateBurgerStat は、保存の呼び出しと、保存された統計を記録する(SaveErr があればそのエラーで
 // 失敗し、統計は記録しない)。
 func (s *Stats) UpdateBurgerStat(_ context.Context, stat domain.BurgerStat) error {
-	s.record("save:" + itoa(stat.BurgerID))
+	s.record("save:" + stat.BurgerID)
 	if s.SaveErr != nil {
 		return s.SaveErr
 	}
@@ -94,8 +93,8 @@ func (s *Stats) UpdateBurgerStat(_ context.Context, stat domain.BurgerStat) erro
 }
 
 // ListBurgerReviewFacts は、Facts があればその結果を、なければ空を返す。
-func (s *Stats) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]domain.ReviewFact, error) {
-	s.record("facts:" + itoa(burgerID))
+func (s *Stats) ListBurgerReviewFacts(ctx context.Context, burgerID string) ([]domain.ReviewFact, error) {
+	s.record("facts:" + burgerID)
 	if s.Facts == nil {
 		return nil, nil
 	}
@@ -103,7 +102,7 @@ func (s *Stats) ListBurgerReviewFacts(ctx context.Context, burgerID int64) ([]do
 }
 
 // ListReviewedBurgerIDsByUser は、ReviewedBy があればその結果を、なければ空を返す。
-func (s *Stats) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]int64, error) {
+func (s *Stats) ListReviewedBurgerIDsByUser(ctx context.Context, userID string) ([]string, error) {
 	s.record("reviewed-by:" + userID)
 	if s.ReviewedBy == nil {
 		return nil, nil
@@ -153,5 +152,3 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 	u.Commits++
 	return nil
 }
-
-func itoa(n int64) string { return strconv.FormatInt(n, 10) }
