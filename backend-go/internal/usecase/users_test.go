@@ -122,12 +122,12 @@ func TestUsersUpdateValidation(t *testing.T) {
 			wantMsgs: []string{"Username can't be blank"},
 		},
 		{
-			name:     "bio が上限を超えると検証エラーになる",
+			name:     "自己紹介文が上限を超えると検証エラーになる",
 			input:    usecase.UpdateUserInput{Bio: strPtr(strings.Repeat("あ", domain.MaxBioChars+1))},
 			wantMsgs: []string{"Bio is too long (maximum is 500 characters)"},
 		},
 		{
-			name:     "username が空で bio が上限超過なら、両方のメッセージを順に集めて返す",
+			name:     "ユーザー名が空で自己紹介文が上限を超えていれば、両方のメッセージをこの順に返す",
 			input:    usecase.UpdateUserInput{Username: strPtr(""), Bio: strPtr(strings.Repeat("🍔", domain.MaxBioChars+1))},
 			wantMsgs: []string{"Username can't be blank", "Bio is too long (maximum is 500 characters)"},
 		},
@@ -309,12 +309,12 @@ func TestUsersUpdateChanges(t *testing.T) {
 			wantChanges: domain.ProfileChanges{Username: strPtr("alice2")},
 		},
 		{
-			name:        "bio だけの入力では他のフィールドは nil のままになる",
+			name:        "自己紹介文だけを送ると、他の項目は変更なしのまま、自己紹介文だけが更新に渡る",
 			input:       usecase.UpdateUserInput{Bio: strPtr("はじめまして")},
 			wantChanges: domain.ProfileChanges{Bio: strPtr("はじめまして")},
 		},
 		{
-			name:        "空文字列の bio は、自己紹介を消す変更としてそのまま渡される(password の空文字列とは違い、存在する扱い)",
+			name:        "空文字の自己紹介文は、書いた内容を「消す」変更としてそのまま渡る(パスワードの空文字は「変更なし」の扱いだが、自己紹介文は空文字も有効な値)",
 			input:       usecase.UpdateUserInput{Bio: strPtr("")},
 			wantChanges: domain.ProfileChanges{Bio: strPtr("")},
 		},

@@ -34,7 +34,8 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
     setServerError(null);
     const data: Record<string, string> = {};
     if (username !== authUser?.username) data.username = username;
-    // 上限などの規則の判定は backend だけが持ち、違反はサーバーの 422 のメッセージで表示する(空文字は消す操作)
+    // 自己紹介文の上限などの規則は backend だけが判定し、違反はサーバーの 422 のメッセージで表示する。
+    // 空文字も「書いた内容を消す」操作なので、そのまま送る
     if (bio !== initialBio) data.bio = bio;
     if (email !== authUser?.email) data.email = email;
     if (password) {

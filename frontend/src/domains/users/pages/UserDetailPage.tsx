@@ -44,7 +44,7 @@ export default function UserDetailPage() {
         <div className={styles.profile}>
           <div className={styles.profileCard}>
             <h2 className={styles.username}>{user.username}</h2>
-            {/* 自己紹介は、改行を保った文字として描画する(HTML としては解釈しない) */}
+            {/* 自己紹介文は利用者が自由に書くので、HTML として解釈せず、改行だけを保った文字として描画する */}
             {user.bio && <p className={styles.bio}>{user.bio}</p>}
             {/* email は API が本人の閲覧時だけ返す。閲覧者の比較ではなく、API の返却有無で出し分ける */}
             {user.email && <p className={styles.email}>{user.email}</p>}

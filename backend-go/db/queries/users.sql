@@ -35,7 +35,7 @@ WHERE id = $1 AND discarded_at IS NULL
 RETURNING *;
 
 -- name: UpdateUserBio :one
--- 列を限定したプロフィール更新：bio だけを更新する（理由は
+-- 列を限定したプロフィール更新：自己紹介文（bio 列）だけを更新する（理由は
 -- UpdateUserUsername を参照）。
 UPDATE users
 SET bio = $2,

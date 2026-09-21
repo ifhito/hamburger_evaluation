@@ -1,6 +1,6 @@
-// クリップボードにテキストを書き込む。書き込めたら true を返す。
-// クリップボード API が無い環境(HTTP の非セキュアなコンテキストなど)や、書き込みを拒否されたとき
-// (権限・フォーカスなし)は false を返し、例外にはしない。呼び出し側は、手動でコピーできる表示に切り替える。
+// クリップボードにテキストを書き込み、書き込めたかどうかを返す。
+// クリップボードの機能がない環境(暗号化されていない HTTP のページなど)や、書き込みを拒否されたとき(権限がない、
+// ページにフォーカスがない)は、例外にせず false を返す。呼び出し側は、その場合に手動でコピーできる表示へ切り替える。
 export async function copyToClipboard(
   text: string,
   clipboard: Pick<Clipboard, "writeText"> | undefined = typeof navigator === "undefined" ? undefined : navigator.clipboard,

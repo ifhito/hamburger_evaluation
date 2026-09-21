@@ -202,8 +202,8 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 - `GET /photos/*` — ディスクに保存されたレビュー写真を配信 (認証不要。末尾が `/` のディレクトリ path は一覧せず 404、末尾 `/` なしは 301 で `/` 付きへ転送されてから 404)。`PHOTO_STORAGE` が `disk` (既定) のときだけ登録され、`s3` では登録されない (写真の URL は bucket の公開ドメインを指す)
 
 **ユーザー**
-- `GET /users/:id` — ユーザーを 1 人取得 (認証は任意。存在しない・退会済み・UUID の正規形でない id は同一の 404。`bio`(自己紹介文。空文字は未設定)は誰が閲覧しても含む。本人が閲覧したときだけ email・admin を含む。`can_edit`: 閲覧者がこのプロフィールを編集・削除できるか(domain の `Manages`。本人だけ `true`)を常に含む)
-- `PUT /users/:id` — ユーザーの更新 (要認証。本人のみ。usecase で判定。email を変更するときは、signup と同じ形式の検証を行う。`bio` は部分更新で、送らなければ変わらず、空文字で消せる。上限は 500 文字で、超えると 422 `Bio is too long (maximum is 500 characters)`。応答に `bio` を含む。signup は `bio` を受け付けない)
+- `GET /users/:id` — ユーザーを 1 人取得 (認証は任意。存在しない・退会済み・UUID の正規形でない id は同一の 404。自己紹介文(応答のキーは `bio`。書かれていなければ空文字)は、誰が閲覧しても含む。email・admin は、本人が閲覧したときだけ含む。`can_edit`: 閲覧者がこのプロフィールを編集・削除できるか(domain の `Manages`。本人だけ `true`)を常に含む)
+- `PUT /users/:id` — ユーザーの更新 (要認証。本人のみ。usecase で判定。email を変更するときは、signup と同じ形式の検証を行う。自己紹介文(`bio`)は、送ったときだけ更新される(送らなければ変わらず、空文字を送ると消える)。上限は 500 文字で、超えると 422 `Bio is too long (maximum is 500 characters)`。応答にも `bio` を含む。新規登録では自己紹介文を設定できない(`POST /signup` の要求に含めても無視される))
 - `DELETE /users/:id` — ユーザーの削除 (要認証。本人のみ。usecase で判定)
 
 **管理者** (要認証。管理者のみ許可する判定は usecase で行う)
@@ -214,7 +214,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 ### 入力の上限
 
-テキスト入力には文字数の上限がある。超えると 422 で、`{"errors": ["Comment is too long (maximum is 2000 characters)"]}` のように、他の違反と一緒に列挙される(検証は永続化の前で、失敗したら何も書かれない。JSON と multipart の両方の経路で同じ)。判定は domain だけが持ち(上限の定数は、ルールを持つ側の `internal/domain/` のファイルに、検証の関数と並べて置く: `review.go` のコメント・バーガー名、`shop.go` のショップ名・却下メモ、`username.go`、`email.go`、`bio.go`)、frontend は判定を持たず、サーバーのメッセージを表示する。
+テキスト入力には文字数の上限がある。超えると 422 で、`{"errors": ["Comment is too long (maximum is 2000 characters)"]}` のように、他の違反と一緒に列挙される(検証は永続化の前で、失敗したら何も書かれない。JSON と multipart の両方の経路で同じ)。判定は domain だけが持ち(上限の定数は、ルールを持つ側の `internal/domain/` のファイルに、検証の関数と並べて置く: `review.go` のコメント・バーガー名、`shop.go` のショップ名・却下メモ、`username.go`、`email.go`、`bio.go` の自己紹介文)、frontend は判定を持たず、サーバーのメッセージを表示する。
 
 | 項目 | 上限(文字) |
 |---|---|
@@ -223,7 +223,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 | ショップ名(`POST /shops`、`PUT /admin/shops/:id`) | 100 |
 | ユーザー名(`POST /signup`、`PUT /users/:id`) | 50 |
 | メールアドレス(`POST /signup`、`PUT /users/:id`) | 254 |
-| 自己紹介文(`PUT /users/:id` の `bio`。送られたときだけ判定) | 500 |
+| 自己紹介文(`PUT /users/:id` の `bio`。送ったときだけ判定) | 500 |
 | 管理者の却下メモ(`POST /admin/shops/:id/reject` の `moderation_note`) | 500 |
 
 - 文字数は Unicode の**コードポイント数**で数える(バイト数でも書記素クラスタでもない。日本語は 1 文字、通常の絵文字も 1 文字。結合文字は 1 コードポイントごとに数える)。PostgreSQL の `char_length` と同じ数え方である
@@ -235,7 +235,7 @@ TEST_DATABASE_URL='postgres://postgres:password@localhost:5433/postgres?sslmode=
 
 `backend-go/db/migrations/` のマイグレーションで定義された 8 つのテーブル:
 
-- **users** — id (uuid), email, username, bio (自己紹介文。空文字は未設定), password_digest, admin フラグ, 論理削除 (discarded_at)
+- **users** — id (uuid), email, username, bio (自己紹介文。書かれていなければ空文字), password_digest, admin フラグ, 論理削除 (discarded_at)
 - **shops** — name, モデレーション状態 (pending / active / rejected), moderation_note, 申請者への FK
 - **burgers** — 中間テーブル経由でショップに紐づくバーガー
 - **shops_burgers** *(中間テーブル)* — shop_id (FK), burger_id (FK)

@@ -9,7 +9,7 @@ import (
 )
 
 // TestUserProfileFor は、ユーザーのビューの規則をその唯一の置き場で固定する。
-// ID・Username・Bio は常に入り、Email と Admin は viewer が本人のときだけ入る。
+// ID・ユーザー名・自己紹介文は常に入り、Email と Admin は viewer が本人のときだけ入る。
 // admin の viewer であっても、他人の Email と Admin は決して入らない。CanEdit（編集・削除できるか）は
 // 本人の viewer だけが true で、匿名・他人・admin の他人は false である。
 func TestUserProfileFor(t *testing.T) {

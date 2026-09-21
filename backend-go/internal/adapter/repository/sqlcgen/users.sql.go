@@ -140,7 +140,7 @@ type UpdateUserBioParams struct {
 	Bio string
 }
 
-// 列を限定したプロフィール更新：bio だけを更新する（理由は
+// 列を限定したプロフィール更新：自己紹介文（bio 列）だけを更新する（理由は
 // UpdateUserUsername を参照）。
 func (q *Queries) UpdateUserBio(ctx context.Context, arg UpdateUserBioParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUserBio, arg.ID, arg.Bio)

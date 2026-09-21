@@ -100,7 +100,7 @@ func newUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(string) st
 //
 // publicUserKeys は、他のエンドポイントに埋め込まれる user の参照（{id, username}）の
 // キー集合である。publicProfileKeys と selfUserKeys は GET /users/{id} のプロフィールで、
-// viewer ごとの can_edit（編集・削除できるか）が常に付く。
+// 自己紹介文（bio。公開情報なので誰にでも付く）と、viewer ごとの can_edit（編集・削除できるか）が常に付く。
 const (
 	publicUserKeys    = "id,username"
 	publicProfileKeys = "bio,can_edit,id,username"
@@ -153,15 +153,15 @@ func newSeededUsersRouter(t *testing.T) (*userStoreFake, http.Handler, func(stri
 }
 
 // TestGetUser は GET /users/{id} を扱う：認証は任意で、匿名・他人・admin の他人には
-// {id, username} だけ（email と admin はキーごと存在しない）、本人には
-// {id, username, email, admin}。存在しない・退会済み・整数でない id は同一の 404
+// 公開情報（id・ユーザー名・自己紹介文。email と admin はキーごと存在しない）、本人には
+// それに email と admin を加えたものを返す。存在しない・退会済み・整数でない id は同一の 404
 // になる。
 func TestGetUser(t *testing.T) {
 	get := func(router http.Handler, path, auth string) *httptest.ResponseRecorder {
 		return do(router, http.MethodGet, path, "", auth)
 	}
 
-	t.Run("AC2 匿名は {id, username} のキーだけを返す", func(t *testing.T) {
+	t.Run("未ログインの閲覧者には公開情報のキーだけを返し、メールアドレスは含めない", func(t *testing.T) {
 		_, router, _ := newSeededUsersRouter(t)
 		rec := get(router, "/users/"+uid.N(1), "")
 		if rec.Code != http.StatusOK {
@@ -182,7 +182,7 @@ func TestGetUser(t *testing.T) {
 		}
 	})
 
-	t.Run("AC3 本人が閲覧すると {id, username, email, admin} を返す", func(t *testing.T) {
+	t.Run("本人が閲覧すると、公開情報に加えてメールアドレスと管理者かどうかも返す", func(t *testing.T) {
 		tests := []struct {
 			name      string
 			id        string
@@ -772,8 +772,8 @@ func TestUsersProfileViewsIntegration(t *testing.T) {
 	}
 
 	// assertView は GET /users/{id} を auth（"" = 匿名）で実行し、200 で、wantEmail が
-	// 空なら公開ビュー {id, username}（body に email の "@" も現れない）、空でなければ
-	// 本人ビュー {id, username, email, admin} であることを確かめる。
+	// 空なら公開情報だけ（body に email の "@" も現れない）、空でなければ本人向けに
+	// email と admin も含むことを確かめる。
 	assertView := func(t *testing.T, id string, auth, wantEmail string, wantAdmin bool) {
 		t.Helper()
 		rec := do(router, http.MethodGet, "/users/"+id, "", auth)
@@ -798,7 +798,7 @@ func TestUsersProfileViewsIntegration(t *testing.T) {
 		}
 	}
 
-	t.Run("匿名の詳細は {id, username} だけを返す", func(t *testing.T) {
+	t.Run("匿名の閲覧者には公開情報だけを返す", func(t *testing.T) {
 		for _, id := range []string{aliceID, bobID, rootID} {
 			assertView(t, id, "", "", false)
 		}

@@ -9,7 +9,7 @@ type User struct {
 	// ID は UUID の正規形（小文字・ハイフン区切り）である。DB が生成し、形式の判定は IsUUID が持つ。
 	ID       string
 	Username string
-	// Bio は自己紹介文である。空文字は未設定を表す。誰にでも公開される。
+	// Bio は自己紹介文（biography の略）である。空文字は未設定を表す。誰にでも公開される。
 	Bio   string
 	Email string
 	Admin bool
@@ -20,7 +20,7 @@ type User struct {
 // （issue #16 R2/R3）。
 func (u User) Manages(id string) bool { return u.ID == id }
 
-// UserProfile は、viewer から見えるユーザーのビューである。ID・Username・Bio は
+// UserProfile は、viewer から見えるユーザーのビューである。ID・ユーザー名・自己紹介文は
 // 誰にでも公開され、Email と Admin は本人にだけ入る（それ以外は nil）。
 // 他人や匿名に渡しうる user のレスポンスは、User そのものではなく、この型
 // （または {id, username} だけの UserRef）から組み立てる。こうして email と
@@ -28,7 +28,7 @@ func (u User) Manages(id string) bool { return u.ID == id }
 type UserProfile struct {
 	ID       string
 	Username string
-	// Bio は自己紹介文で、誰にでも見える（空文字は未設定）。
+	// Bio は自己紹介文で、他人や匿名にも見える（空文字は未設定）。
 	Bio   string
 	Email *string
 	Admin *bool

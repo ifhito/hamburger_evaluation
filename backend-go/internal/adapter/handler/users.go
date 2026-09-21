@@ -17,7 +17,7 @@ const userNotFoundMessage = "User not found"
 
 // userResponse は、PUT /users/{id} の、token を含まない user の JSON 形式である：
 // issue #16 の仕様（「user 形 + admin フラグ」、issue が引用する frontend の契約の
-// レスポンス形状）に従った {id, username, email, admin} に、S28 で bio を足した {id, username, bio, email, admin} であり、
+// レスポンス形状）に従った {id, username, email, admin} に、自己紹介文（bio）を加えた {id, username, bio, email, admin} であり、
 // authUserResponse から token を除いたものである。PUT は本人だけが成功する
 // ので、email と admin を常に含めてよい。他人にも返りうる GET の user は
 // userProfileResponse を使う。
