@@ -165,9 +165,62 @@ CLI の設計思想の違いである。
 
 **第一候補を Cloudflare Workers に変えるべきである。**
 
+## フロント経由の写真アップロード: 3 社とも成功
+
+転送先が Cloud Run(1GB)なので、**原寸 24MP も通った**。
+
+| フロント | ブラウザ相当(205KB) | 原寸 24MP(4.6MB) |
+|---|---|---|
+| Cloudflare Workers | 201(1.4 秒) | **201**(3.9 秒) |
+| Render Static | 201(1.7 秒) | **201**(5.5 秒) |
+| Netlify | 201(2.9 秒) | **201**(5.6 秒) |
+
+Phase 4 で無料プランの API が 24MP で落ちたのは**メモリの問題**であり、
+フロントの転送経路とは無関係だと確認できた。転送先が十分なメモリを持てば、
+どのフロントを経由しても通る。
+
+## OAuth の `redirect_uri`: プレビュー環境との非互換を実証
+
+未登録のクライアントで認可を要求したところ、**すべて 401 で拒否された**。
+
+| `redirect_uri` | 結果 |
+|---|---|
+| Cloudflare Workers の URL | 401 `invalid_client` |
+| Vercel のプレビュー URL(架空) | 401 `invalid_client` |
+| `http://localhost:8787/callback`(Cursor が使う) | 401 `invalid_client` |
+
+```json
+{"error":"invalid_client","error_description":"... The requested OAuth 2.0 Client does not exist."}
+```
+
+**`redirect_uri` の照合以前に `client_id` が未登録として弾かれている。**
+実装の設計どおりで、アプリへ結果を戻せない不正はリダイレクトせずエラーを返す。
+オープンリダイレクタとして悪用されない正しい挙動である。
+
+**PR プレビュー環境との非互換が確定した。** Vercel や Netlify は PR ごとに
+ランダムな URL を払い出すため、`OAUTH_STATIC_CLIENTS` に事前登録できない。
+[ADR-0001](../adr/0001-frontend-deploy-target.md) でプレビュー環境を評価軸から
+下げた判断は正しかった。
+
+回避策は**常設のステージング環境**を 1 つ作り、その URL を登録することである。
+
+### 発見: `OAUTH_ISSUER` の設定ミス
+
+検証の過程で、Cloud Run の `OAUTH_ISSUER` が **Render の URL** を指していることが
+分かった。Render 用に作った環境変数をコピーしたまま直し忘れた形である。
+
+```text
+issuer: https://hamburger-api.onrender.com   ← 実際は Cloud Run
+```
+
+**気づきにくい壊れ方である。** `.well-known/oauth-authorization-server` は 200 を返し、
+窓口は生きているように見える。中身の URL だけが間違っている。
+
+RFC 9207 により認可コードを返すときに `iss` が付き、クライアントは発行者の一致を
+検証するため、**不一致だと接続が必ず失敗する**。
+
 ## 未計測
 
-- **ブラウザ経由の写真アップロード**。フロント経由で実際に通るか
-- **OAuth の `redirect_uri` 登録**。プレビュー環境が使えないことの実証
-- Vercel の転送レイテンシ(ブロック解除後)
+- Vercel の転送レイテンシ(Root Directory の設定と Bot 対策の解除後)
 - 接続を再利用した条件での再計測(上の注記を参照)
+- OAuth の完全な疎通。**同意画面がフロントに未実装**のため、認可コードの取得まで進めない
