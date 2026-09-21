@@ -17,7 +17,10 @@
 | `phase3-candidates.md` | メール送信候補の解説と、選ばなかった理由 |
 | `phase4-api.md` | API 4 候補の結果 |
 | `phase5-async.md` | 非同期処理 4 候補の結果 |
-| `phase6-frontend.md` | フロントエンド 4 候補の結果 |
+| `phase4-<社名>.md` | API 各社の詳細 |
+| `phase4-summary.md` | API 4 候補の総括 |
+| `phase6-summary.md` | フロントエンド 4 候補の総括 |
+| `phase6-candidates.md` | フロントエンド候補の解説と、選ばなかった理由 |
 | `summary.md` | 24 候補の総まとめ。記事の最終回に対応 |
 
 数字は必ず計測日時とセットで書く。無料枠の条件もサービス性能も変わるため、
