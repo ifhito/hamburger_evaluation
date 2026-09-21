@@ -15,6 +15,23 @@ out_dir=${BENCH_OUT:-docs/benchmarks/raw}
 out="${out_dir}/${label}.csv"
 mkdir -p "$out_dir"
 
+# 計測の前に中身を 1 回確認する。ステータスコードだけ見ていると、
+# プラットフォームのプレースホルダー画面を測ってしまう(Phase 4 で実際に起きた)。
+probe=$(curl -sS -o /dev/null -w '%{http_code} %{content_type}' --max-time 30 "$url" 2>/dev/null || echo "000 -")
+probe_code=${probe%% *}
+probe_type=${probe#* }
+echo "事前確認: HTTP ${probe_code} / ${probe_type}"
+case "$probe_type" in
+  *text/html*)
+    echo "  ★ HTML が返っている。API のエンドポイントなら、アプリではなく" >&2
+    echo "     プラットフォームの既定ページを測っている可能性が高い。中身を確認すること。" >&2
+    ;;
+esac
+if [ "$probe_code" = "000" ]; then
+  echo "  ★ 到達できない。URL とネットワークを確認すること。" >&2
+fi
+
+
 {
   echo "# url=${url}"
   echo "# measured_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
