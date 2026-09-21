@@ -46,8 +46,8 @@ func processedIf(withPhoto bool) *photo.Processed {
 func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 	ctx := context.Background()
 	alice := domain.User{ID: uid.N(1), Username: "alice"}
-	stored := reviewDetailFor(alice.ID) // バーガー uid.N(5) に付いた、ID 9 のレビュー
-	getReview := func(_ context.Context, id int64) (domain.ReviewDetail, error) {
+	stored := reviewDetailFor(alice.ID) // バーガー uid.N(5) に付いた、uid.N(9) のレビュー
+	getReview := func(_ context.Context, id string) (domain.ReviewDetail, error) {
 		if id == stored.ID {
 			return stored, nil
 		}
@@ -63,7 +63,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 	t.Run("レビューを削除すると、そのバーガーだけを「ロック → 元データの読み取り → 保存」の順に再計算し、commit する", func(t *testing.T) {
 		stats := &uowtest.Stats{}
 		uow := &uowtest.UoW{Stats: stats}
-		repo := &fakeReviewRepo{discardReview: func(context.Context, int64) error { stats.Note("discard"); return nil }}
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error { stats.Note("discard"); return nil }}
 		if err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID); err != nil {
 			t.Fatalf("Delete returned error: %v", err)
 		}
@@ -79,7 +79,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 	t.Run("削除しようとしたレビューが、別の削除で先に消えていた場合は、統計に触れずに rollback し、レビューが見つからないエラーを返す", func(t *testing.T) {
 		stats := &uowtest.Stats{}
 		uow := &uowtest.UoW{Stats: stats}
-		repo := &fakeReviewRepo{discardReview: func(context.Context, int64) error {
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error {
 			return domain.ErrReviewNotFound // 並行する別の削除が、先にこのレビューを論理削除していた
 		}}
 		err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID)
@@ -98,7 +98,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 		saveErr := errors.New("boom")
 		stats := &uowtest.Stats{SaveErr: saveErr}
 		uow := &uowtest.UoW{Stats: stats}
-		repo := &fakeReviewRepo{discardReview: func(context.Context, int64) error { return nil }}
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error { return nil }}
 		err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID)
 		if !errors.Is(err, saveErr) {
 			t.Fatalf("Delete error = %v, want wrapped %v", err, saveErr)
@@ -112,7 +112,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 		lockErr := errors.New("lock timeout")
 		stats := &uowtest.Stats{LockErr: lockErr}
 		uow := &uowtest.UoW{Stats: stats}
-		repo := &fakeReviewRepo{discardReview: func(context.Context, int64) error { return nil }}
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error { return nil }}
 		if err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID); !errors.Is(err, lockErr) {
 			t.Fatalf("Delete error = %v, want wrapped %v", err, lockErr)
 		}
@@ -126,7 +126,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 		uow := &uowtest.UoW{Stats: stats}
 		repo := &fakeReviewRepo{createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 			stats.Note("insert")
-			review.ID = 44
+			review.ID = uid.N(44)
 			return review, nil
 		}}
 		if _, err := uowReviews(createQuery, repo, uow).Create(ctx, alice, activeShop.ID, cheese.ID, "", 4, "ok", nil); err != nil {
@@ -156,7 +156,7 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 			},
 			createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
 				stats.Note("insert")
-				review.ID = 45
+				review.ID = uid.N(45)
 				return review, nil
 			},
 		}
@@ -204,10 +204,10 @@ func TestReviewsWriteRecalculatesInOneTransaction(t *testing.T) {
 					return review
 				}
 				repo := &fakeReviewRepo{
-					updateReviewContent: func(_ context.Context, _ int64, rating int, comment string) (domain.Review, error) {
+					updateReviewContent: func(_ context.Context, _ string, rating int, comment string) (domain.Review, error) {
 						return updated(stored.Review, rating, comment), nil
 					},
-					updateReviewContentAndKey: func(_ context.Context, _ int64, rating int, comment string, _ *string) (domain.Review, error) {
+					updateReviewContentAndKey: func(_ context.Context, _ string, rating int, comment string, _ *string) (domain.Review, error) {
 						return updated(stored.Review, rating, comment), nil
 					},
 				}
@@ -242,9 +242,9 @@ func TestBurgerStatsRecalculationUsesClockAndDomain(t *testing.T) {
 		{Rating: 3, CreatedAt: time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC), ReviewerHistory: domain.ReviewerHistory{Ratings: []float64{3}}},
 	}
 	stats := &uowtest.Stats{Facts: func(context.Context, string) ([]domain.ReviewFact, error) { return facts, nil }}
-	uow := &uowtest.UoW{Stats: stats, Reviews: &fakeReviewRepo{discardReview: func(context.Context, int64) error { return nil }}}
+	uow := &uowtest.UoW{Stats: stats, Reviews: &fakeReviewRepo{discardReview: func(context.Context, string) error { return nil }}}
 	reviews := usecase.NewReviews(
-		&fakeReviewQuery{getReview: func(context.Context, int64) (domain.ReviewDetail, error) { return stored, nil }},
+		&fakeReviewQuery{getReview: func(context.Context, string) (domain.ReviewDetail, error) { return stored, nil }},
 		uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{T: clockTime}), &fakePhotoStorage{})
 	if err := reviews.Delete(ctx, alice, stored.ID); err != nil {
 		t.Fatalf("Delete returned error: %v", err)

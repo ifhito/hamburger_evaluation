@@ -19,11 +19,11 @@ export default function ReviewEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
-  const { data: review, isLoading: reviewLoading } = useReview(Number(id), user?.id ?? null, {
+  const { data: review, isLoading: reviewLoading } = useReview(id, user?.id ?? null, {
     enabled: !authLoading,
   });
   const isLoading = reviewLoading || authLoading;
-  const { update } = useUpdateReview(Number(id));
+  const { update } = useUpdateReview(id ?? "");
   const ratingRange = useRatingRange();
 
   const { register, handleSubmit, setValue, watch, reset } = useUpdateReviewForm();

@@ -90,7 +90,7 @@ func TestReviewTextLimits(t *testing.T) {
 			created := do(router, http.MethodPost, "/reviews",
 				fmt.Sprintf(`{"review":{"rating":4,"comment":"first","shop_id":%q,"burger_id":%q}}`, activeShopID, cheeseBurgerID), aliceAuth)
 			id, _ := decodePhotoURL(t, created.Body.Bytes())
-			path := fmt.Sprintf("/reviews/%d", id)
+			path := fmt.Sprintf("/reviews/%s", id)
 			edit := func(comment string) (int, string) {
 				rec := do(router, http.MethodPut, path, fmt.Sprintf(`{"review":{"rating":5,"comment":%s}}`, jsonString(t, comment)), aliceAuth)
 				return rec.Code, rec.Body.String()

@@ -73,7 +73,7 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 // とともに返す。または domain.ErrReviewNotFound を返す。author（user）が
 // discard 済みの review も対象外である。SQL は、存在しない行、discard 済みの
 // review、author が discard 済みの review をすべて同一に扱う。
-func (r *ReviewQuery) GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error) {
+func (r *ReviewQuery) GetReview(ctx context.Context, id string) (domain.ReviewDetail, error) {
 	row, err := r.q.GetReviewDetail(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -125,7 +125,7 @@ func (r *ReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID string
 // 共有される）を domain のペイロードに変換する。存在しない stats はゼロに
 // なる。
 func toReviewDetail(
-	id int64, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz,
+	id string, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz,
 	userID string, username string, burgerID string, burgerName string,
 	reviewCount pgtype.Int8, averageRating, weightedScore, confidence pgtype.Float8,
 ) domain.ReviewDetail {

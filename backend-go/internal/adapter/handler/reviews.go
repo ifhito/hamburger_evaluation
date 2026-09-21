@@ -17,7 +17,7 @@ import (
 )
 
 // reviewNotFoundMessage は、存在しない review、discard 済みの review、
-// および数値でない review の id に共通の 404 body であり、soft delete 済みの
+// および UUID の正規形でない review の id に共通の 404 body であり、soft delete 済みの
 // review が一度も存在しなかったものと区別できないようにする。
 const reviewNotFoundMessage = "Review not found"
 
@@ -243,14 +243,14 @@ func newReviewResponse(detail domain.ReviewDetail) reviewResponse {
 	return reviewResponse{shopReviewResponse: resp, CanEdit: detail.CanEdit}
 }
 
-// reviewIDPathValue は {id} の path value をパースする。false は統一された
-// review の 404 が既に書き込まれたことを意味する（数値でない id は存在しない
-// review とまったく同じに見える。shop の id と同じ規約）。
-func reviewIDPathValue(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+// reviewIDPathValue は {id} の path value を取り出す。false は統一された
+// review の 404 が既に書き込まれたことを意味する（UUID の正規形でない id は存在しない
+// review とまったく同じに見える。shop の id と同じ規約。形式の判定は domain.IsUUID が持つ）。
+func reviewIDPathValue(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := r.PathValue("id")
+	if !domain.IsUUID(id) {
 		writeError(w, http.StatusNotFound, reviewNotFoundMessage)
-		return 0, false
+		return "", false
 	}
 	return id, true
 }
@@ -344,7 +344,7 @@ func handleListReviews(reviews *usecase.Reviews) http.HandlerFunc {
 
 // handleGetReview は GET /reviews/{id} を処理する：author、burger、stats を
 // 伴う review、または未知の id、discard 済みの review、author が discard 済みの
-// user である review、数値でない id に対する統一された 404。
+// user である review、UUID の正規形でない id に対する統一された 404。
 func handleGetReview(reviews *usecase.Reviews) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := reviewIDPathValue(w, r)

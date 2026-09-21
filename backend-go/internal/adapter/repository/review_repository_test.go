@@ -12,6 +12,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
 // reviewRow は、reviews の保存された行である（DB のカラムの値のまま）。
@@ -26,13 +27,13 @@ type reviewRow struct {
 }
 
 // readReviewRow は reviews の行を直接読み取る（discard 済みの行も読める）。
-func readReviewRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id int64) reviewRow {
+func readReviewRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id string) reviewRow {
 	t.Helper()
 	var r reviewRow
 	if err := conn.QueryRow(ctx,
 		`SELECT rating, comment, user_id, burger_id, created_at, discarded_at, photo_key FROM reviews WHERE id = $1`, id,
 	).Scan(&r.Rating, &r.Comment, &r.UserID, &r.BurgerID, &r.CreatedAt, &r.DiscardedAt, &r.PhotoKey); err != nil {
-		t.Fatalf("select review %d: %v", id, err)
+		t.Fatalf("select review %s: %v", id, err)
 	}
 	return r
 }
@@ -59,8 +60,8 @@ func TestReviewRepository(t *testing.T) {
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 	t1 := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
 	t2 := time.Date(2024, 5, 2, 10, 0, 0, 0, time.UTC)
-	rOld := dbtest.InsertRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
-	rDiscarded := dbtest.InsertRow(ctx, t, conn, insertReview, 1, "gone", alice, cheese, time.Now(), t2)
+	rOld := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
+	rDiscarded := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 1, "gone", alice, cheese, time.Now(), t2)
 
 	t.Run("CreateReview は insert して保存された行を返す", func(t *testing.T) {
 		review, err := domain.NewReview(4, "Fresh", carol, cheese)
@@ -71,7 +72,7 @@ func TestReviewRepository(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateReview returned error: %v", err)
 		}
-		if created.ID == 0 || created.Rating != 4 || created.AuthorID != carol || created.BurgerID != cheese {
+		if created.ID == "" || created.Rating != 4 || created.AuthorID != carol || created.BurgerID != cheese {
 			t.Errorf("created = %+v, want generated id with the given fields", created)
 		}
 		if created.Comment == nil || *created.Comment != "Fresh" {
@@ -111,7 +112,7 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("UpdateReviewContent に discard 済みまたは存在しない review を渡すと ErrReviewNotFound になる", func(t *testing.T) {
-		for name, id := range map[string]int64{"discarded": rDiscarded, "unknown": 99999} {
+		for name, id := range map[string]string{"discarded": rDiscarded, "unknown": uid.N(99999)} {
 			if _, err := repo.UpdateReviewContent(ctx, id, 3, "x"); !errors.Is(err, domain.ErrReviewNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrReviewNotFound)
 			}
@@ -119,7 +120,7 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("DiscardReview は soft delete をちょうど 1 回だけ行い、hard delete はしない", func(t *testing.T) {
-		victim := dbtest.InsertRow(ctx, t, conn, insertReview, 3, "bye", carol, cheese, nil, t2)
+		victim := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 3, "bye", carol, cheese, nil, t2)
 		if err := repo.DiscardReview(ctx, victim); err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}
@@ -138,7 +139,7 @@ func TestReviewRepository(t *testing.T) {
 		if err := repo.DiscardReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("second discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if err := repo.DiscardReview(ctx, 99999); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := repo.DiscardReview(ctx, uid.N(99999)); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})

@@ -106,7 +106,7 @@ func TestNewReview(t *testing.T) {
 // TestReviewCanBeModifiedBy は所有権ルールを固定する（issue #14 AC3）。
 // author だけが編集または削除でき、admin にも例外はない。
 func TestReviewCanBeModifiedBy(t *testing.T) {
-	review := domain.Review{ID: 1, AuthorID: uid.N(7)}
+	review := domain.Review{ID: uid.N(1), AuthorID: uid.N(7)}
 
 	tests := []struct {
 		name   string
@@ -131,7 +131,7 @@ func TestReviewCanBeModifiedBy(t *testing.T) {
 // 匿名（nil）は常に false で、それ以外は CanBeModifiedBy の規則（author だけ。admin にも
 // 例外なし）に従う。
 func TestReviewCanBeModifiedByViewer(t *testing.T) {
-	review := domain.Review{ID: 1, AuthorID: uid.N(7)}
+	review := domain.Review{ID: uid.N(1), AuthorID: uid.N(7)}
 	author := domain.User{ID: uid.N(7)}
 	other := domain.User{ID: uid.N(8)}
 	admin := domain.User{ID: uid.N(9), Admin: true}

@@ -271,7 +271,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 			t.Errorf("削除済みのレビューの編集 = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 		if err := fail(func(tx usecase.Tx) error {
-			_, err := tx.Reviews.UpdateContent(ctx, 99999, 1, "x")
+			_, err := tx.Reviews.UpdateContent(ctx, uid.N(99999), 1, "x")
 			return err
 		}); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("存在しないレビューの編集 = %v, want %v", err, domain.ErrReviewNotFound)
@@ -279,7 +279,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		if err := fail(func(tx usecase.Tx) error { return tx.Reviews.Discard(ctx, victim.ID) }); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("削除済みのレビューの削除 = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if err := fail(func(tx usecase.Tx) error { return tx.Reviews.Discard(ctx, 99999) }); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := fail(func(tx usecase.Tx) error { return tx.Reviews.Discard(ctx, uid.N(99999)) }); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("存在しないレビューの削除 = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 
@@ -383,7 +383,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 		if created.Burger == nil || !reflect.DeepEqual(*created.Burger, want) {
 			t.Errorf("応答のバーガー = %+v, want 投稿前の統計を持つバーガー %+v", created.Burger, want)
 		}
-		if created.ID == 0 || created.BurgerID != cheese || created.CreatedAt.IsZero() {
+		if created.ID == "" || created.BurgerID != cheese || created.CreatedAt.IsZero() {
 			t.Errorf("作成されたレビュー = %+v, want バーガー %s に付いた、保存済みのレビュー", created.Review, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 1 {
@@ -522,11 +522,11 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("レビュー一覧の取得に失敗した: %v", err)
 		}
-		ids := make([]int64, 0, len(feed))
+		ids := make([]string, 0, len(feed))
 		for _, r := range feed {
 			ids = append(ids, r.ID)
 		}
-		if want := []int64{aliceShared.ID}; !reflect.DeepEqual(ids, want) {
+		if want := []string{aliceShared.ID}; !reflect.DeepEqual(ids, want) {
 			t.Fatalf("一覧のレビュー ID = %v, want %v(victim のレビューは隠れる)", ids, want)
 		}
 		sharedStats := dbtest.RequireConsistentStats(ctx, t, conn, shared)
@@ -550,11 +550,11 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ショップのレビュー一覧の取得に失敗した: %v", err)
 		}
-		shopIDs := make([]int64, 0, len(shopReviews))
+		shopIDs := make([]string, 0, len(shopReviews))
 		for _, r := range shopReviews {
 			shopIDs = append(shopIDs, r.ID)
 		}
-		if want := []int64{aliceShared.ID}; !reflect.DeepEqual(shopIDs, want) {
+		if want := []string{aliceShared.ID}; !reflect.DeepEqual(shopIDs, want) {
 			t.Errorf("ショップのレビュー ID = %v, want %v(victim のレビューは隠れる)", shopIDs, want)
 		}
 	})

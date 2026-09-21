@@ -175,7 +175,8 @@ type ShopDetail struct {
 // ShopReview は shop 詳細に表示される review 1 件であり、その author と、
 // review 由来の統計を含む対象 burger を持つ。
 type ShopReview struct {
-	ID        int64
+	// ID は review の UUID の正規形である。
+	ID        string
 	Rating    int
 	Comment   *string
 	CreatedAt time.Time

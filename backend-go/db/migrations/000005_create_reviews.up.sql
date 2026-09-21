@@ -1,5 +1,5 @@
 CREATE TABLE reviews (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     rating smallint NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment text,
     user_id uuid NOT NULL REFERENCES users (id),

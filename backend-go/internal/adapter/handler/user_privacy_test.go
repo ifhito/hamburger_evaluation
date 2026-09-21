@@ -119,7 +119,7 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, xShop, burgerID); err != nil {
 		t.Fatalf("link burger: %v", err)
 	}
-	postReview := func(auth string, rating int) int64 {
+	postReview := func(auth string, rating int) string {
 		t.Helper()
 		body := fmt.Sprintf(`{"review":{"rating":%d,"comment":"audit review","shop_id":%q,"burger_id":%q}}`, rating, xShop, burgerID)
 		rec := do(router, http.MethodPost, "/reviews", body, auth)
@@ -127,7 +127,7 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 			t.Fatalf("post review: status = %d (body %s)", rec.Code, rec.Body)
 		}
 		var resp struct {
-			ID int64 `json:"id"`
+			ID string `json:"id"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode review: %v", err)
@@ -151,7 +151,7 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 	type endpoint struct {
 		path string
 		// label は、テスト名に使う表示である。path に実行のたびに変わる id が入るとき、テスト名を一定にする
-		// （X のショップは 1、Y のショップは 2 と表す）。
+		// （X のショップ・レビューは 1、Y のショップ・レビューは 2 と表す）。
 		label string
 		// byViewer は viewer の名前をキーにした期待値で、キーがない viewer には
 		// defaults を使う。
@@ -164,11 +164,13 @@ func TestOtherEndpointsDoNotLeakUserPrivateFields(t *testing.T) {
 			defaults: auditWant{status: http.StatusOK, items: 2, refs: []string{"xavier", "yuki"}},
 		},
 		{
-			path:     fmt.Sprintf("/reviews/%d", xReview),
+			path:     fmt.Sprintf("/reviews/%s", xReview),
+			label:    "/reviews/1",
 			defaults: auditWant{status: http.StatusOK, items: -1, refs: []string{"xavier"}},
 		},
 		{
-			path:     fmt.Sprintf("/reviews/%d", yReview),
+			path:     fmt.Sprintf("/reviews/%s", yReview),
+			label:    "/reviews/2",
 			defaults: auditWant{status: http.StatusOK, items: -1, refs: []string{"yuki"}},
 		},
 		{
