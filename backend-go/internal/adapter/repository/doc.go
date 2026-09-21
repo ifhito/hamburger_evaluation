@@ -7,4 +7,9 @@
 //
 // sqlc の出力は sqlcgen サブパッケージにあり、手で編集することはない。
 // 代わりに db/queries/ を変更して再生成する。
+//
+// この package のテストは、書き込み（CUD）の結果を、adapter/query に頼らず SQL の SELECT で
+// 直接確かめる。読み取りの adapter/query を import しない（テストを含む。usecase の構造検査が
+// 守る）。読み取りの検証は adapter/query のテストが担い、両方を通した確認は handler の
+// 統合テストが担う。
 package repository
