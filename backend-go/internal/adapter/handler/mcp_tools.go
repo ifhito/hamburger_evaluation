@@ -115,6 +115,11 @@ func failure(message string) (*mcp.CallToolResult, any, error) {
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: message}}}, nil, nil
 }
 
+// failureMessage は、カタログの文言(handler と同じ)を、英語で、ツールの失敗にする。
+func failureMessage(m domain.Message) (*mcp.CallToolResult, any, error) {
+	return failure(text(domain.LangEN, m))
+}
+
 // success は、v を JSON の文字列にして返す。結果が大きすぎるときは、切らずに、件数を減らすよう伝える。
 func success(v any) (*mcp.CallToolResult, any, error) {
 	var buf bytes.Buffer
@@ -136,15 +141,15 @@ func toolError(op string, err error) (*mcp.CallToolResult, any, error) {
 	var vErr *domain.ValidationError
 	switch {
 	case errors.Is(err, domain.ErrForbidden):
-		return failure(forbiddenMessage)
+		return failureMessage(msgForbidden)
 	case errors.Is(err, domain.ErrReviewNotFound):
-		return failure(reviewNotFoundMessage)
+		return failureMessage(msgReviewNotFound)
 	case errors.Is(err, domain.ErrShopNotFound):
-		return failure(shopNotFoundMessage)
+		return failureMessage(msgShopNotFound)
 	case errors.Is(err, domain.ErrBurgerNotFound):
-		return failure(burgerNotFoundMessage)
+		return failureMessage(msgBurgerNotFound)
 	case errors.Is(err, domain.ErrUserNotFound):
-		return failure(userNotFoundMessage)
+		return failureMessage(msgUserNotFound)
 	case errors.As(err, &vErr):
 		return failure(strings.Join(vErr.Texts(domain.LangEN), "; "))
 	default:
@@ -185,7 +190,7 @@ type getShopInput struct {
 
 func (t *mcpTools) getShop(ctx context.Context, _ *mcp.CallToolRequest, in getShopInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ShopID) {
-		return failure(shopNotFoundMessage)
+		return failureMessage(msgShopNotFound)
 	}
 	detail, err := t.shops.Get(ctx, &t.viewer, in.ShopID)
 	if err != nil {
@@ -207,13 +212,13 @@ func (t *mcpTools) listReviews(ctx context.Context, _ *mcp.CallToolRequest, in l
 	filter := usecase.ReviewListFilter{Keyword: in.Keyword, Rating: in.Rating}
 	if in.ShopID != "" {
 		if !domain.IsUUID(in.ShopID) {
-			return failure("Shop id must be a valid UUID")
+			return failureMessage(msgShopIDInvalid)
 		}
 		filter.ShopID = &in.ShopID
 	}
 	if in.UserID != "" {
 		if !domain.IsUUID(in.UserID) {
-			return failure("User id must be a valid UUID")
+			return failureMessage(msgUserIDInvalid)
 		}
 		filter.UserID = &in.UserID
 	}
@@ -234,7 +239,7 @@ type getReviewInput struct {
 
 func (t *mcpTools) getReview(ctx context.Context, _ *mcp.CallToolRequest, in getReviewInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ReviewID) {
-		return failure(reviewNotFoundMessage)
+		return failureMessage(msgReviewNotFound)
 	}
 	detail, err := t.reviews.Get(ctx, &t.viewer, in.ReviewID)
 	if err != nil {
@@ -249,7 +254,7 @@ type getUserInput struct {
 
 func (t *mcpTools) getUser(ctx context.Context, _ *mcp.CallToolRequest, in getUserInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.UserID) {
-		return failure(userNotFoundMessage)
+		return failureMessage(msgUserNotFound)
 	}
 	profile, err := t.users.Get(ctx, &t.viewer, in.UserID)
 	if err != nil {
@@ -269,8 +274,8 @@ type createReviewInput struct {
 }
 
 func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in createReviewInput) (*mcp.CallToolResult, any, error) {
-	if _, msg := checkReviewTargetIDs(in.ShopID, in.BurgerID); msg != "" {
-		return failure(msg)
+	if status, msg := checkReviewTargetIDs(in.ShopID, in.BurgerID); status != 0 {
+		return failureMessage(msg)
 	}
 	detail, err := t.reviews.Create(ctx, t.viewer, in.ShopID, in.BurgerID, in.BurgerName, in.Rating, in.Comment, nil)
 	if err != nil {
@@ -287,7 +292,7 @@ type updateReviewInput struct {
 
 func (t *mcpTools) updateReview(ctx context.Context, _ *mcp.CallToolRequest, in updateReviewInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ReviewID) {
-		return failure(reviewNotFoundMessage)
+		return failureMessage(msgReviewNotFound)
 	}
 	detail, err := t.reviews.Update(ctx, t.viewer, in.ReviewID, in.Rating, in.Comment, nil)
 	if err != nil {
@@ -302,7 +307,7 @@ type deleteReviewInput struct {
 
 func (t *mcpTools) deleteReview(ctx context.Context, _ *mcp.CallToolRequest, in deleteReviewInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ReviewID) {
-		return failure(reviewNotFoundMessage)
+		return failureMessage(msgReviewNotFound)
 	}
 	if err := t.reviews.Delete(ctx, t.viewer, in.ReviewID); err != nil {
 		return toolError("delete_review", err)

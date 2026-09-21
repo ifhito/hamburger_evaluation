@@ -69,7 +69,7 @@ func handleOAuthAuthorizeRequest(consents *usecase.OAuthConsents) http.HandlerFu
 		}
 		view, err := consents.Describe(r.Context(), viewer.ID, r.URL.Query())
 		if err != nil {
-			writeOAuthError(w, "describe authorize request", err)
+			writeOAuthError(w, r, "describe authorize request", err)
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
@@ -112,12 +112,12 @@ func handleOAuthDecision(consents *usecase.OAuthConsents) http.HandlerFunc {
 		}
 		params, err := usecase.ParseAuthorizeQuery(body.Query)
 		if err != nil {
-			writeOAuthError(w, "decide", err)
+			writeOAuthError(w, r, "decide", err)
 			return
 		}
 		redirectTo, err := consents.Decide(r.Context(), viewer.ID, params, *body.Approve)
 		if err != nil {
-			writeOAuthError(w, "decide", err)
+			writeOAuthError(w, r, "decide", err)
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
@@ -149,7 +149,7 @@ func handleListOAuthGrants(apps *usecase.ConnectedApps) http.HandlerFunc {
 		}
 		grants, hasMore, err := apps.List(r.Context(), viewer.ID, page, perPage)
 		if err != nil {
-			writeOAuthError(w, "list grants", err)
+			writeOAuthError(w, r, "list grants", err)
 			return
 		}
 		out := make([]grantResponse, 0, len(grants))
@@ -174,7 +174,7 @@ func handleRevokeOAuthGrant(apps *usecase.ConnectedApps) http.HandlerFunc {
 			return
 		}
 		if err := apps.Revoke(r.Context(), viewer.ID, r.PathValue("id")); err != nil {
-			writeOAuthError(w, "revoke grant", err)
+			writeOAuthError(w, r, "revoke grant", err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -182,14 +182,14 @@ func handleRevokeOAuthGrant(apps *usecase.ConnectedApps) http.HandlerFunc {
 }
 
 // writeOAuthError は、OAuth の許可に関する use case のエラーを、HTTP の応答にする。
-func writeOAuthError(w http.ResponseWriter, op string, err error) {
+func writeOAuthError(w http.ResponseWriter, r *http.Request, op string, err error) {
 	switch {
 	case errors.Is(err, domain.ErrOAuthAuthorizeRequestInvalid), errors.Is(err, domain.ErrOAuthInvalidScope):
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeJSON(w, http.StatusUnprocessableEntity, errorResponse{Error: err.Error()})
 	case errors.Is(err, domain.ErrOAuthGrantNotFound):
-		writeError(w, http.StatusNotFound, "not found")
+		writeError(w, r, http.StatusNotFound, msgRouteNotFound)
 	default:
 		log.Printf("handler: oauth %s: %v", op, err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeInternalError(w)
 	}
 }
