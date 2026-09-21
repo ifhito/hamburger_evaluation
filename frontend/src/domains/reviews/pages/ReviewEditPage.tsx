@@ -10,7 +10,6 @@ import { ApiError } from "../../../api/client/buildApiClient";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
-import { PHOTO_ACCEPT } from "../../../lib/photoResize";
 import { RatingSelect } from "../../../components/RatingSelect";
 import { Textarea } from "../../../components/Textarea";
 import styles from "./reviewForm.module.css";
@@ -92,7 +91,7 @@ export default function ReviewEditPage() {
             <input
               id="photo"
               type="file"
-              accept={PHOTO_ACCEPT}
+              accept="image/jpeg,image/png,image/webp"
               onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
             />
           </div>

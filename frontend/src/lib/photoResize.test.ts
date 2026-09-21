@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { PHOTO_ACCEPT, shrinkPhoto, type DecodedImage, type PhotoLimits, type PhotoResizeDeps } from "./photoResize";
+import { shrinkPhoto, type DecodedImage, type PhotoLimits, type PhotoResizeDeps } from "./photoResize";
 
 // 上限の値は backend が決める(GET /meta)ので、ここでの数値は、縮小の計算を確かめるための仮の値である。
 const limits: PhotoLimits = { maxEdge: 1600, maxBytes: 5_000_000 };
@@ -73,9 +73,10 @@ describe("shrinkPhoto", () => {
     expect(result.size).toBeLessThan(original.size);
   });
 
-  it("縮小したファイルの名前は、拡張子を .jpg にする(HEIC や PNG でも、出力は JPEG のため)", async () => {
+  it("縮小したファイルの名前は、拡張子を .jpg にする(PNG や WebP でも、出力は JPEG のため)", async () => {
     const names = [
-      ["IMG_0001.HEIC", "IMG_0001.jpg"],
+      ["IMG_0001.JPEG", "IMG_0001.jpg"],
+      ["photo.webp", "photo.jpg"],
       ["my.burger.png", "my.burger.jpg"],
       ["noextension", "noextension.jpg"],
     ];
@@ -102,8 +103,8 @@ describe("shrinkPhoto", () => {
   });
 
   describe("縮小できないときは、失敗にせず、元のファイルをそのまま返す(受け付けるかどうかは backend が判断する)", () => {
-    it("ブラウザが画像を読み込めない(HEIC を扱えないブラウザなど)", async () => {
-      const original = photoFile("IMG_0001.HEIC", 3_000_000, "image/heic");
+    it("ブラウザが画像を読み込めない(壊れたファイルなど)", async () => {
+      const original = photoFile("broken.jpg", 3_000_000);
       const deps: PhotoResizeDeps = {
         decode: vi.fn(async () => {
           throw new Error("The source image could not be decoded.");
@@ -153,15 +154,5 @@ describe("shrinkPhoto", () => {
     await shrinkPhoto(photoFile("a.jpg", 900_000), { maxEdge: 600, maxBytes: 5_000_000 }, deps);
 
     expect(encodeJpeg.mock.calls[0].slice(1, 3)).toEqual([600, 450]);
-  });
-});
-
-describe("PHOTO_ACCEPT(ファイル選択の絞り込み)", () => {
-  it("JPEG・PNG・WebP に加えて、iPhone の写真(HEIC / HEIF)を、種類名と拡張子の両方で選べる", () => {
-    const accepted = PHOTO_ACCEPT.split(",");
-
-    expect(accepted).toEqual(
-      expect.arrayContaining(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", ".heic", ".heif"]),
-    );
   });
 });

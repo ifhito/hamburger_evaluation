@@ -8,8 +8,7 @@
 // 縮小に失敗しても、元のファイルを送れば、backend が判断して、理由つきのメッセージを返す)。
 //
 // 縮小に失敗したとき(ブラウザが画像を読み込めない、canvas を使えない、など)は、例外にせず、元のファイルを返す。
-// たとえば、HEIC を扱えないブラウザ(多くの Chrome)は、HEIC を読み込めないが、backend が JPEG に変換できるので、
-// そのまま送ればよい。
+// そのまま送れば、backend が判断して、受け付けるか、理由つきのメッセージを返す。
 
 export interface PhotoLimits {
   /** 長辺の上限(ピクセル) */
@@ -33,12 +32,6 @@ export interface PhotoResizeDeps {
   encodeJpeg: (image: DecodedImage, width: number, height: number, quality: number) => Promise<Blob | null>;
 }
 
-/**
- * ファイル選択の絞り込み(input の accept)。選びやすくするためのヒントで、受け付けるかは backend が決める。
- * 拡張子も並べるのは、ブラウザや OS によって HEIC の種類名(MIME タイプ)が付かないことがあるため。
- */
-export const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif";
-
 /** JPEG に再エンコードするときの画質(0〜1)。写真として十分に見える範囲で、大きさを抑える値。 */
 const JPEG_QUALITY = 0.85;
 
@@ -57,7 +50,7 @@ const browserDeps: PhotoResizeDeps = {
   },
 };
 
-/** 縮小後の名前。拡張子を .jpg にする(元が HEIC や PNG でも、出力は JPEG のため)。 */
+/** 縮小後の名前。拡張子を .jpg にする(元が PNG や WebP でも、出力は JPEG のため)。 */
 function jpegName(original: string): string {
   const base = original.replace(/\.[^./\\]+$/, "");
   return `${base || "photo"}.jpg`;
