@@ -1,6 +1,6 @@
 module github.com/ifhito/hamburger_evaluation/backend-go
 
-go 1.22
+go 1.27
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.2

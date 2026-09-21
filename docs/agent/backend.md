@@ -4,7 +4,7 @@ Go API は `backend-go/` にあり、検証は `go-checks.sh`、DB・マイグ�
 
 ## 技術スタック
 
-- Go 1.22+(標準 `net/http` のルーティング。Web フレームワークも ORM も使わない)
+- Go 1.27(標準 `net/http` のルーティングを使う。Web フレームワークも ORM も使わない)
 - PostgreSQL 16(pgx)と sqlc
 - `golang-jwt/jwt` と `golang.org/x/crypto`(bcrypt)による独自 JWT Bearer 認証
 - 検証は `gofmt` / `go vet` / `go build` / `go test`
