@@ -174,7 +174,7 @@ func (t *mcpTools) listShops(ctx context.Context, _ *mcp.CallToolRequest, in lis
 	}
 	items := make([]shopResponse, 0, len(list))
 	for _, shop := range list {
-		items = append(items, shopResponse{ID: shop.ID, Name: shop.Name, Status: string(shop.Status)})
+		items = append(items, newShopResponse(shop))
 	}
 	return success(mcpList[shopResponse]{HasMore: hasMore, Items: items})
 }

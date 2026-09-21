@@ -66,7 +66,7 @@ func newMCPE2E(t *testing.T) *mcpE2E {
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
 	unitOfWork := uow.New(pool)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
-	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)))
+	shops := shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool))
 	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos"))
 	users := usecase.NewUsers(userQuery, domain.NewUsers(repository.NewUserRepository(pool)), unitOfWork, recalc, hasher)
 

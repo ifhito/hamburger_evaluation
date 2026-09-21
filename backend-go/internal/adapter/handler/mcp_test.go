@@ -92,7 +92,7 @@ func newMCPKit(t *testing.T) *mcpKit {
 	k.resource = k.url + "/mcp"
 	k.issuer = k.url
 
-	shops := usecase.NewShops(shopRepo, domain.NewShops(shopRepo))
+	shops := shopsUsecase(shopRepo, shopRepo)
 	reviews := reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos"))
 	usersUC := usersUsecase(users, hasherFake{})
 	mcpServer, err := handler.NewMCPServer(usecase.NewOAuthAccessTokens(k.introspect, users, k.resource), shops, reviews, usersUC,

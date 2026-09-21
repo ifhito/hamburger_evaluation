@@ -109,6 +109,30 @@ func (r *ShopQuery) ListShopReviews(ctx context.Context, shopID string) ([]domai
 	return reviews, nil
 }
 
+// ListShopSummaries は、指定した shop それぞれの集計(レビューの件数・評価の平均・ショップの写真のキー)を、
+// shop の id をキーにして返す。1 回の集約クエリで求める(shop の件数に比例してクエリを増やさない)。
+// レビューのない shop は、結果に含まれない(呼び出し側が、空の集計(件数 0・平均と写真は nil)として扱う)。
+// 集計の意味は domain.ShopSummary が定義し、範囲の絞り込みと写真の選び方は、この SQL が実装している。
+func (r *ShopQuery) ListShopSummaries(ctx context.Context, shopIDs []string) (map[string]domain.ShopSummary, error) {
+	summaries := make(map[string]domain.ShopSummary, len(shopIDs))
+	if len(shopIDs) == 0 {
+		return summaries, nil
+	}
+	rows, err := r.q.ListShopSummaries(ctx, shopIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list shop summaries: %w", err)
+	}
+	for _, row := range rows {
+		var photoKey *string
+		if row.PhotoKey.Valid {
+			key := row.PhotoKey.String
+			photoKey = &key
+		}
+		summaries[row.ShopID] = domain.NewShopSummary(row.ReviewCount, row.AverageRating, photoKey)
+	}
+	return summaries, nil
+}
+
 // ListShopsForModeration は、すべての shop をその creator とともに新しい順
 // （created_at desc、id desc）に返す。任意で 1 つの status に絞り込める。
 func (r *ShopQuery) ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {

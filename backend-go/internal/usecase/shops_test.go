@@ -21,6 +21,15 @@ type fakeShopQuery struct {
 	getShopWithCreator     func(ctx context.Context, id string) (domain.ShopDetail, error)
 	listShopReviews        func(ctx context.Context, shopID string) ([]domain.ShopReview, error)
 	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
+	// listShopSummaries は、未設定なら、すべての shop を「レビューなし」(空の集計)として返す。
+	listShopSummaries func(ctx context.Context, shopIDs []string) (map[string]domain.ShopSummary, error)
+}
+
+func (f *fakeShopQuery) ListShopSummaries(ctx context.Context, shopIDs []string) (map[string]domain.ShopSummary, error) {
+	if f.listShopSummaries == nil {
+		return map[string]domain.ShopSummary{}, nil
+	}
+	return f.listShopSummaries(ctx, shopIDs)
 }
 
 func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
