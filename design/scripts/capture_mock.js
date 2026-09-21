@@ -16,8 +16,8 @@ const SCREENS = [
   { key: 'states', title: '空・読み込み・エラー・404', file: 'states.html', lang: 'ja' },
   { key: 'states-en', title: '空・読み込み・エラー・404(English)', file: 'states.html', lang: 'en' },
 ];
-// 第 1 弾以降の画面。[グループ(Penpot のページ名の元), キー, 画面の名前, HTML, state]。state は、HTML の data-only の切り替え(?state=)。
-// 日本語のあとに、同じ画面の英語版(キーの末尾に -en)も、自動で足す
+// 第 1 弾以降の画面。[グループ(Penpot のページ名の元), キー, 画面の名前, HTML, state, 追加の query(省略可。例 'auth=out&user=bob'), 言語(省略可。既定は ja と en の両方)]。
+// state は、HTML の data-only の切り替え(?state=)。英語版は、キーの末尾に -en を付けて、自動で足す
 const GROUPED = [
   ['認証', 'signin', 'サインイン', 'signin.html', 'default'],
   ['認証', 'signin-error', 'サインイン(エラー)', 'signin.html', 'error'],
@@ -39,10 +39,38 @@ const GROUPED = [
   ['ショップ', 'shop-detail-rejected', 'ショップ詳細(却下)', 'shop-detail.html', 'rejected'],
   ['ショップ', 'shop-new', 'ショップ追加', 'shop-new.html', 'default'],
   ['ショップ', 'shop-new-error', 'ショップ追加(エラー)', 'shop-new.html', 'error'],
+  // 第 2 弾
+  ['プロフィール', 'profile', '自分のプロフィール', 'profile.html', 'default'],
+  ['プロフィール', 'profile-other', '他のユーザーのプロフィール', 'profile.html', 'other', 'active=none'],
+  ['プロフィール', 'profile-empty', '自分のプロフィール(レビューも接続もない)', 'profile.html', 'empty', null, ['ja']],
+  ['プロフィール', 'profile-states', 'プロフィールの状態(コピー・接続の解除ほか)', 'profile-states.html', 'default', null, ['ja']],
+  ['プロフィール', 'profile-edit', 'プロフィール編集', 'profile-edit.html', 'default', 'active=me'],
+  ['プロフィール', 'profile-edit-error', 'プロフィール編集(エラー)', 'profile-edit.html', 'error', 'active=me', ['ja']],
+  ['プロフィール', 'profile-delete', 'アカウント削除の確認', 'profile-edit.html', 'delete', 'active=me', ['ja']],
+  ['プロフィール', 'profile-edit-forbidden', 'プロフィール編集(編集できない)', 'profile-edit.html', 'forbidden', 'active=none', ['ja']],
+  ['管理', 'admin', 'ショップの管理', 'admin.html', 'default'],
+  ['管理', 'admin-reject', 'ショップの管理(却下の理由)', 'admin.html', 'reject', null, ['ja']],
+  ['管理', 'admin-error', 'ショップの管理(エラー)', 'admin.html', 'error', null, ['ja']],
+  ['管理', 'admin-empty', 'ショップの管理(審査待ちなし)', 'admin.html', 'empty', null, ['ja']],
+  ['管理', 'admin-edit', 'ショップの編集(管理)', 'admin-edit.html', 'default', null, ['ja']],
+  ['管理', 'admin-edit-error', 'ショップの編集(エラー)', 'admin-edit.html', 'error', null, ['ja']],
+  ['アプリの接続', 'oauth-consent', '許可の画面(読み取り)', 'oauth-consent.html', 'default', 'active=none'],
+  ['アプリの接続', 'oauth-consent-write', '許可の画面(読み取りと書き込み)', 'oauth-consent.html', 'write', 'active=none'],
+  ['アプリの接続', 'oauth-consent-loading', '許可の画面(確認中)', 'oauth-consent.html', 'loading', 'active=none', ['ja']],
+  ['アプリの接続', 'oauth-consent-connecting', '許可の画面(接続中)', 'oauth-consent.html', 'connecting', 'active=none', ['ja']],
+  ['アプリの接続', 'oauth-consent-error', '許可の画面(エラー)', 'oauth-consent.html', 'error', 'active=none', ['ja']],
+  ['アプリの接続', 'oauth-signin', 'サインイン(アプリの接続の途中)', 'signin.html', 'oauth', null, ['ja']],
+  ['見え方', 'visibility', '見え方の一覧', 'visibility.html', 'default', 'active=none', ['ja']],
+  ['見え方', 'vis-review-other', 'レビュー詳細(他人のレビュー)', 'review-detail.html', 'other', 'user=bob', ['ja']],
+  ['見え方', 'vis-review-out', 'レビュー詳細(サインインしていない)', 'review-detail.html', 'out', 'auth=out', ['ja']],
+  ['見え方', 'vis-shop-out', 'ショップ詳細(サインインしていない)', 'shop-detail.html', 'out', 'auth=out', ['ja']],
+  ['見え方', 'vis-shops-out', 'ショップ一覧(サインインしていない)', 'shops.html', 'out', 'auth=out', ['ja']],
+  ['見え方', 'vis-shops-admin', 'ショップ一覧(管理者)', 'shops.html', 'admin', 'user=admin', ['ja']],
 ];
 for (const lang of ['ja', 'en']) {
-  for (const [group, key, title, file, state] of GROUPED) {
-    SCREENS.push({ key: lang === 'en' ? key + '-en' : key, title: lang === 'en' ? title + '(English)' : title, file, lang, state, group });
+  for (const [group, key, title, file, state, extra, langs] of GROUPED) {
+    if (langs && !langs.includes(lang)) continue;
+    SCREENS.push({ key: lang === 'en' ? key + '-en' : key, title: lang === 'en' ? title + '(English)' : title, file, lang, state, extra, group });
   }
 }
 const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }];
@@ -55,13 +83,13 @@ const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }
     for (const sc of SCREENS) {
       const ctx = await browser.newContext({ viewport: { width: size.w, height: size.h }, locale: sc.lang === 'en' ? 'en-US' : 'ja-JP' });
       const page = await ctx.newPage();
-      await page.goto(`file://${MOCK_DIR}/${sc.file}?lang=${sc.lang}${sc.state ? '&state=' + sc.state : ''}`, { waitUntil: 'networkidle' });
+      await page.goto(`file://${MOCK_DIR}/${sc.file}?lang=${sc.lang}${sc.state ? '&state=' + sc.state : ''}${sc.extra ? '&' + sc.extra : ''}`, { waitUntil: 'networkidle' });
       await page.evaluate(() => document.fonts.ready);
       const font = await page.evaluate(() => document.fonts.check('16px "Noto Sans JP"'));
       await page.waitForTimeout(300);
       const data = await page.evaluate(extract);
       const name = `${sc.key}-${size.key}`;
-      fs.writeFileSync(`${OUT}/${name}.json`, JSON.stringify({ key: sc.key, title: sc.title, size: size.key, viewport: size.w, url: sc.file + (sc.state ? '?state=' + sc.state : ''), group: sc.group || null, ...data }));
+      fs.writeFileSync(`${OUT}/${name}.json`, JSON.stringify({ key: sc.key, title: sc.title, size: size.key, viewport: size.w, url: sc.file + (sc.state ? '?state=' + sc.state : '') + (sc.extra ? (sc.state ? '&' : '?') + sc.extra : ''), group: sc.group || null, ...data }));
       await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
       result.push({ name, nodes: data.nodes.length, w: data.width, h: data.height, notoLoaded: font });
       await ctx.close();

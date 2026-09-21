@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロフィール(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="me">
+<main class="wrap page">
+  <!-- state: default = 自分のプロフィール / other = 他のユーザーのプロフィール(alice が bob を見ている) / empty = 自分のプロフィールで、レビューも接続もない -->
+  <section class="profile">
+    <span class="avatar-lg" data-only="default empty">a</span>
+    <span class="avatar-lg" data-only="other">b</span>
+    <div class="profile-main">
+      <h1 data-only="default empty">alice</h1>
+      <h1 data-only="other">bob</h1>
+      <p class="bio" data-only="default empty" data-en="Lunch-break burger hunter in Shinjuku. I like thick patties and a lot of cheese.">新宿でお昼にハンバーガーを探しています。厚めのパティと、たっぷりのチーズが好きです。</p>
+      <p class="bio" data-only="other" data-en="I tour the shops in Shibuya on weekends. I care about how the buns are toasted.">週末は渋谷のお店を回っています。バンズの焼き加減にうるさいです。</p>
+      <p class="email" data-only="default empty">alice@example.com</p>
+      <div class="profile-actions">
+        <button class="btn ghost" data-en="Copy link">リンクをコピー</button>
+        <button class="btn ghost" data-only="default empty" data-en="Edit profile">プロフィールを編集</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" data-only="default">
+    <div class="section-head"><h2 data-en="Connected apps">接続済みのアプリ</h2></div>
+    <div class="apps">
+      <article class="appitem">
+        <div>
+          <b class="name-sm">Claude Code</b>
+          <ul class="scopes"><li data-en="・Read shops, reviews and profiles">・ショップ・レビュー・プロフィールを読む</li><li data-en="・Post, edit and delete reviews, and submit shops, in your name">・あなたの名前で、レビューの投稿・編集・削除と、ショップの申請をする</li></ul>
+          <p class="appmeta" data-en="Connected on Sep 21, 2026">接続した日: 2026年9月21日</p>
+        </div>
+        <button class="btn danger" data-en="Disconnect">接続を解除</button>
+      </article>
+      <article class="appitem">
+        <div>
+          <b class="name-sm">Cursor</b>
+          <ul class="scopes"><li data-en="・Read shops, reviews and profiles">・ショップ・レビュー・プロフィールを読む</li></ul>
+          <p class="appmeta" data-en="Connected on Sep 18, 2026">接続した日: 2026年9月18日</p>
+        </div>
+        <button class="btn danger" data-en="Disconnect">接続を解除</button>
+      </article>
+    </div>
+    <div class="center"><button class="btn ghost" data-en="Load more">もっと見る</button></div>
+  </section>
+
+  <section class="section" data-only="empty">
+    <div class="section-head"><h2>接続済みのアプリ</h2></div>
+    <p class="muted">接続しているアプリはありません。AI アプリから、このアプリに接続すると、ここに並びます。</p>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2 data-en="Reviews">レビュー</h2><span class="count" data-only="default other" data-en="Newest first">新しい順</span></div>
+    <div class="grid reviews four" data-only="default">
+      <article class="rcard"><div class="photo rphoto" style="--a:#e3c29a;--b:#b98552"><span class="photo-label" data-en="Photo">写真</span></div><div class="rbody"><div class="rrow"><span class="name-sm">テリヤキバーガー</span><time data-en="Sep 21, 2026">2026年9月21日</time></div><span class="rate"><span class="burger" data-size="md" data-score="4"></span><b>4</b></span><p class="comment">チーズの量がちょうどよかった。</p><div class="foot"><span>J.S. BURGERS CAFE 新宿</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div></div></article>
+      <article class="rcard"><div class="photo rphoto" style="--a:#d6b08a;--b:#a5714a"><span class="photo-label" data-en="Photo">写真</span></div><div class="rbody"><div class="rrow"><span class="name-sm">シャックバーガー</span><time data-en="Sep 14, 2026">2026年9月14日</time></div><span class="rate"><span class="burger" data-size="md" data-score="5"></span><b>5</b></span><p class="comment">肉汁が多くて、バンズもふわふわでした。</p><div class="foot"><span>Shake Shack 渋谷</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div></div></article>
+      <article class="rcard"><div class="photo rphoto none"><span class="photo-label" data-en="No photo">写真なし</span></div><div class="rbody"><div class="rrow"><span class="name-sm">クラシックバーガー</span><time data-en="Sep 2, 2026">2026年9月2日</time></div><span class="rate"><span class="burger" data-size="md" data-score="3"></span><b>3</b></span><p class="comment">普通においしい。ソースはもう少し濃くてもよいかも。</p><div class="foot"><span>フレッシュネスバーガー 原宿</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div></div></article>
+      <article class="rcard"><div class="photo rphoto" style="--a:#ecd08f;--b:#c4993a"><span class="photo-label" data-en="Photo">写真</span></div><div class="rbody"><div class="rrow"><span class="name-sm">ダブルチーズ</span><time data-en="Aug 28, 2026">2026年8月28日</time></div><span class="rate"><span class="burger" data-size="md" data-score="5"></span><b>5</b></span><p class="comment">また食べたい。チーズが濃厚。</p><div class="foot"><span>バーガーラボ 中目黒</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div></div></article>
+    </div>
+    <div class="grid reviews four" data-only="other">
+      <article class="rcard"><div class="photo rphoto" style="--a:#e8b49b;--b:#bd7150"><span class="photo-label" data-en="Photo">写真</span></div><div class="rbody"><div class="rrow"><span class="name-sm">クラシックチーズバーガー</span><time data-en="Sep 21, 2026">2026年9月21日</time></div><span class="rate"><span class="burger" data-size="md" data-score="4"></span><b>4</b></span><p class="comment">パティの焼き加減が最高でした。</p><div class="foot"><span>J.S. BURGERS CAFE 新宿</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div></div></article>
+      <article class="rcard"><div class="photo rphoto" style="--a:#d6c3bc;--b:#a48782"><span class="photo-label" data-en="Photo">写真</span></div><div class="rbody"><div class="rrow"><span class="name-sm">アボカドバーガー</span><time data-en="Sep 9, 2026">2026年9月9日</time></div><span class="rate"><span class="burger" data-size="md" data-score="4"></span><b>4</b></span><p class="comment">アボカドがたっぷり。少し崩れやすい。</p><div class="foot"><span>グリルバーガー 吉祥寺</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div></div></article>
+    </div>
+    <div class="center" data-only="default"><button class="btn ghost" data-en="Load more">もっと見る</button></div>
+    <section class="panel" data-only="empty"><span class="burger" data-size="lg" data-score="0" data-decor></span><h2 class="state-title">まだ誰も食べていません</h2><p class="state-sub">最初のレビューを書いてみませんか?</p><button type="button" class="btn primary">レビューを書く</button></section>
+  </section>
+
+  <aside class="memo"><b>実装メモ</b><ul>
+    <li>・「プロフィールを編集」は、backend が返す(<code>can_edit</code>。<code>GET /users/:id</code>)ときだけ出す。本人だけが <code>true</code> で、管理者でも他人のプロフィールは <code>false</code>。frontend は、閲覧者と持ち主の比較をしない。</li>
+    <li>・メールアドレスは、API が本人の閲覧のときだけ返す。frontend は、返ってきたときだけ出す(他人の画面には出ない)。自己紹介は、誰にでも見える。文字は、HTML として解釈せず、改行だけを保って出す。</li>
+    <li>・「接続済みのアプリ」は、本人のプロフィール(<code>can_edit</code> が <code>true</code>)だけに出し、OAuth の認可サーバーが無効なとき(API が 404)は、何も出さない。アプリの名前と、許可の範囲の説明文は、API が返したものをそのまま出す(frontend に、範囲の名前や説明を持たない)。いまの API の説明文は日本語だけ。英語の画面で英語にするには、API が言語に合わせて返す必要がある。</li>
+    <li>・「解除」を押すと、確認(ダイアログ。「プロフィールの状態」の見本)のあとで、そのアプリは、すぐ使えなくなる。「もっと見る」は、次のページがある(<code>X-Has-More</code>)ときだけ出す。</li>
+    <li>・「リンクをコピー」は、誰にでも出す(サインインしていなくても)。コピーできなかったときの見せ方は、「プロフィールの状態」の見本。</li>
+  </ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

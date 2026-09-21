@@ -16,13 +16,14 @@
     <h1 data-en="Sign in">サインイン</h1>
     <p class="lead" data-en="Sign in to write and edit your reviews.">レビューを書く・編集するには、サインインしてください。</p>
     <form class="form">
+      <div class="notice" data-only="oauth"><b>サインインして、接続を続けてください</b><span>終わると、許可の画面に戻ります。</span></div>
       <div data-only="error"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not sign in">サインインできませんでした</b><p class="msg">Invalid email or password</p></div></section></div>
-      <div class="field"><label class="label" for="email" data-en="Email">メールアドレス</label><input class="input" id="email" type="email" data-only="default" placeholder="you@example.com" autocomplete="email"><input class="input" id="email" type="email" data-only="error" value="alice@example.com" autocomplete="email"></div>
-      <div class="field"><label class="label" for="password" data-en="Password">パスワード</label><input class="input" id="password" type="password" data-only="default" autocomplete="current-password"><input class="input" id="password" type="password" data-only="error" value="password1" autocomplete="current-password"></div>
+      <div class="field"><label class="label" for="email" data-en="Email">メールアドレス</label><input class="input" id="email" type="email" data-only="default oauth" placeholder="you@example.com" autocomplete="email"><input class="input" id="email" type="email" data-only="error" value="alice@example.com" autocomplete="email"></div>
+      <div class="field"><label class="label" for="password" data-en="Password">パスワード</label><input class="input" id="password" type="password" data-only="default oauth" autocomplete="current-password"><input class="input" id="password" type="password" data-only="error" value="password1" autocomplete="current-password"></div>
       <button type="button" class="btn primary block" data-en="Sign in">サインイン</button>
       <p class="linkline"><span data-en="Don't have an account?">アカウントをお持ちでないとき</span> <a href="#" data-en="Sign up">新規登録</a></p>
     </form>
-    <aside class="memo"><b>実装メモ</b><ul><li>・エラーの文言(<code>Invalid email or password</code> など)は、API が返したものをそのまま出す。文言も判定も、frontend は持たない(いまの API の文言は英語)。見出し(「サインインできませんでした」)だけが、画面側の言葉。</li><li>・メールアドレスの形式・パスワードの強さの判定は backend だけ。入力の途中では判定しない(サインインを押したときの応答で出す)。</li><li>・幅 720px 以下では、写真を出さず、フォームだけにする。</li></ul></aside>
+    <aside class="memo"><b>実装メモ</b><ul><li>・エラーの文言(<code>Invalid email or password</code> など)は、API が返したものをそのまま出す。文言も判定も、frontend は持たない(いまの API の文言は英語)。見出し(「サインインできませんでした」)だけが、画面側の言葉。</li><li>・メールアドレスの形式・パスワードの強さの判定は backend だけ。入力の途中では判定しない(サインインを押したときの応答で出す)。</li><li>・幅 720px 以下では、写真を出さず、フォームだけにする。</li><li>・許可の画面(アプリの接続)へ、サインインしていない人が来たときは、サインイン画面へ送り、サインインしたあとで、許可の画面へ戻す。この画面の上の説明(「サインインして、接続を続けてください」)は、案(いまのアプリは、何も出さない)。戻り先は、URL ではなく、アプリの中の画面の遷移に持たせる。</li></ul></aside>
   </div>
 </main>
 <script src="rating-icons.js"></script>

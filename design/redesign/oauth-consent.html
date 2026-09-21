@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>アプリの接続の許可(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="">
+<main class="wrap consent">
+  <!-- state: default(読み取りだけ)/ write(読み取りと書き込み)/ loading(確認中)/ connecting(接続中)/ error -->
+  <div data-only="default write">
+    <p class="eyebrow" data-en="Connect an app">アプリの接続</p>
+    <h1 data-en="This app wants to connect to your account">次のアプリが、あなたのアカウントに接続しようとしています</h1>
+
+    <div class="appbox">
+      <span class="avatar-lg">C</span>
+      <div>
+        <p class="app-name">Claude Code</p>
+        <p class="app-id" data-en="App ID: 3f6c1a7e-8b21-4d5f-9a3e-2c7d41b0e9aa">アプリ ID: 3f6c1a7e-8b21-4d5f-9a3e-2c7d41b0e9aa</p>
+      </div>
+    </div>
+
+    <section class="perm">
+      <h2 data-en="It will be able to:">許可すること</h2>
+      <ul class="scopes">
+        <li data-en="・Read shops, reviews and profiles">・ショップ・レビュー・プロフィールを読む</li>
+        <li data-only="write" data-en="・Post, edit and delete reviews, and submit shops, in your name">・あなたの名前で、レビューの投稿・編集・削除と、ショップの申請をする</li>
+      </ul>
+    </section>
+
+    <div class="consent-facts">
+      <span data-en="After you choose, you will be sent to localhost:53412."><b>選んだあと、次のアドレスに戻ります:</b> localhost:53412</span>
+      <span data-en="Signed in as alice">サインイン中: <b>alice</b></span>
+    </div>
+
+    <div class="consent-actions"><button type="button" class="btn primary wide" data-en="Allow">許可する</button><button type="button" class="btn ghost wide" data-en="Deny">許可しない</button></div>
+    <p class="hint" style="margin-top:16px" data-en="You can disconnect an app at any time from “Connected apps” on your profile.">許可したアプリは、プロフィールの「接続済みのアプリ」で、いつでも解除できます。</p>
+  </div>
+
+  <div class="status" data-only="loading">
+    <span class="burger" data-size="lg" data-score="3" data-decor></span>
+    <h1 aria-live="polite" data-en="Checking the request…">要求を確認しています…</h1>
+    <p class="muted">少しだけお待ちください</p>
+  </div>
+
+  <div class="status" data-only="connecting">
+    <span class="burger" data-size="lg" data-score="4" data-decor></span>
+    <h1 aria-live="polite">接続しています…</h1>
+    <p class="muted">アプリに戻ります</p>
+  </div>
+
+  <div data-only="error">
+    <p class="eyebrow">アプリの接続</p>
+    <h1>接続できませんでした</h1>
+    <section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">この要求は、完了できません</b><p class="msg">oauth authorization request is invalid</p></div></section>
+    <p class="muted" style="margin-top:16px">アプリに戻って、もう一度お試しください。</p>
+  </div>
+
+  <aside class="memo"><b>実装メモ</b><ul>
+    <li>・「何のアプリに、何を許すか」を、いちばん目立たせる。アプリの名前(大きな文字)と、アプリ ID を、黒い太い枠の面に置き、その下に「許可すること」を並べる。アプリの名前は、アプリが自由に決められるので、HTML として解釈せず、文字として出す。戻り先のホスト(ここでは <code>localhost:53412</code>)は、利用者が、どのアプリ・どこへ、を見比べるための表示で、判断には使わない。</li>
+    <li>・範囲の説明文(「ショップ・レビュー・プロフィールを読む」など)は、API が返したものをそのまま出す。frontend に、範囲の名前や説明を持たない。いまの API の説明文は日本語だけ(英語の画面で英語にするには、API が言語に合わせて返す必要がある)。「書き込み」の範囲を強調する(目立つ印を付ける)には、範囲ごとの印を API が返す必要がある(いまは、名前と説明だけ。frontend が名前を比べて決めると、規則の複製になる)。</li>
+    <li>・「許可する」は、黄色の面のボタン、「許可しない」は白い面に枠のボタン。どちらも 44px 以上。送っている間は、両方押せなくする(二重に送らない)。「許可すること」の下の説明(プロフィールで解除できる)は、案(いまのアプリにはない)。</li>
+    <li>・要求の検証・範囲の説明・「すでに許可済みの範囲に収まるか(尋ねなくてよいか)」の判断は、すべて backend。frontend は、結果の表示と、利用者の選択の送信だけ。エラーの文言(<code>oauth authorization request is invalid</code> など)は、API が返したものをそのまま出す。見出しと「アプリに戻って…」だけが、画面側の言葉。</li>
+    <li>・なりすまし対策: 画面に見せている要求と、送る要求が、必ず同じになるようにする(URL の値が変わったら、いったん「確認中」に戻し、古い画面のボタンは押せない)。アプリへ戻せない不正な要求は、アプリに戻さず、この画面にエラーを出す。</li>
+    <li>・サインインしていない人が来たときは、サインイン画面へ送り、サインインのあとで、この画面へ戻す(「サインイン(アプリの接続の途中)」の見本)。</li>
+  </ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロフィールの状態(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="me">
+<main class="wrap page">
+  <h1>プロフィールの状態</h1>
+  <p class="lead">プロフィールの中の、共有リンクのコピーと「接続済みのアプリ」の、段階ごとの見え方です。</p>
+  <div class="sample-grid">
+    <div class="sample"><p class="note">1. リンクをコピーしたとき</p><div class="profile-actions" style="margin-top:0"><button class="btn ghost" aria-live="polite">リンクをコピーしました</button><button class="btn ghost">プロフィールを編集</button></div></div>
+    <div class="sample"><p class="note">2. コピーできなかったとき(リンクを見せて、選んでもらう)</p><div class="field"><p class="hint" role="status">コピーできませんでした。下のリンクを選んで、コピーしてください。</p><input class="input" readonly value="https://hamburger.example/users/3f6c1a7e-8b21-4d5f-9a3e-2c7d41b0e9aa" aria-label="プロフィールのリンク"></div></div>
+    <div class="sample"><p class="note">3. 接続済みのアプリを読み込んでいるとき</p><section class="panel" style="padding:32px 24px"><span class="burger" data-size="md" data-score="3" data-decor></span><p class="state-sub" aria-live="polite">焼いています…</p></section></div>
+    <div class="sample"><p class="note">4. 接続済みのアプリを読み込めなかったとき</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">接続済みのアプリを読み込めませんでした</b><p class="msg">Failed to load connected apps.</p></div></section></div>
+    <div class="sample"><p class="note">5. 接続を解除するかどうかの確認(ダイアログ)</p><div class="appitem" style="display:block;padding:28px;border-radius:16px;border:1px solid var(--border)"><h2 style="margin-bottom:8px">「Claude Code」の接続を解除しますか?</h2><p class="muted" style="margin-bottom:24px">解除すると、このアプリは、すぐに使えなくなります。</p><div class="actions-row" style="justify-content:flex-end;padding-top:0"><button type="button" class="btn ghost">キャンセル</button><button type="button" class="btn danger-solid">解除する</button></div></div></div>
+    <div class="sample"><p class="note">6. 解除しているとき(送信中)</p><article class="appitem"><div><b class="name-sm">Claude Code</b><p class="appmeta">接続した日: 2026年9月21日</p></div><button class="btn off" aria-busy="true">解除しています…</button></article></div>
+    <div class="sample"><p class="note">7. 解除できなかったとき</p><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title">接続を解除できませんでした</b><p class="msg">Failed to disconnect the app.</p></div></section></div>
+    <div class="sample"><p class="note">8. 接続しているアプリがないとき</p><p class="muted">接続しているアプリはありません。AI アプリから、このアプリに接続すると、ここに並びます。</p></div>
+  </div>
+  <aside class="memo"><b>実装メモ</b><ul>
+    <li>・3〜4 と 6〜7 の文言のうち、<code>Failed to ...</code> の英語は、API が文言を返さなかったときの画面側の文言(いまは英語)。API が文言を返したときは、それをそのまま出す。3 の「焼いています…」は、読み込み中の一言(遊びの文言は、空・読み込み中・見つからないときだけ)。</li>
+    <li>・5 の確認は、いまのアプリでは、ブラウザ標準の確認(<code>window.confirm</code>)。見た目を揃えるために、削除の確認と同じ形のダイアログにする案。確認のあと、そのアプリのトークンは、backend がすぐ使えなくする。</li>
+    <li>・解除している間は、その行のボタンを押せなくする(二重に送らない)。</li>
+  </ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>
