@@ -341,7 +341,7 @@ func TestAuthLogin(t *testing.T) {
 		wantToken string
 	}{
 		{name: "正しい認証情報なら token を返す", email: "a@example.com", password: "Password123!", wantToken: "token-for-7"},
-		{name: "password が誤っていると invalid credentials になる", email: "a@example.com", password: "nope", wantErr: domain.ErrInvalidCredentials},
+		{name: "password が誤っていると invalid credentials になる", email: "a@example.com", password: "Wrongpass1!", wantErr: domain.ErrInvalidCredentials},
 		{name: "未知の email だと invalid credentials になる", email: "b@example.com", password: "Password123!", wantErr: domain.ErrInvalidCredentials},
 	}
 	for _, tt := range tests {
@@ -365,23 +365,40 @@ func TestAuthLogin(t *testing.T) {
 		})
 	}
 
-	// 旧ルールで作られたアカウントを締め出さないことを固定する。
-	// login は強度を検証しない（Story #38 AC9 / R4）ので、8 バイト未満・文字種不足の
-	// password でも digest が一致すれば login できる。
-	for _, weak := range []string{"weakpw", "a"} {
-		t.Run(fmt.Sprintf("強度ルールを満たさない password %q のユーザーでも login できる", weak), func(t *testing.T) {
-			weakQuery := &fakeUserQuery{
-				getByEmail: func(context.Context, string) (usecase.UserCredentials, error) {
-					return usecase.UserCredentials{User: activeUser, PasswordDigest: "digest(" + weak + ")"}, nil
-				},
+	// 認証情報が signup と同じ規則（domain.ValidateCredentials）を満たさないときは、
+	// DB の検索も hash の比較も行わず、検証エラーを返す（Story #61）。
+	// getByEmail を設定しない fakeUserQuery は、呼ばれると panic するので、検索されないことも固定される。
+	rejected := []struct {
+		name     string
+		email    string
+		password string
+		want     []string
+	}{
+		{"email と password が空なら blank を返す", "", "", []string{"Email can't be blank", "Password can't be blank"}},
+		{"形式の合わない email は invalid を返す", "abc", "Password123!", []string{"Email is invalid"}},
+		{"強度を満たさない password は password の違反を返す", "a@example.com", "weakpassword", []string{"Password must include letters, numbers and symbols"}},
+		{"短い password は短さと文字種の違反を返す", "a@example.com", "a", []string{
+			"Password is too short (minimum is 8 characters)",
+			"Password must include letters, numbers and symbols",
+		}},
+	}
+	for _, tt := range rejected {
+		t.Run(tt.name, func(t *testing.T) {
+			hasher := &recordingHasher{}
+			auth := newAuth(&fakeUserQuery{}, &fakeUserRepo{}, hasher, fakeIssuer{}, fakeVerifier{})
+			_, token, err := auth.Login(context.Background(), tt.email, tt.password)
+			var vErr *domain.ValidationError
+			if !errors.As(err, &vErr) {
+				t.Fatalf("Login error = %v, want *domain.ValidationError", err)
 			}
-			auth := newAuth(weakQuery, &fakeUserRepo{}, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
-			user, token, err := auth.Login(context.Background(), "a@example.com", weak)
-			if err != nil {
-				t.Fatalf("Login returned error: %v", err)
+			if !reflect.DeepEqual(vErr.Messages, tt.want) {
+				t.Errorf("Login messages = %v, want %v", vErr.Messages, tt.want)
 			}
-			if user != activeUser || token != "token-for-7" {
-				t.Fatalf("Login = (%+v, %q), want (%+v, %q)", user, token, activeUser, "token-for-7")
+			if token != "" {
+				t.Errorf("Login token = %q, want empty", token)
+			}
+			if hasher.compareCalls != 0 {
+				t.Errorf("Compare calls = %d, want 0 (規則を満たさない入力では比較しない)", hasher.compareCalls)
 			}
 		})
 	}

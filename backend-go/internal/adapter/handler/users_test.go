@@ -682,35 +682,38 @@ func TestUsersPasswordChangeIntegration(t *testing.T) {
 	}
 }
 
-// TestLoginLegacyWeakPasswordIntegration は、旧ルールで作られたアカウントを
-// 締め出さないことを本物の bcrypt・PostgreSQL・router で固定する。login は
-// 強度を検証しない（Story #38 AC9 / R4）ので、signup を経由せず弱い password の
-// digest を直接 INSERT したユーザーでも、/login は token 付きで 200 を返す。
-func TestLoginLegacyWeakPasswordIntegration(t *testing.T) {
+// TestLoginValidationIntegration は、認証情報の規則の判定が本物の bcrypt・PostgreSQL・
+// router を通しても効くことを固定する（Story #61）。規則を満たす認証情報は 200、
+// 規則を満たさない入力は 422、規則を満たしたうえで誤っている入力は 401 になる。
+func TestLoginValidationIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed integration test in short mode")
 	}
-	const weak = "weakpw"
+	const password = "Password123!"
 	conn, router := newUsersIntegrationKit(t)
-	digest, err := infra.BcryptPasswordHasher{}.Hash(weak)
+	digest, err := infra.BcryptPasswordHasher{}.Hash(password)
 	if err != nil {
-		t.Fatalf("hash legacy password: %v", err)
+		t.Fatalf("hash password: %v", err)
 	}
 	if _, err := conn.Exec(context.Background(),
 		`INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3)`,
-		"legacy@example.com", "legacy", digest); err != nil {
-		t.Fatalf("insert legacy user: %v", err)
+		"alice@example.com", "alice", digest); err != nil {
+		t.Fatalf("insert user: %v", err)
 	}
 
-	rec := loginAs(router, "legacy@example.com", weak)
+	rec := loginAs(router, "alice@example.com", password)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("legacy login = %d, want 200 (body %s)", rec.Code, rec.Body)
+		t.Fatalf("login = %d, want 200 (body %s)", rec.Code, rec.Body)
 	}
-	if user := decodeAuthUser(t, rec.Body.Bytes()); user.Username != "legacy" || user.Token == "" {
-		t.Errorf("legacy login body = %+v, want the legacy user with a token", user)
+	if user := decodeAuthUser(t, rec.Body.Bytes()); user.Username != "alice" || user.Token == "" {
+		t.Errorf("login body = %+v, want alice with a token", user)
 	}
-	if wrong := loginAs(router, "legacy@example.com", "wrongpw"); wrong.Code != http.StatusUnauthorized {
-		t.Errorf("legacy login with a wrong password = %d, want 401", wrong.Code)
+	weak := loginAs(router, "alice@example.com", "weakpassword")
+	if weak.Code != http.StatusUnprocessableEntity || weak.Body.String() != `{"errors":["Password must include letters, numbers and symbols"]}` {
+		t.Errorf("weak-password login = %d %s, want 422 with the password message", weak.Code, weak.Body)
+	}
+	if wrong := loginAs(router, "alice@example.com", "Wrongpass1!"); wrong.Code != http.StatusUnauthorized {
+		t.Errorf("wrong-password login = %d, want 401", wrong.Code)
 	}
 }
 

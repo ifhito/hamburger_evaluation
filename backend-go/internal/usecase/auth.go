@@ -74,15 +74,14 @@ type SignupInput struct {
 }
 
 // validate は Rails parity の full message を返す。valid なら空である。
-// メッセージは username、email（domain.ValidateEmail）、password
-// （domain.ValidatePassword）、confirmation の順に並ぶ。
+// メッセージは username、認証情報（domain.ValidateCredentials。email、password の順）、
+// confirmation の順に並ぶ。
 func (in SignupInput) validate() []string {
 	var msgs []string
 	if in.Username == "" {
 		msgs = append(msgs, "Username can't be blank")
 	}
-	msgs = append(msgs, domain.ValidateEmail(in.Email)...)
-	msgs = append(msgs, domain.ValidatePassword(in.Password)...)
+	msgs = append(msgs, domain.ValidateCredentials(in.Email, in.Password)...)
 	if in.PasswordConfirmation != nil && *in.PasswordConfirmation != in.Password {
 		msgs = append(msgs, "Password confirmation doesn't match Password")
 	}
@@ -127,9 +126,15 @@ func (a *Auth) Signup(ctx context.Context, input SignupInput) (domain.User, stri
 const dummyPasswordDigest = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
 // Login は email とパスワードで active なユーザーを認証し、新しいトークンと
-// ともにそのユーザーを返す。未知の email と誤ったパスワードは、どちらも
-// domain.ErrInvalidCredentials を返す。
+// ともにそのユーザーを返す。認証情報が signup と同じ規則（domain.ValidateCredentials）
+// を満たさないときは、DB の検索も hash の比較も行わず *domain.ValidationError を返す。
+// 規則はアカウントの有無に関係なく同じ条件で判定するので、応答から、どの email に
+// アカウントがあるかは分からない。規則を満たしたうえで、未知の email と誤った
+// パスワードは、どちらも domain.ErrInvalidCredentials を返す。
 func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, string, error) {
+	if msgs := domain.ValidateCredentials(email, password); len(msgs) > 0 {
+		return domain.User{}, "", &domain.ValidationError{Messages: msgs}
+	}
 	creds, err := a.query.GetActiveUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {

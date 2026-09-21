@@ -76,7 +76,8 @@ func handleSignup(auth *usecase.Auth) http.HandlerFunc {
 }
 
 // handleLogin は POST /login を処理する：user と新しい token を伴う 200、
-// 認証情報が誤っている場合は Rails-parity の 401 body。
+// 認証情報の形が規則に合わない場合は 422 {"errors":[...]}（signup と同じ形）、
+// 規則を満たしたうえで認証情報が誤っている場合は Rails-parity の 401 body。
 func handleLogin(auth *usecase.Auth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req loginRequest
@@ -85,6 +86,11 @@ func handleLogin(auth *usecase.Auth) http.HandlerFunc {
 		}
 		user, token, err := auth.Login(r.Context(), req.Email, req.Password)
 		if err != nil {
+			var vErr *domain.ValidationError
+			if errors.As(err, &vErr) {
+				writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: vErr.Messages})
+				return
+			}
 			if errors.Is(err, domain.ErrInvalidCredentials) {
 				writeError(w, http.StatusUnauthorized, "Invalid email or password")
 				return
