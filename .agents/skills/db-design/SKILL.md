@@ -3,7 +3,7 @@ name: db-design
 description: PostgreSQL スキーマの設計・変更(backend-go/db 配下のテーブル、制約、インデックス、マイグレーション)のときに使う。ドメイン/DB 分離ルール — スキーマとドメインは別々に設計し、リポジトリ層でマッピングする — を徹底する。
 allowed-tools: [Read, Grep, Glob, Bash(docker compose run:*), Bash(sqlc:*), Bash(git status:*), Bash(git diff:*)]
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

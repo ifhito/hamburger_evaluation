@@ -3,7 +3,7 @@ name: github-story
 description: GitHub issue を PRD-lite 構造のユーザーストーリー(要件、仕様、受け入れ条件、完了の定義)として作成する。ユーザーがストーリーを起票したい、機能を issue として計画したい、議論をチケットにしたいときに使う。
 allowed-tools: [Read, Grep, Glob, Bash(git log:*), Bash(gh issue:*), Bash(gh label:*)]
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

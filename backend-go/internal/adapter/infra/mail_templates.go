@@ -22,8 +22,8 @@ type mailMessage struct {
 func renderSignupConfirmation(n usecase.SignupConfirmation) mailMessage {
 	return mailMessage{
 		To:      n.To,
-		Subject: "Confirm your email address",
-		Body: "Please confirm your email address to finish creating your account:\n\n" +
+		Subject: "Confirm your email address for BurgerStack",
+		Body: "Please confirm your email address to finish creating your BurgerStack account:\n\n" +
 			n.ConfirmURL + "\n\n" +
 			"This link expires in " + humanizeDuration(n.ValidFor) + ".\n" +
 			"If you didn't sign up, you can safely ignore this email.\n",
@@ -35,8 +35,8 @@ func renderSignupConfirmation(n usecase.SignupConfirmation) mailMessage {
 func renderAlreadyRegistered(n usecase.AlreadyRegisteredNotice) mailMessage {
 	return mailMessage{
 		To:      n.To,
-		Subject: "You already have an account",
-		Body: "Someone tried to sign up with this email address, but an account already exists.\n\n" +
+		Subject: "You already have a BurgerStack account",
+		Body: "Someone tried to sign up for BurgerStack with this email address, but an account already exists.\n\n" +
 			"You can sign in here:\n\n" +
 			n.SignInURL + "\n\n" +
 			"If this wasn't you, you can safely ignore this email.\n",

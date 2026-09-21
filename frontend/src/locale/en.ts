@@ -1,6 +1,6 @@
 const en = {
   nav: {
-    brand: "Hamburger Evaluation",
+    brand: "BurgerStack",
     shops: "Shops",
     reviews: "Reviews",
     signout: "Sign out",

@@ -2,7 +2,7 @@
 name: frontend-spa-boundaries
 description: hamburger_evaluation の React SPA(フロントエンドの API クライアント、ドメインフック、ページ、フォーム、state、フロントエンドテスト)を変更するときに使う。
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:

@@ -76,5 +76,30 @@ class LimitLinesTest(unittest.TestCase):
         self.assertEqual(out[-1], "... ほか 70 行")
 
 
+class SecretPathTest(unittest.TestCase):
+    def test_値の雛形は秘密のファイルとして扱わない(self):
+        """.env.example や .env.bench.example のような雛形(末尾が .example)は、秘密のファイルとして扱わない"""
+        for path in (
+            ".env.example",
+            "design/.env.example",
+            "backend-go/.env.example",
+            "backend-go/.env.bench.example",
+        ):
+            self.assertFalse(sensors.is_secret_path(path), path)
+
+    def test_本物の環境変数のファイルは秘密として扱う(self):
+        """.env・.env.local・.env.production や、末尾が .example でないものは、秘密のファイルとして扱う"""
+        for path in (
+            ".env",
+            "backend-go/.env",
+            "backend-go/.env.local",
+            "frontend/.env.production",
+            "backend-go/.env.bench",
+            "backend-go/.env.example.bak",
+            "design/.env",
+        ):
+            self.assertTrue(sensors.is_secret_path(path), path)
+
+
 if __name__ == "__main__":
     unittest.main()

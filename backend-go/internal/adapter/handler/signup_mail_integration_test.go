@@ -56,7 +56,7 @@ func newMailKit(t *testing.T, smtpHost string, smtpPort int) *mailKit {
 	userWrites := domain.NewUsers(repository.NewUserRepository(pool))
 
 	smtpMailer, err := infra.NewSMTPMailer(infra.Config{
-		SMTPHost: smtpHost, SMTPPort: smtpPort, SMTPSecurity: "none", MailFrom: "Hamburger <noreply@example.com>",
+		SMTPHost: smtpHost, SMTPPort: smtpPort, SMTPSecurity: "none", MailFrom: "BurgerStack <noreply@example.com>",
 	})
 	if err != nil {
 		t.Fatalf("NewSMTPMailer: %v", err)
@@ -199,7 +199,7 @@ func TestSignupMailDeliveryIntegration(t *testing.T) {
 			t.Fatalf("届いたメール = %d 通, want 1", len(mails))
 		}
 		mail := mails[0]
-		if mail.To[0] != "alice@example.com" || !strings.Contains(mail.Data, "Subject: Confirm your email address") {
+		if mail.To[0] != "alice@example.com" || !strings.Contains(mail.Data, "Subject: Confirm your email address for BurgerStack") {
 			t.Errorf("届いたメール = %+v", mail)
 		}
 		idx := strings.Index(mail.Data, confirmLinkPrefix)
@@ -243,7 +243,7 @@ func TestSignupMailDeliveryIntegration(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond) // 後から 2 通目が出ないことを確かめる
 		mails := srv.Received()
-		if len(mails) != 1 || !strings.Contains(mails[0].Data, "Subject: You already have an account") || strings.Contains(strings.ToLower(mails[0].Data), "token") {
+		if len(mails) != 1 || !strings.Contains(mails[0].Data, "Subject: You already have a BurgerStack account") || strings.Contains(strings.ToLower(mails[0].Data), "token") {
 			t.Errorf("届いたメール = %d 通 %+v, want 通知 1 通（確認リンク・トークンを含めない）", len(mails), mails)
 		}
 		if n := countRows(t, kit.pool, "mail_deliveries"); n != 1 {

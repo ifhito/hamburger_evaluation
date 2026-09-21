@@ -2,7 +2,7 @@
 name: backend-go-boundaries
 description: hamburger_evaluation の backend-go/ 配下の Go API(ハンドラ、ユースケース、ドメイン、リポジトリ、sqlc クエリ、Go テスト)を変更するときに使う。
 version: 1.0.0
-author: Hamburger Evaluation Agents
+author: BurgerStack Agents
 license: MIT
 metadata:
   hermes:
@@ -59,6 +59,13 @@ backend-go/
   片方だけ直して食い違う)。判断が必要な情報は、レスポンスに含める。
 - 規則の数値を、利用者への説明文に書く必要がある場合は、その説明文が backend の定数の写しで
   あることをコメントに書く(判定そのものは複製しない)。
+- domain が持つのは**業務の規則だけ**(サービスとして「何を許す・何を求める」と決めていること。
+  例: 1 ページの既定の件数・上限と範囲外の丸め、値の許す範囲、受け付ける写真の大きさの上限)。
+  それ以外は、次の置き場所に置く: 入力の形の解釈と確認(HTTP の文字列を数値に読む、「整数でない」という形の
+  エラーとその文言、確認欄と本欄の一致)は handler / usecase、規則を実現する手段(続きがあるかを知るために
+  1 件多く取り出して切り詰める、DB の型に合わせた offset の変換)は usecase / adapter、環境変数で決まる
+  運用の設定(接続先・ポート・タイムアウト・ワーカーの数・通信の保護の大きさ)は infra / cmd。
+  迷ったら元の場所に置き、業務の規則として説明できるものだけを domain に置く。
 
 ## ドメインと DB の分離
 
