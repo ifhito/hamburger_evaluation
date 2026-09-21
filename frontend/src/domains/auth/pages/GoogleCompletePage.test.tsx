@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserRouter, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Provider, createStore } from "jotai";
 import "../../../lib/i18n";
-import { ApiError } from "../../../api/client/buildApiClient";
+import { API_BASE_URL, ApiError } from "../../../api/client/buildApiClient";
 import { byText, cleanup, click, eventually, mount, need, type as typeInto } from "../../../test/dom";
 import { AuthProvider, useAuth } from "../AuthProvider";
 import { GoogleExchangeError, authApi } from "../api/authApiClient";
@@ -68,6 +68,14 @@ const routes = (
 function openCompleteUrl(search = "?code=one-time-code") {
   window.history.replaceState(null, "", `/auth/google/complete${search}`);
 }
+
+// メモリ上の router で、指定した場所(と、遷移の state)から、画面を出す。
+const showAt = (entry: string | { pathname: string; state: unknown }) =>
+  mount(
+    <MemoryRouter initialEntries={[entry]}>
+      <Shell>{routes}</Shell>
+    </MemoryRouter>,
+  );
 
 const showBrowser = () =>
   mount(
@@ -175,12 +183,8 @@ describe("Google の手続きが失敗したあとの、元の画面への戻り
 
   // backend は、失敗の応答(409・400)に、検証済みの戻り先(return_to)を含める。画面は、それをサインインの画面へ渡すだけ。
   async function failWith(returnTo: string | undefined) {
-    exchangeGoogleCode.mockRejectedValue(new GoogleExchangeError(new ApiError([CONFLICT], 409, { return_to: returnTo })));
-    return mount(
-      <MemoryRouter initialEntries={["/auth/google/complete?code=one-time-code"]}>
-        <Shell>{routes}</Shell>
-      </MemoryRouter>,
-    );
+    exchangeGoogleCode.mockRejectedValue(new GoogleExchangeError(new ApiError([CONFLICT], 409, { returnTo })));
+    return showAt("/auth/google/complete?code=one-time-code");
   }
 
   async function backToSigninAndLogIn(page: HTMLElement) {
@@ -236,22 +240,18 @@ describe("Google の手続きが失敗したあとの、元の画面への戻り
 describe("サインイン画面の「Sign in with Google」(ログインが必要な画面から来たとき、戻り先を開始の URL に載せる)", () => {
   const CONSENT = "/oauth/authorize?client_id=app-1&state=xyz";
   const linkHref = async (entry: string | { pathname: string; state: unknown }) => {
-    const page = await mount(
-      <MemoryRouter initialEntries={[entry]}>
-        <Shell>{routes}</Shell>
-      </MemoryRouter>,
-    );
+    const page = await showAt(entry);
     return byText(page, "a", "Sign in with Google")?.getAttribute("href");
   };
 
   it("許可の画面などから送られてきたとき(state の from)は、その画面を return_to として載せる", async () => {
-    expect(await linkHref({ pathname: "/signin", state: { from: CONSENT } })).toBe(`/api/auth/google/start?return_to=${encodeURIComponent(CONSENT)}`);
+    expect(await linkHref({ pathname: "/signin", state: { from: CONSENT } })).toBe(`${API_BASE_URL}/auth/google/start?return_to=${encodeURIComponent(CONSENT)}`);
   });
 
   it("戻り先がないとき・アプリの外を指すときは、return_to を載せない", async () => {
-    expect(await linkHref("/signin")).toBe("/api/auth/google/start");
+    expect(await linkHref("/signin")).toBe(`${API_BASE_URL}/auth/google/start`);
     await cleanup();
-    expect(await linkHref({ pathname: "/signin", state: { from: "https://evil.example/x" } })).toBe("/api/auth/google/start");
+    expect(await linkHref({ pathname: "/signin", state: { from: "https://evil.example/x" } })).toBe(`${API_BASE_URL}/auth/google/start`);
   });
 });
 
@@ -268,11 +268,7 @@ function deferred<T>() {
 
 describe("交換が一時的に失敗したとき(コードは、backend が消費していないので、同じコードで再試行できる)", () => {
   const showFromMemory = (entry = "/auth/google/complete?code=one-time-code") =>
-    mount(
-      <MemoryRouter initialEntries={[entry]}>
-        <Shell>{routes}</Shell>
-      </MemoryRouter>,
-    );
+    showAt(entry);
 
   it("サーバーの障害(500)・通信の失敗は、「Try again」を出し、押すと、同じコードでもう一度交換して、成功すればサインインする", async () => {
     for (const failure of [new ApiError(["internal server error"], 500), new Error("network down")]) {
@@ -316,11 +312,7 @@ describe("交換が一時的に失敗したとき(コードは、backend が消�
 
 describe("コードのない画面(URL から消したあとの、戻る操作など)", () => {
   it("コードがないときは、交換の要求を送らず、失敗の案内とサインインへの導線を出す", async () => {
-    const page = await mount(
-      <MemoryRouter initialEntries={["/auth/google/complete"]}>
-        <Shell>{routes}</Shell>
-      </MemoryRouter>,
-    );
+    const page = await showAt("/auth/google/complete");
 
     await eventually(() => expect(page.textContent).toContain("Google sign-in failed. Please try again."));
     expect(exchangeGoogleCode).not.toHaveBeenCalled();
@@ -349,11 +341,7 @@ describe("画面を離れたあと・ログインの状態の復元中の、交�
   it("「Signing you in…」の間に別の画面へ移ったら、あとで成功しても、勝手に移動させない(サインインは反映する)", async () => {
     const pending = deferred<GoogleExchangeResponse>();
     exchangeGoogleCode.mockReturnValue(pending.promise);
-    const page = await mount(
-      <MemoryRouter initialEntries={["/auth/google/complete?code=one-time-code"]}>
-        <Shell>{routes}</Shell>
-      </MemoryRouter>,
-    );
+    const page = await showAt("/auth/google/complete?code=one-time-code");
     await eventually(() => expect(exchangeGoogleCode).toHaveBeenCalledTimes(1));
     await click(need(byText(page, "a", "Shops"), "Shops")); // ヘッダーのリンクで、別の画面へ
 
@@ -368,11 +356,7 @@ describe("画面を離れたあと・ログインの状態の復元中の、交�
     const restoring = deferred<Awaited<ReturnType<typeof authApi.me>>>();
     me.mockReturnValue(restoring.promise);
     exchangeGoogleCode.mockRejectedValue(new ApiError(["This Google account is already connected to another user."], 409));
-    const page = await mount(
-      <MemoryRouter initialEntries={["/auth/google/complete?code=one-time-code"]}>
-        <Shell>{routes}</Shell>
-      </MemoryRouter>,
-    );
+    const page = await showAt("/auth/google/complete?code=one-time-code");
     await eventually(() => expect(page.textContent).toContain("already connected to another user"));
 
     expect(byText(page, "a", "Back to sign in")).toBeUndefined(); // 復元の前は、どちらも出さない
@@ -381,5 +365,34 @@ describe("画面を離れたあと・ログインの状態の復元中の、交�
 
     await eventually(() => expect(byText(page, "a", "Back to your profile")?.getAttribute("href")).toBe("/users/7"));
     expect(byText(page, "a", "Back to sign in")).toBeUndefined();
+  });
+});
+
+describe("交換に成功したあとの処理が失敗したとき(コードは、もう使い切られている)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const showFromMemory = () =>
+    showAt("/auth/google/complete?code=one-time-code");
+
+  it("ログインの状態の保存が例外になっても、「Try again」は出さず(使用済みのコードで、「リンクが無効」に行き着くため)、失敗の案内を出す", async () => {
+    exchangeGoogleCode.mockResolvedValue(signedIn("/shops"));
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    });
+    const page = await showFromMemory();
+
+    await eventually(() => expect(page.textContent).toContain("Google sign-in failed. Please try again."));
+
+    expect(byText(page, "button", "Try again")).toBeUndefined();
+    expect(exchangeGoogleCode).toHaveBeenCalledTimes(1);
+  });
+
+  it("成功の応答の本文が、想定した形でない(空の文字列など)ときも、「Try again」は出さない", async () => {
+    exchangeGoogleCode.mockResolvedValue("" as unknown as GoogleExchangeResponse);
+    const page = await showFromMemory();
+
+    await eventually(() => expect(page.textContent).toContain("Google sign-in failed. Please try again."));
+
+    expect(byText(page, "button", "Try again")).toBeUndefined();
   });
 });

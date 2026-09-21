@@ -53,21 +53,30 @@ export default function GoogleCompletePage() {
     if (attempt === 0) setSearchParams({}, { replace: true });
     // コードがない(URL から消したあとに、戻る操作でこの画面へ戻ったときなど)ときは、要求を送らない(失敗の表示は、下で決める)。
     if (!code) return;
-    authApi
-      .exchangeGoogleCode(code)
-      .then((res) => {
-        // 交換に成功したら、画面を離れていても、サインインは反映する(コードは使い切られている)。
-        if (isGoogleSignIn(res)) signInWithResponse(res);
-        // サインインも結び付けも、手続きを始めた画面(なければ既定の画面)へ戻す。
-        if (mounted.current) void navigate(appPathOrNull(res.returnTo) ?? "/reviews", { replace: true });
-      })
-      .catch((e: unknown) =>
+    const run = async () => {
+      let res;
+      try {
+        res = await authApi.exchangeGoogleCode(code);
+      } catch (e) {
+        // 交換そのものの失敗。サーバーの障害・通信の失敗は、コードが消費されていないので、やり直せる。
         setFailure(
           e instanceof ApiError
             ? { messages: e.messages, returnTo: e instanceof GoogleExchangeError ? e.returnTo : "", retryable: isServerError(e.status) }
             : { messages: [t("auth.google.error")], returnTo: "", retryable: true },
-        ),
-      );
+        );
+        return;
+      }
+      try {
+        // 交換に成功したら、画面を離れていても、サインインは反映する(コードは使い切られている)。
+        if (isGoogleSignIn(res)) signInWithResponse(res);
+        // サインインも結び付けも、手続きを始めた画面(なければ既定の画面)へ戻す。
+        if (mounted.current) void navigate(appPathOrNull(res.returnTo) ?? "/reviews", { replace: true });
+      } catch {
+        // 成功したあとの処理の失敗(ログインの状態を保存できない・想定外の本文など)。コードは使い切られているので、やり直せない。
+        setFailure({ messages: [t("auth.google.error")], returnTo: "", retryable: false });
+      }
+    };
+    void run();
   }, [attempt, code, navigate, setSearchParams, signInWithResponse, t]);
 
   const retry = () => {
