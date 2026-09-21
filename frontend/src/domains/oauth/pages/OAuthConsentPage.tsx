@@ -8,7 +8,7 @@ import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
 import { oauthApi } from "../api/oauthApiClient";
 import type { AuthorizeRequestView } from "../api/types";
-import { isNavigable } from "../navigation";
+import { hostOf, isNavigable } from "../navigation";
 import styles from "./oauthConsent.module.css";
 
 type State =
@@ -28,6 +28,9 @@ export default function OAuthConsentPage() {
   const { user } = useAuth();
   const [state, setState] = useState<State>({ status: "loading" });
   const [isDeciding, setIsDeciding] = useState(false);
+  // 戻り先のホスト名は、利用者が「どのアプリ・どこへ」を見比べられるよう、表示のためだけに、要求の値から読む
+  // (要求の検証は backend が行う。ここでは判断に使わない)。
+  const returnHost = hostOf(new URLSearchParams(search).get("redirect_uri"));
 
   // アプリへ戻る(ブラウザを、backend が返した戻り先へ移す)。
   const goBackToApp = (target: string) => {
@@ -89,6 +92,7 @@ export default function OAuthConsentPage() {
         <div className={styles.card}>
           {/* アプリの名前は、アプリが自由に決めるので、HTML として解釈せず、文字として描画する */}
           <p className={styles.intro}>{t("oauth.consent.intro", { name: state.view.client.name })}</p>
+          <p className={styles.meta}>{t("oauth.consent.appId", { id: state.view.client.id })}</p>
           <div>
             <p className={styles.heading}>{t("oauth.consent.permissionsHeading")}</p>
             <ul className={styles.scopes}>
@@ -97,6 +101,7 @@ export default function OAuthConsentPage() {
               ))}
             </ul>
           </div>
+          {returnHost && <p className={styles.meta}>{t("oauth.consent.returnsTo", { host: returnHost })}</p>}
           {user && <p className={styles.signedIn}>{t("oauth.consent.signedInAs", { name: user.username })}</p>}
           <div className={styles.actions}>
             <Button type="button" isLoading={isDeciding} onClick={() => void decide(true)}>

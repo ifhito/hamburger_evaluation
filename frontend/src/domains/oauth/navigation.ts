@@ -9,3 +9,10 @@ export function isNavigable(target: string): boolean {
     return false;
   }
 }
+
+// URL のホスト名(ポートつき)を返す。URL として解釈できない・http(s) でないときは null。
+// 許可を尋ねる画面で、「どこへ戻るか」を利用者に見せるために使う(表示のためだけで、判断には使わない)。
+export function hostOf(target: string | null): string | null {
+  if (target === null || !isNavigable(target)) return null;
+  return new URL(target).host;
+}

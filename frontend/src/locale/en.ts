@@ -144,6 +144,8 @@ const en = {
       loading: "Checking the request\u2026",
       connecting: "Connecting\u2026",
       intro: "{{name}} wants to connect to your account.",
+      appId: "App ID: {{id}}",
+      returnsTo: "After you choose, you will be sent to {{host}}.",
       permissionsHeading: "It will be able to:",
       signedInAs: "Signed in as {{name}}",
       allow: "Allow",

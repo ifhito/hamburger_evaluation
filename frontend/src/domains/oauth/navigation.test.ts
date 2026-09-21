@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isNavigable } from "./navigation";
+import { hostOf, isNavigable } from "./navigation";
 
 describe("isNavigable", () => {
   it("https と http の戻り先は、開いてよい", () => {
@@ -17,5 +17,18 @@ describe("isNavigable", () => {
     expect(isNavigable("")).toBe(false);
     expect(isNavigable("/relative/path")).toBe(false);
     expect(isNavigable("not a url")).toBe(false);
+  });
+});
+
+describe("hostOf", () => {
+  it("http(s) の URL から、ポートつきのホスト名を返す", () => {
+    expect(hostOf("https://app.example.com/callback?code=abc")).toBe("app.example.com");
+    expect(hostOf("http://127.0.0.1:53000/callback")).toBe("127.0.0.1:53000");
+  });
+
+  it("null・解釈できない文字列・http(s) ではないスキームは null を返す", () => {
+    expect(hostOf(null)).toBeNull();
+    expect(hostOf("not a url")).toBeNull();
+    expect(hostOf("javascript:alert(1)")).toBeNull();
   });
 });

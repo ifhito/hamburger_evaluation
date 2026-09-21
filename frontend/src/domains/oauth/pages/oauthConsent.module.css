@@ -27,6 +27,12 @@
   gap: 0.375rem;
 }
 
+.meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
 .signedIn {
   font-size: 0.875rem;
   color: var(--color-text-muted);
