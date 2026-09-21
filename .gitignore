@@ -6,6 +6,8 @@
 # Frontend build artifacts and dependencies
 frontend/node_modules/
 frontend/dist/
+# pnpm を docker などで動かしたときに、frontend の中にできる依存の保管場所
+frontend/.pnpm-store/
 
 # Environment files
 .env

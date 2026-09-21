@@ -7,6 +7,18 @@ export interface Meta {
   rating: { min: number; max: number };
   // 写真の上限。maxEdge は長辺(ピクセル)、maxBytes はファイルの大きさ(バイト)。
   photo: { maxEdge: number; maxBytes: number };
+  // 入力欄ごとの文字数の上限(コードポイント数)。文字数のカウンターの表示にだけ使い、超えたかどうかの判定は
+  // backend の 422 に任せる。
+  text: {
+    reviewCommentMaxChars: number;
+    burgerNameMaxChars: number;
+    shopNameMaxChars: number;
+    usernameMaxChars: number;
+    bioMaxChars: number;
+    moderationNoteMaxChars: number;
+  };
+  // パスワードの長さの範囲。文字数ではなくバイト数(日本語の 1 文字は 3 バイト)。説明文の表示にだけ使う。
+  password: { minBytes: number; maxBytes: number };
 }
 
 const metaApiClient = buildApiClient();

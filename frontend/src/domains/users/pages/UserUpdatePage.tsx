@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useUpdateUser, useDeleteUser } from "../hooks/useUserMutations";
 import { useUser } from "../hooks/useUser";
 import { ApiError } from "../../../api/client/buildApiClient";
+import { useMeta } from "../../../api/meta";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
@@ -19,6 +20,7 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
   const { user: authUser, logout, refreshUser } = useAuth();
   const { update } = useUpdateUser(id);
   const { destroy } = useDeleteUser();
+  const meta = useMeta().data;
 
   const [username, setUsername] = useState(authUser?.username ?? "");
   const [bio, setBio] = useState(initialBio);
@@ -82,6 +84,7 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
           label={t("users.update.username")}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
+          counter={{ value: username, max: meta?.text.usernameMaxChars }}
           autoComplete="username"
         />
         <Textarea
@@ -89,6 +92,7 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
           label={t("users.update.bio")}
           value={bio}
           onChange={(e) => setBio(e.target.value)}
+          counter={{ value: bio, max: meta?.text.bioMaxChars }}
           rows={5}
         />
         <Input
@@ -106,7 +110,7 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
-          hint={t("auth.passwordHint")}
+          hint={meta && t("auth.passwordHint", { min: meta.password.minBytes, max: meta.password.maxBytes })}
         />
         <Input
           id="passwordConfirmation"

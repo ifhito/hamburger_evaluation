@@ -10,11 +10,16 @@ const en = {
   common: {
     loading: "Loading\u2026",
     rating: "Rating",
+    charCounter: {
+      tooLong: "Too long",
+      overAnnounce: "Over the limit (maximum {{max}} characters)",
+      withinAnnounce: "Within the limit",
+    },
   },
   auth: {
-    // \u30d1\u30b9\u30ef\u30fc\u30c9\u306e\u898f\u5247\u306e\u5224\u5b9a\u306f backend(domain.ValidatePassword)\u3060\u3051\u304c\u6301\u3064\u3002\u3053\u308c\u306f\u898f\u5247\u3092\u5229\u7528\u8005\u306b\u4f1d\u3048\u308b\u8aac\u660e\u6587\u3067\u3001
-    // \u6570\u5024(\u6700\u5c0f\u30fb\u6700\u5927\u306e\u30d0\u30a4\u30c8\u6570)\u3092\u5909\u3048\u308b\u3068\u304d\u306f\u3001backend \u306e MinPasswordBytes / MaxPasswordBytes \u3068\u3053\u306e\u6587\u8a00\u3092\u76f4\u3059\u3002
-    passwordHint: "8\u201372 bytes (1 byte per ASCII character, 3 per Japanese character), with at least one half-width letter, number and symbol.",
+    // パスワードの規則の判定は backend(domain.ValidatePassword)だけが持つ。これは規則を利用者に伝える説明文で、
+    // 数値(最小・最大のバイト数)は GET /meta が返す値を {{min}} / {{max}} に入れて作る(ここに数字を書かない)。
+    passwordHint: "{{min}}\u2013{{max}} bytes (1 byte per ASCII character, 3 per Japanese character), with at least one half-width letter, number and symbol.",
     signin: {
       title: "Sign In",
       email: "Email",

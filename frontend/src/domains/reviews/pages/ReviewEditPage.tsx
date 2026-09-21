@@ -7,6 +7,7 @@ import { useUpdateReview } from "../hooks/useReviewMutations";
 import { useUpdateReviewForm } from "../hooks/useReviewForm";
 import { useRatingRange } from "../hooks/useRatingRange";
 import { ApiError } from "../../../api/client/buildApiClient";
+import { useMeta } from "../../../api/meta";
 import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
@@ -25,6 +26,7 @@ export default function ReviewEditPage() {
   const isLoading = reviewLoading || authLoading;
   const { update } = useUpdateReview(id ?? "");
   const ratingRange = useRatingRange();
+  const textLimits = useMeta().data?.text;
 
   const { register, handleSubmit, setValue, watch, reset } = useUpdateReviewForm();
 
@@ -75,6 +77,7 @@ export default function ReviewEditPage() {
           <Textarea
             id="comment"
             label={t("reviews.edit.comment")}
+            counter={{ value: watch("comment"), max: textLimits?.reviewCommentMaxChars }}
             {...register("comment")}
           />
           <div className={styles.field}>
