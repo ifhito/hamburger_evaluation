@@ -1,12 +1,3 @@
-.section {
-  margin-bottom: 2rem;
-}
-
-.heading {
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
-}
-
 .row {
   display: flex;
   flex-wrap: wrap;
