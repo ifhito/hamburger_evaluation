@@ -32,3 +32,4 @@ backend-go/storage/
 # Python のキャッシュ(フックのテストで作られる)
 __pycache__/
 *.pyc
+.gocache/

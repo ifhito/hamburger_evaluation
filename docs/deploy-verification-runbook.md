@@ -205,10 +205,23 @@ nohup ./scripts/bench/coldstart.sh https://example.com/healthz 30 5 cold-render 
 
 ### 計測
 
+候補 1 社分は `db-verify.sh` が通しで行う(版の確認・マイグレーション・データ投入・
+レイテンシ・接続数の上限)。
+
 ```bash
-./scripts/bench/latency.sh http://localhost:8080/shops 100 db-neon-shops
-./scripts/bench/latency.sh http://localhost:8080/up    100 db-neon-up
+source backend-go/.env.bench
+./scripts/bench/db-verify.sh neon "$NEON_URL"
 ```
+
+読み書きの統計は `db-ops.sh` で別に取る。アプリの HTTP 層を挟まず pgx で直接叩くので、
+DB とネットワークの往復だけが出る。読み 5 種と書き 4 種について、平均・標準偏差・
+p50 / p90 / p95 / p99 を記録する。
+
+```bash
+./scripts/bench/db-ops.sh neon "$NEON_URL" 200
+```
+
+書き込みで作った行は計測の最後に削除するので、候補間でデータ量がずれない。
 
 `/shops` と `/up` の差が DB 往復のコストになる。
 
