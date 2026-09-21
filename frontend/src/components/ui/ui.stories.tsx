@@ -23,6 +23,8 @@ export const Buttons: Story = {
       <Button>Write a review</Button>
       <Button variant="secondary">Cancel</Button>
       <Button variant="danger">Delete</Button>
+      <Button variant="dangerSolid">Delete</Button>
+      <Button variant="dark">Confirm reject</Button>
       <Button disabled>Post</Button>
       <Button variant="danger" disabled>
         Delete

@@ -17,6 +17,8 @@ describe("Button", () => {
     expect(html(<Button variant="primary">Save</Button>)).toMatch(/class="[^"]*primary/);
     expect(html(<Button variant="secondary">Cancel</Button>)).toMatch(/class="[^"]*secondary/);
     expect(html(<Button variant="danger">Delete</Button>)).toMatch(/class="[^"]*danger/);
+    expect(html(<Button variant="dangerSolid">Delete</Button>)).toMatch(/class="[^"]*dangerSolid/);
+    expect(html(<Button variant="dark">Confirm reject</Button>)).toMatch(/class="[^"]*dark/);
     expect(html(<Button>Save</Button>)).not.toContain("disabled");
   });
 
@@ -35,6 +37,7 @@ describe("Button", () => {
     expect(off).toMatch(/class="[^"]*off/);
     expect(off).not.toMatch(/class="[^"]*primary/);
     expect(html(<Button variant="danger" disabled>Delete</Button>)).toMatch(/class="[^"]*offDanger/);
+    expect(html(<Button variant="dangerSolid" disabled>Delete</Button>)).not.toMatch(/dangerSolid/);
   });
 
   it("form の中でも、指定しない限り送信ボタンにならない(type=button)", () => {

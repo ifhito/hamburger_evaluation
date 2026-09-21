@@ -35,6 +35,18 @@
   color: var(--ui-danger);
 }
 
+/* 削除・解除の確認の「削除する」: 赤の面 + 白い文字 */
+.dangerSolid {
+  border-color: var(--ui-danger);
+  background: var(--ui-danger);
+  color: var(--ui-bg);
+}
+
+.dark {
+  background: var(--ui-text);
+  color: var(--ui-bg);
+}
+
 .off {
   background: var(--ui-surface-2);
   color: var(--ui-text-muted);

@@ -4,7 +4,8 @@ import styles from './button.module.css'
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   // primary: 黄の面 + 黒い文字 / secondary: 白い面 + 枠 / danger: 白い面 + 赤の枠 + 赤い文字(削除だけに使う)
-  variant?: 'primary' | 'secondary' | 'danger'
+  // dangerSolid: 赤の面 + 白い文字(削除・解除の確認の「削除する」) / dark: 黒い面 + 白い文字(却下の確定)
+  variant?: 'primary' | 'secondary' | 'danger' | 'dangerSolid' | 'dark'
   // 送信中。押せなくなり、loadingLabel(なければ「Loading…」)を出す。
   isLoading?: boolean
   loadingLabel?: string
