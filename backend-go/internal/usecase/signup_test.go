@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uowtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -23,12 +25,13 @@ var testNow = time.Date(2026, 1, 1, 12, 0, 30, 0, time.UTC)
 var acceptedReceipt = domain.SignupVerificationReceipt{Accepted: true, ID: uid.N(100), Generation: 3}
 
 // fakeSignupRepo は、手書きの domain.SignupVerificationRepository（書き込み）の test double である。
-// create と confirm が未設定のまま呼ばれると panic するので、想定外の書き込みに対して
-// テストは fail-loud する。discard は、signup のたびに日和見的に呼ばれるので、未設定なら
-// 何もしない。
+// create・lock・discardOne が未設定のまま呼ばれると panic するので、想定外の書き込みに対して
+// テストは fail-loud する。discard(期限切れの掃除)は、signup のたびに日和見的に呼ばれるので、
+// 未設定なら何もしない。
 type fakeSignupRepo struct {
 	create       func(ctx context.Context, p domain.CreateSignupVerificationParams) (domain.SignupVerificationReceipt, error)
-	confirm      func(ctx context.Context, tokenHash string) (domain.User, error)
+	lock         func(ctx context.Context, tokenHash string) error
+	discardOne   func(ctx context.Context, id string) error
 	discard      func(ctx context.Context, limit int) (int64, error)
 	discardCalls int
 }
@@ -40,11 +43,18 @@ func (f *fakeSignupRepo) CreateSignupVerification(ctx context.Context, p domain.
 	return f.create(ctx, p)
 }
 
-func (f *fakeSignupRepo) CreateUserFromSignupVerification(ctx context.Context, tokenHash string) (domain.User, error) {
-	if f.confirm == nil {
-		panic("unexpected CreateUserFromSignupVerification call")
+func (f *fakeSignupRepo) LockSignupVerification(ctx context.Context, tokenHash string) error {
+	if f.lock == nil {
+		panic("unexpected LockSignupVerification call")
 	}
-	return f.confirm(ctx, tokenHash)
+	return f.lock(ctx, tokenHash)
+}
+
+func (f *fakeSignupRepo) DiscardSignupVerification(ctx context.Context, id string) error {
+	if f.discardOne == nil {
+		panic("unexpected DiscardSignupVerification call")
+	}
+	return f.discardOne(ctx, id)
 }
 
 func (f *fakeSignupRepo) DiscardExpiredSignupVerifications(ctx context.Context, limit int) (int64, error) {
@@ -53,6 +63,19 @@ func (f *fakeSignupRepo) DiscardExpiredSignupVerifications(ctx context.Context, 
 		return 0, nil
 	}
 	return f.discard(ctx, limit)
+}
+
+// fakePendingQuery は、手書きの usecase.SignupVerificationQuery（確認待ちの読み取り）の test double である。
+// get が未設定のまま呼ばれると panic する。
+type fakePendingQuery struct {
+	get func(ctx context.Context, tokenHash string) (domain.PendingSignup, error)
+}
+
+func (f *fakePendingQuery) GetSignupVerificationByTokenHash(ctx context.Context, tokenHash string) (domain.PendingSignup, error) {
+	if f.get == nil {
+		panic("unexpected GetSignupVerificationByTokenHash call")
+	}
+	return f.get(ctx, tokenHash)
 }
 
 // recordingMailer は、出すよう頼まれたメールの意図を記録する usecase.Mailer の fake である。
@@ -392,19 +415,61 @@ func TestSignupsRequest(t *testing.T) {
 }
 
 func TestSignupsConfirm(t *testing.T) {
-	t.Run("有効なトークンなら、平文ではなくハッシュで確認し、作られたユーザーと認証トークンを返す", func(t *testing.T) {
-		var gotHash string
-		repo := &fakeSignupRepo{confirm: func(_ context.Context, tokenHash string) (domain.User, error) {
-			gotHash = tokenHash
-			return domain.User{ID: uid.N(5), Username: "alice", Email: "a@example.com"}, nil
-		}}
-		user, token, err := newSignups(notRegistered, repo, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig).
-			Confirm(context.Background(), "raw-token")
+	// 確認の手順を、UnitOfWork(まとめて 1 つのトランザクションにする範囲)の代役の中で動かし、
+	// 「ロック → 読み取り → ユーザーの作成 → 確認待ちの削除」の順序と、確定・取り消しの回数を確かめる。
+	pending := domain.PendingSignup{ID: uid.N(100), Email: "a@example.com", Username: "alice", PasswordDigest: "digest(pw)"}
+	type confirmKit struct {
+		signups *usecase.Signups
+		unit    *uowtest.UoW
+		ops     *[]string
+	}
+	newConfirmKit := func(lockErr, getErr, createErr, discardErr error) confirmKit {
+		var ops []string
+		unit := &uowtest.UoW{
+			SignupVerifications: &fakeSignupRepo{
+				lock: func(_ context.Context, tokenHash string) error {
+					ops = append(ops, "lock:"+tokenHash)
+					return lockErr
+				},
+				discardOne: func(_ context.Context, id string) error {
+					ops = append(ops, "discard:"+id)
+					return discardErr
+				},
+			},
+			PendingSignups: &fakePendingQuery{get: func(_ context.Context, tokenHash string) (domain.PendingSignup, error) {
+				ops = append(ops, "get:"+tokenHash)
+				return pending, getErr
+			}},
+			Users: &fakeUserRepo{createUser: func(_ context.Context, p domain.CreateUserParams) (domain.User, error) {
+				ops = append(ops, fmt.Sprintf("create:%s/%s/%s/admin=%t", p.Email, p.Username, p.PasswordDigest, p.Admin))
+				if createErr != nil {
+					return domain.User{}, createErr
+				}
+				return domain.User{ID: uid.N(5), Username: p.Username, Email: p.Email}, nil
+			}},
+		}
+		signups := usecase.NewSignups(notRegistered, domain.NewSignupVerifications(&fakeSignupRepo{}), unit, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig)
+		return confirmKit{signups: signups, unit: unit, ops: &ops}
+	}
+	hash := domain.HashSignupToken("raw-token")
+
+	t.Run("有効なトークンなら、確認待ちをロックして読み、その内容でユーザーを作り、確認待ちを削除して確定する", func(t *testing.T) {
+		kit := newConfirmKit(nil, nil, nil, nil)
+		user, token, err := kit.signups.Confirm(context.Background(), "raw-token")
 		if err != nil {
 			t.Fatalf("Confirm returned error: %v", err)
 		}
-		if gotHash != domain.HashSignupToken("raw-token") {
-			t.Errorf("repository へ渡した値 = %q, want HashSignupToken(raw-token)", gotHash)
+		wantOps := []string{
+			"lock:" + hash, // 平文ではなく、保存の形(ハッシュ)で照合する
+			"get:" + hash,
+			"create:a@example.com/alice/digest(pw)/admin=false", // 確認待ちの内容で作る。管理者にはしない
+			"discard:" + uid.N(100),
+		}
+		if !reflect.DeepEqual(*kit.ops, wantOps) {
+			t.Errorf("操作の順序 = %v, want %v", *kit.ops, wantOps)
+		}
+		if kit.unit.Commits != 1 || kit.unit.Rollbacks != 0 {
+			t.Errorf("確定 %d 回・取り消し %d 回, want 確定 1・取り消し 0", kit.unit.Commits, kit.unit.Rollbacks)
 		}
 		if want := (domain.User{ID: uid.N(5), Username: "alice", Email: "a@example.com"}); user != want {
 			t.Errorf("user = %+v, want %+v", user, want)
@@ -414,28 +479,68 @@ func TestSignupsConfirm(t *testing.T) {
 		}
 	})
 
-	confirmErr := func(err error) *fakeSignupRepo {
-		return &fakeSignupRepo{confirm: func(context.Context, string) (domain.User, error) { return domain.User{}, err }}
-	}
-	t.Run("期限切れ・存在しない・使用済みは ErrSignupTokenInvalid になる", func(t *testing.T) {
-		repo := confirmErr(fmt.Errorf("confirm signup: %w", domain.ErrSignupTokenInvalid))
-		_, _, err := newSignups(notRegistered, repo, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig).Confirm(context.Background(), "x")
+	t.Run("期限切れ・存在しない・使用済みのトークンは ErrSignupTokenInvalid になり、ユーザーを作らず、取り消される", func(t *testing.T) {
+		kit := newConfirmKit(fmt.Errorf("lock: %w", domain.ErrSignupTokenInvalid), nil, nil, nil)
+		_, _, err := kit.signups.Confirm(context.Background(), "raw-token")
 		if !errors.Is(err, domain.ErrSignupTokenInvalid) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrSignupTokenInvalid)
 		}
+		if want := []string{"lock:" + hash}; !reflect.DeepEqual(*kit.ops, want) {
+			t.Errorf("操作 = %v, want %v（ロックに失敗したら、読み取りも作成も削除もしない）", *kit.ops, want)
+		}
+		if kit.unit.Commits != 0 || kit.unit.Rollbacks != 1 {
+			t.Errorf("確定 %d 回・取り消し %d 回, want 確定 0・取り消し 1", kit.unit.Commits, kit.unit.Rollbacks)
+		}
 	})
-	t.Run("確認までの間に同じ email のユーザーが作られていたときも、区別できない ErrSignupTokenInvalid になる", func(t *testing.T) {
-		repo := confirmErr(fmt.Errorf("confirm signup: %w", domain.ErrEmailTaken))
-		_, _, err := newSignups(notRegistered, repo, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig).Confirm(context.Background(), "x")
+
+	t.Run("ロックのあとに確認待ちが読めなくなっていても(使用済みと同じ)、ErrSignupTokenInvalid になり、取り消される", func(t *testing.T) {
+		kit := newConfirmKit(nil, fmt.Errorf("get: %w", domain.ErrSignupTokenInvalid), nil, nil)
+		_, _, err := kit.signups.Confirm(context.Background(), "raw-token")
+		if !errors.Is(err, domain.ErrSignupTokenInvalid) {
+			t.Fatalf("error = %v, want %v", err, domain.ErrSignupTokenInvalid)
+		}
+		if kit.unit.Commits != 0 || kit.unit.Rollbacks != 1 {
+			t.Errorf("確定 %d 回・取り消し %d 回, want 確定 0・取り消し 1", kit.unit.Commits, kit.unit.Rollbacks)
+		}
+	})
+
+	t.Run("確認までの間に同じ email のユーザーが作られていたときは、区別できない ErrSignupTokenInvalid になり、確認待ちは削除されず、取り消される", func(t *testing.T) {
+		kit := newConfirmKit(nil, nil, fmt.Errorf("create: %w", domain.ErrEmailTaken), nil)
+		_, _, err := kit.signups.Confirm(context.Background(), "raw-token")
 		if !errors.Is(err, domain.ErrSignupTokenInvalid) || errors.Is(err, domain.ErrEmailTaken) {
 			t.Fatalf("error = %v, want only %v", err, domain.ErrSignupTokenInvalid)
 		}
+		for _, op := range *kit.ops {
+			if strings.HasPrefix(op, "discard:") {
+				t.Errorf("ユーザーの作成に失敗したのに、確認待ちを削除した: %v", *kit.ops)
+			}
+		}
+		if kit.unit.Commits != 0 || kit.unit.Rollbacks != 1 {
+			t.Errorf("確定 %d 回・取り消し %d 回, want 確定 0・取り消し 1（確認待ちが消えない）", kit.unit.Commits, kit.unit.Rollbacks)
+		}
 	})
-	t.Run("それ以外の repository エラーは ErrSignupTokenInvalid にならずそのまま伝播する", func(t *testing.T) {
+
+	t.Run("確認待ちの削除に失敗したら、作ったユーザーごと取り消され、エラーはそのまま伝播する", func(t *testing.T) {
 		repoErr := errors.New("connection lost")
-		_, _, err := newSignups(notRegistered, confirmErr(repoErr), fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig).Confirm(context.Background(), "x")
+		kit := newConfirmKit(nil, nil, nil, repoErr)
+		_, _, err := kit.signups.Confirm(context.Background(), "raw-token")
 		if !errors.Is(err, repoErr) || errors.Is(err, domain.ErrSignupTokenInvalid) {
 			t.Fatalf("error = %v, want wrapped %v", err, repoErr)
+		}
+		if kit.unit.Commits != 0 || kit.unit.Rollbacks != 1 {
+			t.Errorf("確定 %d 回・取り消し %d 回, want 確定 0・取り消し 1", kit.unit.Commits, kit.unit.Rollbacks)
+		}
+	})
+
+	t.Run("トランザクションを開始できなければ、ユーザーを作らずにエラーを返す", func(t *testing.T) {
+		kit := newConfirmKit(nil, nil, nil, nil)
+		beginErr := errors.New("begin failed")
+		kit.unit.BeginErr = beginErr
+		if _, _, err := kit.signups.Confirm(context.Background(), "raw-token"); !errors.Is(err, beginErr) {
+			t.Fatalf("error = %v, want wrapped %v", err, beginErr)
+		}
+		if len(*kit.ops) != 0 {
+			t.Errorf("操作 = %v, want なし", *kit.ops)
 		}
 	})
 }

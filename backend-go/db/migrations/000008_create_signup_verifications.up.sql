@@ -1,4 +1,4 @@
--- 確認待ちの signup(S16)。users とは別のテーブルにするので、確認前の signup が
+-- 確認待ちの signup。users とは別のテーブルにするので、確認前の signup が
 -- users を汚さない(users のスキーマは変えない)。token_hash は確認トークンの
 -- SHA-256 で、平文のトークンは保存しない。password_digest は bcrypt 済みで、平文は保存しない。
 CREATE TABLE signup_verifications (

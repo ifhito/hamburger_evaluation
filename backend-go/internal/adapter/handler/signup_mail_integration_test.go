@@ -74,7 +74,7 @@ func newMailKit(t *testing.T, smtpHost string, smtpPort int) *mailKit {
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	kit := &mailKit{pool: pool, now: time.Date(2026, 1, 1, 12, 0, 30, 0, time.UTC)}
 	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pool)),
-		hasher, mailer, codec, usecase.SignupConfig{BaseURL: "https://app.example.com", Now: func() time.Time { return kit.now }})
+		unitOfWork, hasher, mailer, codec, usecase.SignupConfig{BaseURL: "https://app.example.com", Now: func() time.Time { return kit.now }})
 	kit.router = handler.NewRouter(pool, usecase.NewAuth(userQuery, hasher, codec, codec), signups,
 		usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool))),
 		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos")),
@@ -164,7 +164,7 @@ func headerWithoutDate(h http.Header) string {
 }
 
 // TestSignupMailDeliveryIntegration は、signup のメールの記録と冪等を、本物の DB・非同期の送信・SMTP の実装で
-// 確かめる（S16）。SMTP が動いていても落ちていても、応答は同じで、記録だけが sent / failed に分かれる。
+// 確かめる。SMTP が動いていても落ちていても、応答は同じで、記録だけが sent / failed に分かれる。
 func TestSignupMailDeliveryIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed integration test in short mode")

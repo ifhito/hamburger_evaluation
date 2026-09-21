@@ -5,7 +5,7 @@ import { authApi, authApiClient } from "./authApiClient";
 
 // authApiClient は axios のインスタンスなので、adapter を差し替えて、実際に送られるリクエスト
 // (メソッド・パス・snake_case に変換された本文)と、応答の変換を確かめる。
-describe("authApi の signup の確認(S16)", () => {
+describe("authApi の signup と、メールのリンクでの確認", () => {
   let sent: { method?: string; url?: string; body?: unknown } = {};
   const originalAdapter = authApiClient.defaults.adapter;
 

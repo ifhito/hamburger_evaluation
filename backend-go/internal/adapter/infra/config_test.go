@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// mailEnv は、確認メールの必須の設定（S16）を満たす環境変数である。既存のテストは、
+// mailEnv は、確認メールの必須の設定を満たす環境変数である。既存のテストは、
 // これを足して、メール以外の設定を検証する。
 var mailEnv = map[string]string{
 	"SMTP_HOST":    "smtp.example.com",
@@ -242,7 +242,7 @@ func mailLoader(overrides map[string]string) (Config, error) {
 	})
 }
 
-// TestLoadConfigMail は、確認メールの設定（S16、AC11・AC15）を検証する。
+// TestLoadConfigMail は、確認メールの設定を検証する。
 func TestLoadConfigMail(t *testing.T) {
 	t.Run("既定値: STARTTLS、認証なし", func(t *testing.T) {
 		cfg, err := mailLoader(nil)

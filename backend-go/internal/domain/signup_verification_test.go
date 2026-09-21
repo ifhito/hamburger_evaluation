@@ -64,9 +64,10 @@ func TestHashSignupToken(t *testing.T) {
 
 // recordingSignupRepo は、SignupVerifications が repository へ渡した値を記録する fake である。
 type recordingSignupRepo struct {
-	created   []CreateSignupVerificationParams
-	confirmed []string
-	discarded []int
+	created      []CreateSignupVerificationParams
+	locked       []string
+	discardedIDs []string
+	discarded    []int
 }
 
 func (r *recordingSignupRepo) CreateSignupVerification(_ context.Context, p CreateSignupVerificationParams) (SignupVerificationReceipt, error) {
@@ -74,9 +75,14 @@ func (r *recordingSignupRepo) CreateSignupVerification(_ context.Context, p Crea
 	return SignupVerificationReceipt{Accepted: true, ID: "id", Generation: 1}, nil
 }
 
-func (r *recordingSignupRepo) CreateUserFromSignupVerification(_ context.Context, tokenHash string) (User, error) {
-	r.confirmed = append(r.confirmed, tokenHash)
-	return User{}, nil
+func (r *recordingSignupRepo) LockSignupVerification(_ context.Context, tokenHash string) error {
+	r.locked = append(r.locked, tokenHash)
+	return nil
+}
+
+func (r *recordingSignupRepo) DiscardSignupVerification(_ context.Context, id string) error {
+	r.discardedIDs = append(r.discardedIDs, id)
+	return nil
 }
 
 func (r *recordingSignupRepo) DiscardExpiredSignupVerifications(_ context.Context, limit int) (int64, error) {
@@ -84,12 +90,22 @@ func (r *recordingSignupRepo) DiscardExpiredSignupVerifications(_ context.Contex
 	return 0, nil
 }
 
-func TestSignupVerificationsConfirmPassesOnlyTheHash(t *testing.T) {
+func TestSignupVerificationsLockPassesOnlyTheHash(t *testing.T) {
 	repo := &recordingSignupRepo{}
-	if _, err := NewSignupVerifications(repo).Confirm(context.Background(), "raw-token"); err != nil {
-		t.Fatalf("Confirm returned error: %v", err)
+	if err := NewSignupVerifications(repo).Lock(context.Background(), "raw-token"); err != nil {
+		t.Fatalf("Lock returned error: %v", err)
 	}
-	if len(repo.confirmed) != 1 || repo.confirmed[0] != HashSignupToken("raw-token") {
-		t.Errorf("repository へ渡した値 = %v、want [HashSignupToken(raw-token)]（平文を渡してはならない）", repo.confirmed)
+	if len(repo.locked) != 1 || repo.locked[0] != HashSignupToken("raw-token") {
+		t.Errorf("repository へ渡した値 = %v、want [HashSignupToken(raw-token)]（平文を渡してはならない）", repo.locked)
+	}
+}
+
+func TestSignupVerificationsDiscardPassesTheID(t *testing.T) {
+	repo := &recordingSignupRepo{}
+	if err := NewSignupVerifications(repo).Discard(context.Background(), "verification-id"); err != nil {
+		t.Fatalf("Discard returned error: %v", err)
+	}
+	if len(repo.discardedIDs) != 1 || repo.discardedIDs[0] != "verification-id" {
+		t.Errorf("repository へ渡した id = %v、want [verification-id]", repo.discardedIDs)
 	}
 }
