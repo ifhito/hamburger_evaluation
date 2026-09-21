@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InternalAxiosRequestConfig } from "axios";
 import { ApiError } from "../../../api/client/buildApiClient";
-import { authApi, authApiClient } from "./authApiClient";
+import { GoogleExchangeError, authApi, authApiClient } from "./authApiClient";
 
 // authApiClient は axios のインスタンスなので、adapter を差し替えて、実際に送られるリクエスト
 // (メソッド・パス・snake_case に変換された本文)と、応答の変換を確かめる。
 describe("authApi の signup と、メールのリンクでの確認", () => {
-  let sent: { method?: string; url?: string; body?: unknown } = {};
+  let sent: { method?: string; url?: string; body?: unknown; withCredentials?: boolean } = {};
   const originalAdapter = authApiClient.defaults.adapter;
 
   const respondWith = (status: number, data: unknown) => {
     authApiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
-      sent = { method: config.method, url: config.url, body: config.data ? JSON.parse(config.data as string) : undefined };
+      sent = { method: config.method, url: config.url, body: config.data ? JSON.parse(config.data as string) : undefined, withCredentials: config.withCredentials };
       const response = { data, status, statusText: "", headers: {}, config };
       if (status >= 400) {
         throw Object.assign(new Error("request failed"), { isAxiosError: true, response, config });
@@ -73,12 +73,12 @@ describe("authApi の signup と、メールのリンクでの確認", () => {
 });
 
 describe("authApi の Google でのサインイン", () => {
-  let sent: { method?: string; url?: string; body?: unknown } = {};
+  let sent: { method?: string; url?: string; body?: unknown; withCredentials?: boolean } = {};
   const originalAdapter = authApiClient.defaults.adapter;
 
   const respondWith = (status: number, data: unknown) => {
     authApiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
-      sent = { method: config.method, url: config.url, body: config.data ? JSON.parse(config.data as string) : undefined };
+      sent = { method: config.method, url: config.url, body: config.data ? JSON.parse(config.data as string) : undefined, withCredentials: config.withCredentials };
       const response = { data, status, statusText: "", headers: {}, config };
       if (status >= 400) {
         throw Object.assign(new Error("request failed"), { isAxiosError: true, response, config });
@@ -124,16 +124,42 @@ describe("authApi の Google でのサインイン", () => {
     expect((failed as ApiError).status).toBe(400);
   });
 
-  it("失敗の応答(409・400)が return_to を含むときは、ApiError の returnTo に入る(ないとき・文字列でないときは undefined)", async () => {
+  it("失敗の応答(409・400)が return_to を含むときは、GoogleExchangeError の returnTo に入る(ないとき・文字列でないときは空)", async () => {
     respondWith(409, { errors: ["exists"], return_to: "/oauth/authorize?client_id=app-1&state=xyz" });
     const withReturn = await authApi.exchangeGoogleCode("c").catch((e: unknown) => e);
-    expect((withReturn as ApiError).returnTo).toBe("/oauth/authorize?client_id=app-1&state=xyz");
+    expect(withReturn).toBeInstanceOf(GoogleExchangeError);
+    expect(withReturn).toBeInstanceOf(ApiError);
+    expect((withReturn as GoogleExchangeError).returnTo).toBe("/oauth/authorize?client_id=app-1&state=xyz");
+    expect((withReturn as GoogleExchangeError).messages).toEqual(["exists"]);
+    expect((withReturn as GoogleExchangeError).status).toBe(409);
 
     respondWith(400, { errors: ["failed"] });
-    expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as ApiError).returnTo).toBeUndefined();
+    expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as GoogleExchangeError).returnTo).toBe("");
 
     respondWith(400, { errors: ["failed"], return_to: { evil: true } });
-    expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as ApiError).returnTo).toBeUndefined();
+    expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as GoogleExchangeError).returnTo).toBe("");
+  });
+
+  it("Google の交換以外の API の失敗は、ふつうの ApiError のまま(Google 専用の項目を持たない)", async () => {
+    respondWith(401, { error: "Invalid email or password", return_to: "/somewhere" });
+    const failed = await authApi.login({ email: "a@example.com", password: "x" }).catch((e: unknown) => e);
+    expect(failed).toBeInstanceOf(ApiError);
+    expect(failed).not.toBeInstanceOf(GoogleExchangeError);
+    expect("returnTo" in (failed as object)).toBe(false);
+  });
+
+  it("交換と結び付けの開始は、cookie を送受信する(withCredentials)。それ以外の API は、付けない", async () => {
+    respondWith(200, { linked: true, return_to: "" });
+    await authApi.exchangeGoogleCode("c");
+    expect(sent.withCredentials).toBe(true);
+
+    respondWith(200, { redirect_url: "https://accounts.google.com/x" });
+    await authApi.startGoogleLink();
+    expect(sent.withCredentials).toBe(true);
+
+    respondWith(200, { identities: [] });
+    await authApi.listIdentities();
+    expect(sent.withCredentials).toBeUndefined();
   });
 
   it("startGoogleLink は POST /me/identities/google/link で、戻り先を snake_case で送り、Google の URL(redirectUrl)を返す", async () => {

@@ -7,12 +7,14 @@ import "../../../lib/i18n";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { byText, cleanup, click, eventually, mount, need, type as typeInto } from "../../../test/dom";
 import { AuthProvider, useAuth } from "../AuthProvider";
-import { authApi } from "../api/authApiClient";
+import { GoogleExchangeError, authApi } from "../api/authApiClient";
 import type { GoogleExchangeResponse } from "../types";
 import GoogleCompletePage from "./GoogleCompletePage";
 import SigninPage from "./SigninPage";
 
-vi.mock("../api/authApiClient", () => ({
+// 通信(authApi)だけを差し替え、失敗の型(GoogleExchangeError)は、本物を使う。
+vi.mock("../api/authApiClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/authApiClient")>()),
   authApi: { exchangeGoogleCode: vi.fn(), login: vi.fn(), me: vi.fn() },
 }));
 vi.mock("../../../api/meta", () => ({ useMeta: () => ({ data: { loginProviders: ["google"] } }) }));
@@ -173,7 +175,7 @@ describe("Google の手続きが失敗したあとの、元の画面への戻り
 
   // backend は、失敗の応答(409・400)に、検証済みの戻り先(return_to)を含める。画面は、それをサインインの画面へ渡すだけ。
   async function failWith(returnTo: string | undefined) {
-    exchangeGoogleCode.mockRejectedValue(new ApiError([CONFLICT], 409, returnTo));
+    exchangeGoogleCode.mockRejectedValue(new GoogleExchangeError(new ApiError([CONFLICT], 409, { return_to: returnTo })));
     return mount(
       <MemoryRouter initialEntries={["/auth/google/complete?code=one-time-code"]}>
         <Shell>{routes}</Shell>

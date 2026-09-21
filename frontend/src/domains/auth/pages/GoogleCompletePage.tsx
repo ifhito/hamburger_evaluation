@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
-import { authApi } from "../api/authApiClient";
+import { GoogleExchangeError, authApi } from "../api/authApiClient";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { appPathOrNull } from "../../../app/router/returnTo";
 import { Button } from "../../../components/Button";
@@ -60,7 +60,7 @@ export default function GoogleCompletePage() {
       .catch((e: unknown) =>
         setFailure(
           e instanceof ApiError
-            ? { messages: e.messages, returnTo: e.returnTo ?? "", retryable: e.status >= 500 }
+            ? { messages: e.messages, returnTo: e instanceof GoogleExchangeError ? e.returnTo : "", retryable: e.status >= 500 }
             : { messages: [t("auth.google.error")], returnTo: "", retryable: true },
         ),
       );

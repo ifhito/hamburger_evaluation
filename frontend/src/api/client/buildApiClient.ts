@@ -5,15 +5,15 @@ import snakecaseKeys from "snakecase-keys";
 export class ApiError extends Error {
   readonly messages: string[];
   readonly status: number;
-  // 失敗の応答が返す、手続きのあとに戻る先(Google でのサインインの失敗など。backend が確かめたもの)。なければ undefined。
-  readonly returnTo?: string;
+  // 失敗の応答の本文(errors・error 以外の項目を読みたい呼び出し側のため。解釈は、呼び出し側が行う)。
+  readonly body: unknown;
 
-  constructor(messages: string[], status: number, returnTo?: string) {
+  constructor(messages: string[], status: number, body?: unknown) {
     super(messages[0]);
     this.name = "ApiError";
     this.messages = messages;
     this.status = status;
-    this.returnTo = returnTo;
+    this.body = body;
   }
 }
 
@@ -62,11 +62,10 @@ export function buildApiClient(getToken?: () => string | null) {
     },
     (error: unknown) => {
       if (axios.isAxiosError(error) && error.response) {
-        const data = error.response.data as { error?: string; errors?: string[]; return_to?: unknown };
+        const data = error.response.data as { error?: string; errors?: string[] };
         const messages =
           data.errors ?? (data.error ? [data.error] : ["An error occurred"]);
-        const returnTo = typeof data.return_to === "string" ? data.return_to : undefined;
-        return Promise.reject(new ApiError(messages, error.response.status, returnTo));
+        return Promise.reject(new ApiError(messages, error.response.status, data));
       }
       return Promise.reject(error);
     }
