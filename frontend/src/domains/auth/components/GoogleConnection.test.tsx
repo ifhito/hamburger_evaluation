@@ -231,4 +231,35 @@ describe("GoogleConnection(プロフィールの Google の連携。一覧の取
     expect(page.textContent).toContain("Connected as carol@gmail.example");
     expect(page.textContent).not.toContain("Google disconnected.");
   });
+
+  it("結び付いていて、backend が解除できないと返したとき(サインインする方法がなくなる)は、「解除」を出さず、理由を出す", async () => {
+    listIdentities.mockResolvedValue({ identities: [{ ...connected.identities[0], canUnlink: false }] });
+    const page = await show();
+
+    await eventually(() => expect(page.textContent).toContain("Connected as carol@gmail.example"));
+
+    expect(byText(page, "button", "Disconnect")).toBeUndefined();
+    expect(page.textContent).toContain("Add a password");
+  });
+
+  it("メールに HTML があっても、文字として描画する(解釈しない)", async () => {
+    listIdentities.mockResolvedValue({ identities: [{ ...connected.identities[0], email: "<img src=x onerror=alert(1)>@evil.example" }] });
+    const page = await show();
+
+    await eventually(() => expect(page.textContent).toContain("Connected as <img src=x onerror=alert(1)>@evil.example"));
+
+    expect(page.querySelector("img")).toBeNull();
+  });
+
+  it("解除の通信中は、処理中の表示になり、連携の表示は、そのまま", async () => {
+    listIdentities.mockResolvedValue(connected);
+    unlinkGoogle.mockReturnValue(new Promise(() => undefined));
+    const page = await show();
+    await eventually(() => expect(page.textContent).toContain("Connected as carol@gmail.example"));
+
+    await click(need(byText(page, "button", "Disconnect"), "Disconnect"));
+
+    expect(page.textContent).toContain("Loading");
+    expect(page.textContent).toContain("Connected as carol@gmail.example");
+  });
 });

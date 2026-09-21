@@ -9,11 +9,12 @@ import { isNavigable } from "../../oauth/navigation";
 import { GOOGLE_PROVIDER, googleEnabled } from "../googleFlow";
 import { useIdentities } from "../hooks/useIdentities";
 import type { Identity } from "../types";
+import section from "../../../components/profileSection.module.css";
 import styles from "./googleConnection.module.css";
 
 // 連携の状態。一覧を取得できたとき(loaded)だけ、連携の有無と操作を出す(取得中・取得の失敗を、「未連携」と混ぜない)。
 // loaded の identity は、結び付いていればその内容、なければ null。
-export type ConnectionState = { kind: "loading" } | { kind: "failed" } | { kind: "loaded"; identity: Identity | null };
+type ConnectionState = { kind: "loading" } | { kind: "failed" } | { kind: "loaded"; identity: Identity | null };
 
 interface ViewProps {
   state: ConnectionState;
@@ -27,12 +28,12 @@ interface ViewProps {
 }
 
 // プロフィールの Google の連携の見た目。何が押せるかは、backend が返す canUnlink に従う(解除してよいかの判断は持たない)。
-export function GoogleConnectionView({ state, actionError, disconnected, busy, onConnect, onDisconnect, onRetry }: ViewProps) {
+function GoogleConnectionView({ state, actionError, disconnected, busy, onConnect, onDisconnect, onRetry }: ViewProps) {
   const { t } = useTranslation();
   const identity = state.kind === "loaded" ? state.identity : null;
   return (
-    <section className={styles.section}>
-      <h2 className={styles.heading}>{t("auth.google.profile.heading")}</h2>
+    <section className={section.section}>
+      <h2 className={section.heading}>{t("auth.google.profile.heading")}</h2>
       {actionError && <ErrorMessage message={actionError} />}
       {disconnected && (
         <p role="status" className={styles.muted}>
