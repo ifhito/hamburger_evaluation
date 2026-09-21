@@ -22,7 +22,7 @@
 
 場所: `backend-go/`
 
-- 言語: Go 1.22(`go.mod`)。
+- 言語: Go 1.27(`go.mod`)。
 - HTTP: 標準 `net/http` のルーティング。Web フレームワークも ORM も使わない。
 - データベース: PostgreSQL 16(pgx)。クエリは sqlc で生成する。マイグレーションは `db/migrations/`。
 - パッケージマネージャー: Go modules。
