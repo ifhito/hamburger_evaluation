@@ -101,6 +101,37 @@ CREATE TABLE users (
 | PlanetScale Postgres | $39/月〜 | 過剰 |
 | AWS RDS / Cloud SQL | $10〜15/月〜 | 過剰 |
 
+## 実測(2026-09-21、Phase 1)
+
+4 社すべてで**マイグレーション 12 本が無改変で適用でき、sqlc の生成コードもそのまま動いた**。
+PostgreSQL は 17 以上で `gen_random_uuid()` も問題ない。**互換性では差がつかなかった。**
+
+差が出たのはレイテンシだけで、しかもほぼ地理的距離で決まった(日本から計測)。
+
+| 候補 | リージョン | `GET /shops` p50 | 接続数 |
+|---|---|---|---|
+| Neon | Singapore | **80ms** | 50 まで OK |
+| Render Postgres | Oregon | 139ms | 50 まで OK |
+| Supabase | Mumbai | 142ms | 50 まで OK |
+| Xata | US East | 187ms | 50 まで OK |
+
+`/up`(DB に ping するだけ)と `/shops`(実クエリ)の p50 がほぼ同じで、
+**この規模では DB の処理時間ではなく往復の時間が支配的**である。
+
+詳細と、Supabase の Direct connection が IPv6 専用で Docker から繋がらない件は
+`docs/benchmarks/phase1-summary.md` にある。
+
+### リージョンの制約
+
+今回の順位は、無料枠で選べるリージョンがそのまま出たものである。
+
+- Neon: 無料枠は ap-southeast-1(シンガポール)。東京はない
+- Supabase: **新規プロジェクトなら東京(ap-northeast-1)を選べる**。今回は既存の
+  ムンバイのプロジェクトを使ったため不利に出た
+- Render: 無料枠は us-west(オレゴン)。シンガポールは有料プランのみ
+
+**Supabase を東京で作り直せば Neon を下回る可能性が高い。** 再計測の価値がある。
+
 ## 決定(案)
 
 - **Neon(無料枠)** を第一候補とする。
