@@ -110,6 +110,23 @@ func (s *Server) mux() *http.ServeMux {
 	return mux
 }
 
+// Close はサーバーを止める。
+func (s *Server) Close() { s.srv.Close() }
+
+// SetUser は、次の認可から、ID トークンに入れる利用者を設定する。
+func (s *Server) SetUser(u User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.user = u
+}
+
+// SetTweaks は、わざと不正にする指定を設定する。
+func (s *Server) SetTweaks(tw Tweaks) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tweaks = tw
+}
+
 func mustKey() *rsa.PrivateKey {
 	k, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
