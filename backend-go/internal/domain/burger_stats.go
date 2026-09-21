@@ -214,7 +214,7 @@ const (
 	// recalcRetryMaxDelay は、再試行までの待ち時間の上限である。
 	recalcRetryMaxDelay = 5 * time.Minute
 	// MaxRecalcFailureReasonChars は、記録する失敗の理由の文字数の上限(Unicode のコードポイント数)である。
-	// DB の CHECK 制約 burger_stats_dirty_last_error_length_check(000010_create_burger_stats_dirty)と
+	// DB の CHECK 制約 burger_stats_dirty_last_error_max_length(000010_create_burger_stats_dirty)と
 	// 同じ値でなければならない。食い違いは db/migrations_test.go が検出する。
 	MaxRecalcFailureReasonChars = 500
 )

@@ -25,6 +25,14 @@ func withMailConfig(cfg Config) Config {
 	return cfg
 }
 
+// withStatsWorkerDefaults は、期待値に、統計のワーカーの既定の設定を足す(それ以外を指定しないテスト用)。
+func withStatsWorkerDefaults(cfg Config) Config {
+	cfg.StatsWorkerInterval = time.Second
+	cfg.StatsWorkerBatch = 20
+	cfg.StatsWorkerMaxAttempts = 8
+	return cfg
+}
+
 // withMailEnv は、env に mailEnv を足したコピーを返す（env にある値が優先される）。
 func withMailEnv(env map[string]string) func(string) string {
 	return func(key string) string {
@@ -185,7 +193,7 @@ func TestLoadConfig(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadConfig returned error: %v", err)
 			}
-			if want := withMailConfig(tt.want); got != want {
+			if want := withStatsWorkerDefaults(withMailConfig(tt.want)); got != want {
 				t.Fatalf("LoadConfig = %+v, want %+v", got, want)
 			}
 		})
@@ -310,4 +318,43 @@ func TestLoadConfigMail(t *testing.T) {
 			t.Fatalf("error = %v, want error without the password value", err)
 		}
 	})
+}
+
+func TestLoadConfigStatsWorker(t *testing.T) {
+	t.Run("設定すると、その値が使われる", func(t *testing.T) {
+		cfg, err := mailLoader(map[string]string{
+			"STATS_WORKER_INTERVAL":     "250ms",
+			"STATS_WORKER_BATCH":        "5",
+			"STATS_WORKER_MAX_ATTEMPTS": "3",
+		})
+		if err != nil {
+			t.Fatalf("LoadConfig returned error: %v", err)
+		}
+		if cfg.StatsWorkerInterval != 250*time.Millisecond || cfg.StatsWorkerBatch != 5 || cfg.StatsWorkerMaxAttempts != 3 {
+			t.Errorf("ワーカーの設定が違う: %+v", cfg)
+		}
+	})
+
+	// 間違えた値を黙って既定に戻すと、設定したつもりの値が効いていないことに気づけない。
+	// 起動時に、どの変数が悪いかを伝えて失敗させる。
+	for name, env := range map[string]map[string]string{
+		"STATS_WORKER_INTERVAL":     {"STATS_WORKER_INTERVAL": "soon"},
+		"STATS_WORKER_INTERVAL が 0": {"STATS_WORKER_INTERVAL": "0s"},
+		"STATS_WORKER_INTERVAL が負":  {"STATS_WORKER_INTERVAL": "-1s"},
+		"STATS_WORKER_BATCH":        {"STATS_WORKER_BATCH": "many"},
+		"STATS_WORKER_BATCH が 0":    {"STATS_WORKER_BATCH": "0"},
+		"STATS_WORKER_MAX_ATTEMPTS": {"STATS_WORKER_MAX_ATTEMPTS": "-2"},
+	} {
+		t.Run("不正な値はエラーになる: "+name, func(t *testing.T) {
+			_, err := mailLoader(env)
+			if err == nil {
+				t.Fatal("LoadConfig returned nil error, want error")
+			}
+			for key := range env {
+				if !strings.Contains(err.Error(), key) {
+					t.Errorf("エラーに変数名 %s がない: %v", key, err)
+				}
+			}
+		})
+	}
 }

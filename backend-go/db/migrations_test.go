@@ -215,10 +215,45 @@ func TestMigrationsAcceptance(t *testing.T) {
 			"users_username_max_length":        domain.MaxUsernameChars,
 			"users_bio_max_length":             domain.MaxBioChars,
 			"users_email_max_length":           domain.MaxEmailChars,
+
+			"burger_stats_dirty_last_error_max_length": domain.MaxRecalcFailureReasonChars,
 		}
 		if fmt.Sprint(got) != fmt.Sprint(want) {
 			t.Fatalf("CHECK の上限が domain の定数と違う:\n got %v\nwant %v", got, want)
 		}
+	})
+
+	// 再計算の依頼は、バーガーごとに 1 行だけで、存在しないバーガーと負の失敗回数は入らない。
+	// version は、行を消して作り直しても、前の値に戻らない(戻ると、古い再計算が、新しく入った
+	// 依頼を、同じ番号だと思って消してしまう)。
+	t.Run("再計算の依頼は、バーガーごとに 1 行で、消して作り直しても version が戻らない", func(t *testing.T) {
+		var burgerID string
+		if err := conn.QueryRow(ctx, "INSERT INTO burgers (name) VALUES ('依頼の確認用バーガー') RETURNING id::text").Scan(&burgerID); err != nil {
+			t.Fatalf("insert burger: %v", err)
+		}
+		insertVersion := func() int64 {
+			t.Helper()
+			var v int64
+			if err := conn.QueryRow(ctx, "INSERT INTO burger_stats_dirty (burger_id) VALUES ($1) RETURNING version", burgerID).Scan(&v); err != nil {
+				t.Fatalf("insert burger_stats_dirty: %v", err)
+			}
+			return v
+		}
+		first := insertVersion()
+		_, err := conn.Exec(ctx, "INSERT INTO burger_stats_dirty (burger_id) VALUES ($1)", burgerID)
+		assertPgError(t, err, "23505", "burger_stats_dirty_pkey")
+
+		if _, err := conn.Exec(ctx, "DELETE FROM burger_stats_dirty WHERE burger_id = $1", burgerID); err != nil {
+			t.Fatalf("delete burger_stats_dirty: %v", err)
+		}
+		if second := insertVersion(); second <= first {
+			t.Errorf("作り直した依頼の version = %d, want > %d", second, first)
+		}
+
+		_, err = conn.Exec(ctx, "UPDATE burger_stats_dirty SET attempts = -1 WHERE burger_id = $1", burgerID)
+		assertPgError(t, err, "23514", "burger_stats_dirty_attempts_check")
+		_, err = conn.Exec(ctx, "INSERT INTO burger_stats_dirty (burger_id) VALUES ('00000000-0000-4000-8000-000000000000')")
+		assertPgError(t, err, "23503", "burger_stats_dirty_burger_id_fkey")
 	})
 
 	// AC2：すべての migration を down すると空の database に戻る。
@@ -244,7 +279,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	t.Helper()
 
-	wantTables := []string{"burger_stats", "burgers", "mail_deliveries", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
+	wantTables := []string{"burger_stats", "burger_stats_dirty", "burgers", "mail_deliveries", "reviews", "shops", "shops_burgers", "signup_verifications", "users"}
 	gotTables := queryStrings(ctx, t, conn,
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
@@ -260,6 +295,14 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burger_stats/weighted_score/double precision/NO",
 		"burger_stats/confidence/double precision/NO",
 		"burger_stats/calculated_at/timestamp with time zone/NO",
+		// burger_stats_dirty は 000010 で追加された(統計の再計算の依頼)。
+		"burger_stats_dirty/burger_id/uuid/NO",
+		"burger_stats_dirty/version/bigint/NO",
+		"burger_stats_dirty/attempts/integer/NO",
+		"burger_stats_dirty/next_attempt_at/timestamp with time zone/YES",
+		"burger_stats_dirty/last_error/text/YES",
+		"burger_stats_dirty/created_at/timestamp with time zone/NO",
+		"burger_stats_dirty/updated_at/timestamp with time zone/NO",
 		"burgers/id/uuid/NO",
 		"burgers/name/text/NO",
 		"burgers/created_at/timestamp with time zone/NO",
@@ -371,6 +414,10 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"mail_deliveries/mail_deliveries_kind_check/c",
 		"mail_deliveries/mail_deliveries_status_check/c",
 		"mail_deliveries/mail_deliveries_sent_at_check/c",
+		"burger_stats_dirty/burger_stats_dirty_pkey/p",
+		"burger_stats_dirty/burger_stats_dirty_burger_id_fkey/f",
+		"burger_stats_dirty/burger_stats_dirty_attempts_check/c",
+		"burger_stats_dirty/burger_stats_dirty_last_error_max_length/c",
 	}
 	for _, want := range wantConstraints {
 		if !constraints[want] {
@@ -451,6 +498,8 @@ var textLimitCases = []textLimitCase{
 		"INSERT INTO users (email, username, password_digest, bio) VALUES ('b' || md5(random()::text) || '@example.com', 'bio-user', 'digest', $1)"},
 	{"users.email", domain.MaxEmailChars, "users_email_max_length",
 		"INSERT INTO users (email, username, password_digest) VALUES ($1, 'limit-user', 'digest')"},
+	{"burger_stats_dirty.last_error", domain.MaxRecalcFailureReasonChars, "burger_stats_dirty_last_error_max_length",
+		"INSERT INTO burger_stats_dirty (burger_id, last_error) VALUES ((SELECT id FROM burgers ORDER BY created_at LIMIT 1), $1)"},
 }
 
 // assertTextLimits は、各列で「上限ちょうど（マルチバイトを含む）は入る」「1 文字超えると

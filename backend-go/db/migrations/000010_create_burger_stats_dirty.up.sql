@@ -19,7 +19,7 @@ CREATE TABLE burger_stats_dirty (
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT burger_stats_dirty_attempts_check CHECK (attempts >= 0),
-    CONSTRAINT burger_stats_dirty_last_error_length_check CHECK (char_length(last_error) <= 500)
+    CONSTRAINT burger_stats_dirty_last_error_max_length CHECK (char_length(last_error) <= 500)
 );
 
 -- 表を消すと sequence も一緒に消えるようにする。
