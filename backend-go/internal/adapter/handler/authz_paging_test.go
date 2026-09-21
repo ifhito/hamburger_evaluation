@@ -85,7 +85,7 @@ func TestReviewCanEdit(t *testing.T) {
 	}
 	for _, v := range viewers {
 		t.Run("詳細: "+v.name, func(t *testing.T) {
-			rec := do(router, http.MethodGet, fmt.Sprintf("/reviews/%d", cheeseReviewID), "", v.auth)
+			rec := do(router, http.MethodGet, fmt.Sprintf("/reviews/%s", cheeseReviewID), "", v.auth)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body)
 			}
@@ -120,7 +120,7 @@ func TestReviewCanEdit(t *testing.T) {
 	})
 
 	t.Run("更新のレスポンスは author 本人なので true", func(t *testing.T) {
-		rec := do(router, http.MethodPut, fmt.Sprintf("/reviews/%d", cheeseReviewID), `{"review":{"rating":5,"comment":"edited"}}`, aliceAuth)
+		rec := do(router, http.MethodPut, fmt.Sprintf("/reviews/%s", cheeseReviewID), `{"review":{"rating":5,"comment":"edited"}}`, aliceAuth)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body)
 		}
@@ -132,7 +132,7 @@ func TestReviewCanEdit(t *testing.T) {
 	t.Run("shop 詳細に埋め込まれる review には can_edit を含めない", func(t *testing.T) {
 		// shop 詳細の review は閲覧者ごとの値を持たない（別の型）。frontend が誤って使えないようにする。
 		shopRepo := seedShops(uid.N(1))
-		shopRepo.reviews[uid.N(1)] = []domain.ShopReview{{ID: 9, Rating: 4, User: &domain.UserRef{ID: uid.N(3), Username: "bob"}}}
+		shopRepo.reviews[uid.N(1)] = []domain.ShopReview{{ID: uid.N(9), Rating: 4, User: &domain.UserRef{ID: uid.N(3), Username: "bob"}}}
 		shopRouter, _, _, _ := newShopsRouter(t, shopRepo)
 		rec := do(shopRouter, http.MethodGet, "/shops/"+uid.N(1), "", "")
 		reviews, ok := decodeJSONObject(t, rec.Body.Bytes())["reviews"].([]any)
@@ -202,7 +202,7 @@ func TestListReviewsHasMore(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := seedReviewWorld(uid.N(1))
 			for i := 1; i <= tt.total; i++ {
-				id := int64(i)
+				id := uid.N(i)
 				repo.reviews[id] = &fakeStoredReview{review: domain.Review{
 					ID: id, Rating: 3, AuthorID: uid.N(1), BurgerID: cheeseBurgerID,
 					CreatedAt: reviewBaseTime.Add(0),

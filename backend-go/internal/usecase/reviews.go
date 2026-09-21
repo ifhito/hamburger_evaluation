@@ -31,7 +31,7 @@ type ReviewQuery interface {
 	// review を 1 件返すか、（wrap された）domain.ErrReviewNotFound を返す。
 	// 存在しない review、discard 済みの review、author が discard 済みの
 	// user である review は区別できない。
-	GetReview(ctx context.Context, id int64) (domain.ReviewDetail, error)
+	GetReview(ctx context.Context, id string) (domain.ReviewDetail, error)
 	// GetShop は素の shop の行（creator なし、review なし）を返すか、
 	// （wrap された）domain.ErrShopNotFound を返す。
 	GetShop(ctx context.Context, id string) (domain.Shop, error)
@@ -111,7 +111,7 @@ func (s *Reviews) List(ctx context.Context, viewer *domain.User, filter ReviewLi
 // discard 済みの review、author が discard 済みの user である review は、
 // いずれも domain.ErrReviewNotFound を返す。viewer（nil = 匿名）は CanEdit の
 // 設定だけに使う。
-func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id int64) (domain.ReviewDetail, error) {
+func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (domain.ReviewDetail, error) {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("get review: %w", err)
@@ -212,7 +212,7 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 // 後にはじめて古い blob を best-effort で削除する。
 // nil の upload は content だけの書き込みを行い、photo_key には触れない
 // （写真を削除する経路はない）。
-func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
+func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
@@ -262,7 +262,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id int64, rati
 // （403、Update と同様に author のみ）、そしてカラム限定の discard の順で
 // 行い、hard DELETE は決して行わない。写真の blob があれば、discard が
 // 成功した後に best-effort で削除される（S10）。
-func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id int64) error {
+func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id string) error {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete review: %w", err)

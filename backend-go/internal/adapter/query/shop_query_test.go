@@ -258,11 +258,11 @@ func TestShopQuery(t *testing.T) {
 			VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 		t1 := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
 		t2 := time.Date(2024, 5, 2, 10, 0, 0, 0, time.UTC)
-		r1 := dbtest.InsertRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
-		r2 := dbtest.InsertRow(ctx, t, conn, insertReview, 3, nil, carol, cheese, nil, t2)
-		r3 := dbtest.InsertRow(ctx, t, conn, insertReview, 4, nil, alice, plain, nil, t2) // r2 と同時刻：id desc で同順位を解消する
-		dbtest.InsertRow(ctx, t, conn, insertReview, 1, "discarded", alice, cheese, time.Now(), t2)
-		dbtest.InsertRow(ctx, t, conn, insertReview, 2, "other shop", alice, other, nil, t2)
+		r1 := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
+		r2 := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 3, nil, carol, cheese, nil, t2)
+		r3 := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 4, nil, alice, plain, nil, t2) // r2 と同時刻：id desc で同順位を解消する
+		dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 1, "discarded", alice, cheese, time.Now(), t2)
+		dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 2, "other shop", alice, other, nil, t2)
 		if _, err := conn.Exec(ctx,
 			`INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at)
 			 VALUES ($1, 2, 4.0, 3.9, 0.7, now())`, cheese); err != nil {
@@ -290,6 +290,10 @@ func TestShopQuery(t *testing.T) {
 				User:   &domain.UserRef{ID: alice, Username: "alice"},
 				Burger: &domain.ShopReviewBurger{ID: cheese, Name: "Cheese", AverageRating: 4.0, ReviewCount: 2, WeightedScore: 3.9, Confidence: 0.7},
 			},
+		}
+		// r3 と r2 は created_at が同じなので、id の降順（UUID は文字列としての降順）で並ぶ。
+		if want[0].ID < want[1].ID {
+			want[0], want[1] = want[1], want[0]
 		}
 		if len(reviews) != len(want) {
 			t.Fatalf("got %d reviews (%+v), want %d", len(reviews), reviews, len(want))

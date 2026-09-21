@@ -94,7 +94,7 @@ func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID string, 
 // domain.ErrReviewNotFound を返す。カラム単位に限定される：discarded_at は決して
 // 書き込まれないので、edit が soft delete を復活させることも、soft delete と
 // race することもない。
-func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, rating int, comment string) (domain.Review, error) {
+func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id string, rating int, comment string) (domain.Review, error) {
 	row, err := r.q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
 		ID:      id,
 		Rating:  int16(rating),
@@ -116,7 +116,7 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id int64, ra
 // 実行されるので、photo を伴う edit は、content と key をまとめて commit するか、何も
 // commit しないかのどちらかになる。2 番目のステートメントが返す行には、最初のステートメントの
 // rating/comment がすでに反映されている（同一トランザクション）。
-func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id int64, rating int, comment string, photoKey *string) (domain.Review, error) {
+func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error) {
 	var row sqlcgen.Review
 	err := withTx(ctx, r.db, "update review content and photo key", func(q *sqlcgen.Queries) error {
 		if _, err := q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
@@ -151,7 +151,7 @@ func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, i
 // DiscardReview は review を soft delete する（discarded_at に時刻を刻み、
 // hard DELETE は決して行わない）。存在しない review や、すでに discard 済みの
 // review はどの行にも一致せず、domain.ErrReviewNotFound を返す。
-func (r *ReviewRepository) DiscardReview(ctx context.Context, id int64) error {
+func (r *ReviewRepository) DiscardReview(ctx context.Context, id string) error {
 	if _, err := r.q.DiscardReview(ctx, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("discard review: %w", domain.ErrReviewNotFound)

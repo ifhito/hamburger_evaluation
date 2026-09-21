@@ -266,7 +266,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 			t.Errorf("update discarded review = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 		if err := fail(func(tx usecase.Tx) error {
-			_, err := tx.Reviews.UpdateContent(ctx, 99999, 1, "x")
+			_, err := tx.Reviews.UpdateContent(ctx, uid.N(99999), 1, "x")
 			return err
 		}); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("update unknown review = %v, want %v", err, domain.ErrReviewNotFound)
@@ -274,7 +274,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		if err := fail(func(tx usecase.Tx) error { return tx.Reviews.Discard(ctx, victim.ID) }); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("second discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if err := fail(func(tx usecase.Tx) error { return tx.Reviews.Discard(ctx, 99999) }); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := fail(func(tx usecase.Tx) error { return tx.Reviews.Discard(ctx, uid.N(99999)) }); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 
@@ -376,7 +376,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 		if created.Burger == nil || !reflect.DeepEqual(*created.Burger, want) {
 			t.Errorf("burger = %+v, want the seeded pre-insert stats %+v", created.Burger, want)
 		}
-		if created.ID == 0 || created.BurgerID != cheese || created.CreatedAt.IsZero() {
+		if created.ID == "" || created.BurgerID != cheese || created.CreatedAt.IsZero() {
 			t.Errorf("created = %+v, want a stored review for burger %s", created.Review, cheese)
 		}
 		if got := burgersNamed(t, "Cheese"); got != 1 {
@@ -515,11 +515,11 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListReviews returned error: %v", err)
 		}
-		ids := make([]int64, 0, len(feed))
+		ids := make([]string, 0, len(feed))
 		for _, r := range feed {
 			ids = append(ids, r.ID)
 		}
-		if want := []int64{aliceShared.ID}; !reflect.DeepEqual(ids, want) {
+		if want := []string{aliceShared.ID}; !reflect.DeepEqual(ids, want) {
 			t.Fatalf("feed ids = %v, want %v (victim's reviews hidden)", ids, want)
 		}
 		sharedStats := dbtest.RequireConsistentStats(ctx, t, conn, shared)
@@ -543,11 +543,11 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListShopReviews returned error: %v", err)
 		}
-		shopIDs := make([]int64, 0, len(shopReviews))
+		shopIDs := make([]string, 0, len(shopReviews))
 		for _, r := range shopReviews {
 			shopIDs = append(shopIDs, r.ID)
 		}
-		if want := []int64{aliceShared.ID}; !reflect.DeepEqual(shopIDs, want) {
+		if want := []string{aliceShared.ID}; !reflect.DeepEqual(shopIDs, want) {
 			t.Errorf("shop review ids = %v, want %v (victim's review hidden)", shopIDs, want)
 		}
 	})

@@ -45,7 +45,7 @@ type userRefResponse struct {
 }
 
 type shopReviewResponse struct {
-	ID        int64   `json:"id"`
+	ID        string  `json:"id"`
 	Rating    int     `json:"rating"`
 	Comment   *string `json:"comment"`
 	CreatedAt string  `json:"created_at"`

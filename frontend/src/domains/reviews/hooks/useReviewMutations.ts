@@ -48,7 +48,7 @@ export function useCreateReview() {
   };
 }
 
-export function useUpdateReview(id: number) {
+export function useUpdateReview(id: string) {
   const { mutate } = useSWRConfig();
   return {
     update: async (data: ReviewUpdateInput, photo?: File | null): Promise<ReviewView> => {
@@ -63,7 +63,7 @@ export function useUpdateReview(id: number) {
 export function useDeleteReview() {
   const { mutate } = useSWRConfig();
   return {
-    destroy: async (id: number): Promise<void> => {
+    destroy: async (id: string): Promise<void> => {
       await reviewApiClient.delete(`/reviews/${id}`);
       await mutate(isReviewKey);
     },

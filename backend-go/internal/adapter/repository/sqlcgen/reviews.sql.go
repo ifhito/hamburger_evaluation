@@ -60,7 +60,7 @@ RETURNING burger_id
 // しかも 1 回だけ行う。すでに discard 済みの review はどの行にもマッチせず、
 // not found として現れる。burger_id を返すので、呼び出し元は同じ
 // トランザクション内でその burger の統計を再計算できる。
-func (q *Queries) DiscardReview(ctx context.Context, id int64) (string, error) {
+func (q *Queries) DiscardReview(ctx context.Context, id string) (string, error) {
 	row := q.db.QueryRow(ctx, discardReview, id)
 	var burger_id string
 	err := row.Scan(&burger_id)
@@ -80,7 +80,7 @@ WHERE r.id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL
 `
 
 type GetReviewDetailRow struct {
-	ID            int64
+	ID            string
 	Rating        int16
 	Comment       pgtype.Text
 	PhotoKey      pgtype.Text
@@ -99,7 +99,7 @@ type GetReviewDetailRow struct {
 // burger、統計付き）。公開の詳細 endpoint と、編集・削除の認可のための
 // 読み込み（user_id が所有者チェックを担う）の両方に使われる。author が
 // discard 済みの review は、存在しない review と区別がつかなくなる（S8）。
-func (q *Queries) GetReviewDetail(ctx context.Context, id int64) (GetReviewDetailRow, error) {
+func (q *Queries) GetReviewDetail(ctx context.Context, id string) (GetReviewDetailRow, error) {
 	row := q.db.QueryRow(ctx, getReviewDetail, id)
 	var i GetReviewDetailRow
 	err := row.Scan(
@@ -160,7 +160,7 @@ type ListPublicReviewsParams struct {
 }
 
 type ListPublicReviewsRow struct {
-	ID            int64
+	ID            string
 	Rating        int16
 	Comment       pgtype.Text
 	PhotoKey      pgtype.Text
@@ -280,7 +280,7 @@ RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, upd
 `
 
 type UpdateReviewContentParams struct {
-	ID      int64
+	ID      string
 	Rating  int16
 	Comment pgtype.Text
 }
@@ -314,7 +314,7 @@ RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, upd
 `
 
 type UpdateReviewPhotoKeyParams struct {
-	ID       int64
+	ID       string
 	PhotoKey pgtype.Text
 }
 

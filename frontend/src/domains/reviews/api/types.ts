@@ -1,5 +1,5 @@
 export interface Review {
-  id: number;
+  id: string;
   rating: number;
   comment: string | null;
   photoUrl: string | null;
