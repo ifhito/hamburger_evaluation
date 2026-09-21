@@ -20,6 +20,8 @@ import (
 	"net/http"
 
 	"golang.org/x/image/draw"
+
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	_ "golang.org/x/image/webp" // image.Decode に webp を登録する（pure-Go で decode のみ）
 )
 
@@ -37,20 +39,15 @@ var ErrDimensionsTooLarge = fmt.Errorf("%w: dimensions exceed the limit", ErrUns
 // 受け付けない。handler は、対応しない理由が分かる別のメッセージにする。
 var ErrHEIFNotSupported = fmt.Errorf("%w: HEIC/HEIF is not supported", ErrUnsupportedImage)
 
-// MaxEdge は、保存する写真の長辺の上限(ピクセル)である。frontend が送る前に縮小する目安として
-// 使えるように、GET /meta で返す。
-const MaxEdge = 1600
-
 const (
 	// maxEdge は出力の最長辺である。これより大きい画像は縮小され、小さい
-	// 画像は決して拡大されない。
-	maxEdge = MaxEdge
+	// 画像は決して拡大されない。値(業務の規則)は domain が持つ。
+	maxEdge = domain.PhotoMaxEdge
 	// maxDimension と maxPixels は、画像ヘッダで宣言されたサイズの上限で
 	// あり、完全な decode の前にチェックされる（decompression bomb のガード）。
-	// 24MP は実際のカメラ出力をカバーする。いずれにせよ長辺は 1600px に
-	// 縮小される。
-	maxDimension = 10000
-	maxPixels    = 24_000_000
+	// 値(業務の規則)は domain が持つ。
+	maxDimension = domain.MaxPhotoDimension
+	maxPixels    = domain.MaxPhotoPixels
 	// maxDecodedBytes は、decode 後のピクセルバッファの推定メモリサイズ
 	// （bytesPerPixel × 宣言されたピクセル数）の上限である。これにより、
 	// 16-bit の画像が、ピクセル数のガードをすり抜けて約 2 倍大きい decode を

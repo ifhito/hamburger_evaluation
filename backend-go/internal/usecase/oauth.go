@@ -197,10 +197,10 @@ func NewConnectedApps(grants OAuthGrantQuery, writes *domain.OAuthGrants) *Conne
 }
 
 // List は、利用者が許可したアプリを、最近使ったものから順に、ページ送りで返す。1 ページの件数の規則は、
-// 既存の一覧(ショップ・レビュー)と同じ clampPage で、範囲外の page / perPage は、エラーにせず補正される
+// 既存の一覧(ショップ・レビュー)と同じ domain.PageBounds で、範囲外の page / perPage は、エラーにせず補正される
 // (page < 1 は 1、perPage < 1 は 20、perPage の上限は 100)。2 つ目の戻り値は、次のページがあるかである。
 func (a *ConnectedApps) List(ctx context.Context, userID string, page, perPage int) ([]domain.OAuthGrant, bool, error) {
-	limit, offset := clampPage(page, perPage)
+	limit, offset := domain.PageBounds(page, perPage)
 	grants, hasMore, err := a.grants.ListOAuthGrantsByUser(ctx, userID, limit, offset)
 	if err != nil {
 		return nil, false, fmt.Errorf("list connected apps: %w", err)

@@ -9,7 +9,6 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
-	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
 
 // TestMe は GET /me を扱う：有効なトークンは現在のユーザー(can_moderate つき)を 200 で返し、
@@ -70,7 +69,7 @@ func TestMeta(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body)
 	}
 	want := `{"rating":{"min":` + strconv.Itoa(domain.MinRating) + `,"max":` + strconv.Itoa(domain.MaxRating) + `},` +
-		`"photo":{"max_edge":` + strconv.Itoa(photo.MaxEdge) + `,"max_bytes":5242880}}`
+		`"photo":{"max_edge":` + strconv.Itoa(domain.PhotoMaxEdge) + `,"max_bytes":5242880}}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

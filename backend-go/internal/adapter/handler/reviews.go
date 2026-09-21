@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -45,10 +46,6 @@ type reviewParamsRequest struct {
 }
 
 const (
-	// maxPhotoBytes は生の写真アップロードを 5 MiB に制限する。
-	// これより大きなアップロードは 413 ではなく 422 になる。グローバルな
-	// review の body cap の方が広い。
-	maxPhotoBytes int64 = 5 << 20
 	// maxMultipartTextBytes は multipart の review 投稿の各 text フィールドを
 	// 制限する。写真の cap に比べれば小さいが、現実的なコメントには十分な
 	// 余裕がある（コメントの文字数の上限は domain の検証が 422 で判定し、
@@ -56,7 +53,9 @@ const (
 	maxMultipartTextBytes int64 = 64 << 10
 )
 
-const photoTooLargeMessage = "Photo is too large (max 5MB)"
+// photoTooLargeMessage は、写真のファイルが上限(domain.MaxPhotoBytes)を超えるときに返す。
+// これより大きなアップロードは 413 ではなく 422 になる。グローバルな review の body cap の方が広い。
+var photoTooLargeMessage = fmt.Sprintf("Photo is too large (max %dMB)", domain.MaxPhotoBytes>>20)
 
 // photoUnsupportedMessage は、形式が対応外の写真と、壊れていてデコードできない写真に返す。
 const photoUnsupportedMessage = "Photo must be a JPEG, PNG, or WebP image"
@@ -67,7 +66,7 @@ const photoHEIFMessage = "Photo must be a JPEG, PNG, or WebP image (HEIC/HEIF is
 
 // photoDimensionsMessage は、写真の寸法(横・縦・画素数)が上限を超えるときに返す。形式の違いとは
 // 直し方が違う(画像を小さくする)ので、別のメッセージにしている。
-const photoDimensionsMessage = "Photo dimensions are too large (max 10000px per side and 24 megapixels)"
+var photoDimensionsMessage = fmt.Sprintf("Photo dimensions are too large (max %dpx per side and %d megapixels)", domain.MaxPhotoDimension, domain.MaxPhotoPixels/1_000_000)
 
 // multipartReviewForm は multipart/form-data の review 投稿（写真つきの投稿の
 // 通信の取り決め）のフラットなフィールドを保持する：reviewParamsRequest と同じ値に
@@ -183,9 +182,9 @@ func readTextPart(w http.ResponseWriter, part *multipart.Part) (string, bool) {
 // ctx（request の context）は、Process 内の decode semaphore の待機を制限
 // する。false は、エラーレスポンスが既に書き込まれたことを意味する。
 func readPhotoPart(ctx context.Context, w http.ResponseWriter, part *multipart.Part) (*photo.Processed, bool) {
-	limited := &io.LimitedReader{R: part, N: maxPhotoBytes + 1}
+	limited := &io.LimitedReader{R: part, N: domain.MaxPhotoBytes + 1}
 	processed, err := photo.Process(ctx, limited)
-	if limited.N == 0 { // part が maxPhotoBytes を超えるデータを保持していた
+	if limited.N == 0 { // part が domain.MaxPhotoBytes を超えるデータを保持していた
 		writeJSON(w, http.StatusUnprocessableEntity, errorsResponse{Errors: []string{photoTooLargeMessage}})
 		return nil, false
 	}

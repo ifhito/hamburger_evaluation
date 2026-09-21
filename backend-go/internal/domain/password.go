@@ -56,3 +56,13 @@ func hasAllCharKinds(s string) bool {
 	}
 	return letter && digit && symbol
 }
+
+// ValidatePasswordConfirmation は、確認欄に入力された値(confirmation。入力がなければ nil)が、
+// パスワード(password)と一致することを判定する。確認欄が nil なら、確認を求めていないので、常に問題なし
+// (登録・プロフィールの更新のどちらも、確認欄は任意)。一致しなければ、その理由のメッセージを返す。
+func ValidatePasswordConfirmation(password string, confirmation *string) []string {
+	if confirmation != nil && *confirmation != password {
+		return []string{"Password confirmation doesn't match Password"}
+	}
+	return nil
+}

@@ -79,15 +79,11 @@ func (in UpdateUserInput) validate(currentEmail string) []string {
 	if in.passwordPresent() {
 		msgs = append(msgs, domain.ValidatePassword(*in.Password)...)
 	}
-	if in.PasswordConfirmation != nil {
-		password := ""
-		if in.Password != nil {
-			password = *in.Password
-		}
-		if *in.PasswordConfirmation != password {
-			msgs = append(msgs, "Password confirmation doesn't match Password")
-		}
+	password := ""
+	if in.Password != nil {
+		password = *in.Password
 	}
+	msgs = append(msgs, domain.ValidatePasswordConfirmation(password, in.PasswordConfirmation)...)
 	return msgs
 }
 

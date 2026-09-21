@@ -87,9 +87,7 @@ type SignupInput struct {
 func (in SignupInput) validate() []string {
 	msgs := domain.ValidateUsername(in.Username)
 	msgs = append(msgs, domain.ValidateCredentials(in.Email, in.Password)...)
-	if in.PasswordConfirmation != nil && *in.PasswordConfirmation != in.Password {
-		msgs = append(msgs, "Password confirmation doesn't match Password")
-	}
+	msgs = append(msgs, domain.ValidatePasswordConfirmation(in.Password, in.PasswordConfirmation)...)
 	return msgs
 }
 

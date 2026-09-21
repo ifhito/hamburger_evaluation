@@ -15,11 +15,11 @@ import (
 // （resource guardrail）。
 const maxRequestBodyBytes int64 = 1 << 20
 
-// maxReviewRequestBodyBytes は review の投稿 body（multipart のみ）を 6 MiB に
-// 制限する：5 MiB の写真に加え、フィールドと multipart のフレーミングの分の
-// 余裕がある。写真自体は引き続き独自の 5 MiB の上限で検査され、422 を返す
+// maxReviewRequestBodyBytes は review の投稿 body（multipart のみ）を、写真の上限
+// （domain.MaxPhotoBytes）に 1 MiB を足した大きさ（いまは 6 MiB）に制限する：写真に加え、
+// フィールドと multipart のフレーミングの分の余裕がある。写真自体は引き続き独自の上限で検査され、422 を返す
 // のはそちらである。この cap は暴走した body を 413 で止めるだけである。
-const maxReviewRequestBodyBytes int64 = 6 << 20
+const maxReviewRequestBodyBytes int64 = domain.MaxPhotoBytes + 1<<20
 
 // bodyLimit は request の body の上限を返す：より大きな上限を得るのは、
 // review の書き込み endpoint（POST /reviews、PUT /reviews/{id}）に対する

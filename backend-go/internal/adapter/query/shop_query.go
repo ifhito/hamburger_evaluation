@@ -36,7 +36,7 @@ var _ usecase.ShopQuery = (*ShopQuery)(nil)
 func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
 	params := sqlcgen.ListShopsParams{
 		ViewAll:    vis.ViewAll,
-		PageLimit:  limit + 1,
+		PageLimit:  domain.PageFetchLimit(limit),
 		PageOffset: offset,
 	}
 	params.ViewerID = vis.ViewerID
@@ -47,7 +47,7 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 	if err != nil {
 		return nil, false, fmt.Errorf("list shops: %w", err)
 	}
-	rows, hasMore := trimPage(rows, limit)
+	rows, hasMore := domain.TrimPage(rows, limit)
 	shops := make([]domain.Shop, 0, len(rows))
 	for _, row := range rows {
 		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)

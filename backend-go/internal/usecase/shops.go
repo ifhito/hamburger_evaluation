@@ -46,10 +46,10 @@ func NewShops(query ShopQuery, shops *domain.Shops) *Shops {
 
 // List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
 // ものを、ページネーションして返す。範囲外の page/perPage は、エラーにせず
-// clampPage の規則で補正される（page < 1 は 1、perPage < 1 は 20、perPage の
+// domain.PageBounds の規則で補正される（page < 1 は 1、perPage < 1 は 20、perPage の
 // 上限は 100）。2 つ目の戻り値は、次のページがあるか（has_more）である。
 func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.Shop, bool, error) {
-	limit, offset := clampPage(page, perPage)
+	limit, offset := domain.PageBounds(page, perPage)
 	shops, hasMore, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
 	if err != nil {
 		return nil, false, fmt.Errorf("list shops: %w", err)
