@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロフィールの Google 連携(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="google-login.css">
+</head>
+<body data-active="me">
+<main class="wrap page">
+  <!-- state: none = Google を連携していない / connected = 連携済み(解除できる)/ cannot = 連携済みだが、解除できない(サインインの方法が Google だけ)/ loaderror = 連携の状態を読み込めなかった -->
+  <section class="profile">
+    <span class="avatar-lg" data-only="none connected cannot loaderror">a</span>
+    <div class="profile-main">
+      <h1 data-only="none connected cannot loaderror">alice</h1>
+      <p class="bio" data-only="none connected cannot loaderror" data-en="Lunch-break burger hunter in Shinjuku. I like thick patties and a lot of cheese.">新宿でお昼にハンバーガーを探しています。厚めのパティと、たっぷりのチーズが好きです。</p>
+      <p class="email" data-only="none connected cannot loaderror">alice@example.com</p>
+      <div class="profile-actions">
+        <button class="btn ghost" data-en="Copy link">リンクをコピー</button>
+        <button class="btn ghost" data-only="none connected cannot loaderror" data-en="Edit profile">プロフィールを編集</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2 data-en="Google">Google</h2></div>
+    <div data-only="loaderror"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not load your Google connection">Google の連携を読み込めませんでした</b><p class="msg">Failed to load your Google connection.</p></div></section><p class="hint" style="margin-top:12px">連携しているかどうかが分からないので、「連携する」も「解除」も出さない。<button class="btn ghost" style="margin-left:12px" data-en="Try again">もう一度読み込む</button></p></div>
+    <article class="appitem" data-only="none">
+      <div><b class="name-sm" data-en="Google account">Google アカウント</b><p class="appmeta" data-en="Not connected. Connect it to sign in with Google.">連携していません。連携すると、Google でサインインできます。</p></div>
+      <button class="btn ghost" data-en="Connect Google">Google を連携する</button>
+    </article>
+    <article class="appitem" data-only="connected">
+      <div><b class="name-sm" data-en="Google account">Google アカウント</b><p class="appmeta" data-en="Connected as alice@gmail.com">連携済み: alice@gmail.com</p></div>
+      <button class="btn danger" data-en="Disconnect">連携を解除</button>
+    </article>
+    <article class="appitem" data-only="cannot">
+      <div><b class="name-sm" data-en="Google account">Google アカウント</b><p class="appmeta" data-en="Connected as alice@gmail.com">連携済み: alice@gmail.com</p><p class="arow-note" style="margin-top:12px" data-en="Google is your only way to sign in. Add a password to be able to disconnect it.">Google が、サインインできる唯一の方法です。パスワードを追加すると、解除できるようになります。</p></div>
+    </article>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2 data-en="Connected apps">接続済みのアプリ</h2></div>
+    <div class="apps">
+      <article class="appitem">
+        <div>
+          <b class="name-sm">Claude Code</b>
+          <ul class="scopes"><li data-en="・Read shops, reviews and profiles">・ショップ・レビュー・プロフィールを読む</li><li data-en="・Post, edit and delete reviews, and submit shops, in your name">・あなたの名前で、レビューの投稿・編集・削除と、ショップの申請をする</li></ul>
+          <p class="appmeta" data-en="Connected on Sep 21, 2026">接続した日: 2026年9月21日</p>
+        </div>
+        <button class="btn danger" data-en="Disconnect">接続を解除</button>
+      </article>
+      <article class="appitem">
+        <div>
+          <b class="name-sm">Cursor</b>
+          <ul class="scopes"><li data-en="・Read shops, reviews and profiles">・ショップ・レビュー・プロフィールを読む</li></ul>
+          <p class="appmeta" data-en="Connected on Sep 18, 2026">接続した日: 2026年9月18日</p>
+        </div>
+        <button class="btn danger" data-en="Disconnect">接続を解除</button>
+      </article>
+    </div>
+    <div class="center"><button class="btn ghost" data-en="Load more">もっと見る</button></div>
+  </section>
+  <p class="muted" style="margin-bottom:56px">(このあとに、レビューの一覧が続く。省略)</p>
+  <aside class="memo"><b>実装メモ</b><ul>
+    <li>・「Google」の欄は、本人のプロフィール(<code>can_edit</code> が <code>true</code>)で、<code>GET /meta</code> の <code>login_providers</code> に <code>google</code> があるときだけ出す。他人のプロフィール・管理者が見る他人のプロフィールには出ない。連携の状態は、本人の <code>GET /me/identities</code>(<code>email</code>・<code>can_unlink</code>)。</li>
+    <li>・「解除」を出すかは、API が返す <code>can_unlink</code>(サインインの方法がなくなるときは <code>false</code>)に従う。frontend は、パスワードがあるかを自分で判断しない。<code>false</code> のときは、「解除」を出さず、理由の一文(この画面の見本の文言は、frontend の文言。API の文言ではない)を出す。「パスワードを追加すると」は、パスワードの後からの追加の機能がまだないので、いまは案内だけ(機能の追加は別の story)。</li>
+    <li>・読み込めなかった(<code>loaderror</code>)ときは、エラーと再試行だけを出し、「連携していません」とは出さない(連携済みかもしれないため)。</li>
+    <li>・「連携する」は、認証つきの POST で、Google の URL を受け取り、ブラウザがそこへ移動する(そのブラウザに、手続きの cookie が付く)。押してから移動するまでは、ボタンを押せなくする(「プロフィールの状態」の見本)。戻ってきたら、このプロフィールへ戻る。</li>
+    <li>・この欄のボタンは、このアプリの普通のボタン(枠つきの「連携する」、赤い枠の「連携を解除」。「接続済みのアプリ」の「接続を解除」と同じ作り)。Google のブランドのボタン(「G」つき)は、サインイン・登録の「Google でサインイン」だけで、連携のボタンには、使わない案(「G」を、サインイン以外の操作に使わないため)。</li>
+  </ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+<script src="google-login.js"></script>
+</body>
+</html>

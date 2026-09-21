@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google ログインの見た目: 案の比較</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="google-login.css">
+</head>
+<body data-no-header>
+<main class="gsheet">
+  <h1>Google ログインの見た目: ボタン・文言・置き場所の案</h1>
+  <p class="lead">S43(Google でサインイン・新規登録・連携)の見た目の案です。<b>利用者が選ぶ前の案の比較</b>で、どれも確定していません。推奨は書きましたが、選ぶのは利用者です。下の「案の一覧」の順に、ボタン(G1〜G5)・文言・置き場所を比べ、最後に、推奨の案を置いた画面を見られます。色は、このアプリのトークン(白・黒・黄の面・赤はエラーだけ)のままで、<b>Google の「G」の 4 色と、ボタンの色(ライト・ニュートラル・ダーク)だけが、Google のブランドで決まっている例外</b>です。</p>
+
+  <h2>0. 前提: Google のブランドの決まり(要点)</h2>
+  <p>出典: <a href="https://developers.google.com/identity/branding-guidelines"><u>Sign in with Google Branding Guidelines</u></a>(このページの記述は、作成時に確認した内容。<b>アプリの審査(app verification)を通すために、必ず守る決まり</b>とされている)。</p>
+  <ul>
+    <li>・<b>文言</b>: 行動を促す文言として「Sign in with Google」「Sign up with Google」「Continue with Google」を勧める。<b>言語に合わせた翻訳は、許可され、勧められている</b>。「Google」だけをボタンの文言にしてはいけない。<b>このアプリにサインイン・登録する、という意味</b>が分かること(Google のアカウントを、新しく作る、という意味に見えてはいけない)。</li>
+    <li>・<b>色</b>: ライト(面 <code>#FFFFFF</code>・枠 <code>#747775</code> 1px の内側・文字 <code>#1F1F1F</code>)、ダーク(面 <code>#131314</code>・枠 <code>#8E918F</code>・文字 <code>#E3E3E3</code>)、ニュートラル(面 <code>#F2F2F2</code>・枠なし・文字 <code>#1F1F1F</code>)の 3 つ。「G」は、標準の色のものだけ(単色にしない・作り直さない・古い「G」を使わない)。<b>ライト・ダーク・ニュートラル以外の色の面の上に、「G」を置いてはいけない</b>(だから、黄色のボタンに「G」を置く案は、作れない)。「G」の大きさは変えない(伸ばさない。縦横の比を保つ)。</li>
+    <li>・<b>フォント</b>: Google Sans の Medium(14/20)。この見本は、手元のフォント(Noto Sans JP の 500)で描いている。実装では、公式の配布のボタン画像(SVG・PNG。文言の差し替えができる)か、Google Sans を使う。</li>
+    <li>・<b>大きさ・余白</b>: 拡大縮小は自由(縦横の比を保つ)。標準は高さ 40px・「G」は 18px 前後で、余白は決まっている(公式の画像で確認)。このアプリの入力欄・ボタンは高さ 44px・角丸 8px で、G2〜G4 は、その高さ・角丸にそろえた案(色・文字・「G」の決まりは、そのまま)。</li>
+    <li>・<b>並べ方</b>: ほかの外部サービスのサインインと同じ程度の目立ち方にする(ここでは、外部サービスは Google だけ)。</li>
+    <li>・このアプリの決まり(S37 で決定): 白地・黒文字・黄は「面の塗り」だけ(文字にも線にも使わない)・赤は削除とエラーだけ。「G」の 4 色は、Google のブランドの例外として、UI の他の部品には使わない。</li>
+  </ul>
+
+  <h2>1. ボタンの案(G1〜G5)</h2>
+  <p>それぞれ、フォームの幅(約 440px)に置いたところを、日本語と英語で見せています。上に、このアプリの主のボタン(黄色の面)を置いて、目立ち方の釣り合いも見られるようにしました。</p>
+  <div class="gcards" id="cards"></div>
+
+  <h2>2. 文言の案</h2>
+  <p>Google の決まりは、翻訳を許可・推奨しています。このアプリは、いまの実装の文言が「Sign in with Google」「Sign up with Google」の 2 つです(日本語の画面には、まだ日本語がありません)。</p>
+  <table class="gtable">
+    <thead><tr><th>案</th><th>サインインの画面(日本語 / English)</th><th>登録の画面(日本語 / English)</th><th>長所・短所</th></tr></thead>
+    <tbody>
+      <tr><td><b>T1 画面ごと</b><br>(いまの実装)</td><td>Google でサインイン<br>Sign in with Google</td><td>Google で登録<br>Sign up with Google</td><td>画面の目的と合う。<b>短所</b>: Google での 2 回目以降は「サインイン」、初回は「登録」になるが、どの画面から始めても、同じ手続き(初回なら、その場で登録される)。サインインの画面から進んだ初めての人が、意図せず登録されることの説明が、文言にない。</td></tr>
+      <tr><td><b>T2 どちらも「続ける」</b></td><td>Google で続ける<br>Continue with Google</td><td>Google で続ける<br>Continue with Google</td><td>実際の挙動(初回は登録、2 回目以降はサインイン)と合い、画面によって文言を変えなくて済む(部品が 1 つ)。Google が勧める文言の 1 つ。<b>短所</b>: 「続ける」だけでは、このアプリに入る操作だと、少し弱い(Google の決まりの「このアプリにサインイン・登録する意味が分かること」は、ボタンのそばの説明で補える)。</td></tr>
+      <tr><td><b>T3 サインインだけ「続ける」</b></td><td>Google で続ける<br>Continue with Google</td><td>Google で登録<br>Sign up with Google</td><td>登録の画面は、「登録」と言い切る(メールの確認がなく、その場で登録が完了する、という違いが伝わる)。サインインの画面は、初回の人にも合う「続ける」。<b>短所</b>: 文言が 2 種類になる。</td></tr>
+    </tbody>
+  </table>
+  <div class="gcards" id="labelcards"></div>
+
+  <h2>3. 置き場所の案</h2>
+  <p>フォームの主のボタン(黄)と、Google のボタンの上下関係です。「または」の区切りは、いまの実装と同じ。</p>
+  <div class="gcards">
+    <div class="gcard"><span class="gname">P1 どちらの画面も下</span>
+      <div class="gwire"><div class="wf"><p>サインイン</p><div class="wbox">メール</div><div class="wbox">パスワード</div><div class="wbox wp">サインイン</div><div class="wbox wor">または</div><div class="wbox wg">Google</div></div><div class="wf"><p>新規登録</p><div class="wbox">ユーザー名</div><div class="wbox">メール</div><div class="wbox">パスワード ×2</div><div class="wbox wp">アカウントを作る</div><div class="wbox wor">または</div><div class="wbox wg">Google</div></div></div>
+      <p class="gpm"><b>長所</b>: いまの実装と同じ。既存の画面の順序(メール・パスワードが先)を変えない。二つの画面がそろう。<br><b>短所</b>: 登録の画面は、入力欄が 4 つあり、Google が見えるまで、長く縦に進む(スマートフォンでは、画面の下に隠れる)。</p></div>
+    <div class="gcard"><span class="gname">P2 どちらの画面も上</span>
+      <div class="gwire"><div class="wf"><p>サインイン</p><div class="wbox wg">Google</div><div class="wbox wor">または</div><div class="wbox">メール</div><div class="wbox">パスワード</div><div class="wbox wp">サインイン</div></div><div class="wf"><p>新規登録</p><div class="wbox wg">Google</div><div class="wbox wor">または</div><div class="wbox">ユーザー名</div><div class="wbox">メール</div><div class="wbox">パスワード ×2</div><div class="wbox wp">アカウントを作る</div></div></div>
+      <p class="gpm"><b>長所</b>: 短い手順(1 回押すだけ)を先に見せる。二つの画面がそろう。<br><b>短所</b>: パスワードで入る人(既存の人の多く)が、毎回、フォームの前に Google を目にする。フォームの主のボタン(黄)が、画面の下になる。</p></div>
+    <div class="gcard rec"><span class="gtag">推奨</span><span class="gname">P3 サインインは下・登録は上</span>
+      <div class="gwire"><div class="wf"><p>サインイン</p><div class="wbox">メール</div><div class="wbox">パスワード</div><div class="wbox wp">サインイン</div><div class="wbox wor">または</div><div class="wbox wg">Google</div></div><div class="wf"><p>新規登録</p><div class="wbox wg">Google</div><div class="wbox wor">または</div><div class="wbox">ユーザー名</div><div class="wbox">メール</div><div class="wbox">パスワード ×2</div><div class="wbox wp">アカウントを作る</div></div></div>
+      <p class="gpm"><b>長所</b>: 登録は、入力欄が多く、確認メールも要る画面なので、1 回押すだけで終わる Google を先に見せられる。サインインは、パスワードで入る人が多いので、いまの順序のまま。<br><b>短所</b>: 二つの画面で、順序が違う(見た目の一貫性が少し下がる)。</p></div>
+  </div>
+
+  <h2>4. 推奨の案を置いた画面(見本)</h2>
+  <p>ボタンは G2、文言は T1(画面ごと。いまの実装)、置き場所は P3 で組んでいます(画面の HTML は、<code>?btn=g1〜g5</code>・<code>?label=cont</code>・<code>?place=top|bottom</code> で、ほかの案に切り替えられます)。</p>
+  <div class="gframes">
+    <div class="gframe"><iframe src="google-signin.html?embed=1" style="height:640px" title="サインイン"></iframe><p class="gcap"><b>サインイン</b>(通常)</p></div>
+    <div class="gframe"><iframe src="google-signup.html?embed=1" style="height:760px" title="新規登録"></iframe><p class="gcap"><b>新規登録</b>(通常。Google を上に置く案)</p></div>
+    <div class="gframe"><iframe src="google-signin.html?embed=1&state=error" style="height:700px" title="サインイン(エラー)"></iframe><p class="gcap"><b>サインイン(エラー)</b>: 赤い枠は、メール・パスワードの失敗だけ。Google のボタンの下には出さない(Google の失敗は、別の画面)。</p></div>
+    <div class="gframe"><iframe src="google-signin.html?embed=1&state=oauth" style="height:730px" title="サインイン(アプリの接続の途中)"></iframe><p class="gcap"><b>サインイン(アプリの接続の途中)</b>: Google でサインインしても、許可の画面へ戻る。</p></div>
+    <div class="gframe"><iframe src="google-signin.html?embed=1&state=busy" style="height:640px" title="サインイン(Google に移動中)"></iframe><p class="gcap"><b>Google に移動している間</b>: ボタンを押せなくして、二重に開始しない。</p></div>
+  </div>
+
+  <h2>5. Google の失敗の画面・プロフィールの連携の欄</h2>
+  <p>失敗の画面(<a href="google-complete.html">google-complete.html</a>)の状態は、下の 7 つです。プロフィールの連携の欄は <a href="google-profile.html">google-profile.html</a>(欄そのもの)と <a href="google-profile-states.html">google-profile-states.html</a>(操作の途中と結果)、見え方の一覧に足す行は <a href="google-visibility.html">google-visibility.html</a> です。</p>
+  <div class="gframes">
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=loading" style="height:340px" title="交換中"></iframe><p class="gcap"><b>交換中</b>(コードを API と交換している間)</p></div>
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=exists" style="height:440px" title="同じメールのアカウントがある"></iframe><p class="gcap"><b>同じメールのアカウントがある</b>(409)</p></div>
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=exists-oauth" style="height:560px" title="同じメール + 元の画面に戻れる"></iframe><p class="gcap"><b>同じ + 元の画面に戻れる</b>(アプリの接続の途中から)</p></div>
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=taken" style="height:440px" title="ほかのアカウントに連携済み"></iframe><p class="gcap"><b>その Google は、ほかのアカウントに結び付いている</b>(409)</p></div>
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=failed" style="height:520px" title="失敗"></iframe><p class="gcap"><b>失敗・キャンセル</b>(400)。「もう一度」は、Google のボタン。</p></div>
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=expired" style="height:520px" title="期限切れ"></iframe><p class="gcap"><b>リンクが無効・期限切れ</b>(400。有効期間は 60 秒。API は区別しない)</p></div>
+    <div class="gframe"><iframe src="google-complete.html?embed=1&state=linkfail&auth=in" style="height:440px" title="連携の失敗"></iframe><p class="gcap"><b>連携の失敗</b>(サインイン済み。すでに別の Google に連携している)</p></div>
+  </div>
+
+  <h2>6. 私の推奨(選ぶのは利用者)</h2>
+  <div class="grec">
+    <p><b>ボタン: G2(ライト・このアプリの高さ 44px と角丸 8px にそろえ、全幅)</b></p>
+    <ul>
+      <li>・Google の「ライト」の色そのもの(面 <code>#FFFFFF</code>・枠 <code>#747775</code>・文字 <code>#1F1F1F</code>)で、Google の決まりを守れる。文字は白に対して 16.48:1、枠は白に対して 4.53:1(部品の境界に必要な 3:1 以上)。</li>
+      <li>・入力欄・このアプリのボタンと、高さ・角丸・全幅がそろい、白地・枠つきの「副のボタン」と同じ見え方で、画面のなかで浮かない。黄色の主のボタンより、控えめだが、枠と「G」で、はっきり見える。</li>
+      <li>・<b>G1</b>(標準の高さ 40px)は、入力欄(44px)と高さがずれ、幅も文字に合うので、フォームの中で座りが悪い。<b>G3</b>(灰色の面)は、白に対して 1.12:1 で、境界がほとんど見えず、「押せない」ように見えかねない(文字は 14.72:1 で読める)。<b>G4</b>(黒い面)は、黄色の主のボタンより重く、Google が「主」に見える(白に対して 18.57:1)。<b>G5</b>(「G」だけ)は、何の操作か分かりにくく、文字がないので、Google の決まり上も避けたい(狭い場所の補助としてなら可)。</li>
+    </ul>
+    <p><b>文言: T2(どちらも「Google で続ける」)</b>、次点は T1(いまの実装。画面ごと)</p>
+    <ul><li>・初回は登録、2 回目以降はサインインになる実際の挙動と合い、部品が 1 つで済む。サインインの画面から、初めて Google を使った人が、その場で登録される点も、嘘にならない。「このアプリに入る操作だ」ということは、ボタンの上の一文(例: 「Google のアカウントで、BurgerStack を使います」)で補える案(文言は、選ばれたら決める)。</li></ul>
+    <p><b>置き場所: P3(サインインは下・登録は上)</b></p>
+    <ul><li>・登録は、入力欄が 4 つ + メールの確認が要る画面なので、1 回押すだけで完了する Google を先に見せる。サインインは、パスワードで入る人が多いので、いまの順序のまま。</li></ul>
+    <p><b>連携の操作(プロフィール)は、Google のブランドのボタンにしない</b>: 「Google を連携する」は、このアプリの普通の枠つきのボタン(サインイン以外の操作に、「G」を使わない)。「連携を解除」は、「接続済みのアプリ」の「接続を解除」と同じ赤い枠のボタン。</p>
+  </div>
+  <p class="muted" style="margin-top:24px">未確認: 公式の配布のボタン画像との細部(余白・ダークの「G」の下地の形)の一致、Google Sans での文字幅、実機での見え方。公式の画像で確かめるのは、実装のときです。</p>
+</main>
+<script src="google-login.js"></script>
+<script>
+  // ボタンの案のカード(日本語・英語のボタンと、主のボタンとの並び)
+  const L = { ja: window.GLabel, en: { signin: 'Sign in with Google', signup: 'Sign up with Google', cont: 'Continue with Google', or: 'or' } };
+  const jaLabels = { signin: 'Google でサインイン', cont: 'Google で続ける', or: 'または' };
+  const primary = { ja: 'サインイン', en: 'Sign in' };
+  const cards = [
+    { v: 'g1', pm: '<b>Google 標準のライト</b>(高さ 40px・角 4px・幅は文字に合う)。Google が最も確認しやすい形。<br><b>短所</b>: 入力欄(44px)と高さがずれ、フォームの中で座りが悪い。' },
+    { v: 'g2', rec: true, pm: '<b>ライト + このアプリの高さ 44px・角丸 8px・全幅</b>。色・文字・「G」は、Google のライトのまま。<br><b>長所</b>: 入力欄・ボタンとそろい、白地の副のボタンと同じ見え方。文字 16.48:1・枠 4.53:1。' },
+    { v: 'g3', pm: '<b>ニュートラル</b>(灰色の面 <code>#F2F2F2</code>・枠なし)。<br><b>長所</b>: 静か。<b>短所</b>: 面と白の境界が 1.12:1 で、ほとんど見えない(押せないように見えかねない)。文字は 14.72:1。' },
+    { v: 'g4', pm: '<b>ダーク</b>(黒い面 <code>#131314</code>・枠 <code>#8E918F</code>・文字 <code>#E3E3E3</code>)。「G」は、白い下地の上。<br><b>短所</b>: 黄色の主のボタンより重く、Google が主に見える。' },
+    { v: 'g5', pm: '<b>「G」だけのボタン</b>(40×40。読み上げの名前は文言)。<br><b>短所</b>: 何の操作か分かりにくい。文字つきの案より、審査(Google の決まり)の面で不利。狭い場所の補助向き。' },
+  ];
+  const cardHtml = (c, i) => {
+    const one = (lang) => {
+      const t = c.v === 'g5' ? L[lang].signin : L[lang].signin;
+      return `<div class="gstage"><span class="btn primary block" style="display:flex;align-items:center;justify-content:center;height:44px">${primary[lang]}</span><div class="gor" aria-hidden="true"><span>${L[lang].or}</span></div>${window.GBtn(c.v, t)}</div>`;
+    };
+    const name = window.GVariants[c.v].name;
+    return `<div class="gcard${c.rec ? ' rec' : ''}">${c.rec ? '<span class="gtag">推奨</span>' : ''}<span class="gname">${name}</span>${one('ja')}${one('en')}<p class="gpm">${c.pm}</p></div>`;
+  };
+  document.getElementById('cards').innerHTML = cards.map(cardHtml).join('');
+  // 文言の案の見本(G2 のボタンで、T1・T2・T3 の日本語・English)
+  const lab = [
+    ['T1 サインイン', 'signin'], ['T1 登録', 'signup'], ['T2 続ける', 'cont'],
+  ];
+  document.getElementById('labelcards').innerHTML = lab.map(([n, k]) => `<div class="gcard"><span class="gname">${n}</span><div class="gstage">${window.GBtn('g2', L.ja[k])}${window.GBtn('g2', L.en[k])}</div></div>`).join('');
+</script>
+</body>
+</html>

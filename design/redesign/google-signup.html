@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新規登録 + Google(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="google-login.css">
+</head>
+<body data-auth="out" data-active="signup" data-gkind="signup" data-gplace="top">
+<main class="wrap auth">
+  <div class="photo" style="--a:#d6b08a;--b:#a5714a"><span class="photo-label" data-en="Photo">写真</span></div>
+  <div class="auth-main">
+    <h1 data-only="default error" data-en="Sign up">新規登録</h1>
+    <h1 data-only="sent" data-en="Check your email">確認メールを送りました</h1>
+    <p class="lead" data-only="default error" data-en="Create an account. We will email you a link to confirm your address.">アカウントを作ります。確認のリンクを、メールでお送りします。</p>
+    <form class="form" data-only="default error">
+      <div id="gtop"></div>
+      <div data-only="error"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Could not create your account">アカウントを作れませんでした</b><ul><li>・Password is too short (minimum is 8 characters)</li><li>・Password confirmation doesn't match Password</li></ul></div></section></div>
+      <div class="field"><label class="label" for="username" data-en="Username">ユーザー名</label><input class="input" id="username" data-only="default" autocomplete="username"><input class="input" id="username" data-only="error" value="alice" autocomplete="username"></div>
+      <div class="field"><label class="label" for="email" data-en="Email">メールアドレス</label><input class="input" id="email" type="email" data-only="default" placeholder="you@example.com" autocomplete="email"><input class="input" id="email" type="email" data-only="error" value="alice@example.com" autocomplete="email"></div>
+      <div class="field"><label class="label" for="password" data-en="Password">パスワード</label><input class="input" id="password" type="password" data-only="default" autocomplete="new-password" aria-describedby="password-hint"><input class="input" id="password" type="password" data-only="error" value="abc123" autocomplete="new-password" aria-describedby="password-hint"><p class="hint" id="password-hint" data-en="8 to 72 bytes (1 byte per ASCII character, 3 per Japanese character), with at least one half-width letter, number and symbol.">8〜72 バイト(半角の英数字は 1 文字 1 バイト、日本語は 1 文字 3 バイト)。半角の英字・数字・記号を、それぞれ 1 文字以上含めてください。</p></div>
+      <div class="field"><label class="label" for="pc" data-en="Confirm password">パスワード(確認)</label><input class="input" id="pc" type="password" data-only="default" autocomplete="new-password"><input class="input" id="pc" type="password" data-only="error" value="abc124" autocomplete="new-password"></div>
+      <button type="button" class="btn primary block" data-en="Create account">アカウントを作る</button>
+      <div id="gbot"></div>
+      <p class="linkline"><span data-en="Already have an account?">すでにアカウントをお持ちのとき</span> <a href="#" data-en="Sign in">サインイン</a></p>
+    </form>
+    <div class="form" data-only="sent">
+      <p data-en="We sent a confirmation email to alice@example.com. Open the link in it to finish creating your account."><b>alice@example.com</b> に確認メールを送りました。メールのリンクを開くと、登録が完了します。</p>
+      <p class="hint" data-en="If you don't see it, check your spam folder. To change your details, sign up again.">届かないときは、迷惑メールのフォルダを確認してください。登録の内容を変えるときは、もう一度、新規登録してください。</p>
+      <button type="button" class="btn ghost" data-en="Sign up again">もう一度、新規登録する</button>
+    </div>
+    <aside class="memo"><b>実装メモ</b><ul><li>・Google のボタンは、<code>GET /meta</code> の <code>login_providers</code> に <code>google</code> があるときだけ出す(使えないときは、何も出さない)。Google で登録すると、Google が確認済みのメールなので、<b>メールの確認の手順は要らない</b>(このアプリの登録は、その場で完了する)。同じメールのアカウントがすでにあるときは、自動では連携せず、失敗の画面(<a href="google-complete.html?state=exists">google-complete.html</a>)で案内する。</li><li>・置き場所の案は、<a href="google-login.html">google-login.html</a> の「置き場所」。この見本は、登録の画面では Google を上に置く案(手順が短い方法を先に見せる)。サインインの画面は、下に置く案。どちらも、利用者が選ぶ。</li><li>・ユーザー名・メールアドレス・パスワードの規則(空・長さ・形式・強さ・確認の一致)の判定と文言は、backend だけが持つ。エラーは、API が返した文言を、そのまま一覧で出す(複数あれば箇条書き)。</li><li>・パスワードの説明文の数字(8〜72)は、いまは frontend の文言に書いてあり、規則の複製になっている。API から取る(<code>GET /meta</code> に足す)か、説明文を出さずにエラー文言に任せる。決めるのは実装のとき。</li><li>・確認メールの送り先は、登録済みでも同じ画面が出る(応答が同じで、区別できない)。</li></ul></aside>
+  </div>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+<script src="google-login.js"></script>
+</body>
+</html>
