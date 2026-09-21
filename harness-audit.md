@@ -112,7 +112,7 @@ Backend の境界:
 
 ```text
 backend-go/cmd/api                        composition root: 設定、DB プール、配線、サーバ
-backend-go/internal/domain                エンティティ / 値オブジェクト / ドメインエラー / 書き込みの *Repository の interface と、それを呼ぶ *Service。標準ライブラリのみ
+backend-go/internal/domain                エンティティ / 値オブジェクト / ドメインエラー / 書き込みの *Repository の interface と、それを持つ書き込みオブジェクト(複数の集約を跨ぐ更新だけ *Service)。標準ライブラリのみ
 backend-go/internal/usecase               ユースケースと読み取りの *Query(利用側で宣言)。repository には依存しない
 backend-go/internal/adapter/handler       net/http のハンドラ、DTO、ルーティング、middleware
 backend-go/internal/adapter/query         usecase の *Query(読み取り)を sqlc で実装
