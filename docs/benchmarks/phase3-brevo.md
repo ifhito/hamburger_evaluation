@@ -1,8 +1,8 @@
 # Phase 3: brevo
 
-- 計測日: 2026-09-22 00:00
+- 計測日: 2026-09-22 00:19
 - SMTP: `smtp-relay.brevo.com:587`(`starttls`)
-- 差出人: `hito01010101@gmail.com`
+- 差出人: `noreply@mail.coffee-collections.uk`
 - 宛先: 実行ごとに + エイリアスで一意にしている(記録時は伏せる)
 
 ## 結果
@@ -10,10 +10,8 @@
 | 項目 | 結果 |
 |---|---|
 | `POST /signup` | 202 |
-| `mail_deliveries.status` | `failed` |
+| `mail_deliveries.status` | `sent` |
 | 送信までの時間 | 2 秒 |
-| 失敗の種類 | `permanent` |
-| 理由 | `smtp: auth: 525 "5.7.1 Unauthorized IP address"` |
 
 ## 冪等性
 

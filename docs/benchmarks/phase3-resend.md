@@ -1,8 +1,8 @@
 # Phase 3: resend
 
-- 計測日: 2026-09-22 00:00
+- 計測日: 2026-09-22 00:15
 - SMTP: `smtp.resend.com:587`(`starttls`)
-- 差出人: `onboarding@resend.dev`
+- 差出人: `noreply@mail.coffee-collections.uk`
 - 宛先: 実行ごとに + エイリアスで一意にしている(記録時は伏せる)
 
 ## 結果
@@ -10,10 +10,8 @@
 | 項目 | 結果 |
 |---|---|
 | `POST /signup` | 202 |
-| `mail_deliveries.status` | `failed` |
-| 送信までの時間 | 3 秒 |
-| 失敗の種類 | `permanent` |
-| 理由 | `smtp: end data: 550 "You can only send testing emails to your own email address (hito01010101@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change t` |
+| `mail_deliveries.status` | `sent` |
+| 送信までの時間 | 4 秒 |
 
 ## 冪等性
 
