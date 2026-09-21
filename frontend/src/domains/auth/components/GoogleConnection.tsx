@@ -10,25 +10,44 @@ import { useIdentities } from "../hooks/useIdentities";
 import type { Identity } from "../types";
 import styles from "./googleConnection.module.css";
 
+// 連携の状態。一覧を取得できたとき(loaded)だけ、連携の有無と操作を出す(取得中・取得の失敗を、「未連携」と混ぜない)。
+// loaded の identity は、結び付いていればその内容、なければ null。
+export type ConnectionState = { kind: "loading" } | { kind: "failed" } | { kind: "loaded"; identity: Identity | null };
+
 interface ViewProps {
-  // 結び付いていれば、その内容。なければ null。
-  identity: Identity | null;
-  loadFailed: boolean;
+  state: ConnectionState;
   actionError: string[] | null;
+  // 解除に成功したことの知らせ。
+  disconnected: boolean;
   busy: "connect" | "disconnect" | null;
   onConnect: () => void;
   onDisconnect: () => void;
+  onRetry: () => void;
 }
 
 // プロフィールの Google の連携の見た目。何が押せるかは、backend が返す canUnlink に従う(解除してよいかの判断は持たない)。
-export function GoogleConnectionView({ identity, loadFailed, actionError, busy, onConnect, onDisconnect }: ViewProps) {
+export function GoogleConnectionView({ state, actionError, disconnected, busy, onConnect, onDisconnect, onRetry }: ViewProps) {
   const { t } = useTranslation();
+  const identity = state.kind === "loaded" ? state.identity : null;
   return (
     <section className={styles.section}>
       <h2 className={styles.heading}>{t("auth.google.profile.heading")}</h2>
-      {loadFailed && <ErrorMessage message={t("auth.google.profile.loadError")} />}
       {actionError && <ErrorMessage message={actionError} />}
-      {identity ? (
+      {disconnected && (
+        <p role="status" className={styles.muted}>
+          {t("auth.google.profile.disconnected")}
+        </p>
+      )}
+      {state.kind === "loading" && <p className={styles.muted}>{t("common.loading")}</p>}
+      {state.kind === "failed" && (
+        <div className={styles.row}>
+          <ErrorMessage message={t("auth.google.profile.loadError")} />
+          <Button type="button" variant="secondary" onClick={onRetry}>
+            {t("auth.google.profile.retry")}
+          </Button>
+        </div>
+      )}
+      {state.kind === "loaded" && identity && (
         <div className={styles.row}>
           <div>
             {/* メールは Google が返した文字列なので、HTML として解釈せず、文字として描画する */}
@@ -41,7 +60,8 @@ export function GoogleConnectionView({ identity, loadFailed, actionError, busy, 
             </Button>
           )}
         </div>
-      ) : (
+      )}
+      {state.kind === "loaded" && !identity && (
         <div className={styles.row}>
           <p className={styles.muted}>{t("auth.google.profile.notConnected")}</p>
           <Button type="button" variant="secondary" isLoading={busy === "connect"} onClick={onConnect}>
@@ -59,12 +79,18 @@ export function GoogleConnectionView({ identity, loadFailed, actionError, busy, 
 export function GoogleConnection({ viewerId }: { viewerId: string }) {
   const { t } = useTranslation();
   const enabled = googleEnabled(useMeta().data);
-  const { identities, error, isLoading, refresh } = useIdentities(viewerId, enabled);
+  const { identities, error, isLoading, refresh, removeProvider } = useIdentities(viewerId, enabled);
   const [busy, setBusy] = useState<"connect" | "disconnect" | null>(null);
   const [actionError, setActionError] = useState<string[] | null>(null);
+  const [disconnected, setDisconnected] = useState(false);
 
-  if (!enabled || isLoading) return null;
-  const identity = identities?.find((i) => i.provider === GOOGLE_PROVIDER) ?? null;
+  if (!enabled) return null;
+  // 一覧を取得できたときだけ、連携の有無を決める(取得できていないのに、「未連携」にしない)。
+  const state: ConnectionState = identities
+    ? { kind: "loaded", identity: identities.find((i) => i.provider === GOOGLE_PROVIDER) ?? null }
+    : error && !isLoading
+      ? { kind: "failed" }
+      : { kind: "loading" };
 
   const onConnect = async () => {
     setBusy("connect");
@@ -84,24 +110,30 @@ export function GoogleConnection({ viewerId }: { viewerId: string }) {
     if (!window.confirm(t("auth.google.profile.disconnectConfirm"))) return;
     setBusy("disconnect");
     setActionError(null);
+    setDisconnected(false);
     try {
       await authApi.unlinkGoogle();
-      await refresh();
     } catch (e) {
       setActionError(e instanceof ApiError ? e.messages : [t("auth.google.profile.disconnectError")]);
-    } finally {
       setBusy(null);
+      return;
     }
+    // 解除は済んだ。このあとの再取得の成否は、解除の成否とは別(失敗しても、解除できたことは変わらない)。
+    await removeProvider(GOOGLE_PROVIDER);
+    setDisconnected(true);
+    setBusy(null);
+    void refresh();
   };
 
   return (
     <GoogleConnectionView
-      identity={identity}
-      loadFailed={error !== undefined}
+      state={state}
       actionError={actionError}
+      disconnected={disconnected}
       busy={busy}
       onConnect={() => void onConnect()}
       onDisconnect={() => void onDisconnect()}
+      onRetry={() => void refresh()}
     />
   );
 }

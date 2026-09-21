@@ -78,6 +78,8 @@ const en = {
         disconnectConfirm: "Disconnect Google? You won't be able to sign in with it anymore.",
         cannotUnlink: "Google is your only way to sign in. Add a password to be able to disconnect it.",
         loadError: "Failed to load your Google connection.",
+        retry: "Retry",
+        disconnected: "Google disconnected.",
         connectError: "Failed to start connecting Google.",
         disconnectError: "Failed to disconnect Google.",
       },
