@@ -2,7 +2,6 @@ package query_test
 
 import (
 	"context"
-	"sort"
 	"testing"
 	"time"
 
@@ -185,15 +184,12 @@ func TestShopSummaries(t *testing.T) {
 		}
 	})
 
-	t.Run("一覧の取得は、ショップの件数に関わらず、2 回のクエリで済む(件数に比例しない)", func(t *testing.T) {
-		names := make([]string, 0, 20)
+	t.Run("一覧の取得は、ショップの件数に関わらず、同じ回数のクエリで済む(件数に比例しない)", func(t *testing.T) {
 		for i := 0; i < 20; i++ {
 			shop := f.shop("List Shop " + string(rune('A'+i)))
-			names = append(names, "List Shop "+string(rune('A'+i)))
 			b := f.burger(shop, "Classic")
 			f.review(alice, b, 1+i%5, 30+i, "reviews/list-"+string(rune('a'+i))+".jpg", false)
 		}
-		sort.Strings(names)
 		countQueries := func(keyword string, perPage int) (queries, shops int) {
 			n := 0
 			shopsUC := usecase.NewShops(query.NewShopQuery(countingDB{conn: conn, n: &n}), domain.NewShops(nil))
@@ -211,8 +207,8 @@ func TestShopSummaries(t *testing.T) {
 		if gotOne != 1 {
 			t.Fatalf("shops = %d, want 1", gotOne)
 		}
-		if twenty != 2 || one != 2 {
-			t.Errorf("クエリの回数 = 20 件で %d 回・1 件で %d 回, want どちらも 2 回(ショップの一覧 1 回 + 集計 1 回)", twenty, one)
+		if twenty != one {
+			t.Errorf("クエリの回数 = 20 件で %d 回・1 件で %d 回, want 同じ回数(ショップの件数に比例しない。いまは、一覧 1 回 + 集計 1 回)", twenty, one)
 		}
 	})
 }

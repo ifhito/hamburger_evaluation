@@ -1,11 +1,11 @@
 package domain
 
-import "math"
-
 // ShopSummary は、ショップに紐づくレビューから求める集計で、一覧と詳細に添える。
 //
 // 集計の対象は、ショップ詳細に出るレビューと同じ範囲(削除されていないレビューのうち、書いた
 // 利用者も退会していないもの)である。範囲の外のレビューは、件数にも平均にも写真にも入らない。
+// ここは集計の意味の定義(範囲・丸め・写真の選び方)で、範囲の絞り込みと写真の選び方は、1 回の集約で
+// 済ませるため、adapter/query の SQL(ListShopSummaries)が実装している。丸めだけは、ここが持つ。
 type ShopSummary struct {
 	// ReviewCount は、対象のレビューの件数である。
 	ReviewCount int64
@@ -22,17 +22,17 @@ type ShopSummary struct {
 	PhotoURL *string
 }
 
-// RoundAverageRating は、評価の平均を、小数 1 桁に丸める(0.05 は切り上げ)。
+// RoundAverageRating は、評価の平均を、小数 1 桁に丸める(0.05 は切り上げ。バーガーの統計と同じ丸め方)。
 func RoundAverageRating(average float64) float64 {
-	return math.Round(average*10) / 10
+	return roundHalfAwayFromZero(average, 10)
 }
 
-// NewShopSummary は、レビューの件数・評価の平均(まだ丸めていない値。レビューがなければ nil)・
-// 写真のキーから集計を作る。
-func NewShopSummary(reviewCount int64, average *float64, photoKey *string) ShopSummary {
+// NewShopSummary は、レビューの件数・評価の平均(まだ丸めていない値。レビューがないときは使わない)・
+// 写真のキーから集計を作る。レビューがなければ、平均は nil になる。
+func NewShopSummary(reviewCount int64, average float64, photoKey *string) ShopSummary {
 	summary := ShopSummary{ReviewCount: reviewCount, PhotoKey: photoKey}
-	if reviewCount > 0 && average != nil {
-		rounded := RoundAverageRating(*average)
+	if reviewCount > 0 {
+		rounded := RoundAverageRating(average)
 		summary.AverageRating = &rounded
 	}
 	return summary

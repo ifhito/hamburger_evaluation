@@ -21,8 +21,8 @@ type ShopQuery interface {
 	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error)
 	// ListShopSummaries は、shop それぞれの集計(レビューの件数・評価の平均・ショップの写真のキー)を、
 	// shop の id をキーにして返す。1 回の集約で求める(shop の件数に比例してクエリを増やさない)。
-	// レビューのない shop は、空の集計になる(件数 0・平均と写真は nil)。集計の対象と意味は
-	// domain.ShopSummary が持つ。
+	// レビューのない shop は、結果に含まれないことがある(呼び出し側が、その shop を空の集計(件数 0・平均と
+	// 写真は nil)として扱う)。集計の意味は domain.ShopSummary が定義する。
 	ListShopSummaries(ctx context.Context, shopIDs []string) (map[string]domain.ShopSummary, error)
 	// GetShopWithCreator は shop とその creator を返す。Reviews は空の
 	// ままである。
@@ -119,7 +119,7 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id string) (domain
 	}
 	detail.Reviews = reviews
 	detail.CanReview = detail.CanBeReviewedByViewer(viewer)
-	detail.Summary = s.withPhotoURL(summaries[id])
+	detail.Summary = s.withPhotoURL(summaries[detail.ID])
 	return detail, nil
 }
 

@@ -15,8 +15,6 @@ type stubPhotoURLs struct{}
 
 func (stubPhotoURLs) URL(key string) string { return "https://photos.test/" + key }
 
-func floatPtr(f float64) *float64 { return &f }
-
 func TestShopsListSummaries(t *testing.T) {
 	shopA := domain.Shop{ID: uid.N(1), Name: "A", Status: domain.ShopStatusActive}
 	shopB := domain.Shop{ID: uid.N(2), Name: "B", Status: domain.ShopStatusActive}
@@ -30,13 +28,14 @@ func TestShopsListSummaries(t *testing.T) {
 			summaryCalls++
 			gotIDs = ids
 			return map[string]domain.ShopSummary{
-				shopA.ID: domain.NewShopSummary(3, floatPtr(4.0), strPtr("reviews/a.jpg")),
+				shopA.ID: domain.NewShopSummary(3, 4.0, strPtr("reviews/a.jpg")),
 			}, nil
 		},
 	}
 	shops := usecase.NewShops(query, domain.NewShops(&fakeShopRepo{}), usecase.WithPhotoURLs(stubPhotoURLs{}))
 
 	t.Run("集計は、一覧の全ショップ分を 1 回の問い合わせで取り、写真のキーは公開 URL に直して添える", func(t *testing.T) {
+		summaryCalls, gotIDs = 0, nil // このサブテストの中だけで数える(ほかのサブテストの呼び出しを含めない)
 		list, _, err := shops.List(context.Background(), nil, "", 1, 20)
 		if err != nil {
 			t.Fatalf("List returned error: %v", err)
@@ -92,7 +91,7 @@ func TestShopsGetSummary(t *testing.T) {
 		getShopWithCreator: func(context.Context, string) (domain.ShopDetail, error) { return shop, nil },
 		listShopReviews:    func(context.Context, string) ([]domain.ShopReview, error) { return nil, nil },
 		listShopSummaries: func(_ context.Context, ids []string) (map[string]domain.ShopSummary, error) {
-			return map[string]domain.ShopSummary{ids[0]: domain.NewShopSummary(2, floatPtr(3.5), strPtr("reviews/x.jpg"))}, nil
+			return map[string]domain.ShopSummary{ids[0]: domain.NewShopSummary(2, 3.5, strPtr("reviews/x.jpg"))}, nil
 		},
 	}
 	got, err := usecase.NewShops(query, domain.NewShops(&fakeShopRepo{}), usecase.WithPhotoURLs(stubPhotoURLs{})).

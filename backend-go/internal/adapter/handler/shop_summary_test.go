@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"slices"
@@ -8,8 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
@@ -33,7 +37,7 @@ func jsonKeys(t *testing.T, raw []byte) []string {
 func TestShopSummaryFields(t *testing.T) {
 	repo := seedShops(uid.N(1))
 	repo.summaries = map[string]domain.ShopSummary{
-		uid.N(1): domain.NewShopSummary(3, shopPtr(4.25), shopPtr("reviews/latest.jpg")),
+		uid.N(1): domain.NewShopSummary(3, 4.25, shopPtr("reviews/latest.jpg")),
 	}
 	router, aliceAuth, _, _ := newShopsRouter(t, repo, usecase.WithPhotoURLs(storage.NewDisk(t.TempDir(), "/photos")))
 
@@ -100,7 +104,7 @@ func TestShopSummaryFields(t *testing.T) {
 func TestMCPListShopsCarriesSummary(t *testing.T) {
 	k := newMCPKit(t)
 	k.shops.summaries = map[string]domain.ShopSummary{
-		uid.N(1): domain.NewShopSummary(3, shopPtr(4.25), nil),
+		uid.N(1): domain.NewShopSummary(3, 4.25, nil),
 	}
 	alice := k.connect(t, k.token(k.alice, readScope))
 
@@ -114,6 +118,67 @@ func TestMCPListShopsCarriesSummary(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("list_shops = %s, want it to contain %s", text, want)
+		}
+	}
+}
+
+// TestShopSummaryThroughRealQuery は、本物の DB・本物の ShopQuery(SQL・uuid[] の引数)・写真の URL の組み立て・
+// handler をつないで、一覧と詳細の応答に、写真の URL・平均評価・件数が入ることを確かめる(fake を使わない通しの確認)。
+func TestShopSummaryThroughRealQuery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed test in short mode")
+	}
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	insertUser := `INSERT INTO users (email, username, password_digest) VALUES ($1, $2, 'x') RETURNING id`
+	alice := dbtest.InsertUserRow(ctx, t, conn, insertUser, "alice@example.com", "alice")
+	shop := dbtest.InsertUUIDRow(ctx, t, conn, `INSERT INTO shops (name, status) VALUES ('Real Diner', 1) RETURNING id`)
+	quiet := dbtest.InsertUUIDRow(ctx, t, conn, `INSERT INTO shops (name, status) VALUES ('Quiet Diner', 1) RETURNING id`)
+	burger := dbtest.InsertUUIDRow(ctx, t, conn, `INSERT INTO burgers (name) VALUES ('Classic') RETURNING id`)
+	if _, err := conn.Exec(ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, shop, burger); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range []struct {
+		rating    int
+		photo     any
+		discarded bool
+		minute    int
+	}{
+		{5, "reviews/old.jpg", false, 1},
+		{4, "reviews/latest.jpg", false, 2}, // 写真つきで最も新しい(削除されていない)
+		{1, "reviews/discarded.jpg", true, 3},
+	} {
+		var discardedAt any
+		if r.discarded {
+			discardedAt = "2026-01-02T00:00:00Z"
+		}
+		if _, err := conn.Exec(ctx, `INSERT INTO reviews (rating, user_id, burger_id, photo_key, discarded_at, created_at)
+			VALUES ($1, $2, $3, $4, $5, '2026-01-01T10:00:00Z'::timestamptz + make_interval(mins => $6))`,
+			r.rating, alice, burger, r.photo, discardedAt, r.minute); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	users, auth, _ := newAuthKit()
+	shopFake := &shopStoreFake{}
+	shops := usecase.NewShops(query.NewShopQuery(conn), domain.NewShops(shopFake), usecase.WithPhotoURLs(storage.NewDisk(t.TempDir(), "/photos")))
+	router := handler.NewRouter(okPinger, auth, unusedSignups(), shops,
+		reviewsUsecase(newReviewStoreFake(), storage.NewDisk(t.TempDir(), "/photos")), usersUsecase(users, hasherFake{}), nil, nil, nil)
+
+	rec := do(router, http.MethodGet, "/shops", "", "")
+	want := `[{"id":"` + quiet + `","name":"Quiet Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},` +
+		`{"id":"` + shop + `","name":"Real Diner","status":"active","photo_url":"/photos/reviews/latest.jpg","average_rating":4.5,"review_count":2}]`
+	if rec.Code != http.StatusOK || rec.Body.String() != want {
+		t.Errorf("一覧 = %d %s, want %s", rec.Code, rec.Body, want)
+	}
+
+	rec = do(router, http.MethodGet, "/shops/"+shop, "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("詳細 = %d %s", rec.Code, rec.Body)
+	}
+	for _, want := range []string{`"photo_url":"/photos/reviews/latest.jpg"`, `"average_rating":4.5`, `"review_count":2`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("詳細 = %s, want it to contain %s", rec.Body, want)
 		}
 	}
 }
