@@ -14,7 +14,7 @@ type Review struct {
 	Rating  int
 	Comment *string
 	// PhotoKey は review の写真の storage key であり、写真が添付されて
-	// いないときは nil である（S10）。key はここでは不透明な値であり、URL は
+	// いないときは nil である。key はここでは不透明な値であり、URL は
 	// usecase が photo storage を介して組み立てる。domain 自身が組み立てる
 	// ことは決してない。
 	PhotoKey *string
