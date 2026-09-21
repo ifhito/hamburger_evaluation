@@ -31,13 +31,14 @@ own.
     (`can_*`, `has_more`, …); never duplicate validation, permission
     conditions, constants, or derived values in the frontend.
   - **Repositories are used only from `domain`.** `*Repository` interfaces
-    (writes only: `Create*`/`Update*`/`Discard*`) are declared in `domain` and
+    (writes only: `Create*`/`Update*`/`Discard*`, plus `Lock*` for the row lock taken before a write) are declared in `domain` and
     called only by domain code. A usecase never declares, holds, or calls a
     repository: it reads through its own `*Query` interfaces (`Get*`/`List*`)
     and writes through the per-aggregate domain write objects (`Shops`,
     `Reviews`, `Users`). Never use a `*Service` for a write that touches a
     single aggregate; a domain `*Service` is only for updates that span
-    several aggregates. Never mix reads and writes in one interface.
+    several aggregates with no read in between (procedures that read in
+    between are built by the usecase inside `UnitOfWork.Do`). Never mix reads and writes in one interface.
   - Runtime resource guardrails are defaults: server timeouts, body caps,
     ctx propagation, single sized pgxpool, pagination.
   - API JSON is snake_case; the TypeScript types under
