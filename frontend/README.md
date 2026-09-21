@@ -32,7 +32,7 @@ src/
 │   ├── auth/
 │   │   ├── api/          # authApiClient.ts
 │   │   ├── hooks/        # useAuthForm.ts (react-hook-form)
-│   │   ├── pages/        # SigninPage / SignupPage / SignoutPage
+│   │   ├── pages/        # SigninPage / SignupPage / SignupConfirmPage / SignoutPage
 │   │   ├── AuthProvider.tsx  # Context + useAuth hook
 │   │   ├── storage.ts    # localStorage 操作
 │   │   └── types.ts
@@ -89,7 +89,8 @@ pnpm run build         # プロダクションビルド (型チェック込み)
 | `/reviews/:id` | public | ReviewDetailPage |
 | `/reviews/new` | 要認証 | ReviewNewPage |
 | `/reviews/:id/edit` | 要認証 | ReviewEditPage |
-| `/signup` | ゲストのみ | SignupPage |
+| `/signup` | ゲストのみ | SignupPage(確認メールを送る) |
+| `/signup/confirm` | public | SignupConfirmPage(確認メールのリンクの受け皿。成功するとログイン状態になる) |
 | `/signin` | ゲストのみ | SigninPage |
 | `/signout` | 要認証 | SignoutPage |
 | `/users/:id` | public | UserDetailPage |

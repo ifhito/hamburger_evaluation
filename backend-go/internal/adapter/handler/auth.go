@@ -25,8 +25,8 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// authUserResponse は、signup と login の成功時に返す snake_case の body で
-// あり、frontend の契約（domains/auth/types.ts の SignupResponse）に従う。
+// authUserResponse は、login と signup の確認（POST /signup/confirm）の成功時に返す
+// snake_case の body であり、frontend の契約（domains/auth/types.ts の AuthUserResponse）に従う。
 type authUserResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`

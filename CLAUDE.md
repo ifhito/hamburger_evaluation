@@ -50,7 +50,7 @@ hamburger_evaluation/
 
 クリーンアーキテクチャ (handler → usecase → domain) を採用しています。依存は内側にのみ向き、認可の判断は handler ではなく usecase / domain に置きます。
 
-永続化は読み取りと書き込みで分け、repository は domain からだけ使う。usecase は読み取りに `*Query`(usecase が宣言。メソッド名は `Get*` / `List*` のみ)を使い、書き込みは domain の書き込みオブジェクト(集約ごとの `domain.Shops` / `Reviews` / `Users`)を通す。usecase は repository を宣言も保持も呼び出しもしない。repository の interface(`*Repository`。`Create*` / `Update*` / `Discard*` のみの書き込み専用)は domain が宣言し、それを呼べるのは domain のコードだけである(Service という型に限らない)。Query に書き込みを、Repository に読み取りを置かない。adapter は読み取りを `internal/adapter/query`、書き込みを `internal/adapter/repository` が実装し、sqlc の行 → domain の写像のうち、query と repository の両方が使うものは `internal/adapter/rowmap` に 1 か所にまとめる(片側だけが使う写像はその側に置く)。書き込みの内部で必要な読み取り(トランザクション内のロック取得など)は repository の実装の内部に閉じる。組み立て(`cmd/api/main.go`)は「repository → 書き込みオブジェクト → usecase」の順に行う。1 つの集約だけを更新する書き込みは、Service を作らず、その集約の書き込みオブジェクトに置く(自分の集約の repository だけを持つ薄い層)。`*Service` は、複数の集約を跨ぐ更新だけに使う(2 種類以上の repository を持つときだけ許す。現時点では 1 つもない)。業務の判断はエンティティ・値オブジェクトに置き、公開メソッドは 1 つの型あたり 8 個までとする(ルールの全文は `backend-go/internal/domain/doc.go`。構造検査 `TestPersistenceInterfaceNaming` が、usecase・handler・query が repository に依存しないこと、書き込みオブジェクトが自分の repository だけを持つこと、単一の集約の Service を作らないこと、メソッド数の上限を強制する)。
+永続化は読み取りと書き込みで分け、repository は domain からだけ使う。usecase は読み取りに `*Query`(usecase が宣言。メソッド名は `Get*` / `List*` のみ)を使い、書き込みは domain の書き込みオブジェクト(集約ごとの `domain.Shops` / `Reviews` / `Users` / `SignupVerifications`)を通す。usecase は repository を宣言も保持も呼び出しもしない。repository の interface(`*Repository`。`Create*` / `Update*` / `Discard*` のみの書き込み専用)は domain が宣言し、それを呼べるのは domain のコードだけである(Service という型に限らない)。Query に書き込みを、Repository に読み取りを置かない。adapter は読み取りを `internal/adapter/query`、書き込みを `internal/adapter/repository` が実装し、sqlc の行 → domain の写像のうち、query と repository の両方が使うものは `internal/adapter/rowmap` に 1 か所にまとめる(片側だけが使う写像はその側に置く)。書き込みの内部で必要な読み取り(トランザクション内のロック取得など)は repository の実装の内部に閉じる。組み立て(`cmd/api/main.go`)は「repository → 書き込みオブジェクト → usecase」の順に行う。1 つの集約だけを更新する書き込みは、Service を作らず、その集約の書き込みオブジェクトに置く(自分の集約の repository だけを持つ薄い層)。`*Service` は、複数の集約を跨ぐ更新だけに使う(2 種類以上の repository を持つときだけ許す。現時点では 1 つもない)。業務の判断はエンティティ・値オブジェクトに置き、公開メソッドは 1 つの型あたり 8 個までとする(ルールの全文は `backend-go/internal/domain/doc.go`。構造検査 `TestPersistenceInterfaceNaming` が、usecase・handler・query が repository に依存しないこと、書き込みオブジェクトが自分の repository だけを持つこと、単一の集約の Service を作らないこと、メソッド数の上限を強制する)。
 
 ```text
 backend-go/
@@ -127,7 +127,7 @@ APP_BASE_URL=https://<frontend の URL>
 **既知の残課題・残リスク**
 - `PUT /users/:id` で email を変更するときは、確認メールを挟まず、使用済みの email に 422 `Email has already been taken` を返し続ける。**認証済みのユーザーからは、email の登録有無を判別できる**(メール変更の確認は後続の story)。
 - **pre-hijacking**: 攻撃者が被害者の email で先に signup し、被害者が身に覚えのない確認メールのリンクを開くと、攻撃者のパスワードのアカウントができる。緩和として、確認メールに「心当たりがなければ無視」と明記し、同じ email への signup は最新の入力で置き換え、有効期間は 24 時間、間隔内の再 signup では確認待ちを変えない。根本対策(リンク先でパスワードを設定する方式)は、UI の変更が大きいため採用していない。
-- メールの大量送信の悪用は、同じ宛先・同じ件名を 60 秒に 1 通に絞って緩和している(確認メールは DB の判定、通知メールはプロセスごとのメモリの記録。複数のインスタンスでは共有しない)。IP 単位の制限はない。
+- メールの大量送信の悪用は、同じ宛先・同じ件名を 60 秒に 1 通に絞って緩和している(確認メールは DB の判定、通知メールはプロセスごとのメモリの記録。複数のインスタンスでは共有しない)。IP 単位の制限はない。`alice+1@…` のような別名は別の宛先として数えるので、同じ受信箱への送信は抑えられない。
 - 応答時間: メール送信は非同期で、bcrypt は全分岐で行う。DB 操作の差(ミリ秒)は残る。
 - 退会(soft delete)したユーザーの email は、`users.email` の一意制約が残るため、再登録できない(signup は 202 になるが、確認で 400 になる)。
 - email の大文字小文字: 確認待ちは大文字小文字を区別せず一意だが、`users.email` は入力どおり保存され、登録済みの判定(`GetActiveUserByEmail`)と login は完全一致である(従来どおり)。

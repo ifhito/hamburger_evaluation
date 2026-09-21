@@ -363,7 +363,14 @@ func TestSignupConfirmRejections(t *testing.T) {
 	}{
 		{"期限切れ", func(_ *signupKit, tok string) string { return tok }, func(kit *signupKit) { kit.store.now = kit.store.now.Add(25 * time.Hour) }},
 		{"存在しない", func(*signupKit, string) string { return "does-not-exist" }, nil},
-		{"改ざん(末尾を変える)", func(_ *signupKit, tok string) string { return tok[:len(tok)-1] + "A" }, nil},
+		// 末尾の 1 文字を必ず別の文字に変える（元の末尾が "A" のとき "A" に変えると、改ざんにならない）。
+		{"改ざん(末尾を変える)", func(_ *signupKit, tok string) string {
+			last := "A"
+			if strings.HasSuffix(tok, "A") {
+				last = "B"
+			}
+			return tok[:len(tok)-1] + last
+		}, nil},
 		{"空", func(*signupKit, string) string { return "" }, nil},
 		{"確認までの間に同じ email のユーザーが作られていた", func(_ *signupKit, tok string) string { return tok },
 			func(kit *signupKit) { kit.users.seed("other", "alice@example.com", "Password123!") }},
