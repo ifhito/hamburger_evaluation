@@ -102,6 +102,9 @@ type UserIdentityRepository interface {
 	// DiscardUserIdentity は、userID の、provider の結び付きを削除する。なければ(wrap された)
 	// ErrIdentityNotFound を返す。
 	DiscardUserIdentity(ctx context.Context, userID, provider string) error
+	// DiscardUserIdentitiesByUser は、userID の、すべての結び付きを削除する(1 件もなくてもエラーにしない)。
+	// 退会のときに使う。
+	DiscardUserIdentitiesByUser(ctx context.Context, userID string) error
 }
 
 // ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
@@ -127,4 +130,11 @@ func (s *UserIdentities) Create(ctx context.Context, params CreateUserIdentityPa
 // Discard は、userID の、provider の結び付きを削除する。
 func (s *UserIdentities) Discard(ctx context.Context, userID, provider string) error {
 	return s.repo.DiscardUserIdentity(ctx, userID, provider)
+}
+
+// DiscardAll は、userID の、すべての結び付きを削除する(退会のとき。1 件もなくてもエラーにしない)。退会した
+// 利用者に、外部のアカウントが結び付いたまま残ると、その外部のアカウントは、ほかのどのアカウントにも
+// 結び付けられず、サインインにも使えなくなる。
+func (s *UserIdentities) DiscardAll(ctx context.Context, userID string) error {
+	return s.repo.DiscardUserIdentitiesByUser(ctx, userID)
 }

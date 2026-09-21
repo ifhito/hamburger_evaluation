@@ -41,6 +41,16 @@ func (q *Queries) CreateUserIdentity(ctx context.Context, arg CreateUserIdentity
 	return i, err
 }
 
+const discardUserIdentitiesByUser = `-- name: DiscardUserIdentitiesByUser :exec
+DELETE FROM user_identities
+WHERE user_id = $1
+`
+
+func (q *Queries) DiscardUserIdentitiesByUser(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, discardUserIdentitiesByUser, userID)
+	return err
+}
+
 const discardUserIdentity = `-- name: DiscardUserIdentity :execrows
 DELETE FROM user_identities
 WHERE user_id = $1 AND provider = $2

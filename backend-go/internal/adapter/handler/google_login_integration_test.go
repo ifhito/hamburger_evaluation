@@ -970,6 +970,25 @@ func TestGoogleLinking(t *testing.T) {
 		}
 	})
 
+	t.Run("Google と結び付けた利用者が退会すると、結び付きも消え、その Google アカウントを、別の利用者が結び付けられる", func(t *testing.T) {
+		k := newGoogleKit(t)
+		if body := decodeExchange(t, k.exchange(linkFlow(t, k, k.alice).code)); !body.Linked {
+			t.Fatal("alice の結び付けに失敗した")
+		}
+
+		if del := do(k.router, http.MethodDelete, "/users/"+k.alice, "", k.bearer(t, k.alice)); del.Code != http.StatusNoContent {
+			t.Fatalf("退会 = %d %s", del.Code, del.Body)
+		}
+
+		if n := k.count(t, "user_identities"); n != 0 {
+			t.Fatalf("退会したのに、結び付きが %d 件残っている", n)
+		}
+		linked := k.exchange(linkFlow(t, k, k.bob).code)
+		if linked.Code != http.StatusOK || !decodeExchange(t, linked).Linked {
+			t.Fatalf("退会した利用者の Google を、別の利用者(bob)が結び付けられない: %d %s", linked.Code, linked.Body)
+		}
+	})
+
 	t.Run("結び付けの API は、ログインが要る(なければ 401)", func(t *testing.T) {
 		k := newGoogleKit(t)
 		for _, tc := range []struct{ method, path string }{

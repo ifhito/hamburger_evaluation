@@ -7,6 +7,10 @@ RETURNING *;
 DELETE FROM user_identities
 WHERE user_id = $1 AND provider = $2;
 
+-- name: DiscardUserIdentitiesByUser :exec
+DELETE FROM user_identities
+WHERE user_id = $1;
+
 -- name: GetUserIdentityByProviderUserID :one
 SELECT * FROM user_identities
 WHERE provider = $1 AND provider_user_id = $2;
