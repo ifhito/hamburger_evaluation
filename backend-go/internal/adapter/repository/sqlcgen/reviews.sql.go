@@ -20,7 +20,7 @@ RETURNING id, rating, comment, user_id, burger_id, discarded_at, created_at, upd
 type CreateReviewParams struct {
 	Rating   int16
 	Comment  pgtype.Text
-	UserID   int64
+	UserID   string
 	BurgerID int64
 	PhotoKey pgtype.Text
 }
@@ -85,7 +85,7 @@ type GetReviewDetailRow struct {
 	Comment       pgtype.Text
 	PhotoKey      pgtype.Text
 	CreatedAt     pgtype.Timestamptz
-	UserID        int64
+	UserID        string
 	UserUsername  string
 	BurgerID      int64
 	BurgerName    string
@@ -145,7 +145,7 @@ WHERE r.discarded_at IS NULL
       JOIN shops fs ON fs.id = fsb.shop_id AND fs.status = 1
       WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = $3::bigint
   ))
-  AND ($4::bigint IS NULL OR r.user_id = $4::bigint)
+  AND ($4::uuid IS NULL OR r.user_id = $4::uuid)
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT $6 OFFSET $5
 `
@@ -154,7 +154,7 @@ type ListPublicReviewsParams struct {
 	FilterRating   pgtype.Int8
 	CommentPattern pgtype.Text
 	FilterShopID   pgtype.Int8
-	FilterUserID   pgtype.Int8
+	FilterUserID   *string
 	PageOffset     int32
 	PageLimit      int32
 }
@@ -165,7 +165,7 @@ type ListPublicReviewsRow struct {
 	Comment       pgtype.Text
 	PhotoKey      pgtype.Text
 	CreatedAt     pgtype.Timestamptz
-	UserID        int64
+	UserID        string
 	UserUsername  string
 	BurgerID      int64
 	BurgerName    string
@@ -250,7 +250,7 @@ ORDER BY burger_id
 // 欠かせない。recalculateBurgerStats は各 burger を FOR UPDATE でロックし、
 // 複数の burger を扱う呼び出し元はすべて burger_id の昇順でロックしなければ
 // ならない。そうすれば、burger の集合が重なってもデッドロックしない。
-func (q *Queries) ListUserKeptReviewBurgerIDs(ctx context.Context, userID int64) ([]int64, error) {
+func (q *Queries) ListUserKeptReviewBurgerIDs(ctx context.Context, userID string) ([]int64, error) {
 	rows, err := q.db.Query(ctx, listUserKeptReviewBurgerIDs, userID)
 	if err != nil {
 		return nil, err

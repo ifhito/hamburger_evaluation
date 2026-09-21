@@ -10,10 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -43,8 +46,8 @@ type fakeRecord struct {
 // 書き込みオブジェクトの引数型がコンパイル時に保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
 // 駆動する）。
 type userStoreFake struct {
-	seq   int64
-	users map[int64]*fakeRecord
+	seq   int
+	users map[string]*fakeRecord
 	err   error
 }
 
@@ -53,7 +56,7 @@ var (
 	_ domain.UserRepository = (*userStoreFake)(nil)
 )
 
-func newUserStoreFake() *userStoreFake { return &userStoreFake{users: map[int64]*fakeRecord{}} }
+func newUserStoreFake() *userStoreFake { return &userStoreFake{users: map[string]*fakeRecord{}} }
 
 func (f *userStoreFake) CreateUser(_ context.Context, p domain.CreateUserParams) (domain.User, error) {
 	if f.err != nil {
@@ -65,7 +68,7 @@ func (f *userStoreFake) CreateUser(_ context.Context, p domain.CreateUserParams)
 		}
 	}
 	f.seq++
-	user := domain.User{ID: f.seq, Username: p.Username, Email: p.Email, Admin: p.Admin}
+	user := domain.User{ID: uid.N(f.seq), Username: p.Username, Email: p.Email, Admin: p.Admin}
 	f.users[user.ID] = &fakeRecord{user: user, digest: p.PasswordDigest}
 	return user, nil
 }
@@ -82,7 +85,7 @@ func (f *userStoreFake) GetActiveUserByEmail(_ context.Context, email string) (u
 	return usecase.UserCredentials{}, domain.ErrUserNotFound
 }
 
-func (f *userStoreFake) GetActiveUserByID(_ context.Context, id int64) (domain.User, error) {
+func (f *userStoreFake) GetActiveUserByID(_ context.Context, id string) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err
 	}
@@ -153,7 +156,7 @@ func do(router http.Handler, method, path, body, authHeader string) *httptest.Re
 }
 
 func decodeAuthUser(t *testing.T, body []byte) (resp struct {
-	ID       int64  `json:"id"`
+	ID       string `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Admin    bool   `json:"admin"`
@@ -179,8 +182,8 @@ func TestSignupThenLogout(t *testing.T) {
 		t.Fatalf("signup status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 	}
 	user := decodeAuthUser(t, rec.Body.Bytes())
-	if user.ID != 1 || user.Username != "alice" || user.Email != "alice@example.com" || user.Admin {
-		t.Errorf("signup body = %+v, want id=1 alice alice@example.com admin=false", user)
+	if user.ID != uid.N(1) || user.Username != "alice" || user.Email != "alice@example.com" || user.Admin {
+		t.Errorf("signup body = %+v, want id=%s alice alice@example.com admin=false", user, uid.N(1))
 	}
 	if user.Token == "" {
 		t.Fatal("signup token is empty")
@@ -440,9 +443,16 @@ func TestRequireAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue discarded-user token: %v", err)
 	}
-	unknownToken, err := codec.Issue(9999)
+	unknownToken, err := codec.Issue(uid.N(9999))
 	if err != nil {
 		t.Fatalf("issue unknown-user token: %v", err)
+	}
+
+	// user_id が数値だった旧形式のトークン(S27 より前の発行形式)は、署名と期限が正しくても無効になる。
+	legacyToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256,
+		jwt.MapClaims{"user_id": 1, "exp": time.Now().Add(time.Hour).Unix()}).SignedString([]byte(testJWTSecret))
+	if err != nil {
+		t.Fatalf("issue legacy numeric token: %v", err)
 	}
 
 	router := newTestRouterWith(t, okPinger, auth)
@@ -464,6 +474,7 @@ func TestRequireAuth(t *testing.T) {
 		{name: "AC4 別の secret で署名されたトークンは拒否される", authHeader: "Bearer " + wrongSecretToken, wantStatus: http.StatusUnauthorized},
 		{name: "AC4 期限切れのトークンは拒否される", authHeader: "Bearer " + expiredToken, wantStatus: http.StatusUnauthorized},
 		{name: "未知のユーザーのトークンは拒否される", authHeader: "Bearer " + unknownToken, wantStatus: http.StatusUnauthorized},
+		{name: "S27 user_id が数値の旧形式のトークンは拒否される", authHeader: "Bearer " + legacyToken, wantStatus: http.StatusUnauthorized},
 		{name: "AC5 discard 済みのユーザーのトークンは拒否される", authHeader: "Bearer " + discardedToken, wantStatus: http.StatusUnauthorized},
 	}
 	for _, tt := range tests {
@@ -545,7 +556,7 @@ func TestOptionalAuth(t *testing.T) {
 				t.Fatalf("viewer present = %v, want %v", ok, tt.wantViewer)
 			}
 			if tt.wantViewer && viewer.ID != alice.ID {
-				t.Errorf("viewer.ID = %d, want %d", viewer.ID, alice.ID)
+				t.Errorf("viewer.ID = %s, want %s", viewer.ID, alice.ID)
 			}
 		})
 	}

@@ -25,7 +25,7 @@ func NewUsers(query UserQuery, users *domain.Users, hasher PasswordHasher) *User
 // Get は、discard されていないユーザー 1 人を、viewer（nil = 匿名）から見える
 // ビューにして返す。存在しないユーザーと discard 済みのユーザーは、どちらも
 // domain.ErrUserNotFound になる。
-func (s *Users) Get(ctx context.Context, viewer *domain.User, id int64) (domain.UserProfile, error) {
+func (s *Users) Get(ctx context.Context, viewer *domain.User, id string) (domain.UserProfile, error) {
 	user, err := s.query.GetActiveUserByID(ctx, id)
 	if err != nil {
 		return domain.UserProfile{}, fmt.Errorf("get user: %w", err)
@@ -89,7 +89,7 @@ func (in UpdateUserInput) validate(currentEmail string) []string {
 // なくても同じ）、domain の本人管理ルール（403）、入力の validation
 // （422）、そしてカラム限定の書き込みの順である。すでに使われている email は、
 // signup と同様に *domain.ValidationError として返される。
-func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, input UpdateUserInput) (domain.User, error) {
+func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string, input UpdateUserInput) (domain.User, error) {
 	target, err := s.query.GetActiveUserByID(ctx, targetID)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("update user: %w", err)
@@ -121,7 +121,7 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID int64, 
 // Delete は対象ユーザーのアカウントを soft delete する。load（404。所有者で
 // なくても同じ）、domain の本人管理ルール（403）、そして discard の順で
 // 行い、hard DELETE は決して行わない。
-func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID int64) error {
+func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string) error {
 	target, err := s.query.GetActiveUserByID(ctx, targetID)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)

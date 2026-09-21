@@ -40,7 +40,7 @@ ORDER BY r.id;
 -- kept な rating（Rails の user.reviews.kept に対応する）。
 SELECT r.user_id, r.rating
 FROM reviews r
-WHERE r.user_id = ANY(sqlc.arg(user_ids)::bigint[])
+WHERE r.user_id = ANY(sqlc.arg(user_ids)::uuid[])
   AND r.discarded_at IS NULL
 ORDER BY r.id;
 

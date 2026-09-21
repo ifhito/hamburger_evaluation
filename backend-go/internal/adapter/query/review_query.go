@@ -52,9 +52,7 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 	if filter.ShopID != nil {
 		params.FilterShopID = pgtype.Int8{Int64: *filter.ShopID, Valid: true}
 	}
-	if filter.UserID != nil {
-		params.FilterUserID = pgtype.Int8{Int64: *filter.UserID, Valid: true}
-	}
+	params.FilterUserID = filter.UserID
 	rows, err := r.q.ListPublicReviews(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list reviews: %w", err)
@@ -127,7 +125,7 @@ func (r *ReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID int64)
 // なる。
 func toReviewDetail(
 	id int64, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz,
-	userID int64, username string, burgerID int64, burgerName string,
+	userID string, username string, burgerID int64, burgerName string,
 	reviewCount pgtype.Int8, averageRating, weightedScore, confidence pgtype.Float8,
 ) domain.ReviewDetail {
 	burger := rowmap.ShopReviewBurger(burgerID, burgerName, averageRating, reviewCount, weightedScore, confidence)

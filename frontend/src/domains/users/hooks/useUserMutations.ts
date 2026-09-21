@@ -12,7 +12,7 @@ export function isUserKey(key: unknown): boolean {
   return Array.isArray(key) && key[0] === "/users";
 }
 
-export function useUpdateUser(id: number) {
+export function useUpdateUser(id: string) {
   const { mutate } = useSWRConfig();
   return {
     // PUT のレスポンスは常に本人ビュー(email / admin あり)なので AuthUser を返す。
@@ -27,7 +27,7 @@ export function useUpdateUser(id: number) {
 export function useDeleteUser() {
   const { mutate } = useSWRConfig();
   return {
-    destroy: async (id: number): Promise<void> => {
+    destroy: async (id: string): Promise<void> => {
       await userApiClient.delete(`/users/${id}`);
       await mutate(isUserKey, undefined);
     },
