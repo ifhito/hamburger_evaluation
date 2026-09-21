@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>レビューの編集(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="reviews">
+<main class="wrap page">
+  <a class="back" href="#" data-en="← Back to the review">← レビューに戻る</a>
+  <h1 data-en="Edit review">レビューを編集する</h1>
+  <p class="shopline"><b>テリヤキバーガー</b><span>J.S. BURGERS CAFE 新宿</span></p>
+  <div class="narrow" data-only="forbidden"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="You can't edit this review">このレビューは、編集できません</b><p class="msg" data-en="Only the person who wrote it can edit it.">投稿した本人だけが、編集できます。</p></div></section><p style="margin-top:16px"><a class="textlink" href="#" data-en="← Back to the review">← レビューに戻る</a></p></div>
+  <div data-only="default">
+    <div class="formgrid">
+      <div class="form">
+        <div class="field"><span class="label" id="rl" data-en="Rating">評価</span><div class="ratingpick" role="radiogroup" aria-labelledby="rl"><div class="rp-view"><span class="burger" data-size="lg" data-score="4" data-decor></span><div class="rp-num"><b>4</b><span class="rp-of" data-en="out of 5">/ 5</span></div></div><div class="rp-steps"><button type="button" class="step" role="radio" aria-checked="false">1</button><button type="button" class="step" role="radio" aria-checked="false">2</button><button type="button" class="step" role="radio" aria-checked="false">3</button><button type="button" class="step on" role="radio" aria-checked="true">4</button><button type="button" class="step" role="radio" aria-checked="false">5</button></div></div></div>
+        <div class="field"><label class="label" id="comment-l" for="comment" data-en="Comment">コメント</label><div class="input area" id="comment" role="textbox" aria-multiline="true" aria-labelledby="comment-l">チーズの量がちょうどよかった。</div><p class="counter" aria-live="polite">15 / 2000</p></div>
+      </div>
+      <div class="form"><div class="field"><span class="label" data-en="Photo (optional)">写真 <span class="optional" data-en="(optional)">(任意)</span></span><div><div class="photo pv" style="--a:#e3c29a;--b:#b98552"><span class="photo-label" data-en="Photo">写真</span></div><div class="pfile"><span class="fname">現在の写真</span><span class="muted" data-en="Posted on Sep 21, 2026">2026年9月21日に投稿</span></div><div class="pbtns"><button type="button" class="btn ghost" data-en="Change photo">写真を変える</button></div></div></div></div>
+    </div>
+    <div class="actions-row"><button type="button" class="btn primary wide" data-en="Save changes">変更を保存する</button><button type="button" class="btn ghost" data-en="Cancel">キャンセル</button></div>
+  </div>
+  <aside class="memo"><b>実装メモ</b><ul><li>・編集してよいかは、backend が返す(<code>can_edit</code>)。他人のレビューでは、フォームを出さず、この画面を出す。バーガーの名前は、あとから変えられない(表示だけ)。</li><li>・写真は「変える」だけ(外す操作は、いまのアプリにない)。写真を変えたときの小さくする処理・エラーは、投稿の画面と同じ(<code>review-photo</code> の見本)。</li><li>・評価・文字数・写真の値の出どころは、投稿の画面と同じ(<code>GET /meta</code>)。</li></ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

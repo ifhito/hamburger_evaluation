@@ -85,7 +85,7 @@ const TOKENS = [
   ['burger-lettuce', BC.lettuce, '評価のバーガー: レタスの塗り(チーズは accent の黄色)'],
   ['burger-tomato', BC.tomato, '評価のバーガー: トマトの塗り'],
   ['burger-empty', window.Burger.EMPTY, '評価のバーガー: 水位より上の輪郭(灰色)'],
-  ['danger', '--danger', '赤。削除とエラーだけに使う(ほかには使わない)。削除ボタンの枠と文字・エラーの枠と帯と「!」の面と見出し'],
+  ['danger', '--danger', '赤。削除とエラーだけに使う(ほかには使わない)。削除ボタンの枠と文字・削除の確認ボタンの面・エラーの枠と帯と「!」の面と見出し'],
   ['danger-surface', '--danger-surface', 'エラーの表示の薄い赤の背景(文字は黒)'],
 ];
 const tokens = TOKENS.map(([name, src, usage]) => ({ name, src, value: src.startsWith('#') ? src : v(src), usage }));
@@ -112,6 +112,8 @@ const PAIRS = [
   ['エラーの見出しの赤い文字 / 薄い赤の背景', v('--danger'), v('--danger-surface'), 4.5, true],
   ['エラーの文言の黒い文字 / 薄い赤の背景', v('--text'), v('--danger-surface'), 4.5, true],
   ['エラーの「!」の白い文字 / 赤の面', v('--bg'), v('--danger'), 4.5, true],
+  ['削除の確認の「削除する」ボタンの白い文字 / 赤の面', v('--bg'), v('--danger'), 4.5, true],
+  ['押せないボタン(送っている間・小さくしている間)の文字 / 薄い灰色の面', v('--text-muted'), v('--surface-2'), 4.5, true],
   ['エラーの赤い枠・帯 / 薄い赤の背景(図形は 3:1)', v('--danger'), v('--danger-surface'), 3, true],
   ['黄色の文字 / ページの背景', v('--accent'), v('--bg'), 4.5, false],
   ['黄色の線・枠 / ページの背景', v('--accent'), v('--bg'), 3, false],
