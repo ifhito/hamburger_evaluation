@@ -39,6 +39,9 @@ type ReviewQuery interface {
 	// いるときに限り、stats つき（まだ計算されていなければゼロ）の burger を
 	// 返し、そうでなければ（wrap された）domain.ErrBurgerNotFound を返す。
 	GetShopBurger(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error)
+	// GetReviewShop は、review が属する shop(review の burger を持つ shop)を返す。
+	// review が存在しないときは、(wrap された)domain.ErrReviewNotFound を返す。
+	GetReviewShop(ctx context.Context, reviewID string) (domain.Shop, error)
 }
 
 // ReviewListFilter は、GET /reviews の省略可能なクエリフィルタを保持する。
@@ -113,8 +116,9 @@ func (s *Reviews) List(ctx context.Context, viewer *domain.User, filter ReviewLi
 
 // Get は author、burger、stats つきの review を 1 件返す。存在しない review、
 // discard 済みの review、author が discard 済みの user である review は、
-// いずれも domain.ErrReviewNotFound を返す。viewer（nil = 匿名）は CanEdit の
-// 設定だけに使う。
+// いずれも domain.ErrReviewNotFound を返す。viewer（nil = 匿名）は CanEdit と
+// CanReview の設定に使う。CanReview は、review の burger を持つショップ（複数あるときは
+// 作成の古い順の先頭）に、viewer が review を書けるかで、ショップ詳細の can_review と同じ規則である。
 func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (domain.ReviewDetail, error) {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
@@ -122,6 +126,11 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (doma
 	}
 	detail.PhotoURL = s.photoURL(detail.PhotoKey)
 	detail.CanEdit = detail.CanBeModifiedByViewer(viewer)
+	shop, err := s.query.GetReviewShop(ctx, id)
+	if err != nil {
+		return domain.ReviewDetail{}, fmt.Errorf("get review shop: %w", err)
+	}
+	detail.CanReview = shop.CanBeReviewedByViewer(viewer) // ショップ詳細の can_review と同じ規則
 	return detail, nil
 }
 

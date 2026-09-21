@@ -232,6 +232,18 @@ type reviewResponse struct {
 	CanEdit bool `json:"can_edit"`
 }
 
+// reviewDetailResponse は GET /reviews/{id} の body である。reviewResponse に、viewer が、その review の
+// ショップに review を投稿できるか(can_review。ショップ詳細の can_review と同じ規則)を足したもの。
+// 一覧・作成・更新の応答には含めない(画面が使うのは詳細だけで、ほかでは意味のない false になるため)。
+type reviewDetailResponse struct {
+	reviewResponse
+	CanReview bool `json:"can_review"`
+}
+
+func newReviewDetailResponse(detail domain.ReviewDetail) reviewDetailResponse {
+	return reviewDetailResponse{reviewResponse: newReviewResponse(detail), CanReview: detail.CanReview}
+}
+
 // newReviewResponse は domain の payload を、shop detail の reviews と共有する
 // wire 形状（frontend の Review、domains/reviews/api/types.ts。ワイヤ上は snake_case）に
 // can_edit を足して対応させる。
@@ -370,7 +382,7 @@ func handleGetReview(reviews *usecase.Reviews) http.HandlerFunc {
 			writeReviewError(w, "get", err)
 			return
 		}
-		writeJSON(w, http.StatusOK, newReviewResponse(detail))
+		writeJSON(w, http.StatusOK, newReviewDetailResponse(detail))
 	}
 }
 

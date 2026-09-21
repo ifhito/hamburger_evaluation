@@ -113,3 +113,14 @@ SET discarded_at = now(),
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
 RETURNING burger_id;
+
+-- name: GetReviewShop :one
+-- review が属する shop(review の burger を持つ shop)。review の詳細で、viewer がその shop に
+-- review を投稿できるか(can_review)を、ショップ詳細と同じ規則で求めるために使う。
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id
+FROM reviews r
+JOIN shops_burgers sb ON sb.burger_id = r.burger_id
+JOIN shops s ON s.id = sb.shop_id
+WHERE r.id = $1
+ORDER BY s.created_at, s.id
+LIMIT 1;

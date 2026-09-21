@@ -24,6 +24,7 @@ type fakeReviewQuery struct {
 	getReview     func(ctx context.Context, id string) (domain.ReviewDetail, error)
 	getShop       func(ctx context.Context, id string) (domain.Shop, error)
 	getShopBurger func(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error)
+	getReviewShop func(ctx context.Context, reviewID string) (domain.Shop, error)
 }
 
 func (f *fakeReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error) {
@@ -45,6 +46,14 @@ func (f *fakeReviewQuery) GetShop(ctx context.Context, id string) (domain.Shop, 
 		panic("unexpected GetShop call")
 	}
 	return f.getShop(ctx, id)
+}
+
+// GetReviewShop は、未設定なら、誰でも投稿できる(active の)ショップを返す。
+func (f *fakeReviewQuery) GetReviewShop(ctx context.Context, reviewID string) (domain.Shop, error) {
+	if f.getReviewShop == nil {
+		return domain.Shop{Status: domain.ShopStatusActive}, nil
+	}
+	return f.getReviewShop(ctx, reviewID)
 }
 
 func (f *fakeReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error) {

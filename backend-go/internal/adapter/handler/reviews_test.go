@@ -152,6 +152,29 @@ func (f *reviewStoreFake) GetShop(_ context.Context, id string) (domain.Shop, er
 	return domain.Shop{}, domain.ErrShopNotFound
 }
 
+// GetReviewShop は、review の burger を持つ shop(links の逆引き)を返す。burger が複数の shop にあるときは
+// id が最小の shop を選ぶ(本物のクエリは、作成の古い順)。
+func (f *reviewStoreFake) GetReviewShop(_ context.Context, reviewID string) (domain.Shop, error) {
+	if f.err != nil {
+		return domain.Shop{}, f.err
+	}
+	rec, ok := f.reviews[reviewID]
+	if !ok {
+		return domain.Shop{}, domain.ErrReviewNotFound
+	}
+	shopIDs := make([]string, 0, len(f.links))
+	for shopID := range f.links {
+		shopIDs = append(shopIDs, shopID)
+	}
+	sort.Strings(shopIDs)
+	for _, shopID := range shopIDs {
+		if slices.Contains(f.links[shopID], rec.review.BurgerID) {
+			return f.shops[shopID], nil
+		}
+	}
+	return domain.Shop{}, domain.ErrReviewNotFound
+}
+
 func (f *reviewStoreFake) GetShopBurger(_ context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error) {
 	if f.err != nil {
 		return domain.ShopReviewBurger{}, f.err
@@ -330,6 +353,7 @@ func TestCreateReview(t *testing.T) {
 		want := `{"id":"` + uid.N(1) + `","rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`
 		wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
+		wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false}` // 匿名は、詳細でも can_review が false(一覧・作成・更新には、この項目がない)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -346,8 +370,8 @@ func TestCreateReview(t *testing.T) {
 		if detail.Code != http.StatusOK {
 			t.Fatalf("detail status = %d, want %d (body %s)", detail.Code, http.StatusOK, detail.Body)
 		}
-		if got := detail.Body.String(); got != wantAnon {
-			t.Errorf("detail body = %s, want %s", got, wantAnon)
+		if got := detail.Body.String(); got != wantAnonDetail {
+			t.Errorf("detail body = %s, want %s", got, wantAnonDetail)
 		}
 	})
 
@@ -819,11 +843,12 @@ func TestUpdateReview(t *testing.T) {
 			`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`,
 			cheeseReviewID)
 		wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
+		wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false}` // 匿名は、詳細でも can_review が false(一覧・作成・更新には、この項目がない)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
-		if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != wantAnon {
-			t.Errorf("detail after edit = %s, want %s", detail.Body, wantAnon)
+		if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != wantAnonDetail {
+			t.Errorf("detail after edit = %s, want %s", detail.Body, wantAnonDetail)
 		}
 	})
 
@@ -868,11 +893,12 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 		`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`,
 		cheeseReviewID)
 	wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
+	wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false}` // 匿名は、詳細でも can_review が false(一覧・作成・更新には、この項目がない)
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want the original burger with updated content %s", got, want)
 	}
-	if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != wantAnon {
-		t.Errorf("detail after tampered edit = %s, want %s", detail.Body, wantAnon)
+	if detail := do(router, http.MethodGet, path, "", ""); detail.Body.String() != wantAnonDetail {
+		t.Errorf("detail after tampered edit = %s, want %s", detail.Body, wantAnonDetail)
 	}
 
 	// でたらめな id も同様に効果を持たない。

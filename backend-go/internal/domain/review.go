@@ -120,6 +120,10 @@ type ReviewDetail struct {
 	// CanEdit は、viewer がこの review を編集・削除できるかである。viewer ごとに
 	// 決まる値なので、usecase が CanBeModifiedByViewer で設定する（読み取ったままでは false）。
 	CanEdit bool
+	// CanReview は、viewer が、この review のショップに review を投稿できるかである
+	// （ショップ詳細の CanReview と同じ規則。Shop.CanBeReviewedByViewer）。viewer ごとに決まる値で、
+	// review の詳細を返すときだけ usecase が設定する（一覧などでは false のまま）。
+	CanReview bool
 }
 
 // ---- repository の契約(実装は adapter/repository) ----

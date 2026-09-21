@@ -104,6 +104,23 @@ func (r *ReviewQuery) GetShop(ctx context.Context, id string) (domain.Shop, erro
 	return shop, nil
 }
 
+// GetReviewShop は、review が属する shop(review の burger を持つ shop)を返す。
+// review が存在しないときは domain.ErrReviewNotFound を返す。
+func (r *ReviewQuery) GetReviewShop(ctx context.Context, reviewID string) (domain.Shop, error) {
+	row, err := r.q.GetReviewShop(ctx, reviewID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Shop{}, fmt.Errorf("get review shop: %w", domain.ErrReviewNotFound)
+		}
+		return domain.Shop{}, fmt.Errorf("get review shop: %w", err)
+	}
+	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+	if err != nil {
+		return domain.Shop{}, fmt.Errorf("get review shop: %w", err)
+	}
+	return shop, nil
+}
+
 // GetShopBurger は、burger が shops_burgers 経由でその shop に紐づいている
 // とき、stats つきの burger を返す。そうでなければ domain.ErrBurgerNotFound
 // を返す。存在しない burger と別の shop の burger は区別できない。
