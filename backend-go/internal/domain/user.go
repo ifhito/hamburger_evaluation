@@ -9,8 +9,10 @@ type User struct {
 	// ID は UUID の正規形（小文字・ハイフン区切り）である。DB が生成し、形式の判定は IsUUID が持つ。
 	ID       string
 	Username string
-	Email    string
-	Admin    bool
+	// Bio は自己紹介文（biography の略）である。空文字は未設定を表す。誰にでも公開される。
+	Bio   string
+	Email string
+	Admin bool
 }
 
 // CanModerate は、shop の moderation（一覧・名称変更・承認・却下）を行ってよいかを返す。
@@ -22,7 +24,7 @@ func (u User) CanModerate() bool { return u.Admin }
 // （issue #16 R2/R3）。
 func (u User) Manages(id string) bool { return u.ID == id }
 
-// UserProfile は、viewer から見えるユーザーのビューである。ID と Username は
+// UserProfile は、viewer から見えるユーザーのビューである。ID・ユーザー名・自己紹介文は
 // 誰にでも公開され、Email と Admin は本人にだけ入る（それ以外は nil）。
 // 他人や匿名に渡しうる user のレスポンスは、User そのものではなく、この型
 // （または {id, username} だけの UserRef）から組み立てる。こうして email と
@@ -30,8 +32,10 @@ func (u User) Manages(id string) bool { return u.ID == id }
 type UserProfile struct {
 	ID       string
 	Username string
-	Email    *string
-	Admin    *bool
+	// Bio は自己紹介文で、他人や匿名にも見える（空文字は未設定）。
+	Bio   string
+	Email *string
+	Admin *bool
 	// CanEdit は、viewer がこのプロフィールを編集・削除できるか（Manages）である。
 	// 匿名は false。frontend は、編集リンクの出し分けにこの値を使う。
 	CanEdit bool
@@ -42,7 +46,7 @@ type UserProfile struct {
 // admin は見えない（管理者による他人 email の閲覧は対象外。Manages と同じく
 // admin に例外はない）。
 func (u User) ProfileFor(viewer *User) UserProfile {
-	p := UserProfile{ID: u.ID, Username: u.Username}
+	p := UserProfile{ID: u.ID, Username: u.Username, Bio: u.Bio}
 	if viewer != nil && viewer.ID == u.ID {
 		p.Email = &u.Email
 		p.Admin = &u.Admin
@@ -69,6 +73,7 @@ type CreateUserParams struct {
 // 目にすることはない。
 type ProfileChanges struct {
 	Username       *string
+	Bio            *string
 	Email          *string
 	PasswordDigest *string
 }

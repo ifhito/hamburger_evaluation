@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	usersViewer = domain.User{ID: uid.N(1), Username: "alice", Email: "alice@example.com"}
+	usersViewer = domain.User{ID: uid.N(1), Username: "alice", Bio: "alice の自己紹介", Email: "alice@example.com"}
 	usersOther  = domain.User{ID: uid.N(2), Username: "bob", Email: "bob@example.com"}
 )
 
@@ -37,12 +37,12 @@ func boolPtr(b bool) *bool { return &b }
 
 // publicProfile は、u の公開ビュー（email と admin は nil）を返す。
 func publicProfile(u domain.User) domain.UserProfile {
-	return domain.UserProfile{ID: u.ID, Username: u.Username}
+	return domain.UserProfile{ID: u.ID, Username: u.Username, Bio: u.Bio}
 }
 
 // selfProfile は、u の本人ビュー（email と admin を含み、編集できる: CanEdit）を返す。
 func selfProfile(u domain.User) domain.UserProfile {
-	return domain.UserProfile{ID: u.ID, Username: u.Username, Email: strPtr(u.Email), Admin: boolPtr(u.Admin), CanEdit: true}
+	return domain.UserProfile{ID: u.ID, Username: u.Username, Bio: u.Bio, Email: strPtr(u.Email), Admin: boolPtr(u.Admin), CanEdit: true}
 }
 
 // TestUsersGet は、詳細が viewer ごとのビューで返ることと、存在しない
@@ -120,6 +120,16 @@ func TestUsersUpdateValidation(t *testing.T) {
 			name:     "username が空だと検証エラーになる",
 			input:    usecase.UpdateUserInput{Username: strPtr("")},
 			wantMsgs: []string{"Username can't be blank"},
+		},
+		{
+			name:     "自己紹介文が上限を超えると検証エラーになる",
+			input:    usecase.UpdateUserInput{Bio: strPtr(strings.Repeat("あ", domain.MaxBioChars+1))},
+			wantMsgs: []string{"Bio is too long (maximum is 500 characters)"},
+		},
+		{
+			name:     "ユーザー名が空で自己紹介文が上限を超えていれば、両方のメッセージをこの順に返す",
+			input:    usecase.UpdateUserInput{Username: strPtr(""), Bio: strPtr(strings.Repeat("🍔", domain.MaxBioChars+1))},
+			wantMsgs: []string{"Username can't be blank", "Bio is too long (maximum is 500 characters)"},
 		},
 		{
 			name:     "email が空だと検証エラーになる",
@@ -299,6 +309,16 @@ func TestUsersUpdateChanges(t *testing.T) {
 			wantChanges: domain.ProfileChanges{Username: strPtr("alice2")},
 		},
 		{
+			name:        "自己紹介文だけを送ると、他の項目は変更なしのまま、自己紹介文だけが更新に渡る",
+			input:       usecase.UpdateUserInput{Bio: strPtr("はじめまして")},
+			wantChanges: domain.ProfileChanges{Bio: strPtr("はじめまして")},
+		},
+		{
+			name:        "空文字の自己紹介文は、書いた内容を「消す」変更としてそのまま渡る(パスワードの空文字は「変更なし」の扱いだが、自己紹介文は空文字も有効な値)",
+			input:       usecase.UpdateUserInput{Bio: strPtr("")},
+			wantChanges: domain.ProfileChanges{Bio: strPtr("")},
+		},
+		{
 			name:        "空文字列の password は存在しない扱いで、digest の変更もエラーもない",
 			input:       usecase.UpdateUserInput{Password: strPtr("")},
 			wantChanges: domain.ProfileChanges{},
@@ -318,9 +338,10 @@ func TestUsersUpdateChanges(t *testing.T) {
 		},
 		{
 			name:  "全フィールドを同時に更新できる",
-			input: usecase.UpdateUserInput{Username: strPtr("alice2"), Email: strPtr("alice2@example.com"), Password: strPtr("NewPassw0rd!")},
+			input: usecase.UpdateUserInput{Username: strPtr("alice2"), Bio: strPtr("bio2"), Email: strPtr("alice2@example.com"), Password: strPtr("NewPassw0rd!")},
 			wantChanges: domain.ProfileChanges{
 				Username:       strPtr("alice2"),
+				Bio:            strPtr("bio2"),
 				Email:          strPtr("alice2@example.com"),
 				PasswordDigest: strPtr("digest(NewPassw0rd!)"),
 			},
@@ -412,7 +433,7 @@ func profileChangesString(c domain.ProfileChanges) string {
 		}
 		return fmt.Sprintf("%q", *p)
 	}
-	return fmt.Sprintf("{Username:%s Email:%s PasswordDigest:%s}", deref(c.Username), deref(c.Email), deref(c.PasswordDigest))
+	return fmt.Sprintf("{Username:%s Bio:%s Email:%s PasswordDigest:%s}", deref(c.Username), deref(c.Bio), deref(c.Email), deref(c.PasswordDigest))
 }
 
 // TestUsersUpdateEmailTaken は usecase レベルで AC3 を扱う。repository の

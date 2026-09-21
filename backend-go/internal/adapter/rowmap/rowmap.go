@@ -76,6 +76,7 @@ func User(row sqlcgen.User) domain.User {
 	return domain.User{
 		ID:       row.ID,
 		Username: row.Username,
+		Bio:      row.Bio,
 		Email:    row.Email,
 		Admin:    row.Admin,
 	}

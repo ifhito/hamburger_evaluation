@@ -131,6 +131,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 			"shops_name_max_length":            domain.MaxShopNameChars,
 			"shops_moderation_note_max_length": domain.MaxModerationNoteChars,
 			"users_username_max_length":        domain.MaxUsernameChars,
+			"users_bio_max_length":             domain.MaxBioChars,
 			"users_email_max_length":           domain.MaxEmailChars,
 		}
 		if fmt.Sprint(got) != fmt.Sprint(want) {
@@ -225,6 +226,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"users/id/uuid/NO",
 		"users/email/text/NO",
 		"users/username/text/NO",
+		"users/bio/text/NO",
 		"users/password_digest/text/NO",
 		"users/admin/boolean/NO",
 		"users/discarded_at/timestamp with time zone/YES",
@@ -273,6 +275,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/shops_name_max_length/c",
 		"shops/shops_moderation_note_max_length/c",
 		"users/users_username_max_length/c",
+		"users/users_bio_max_length/c",
 		"users/users_email_max_length/c",
 		"reviews/reviews_user_id_fkey/f",
 		"reviews/reviews_burger_id_fkey/f",
@@ -362,6 +365,8 @@ var textLimitCases = []textLimitCase{
 		"INSERT INTO shops (name, status, moderation_note) VALUES ('note-shop', 2, $1)"},
 	{"users.username", domain.MaxUsernameChars, "users_username_max_length",
 		"INSERT INTO users (email, username, password_digest) VALUES ('u' || md5(random()::text) || '@example.com', $1, 'digest')"},
+	{"users.bio", domain.MaxBioChars, "users_bio_max_length",
+		"INSERT INTO users (email, username, password_digest, bio) VALUES ('b' || md5(random()::text) || '@example.com', 'bio-user', 'digest', $1)"},
 	{"users.email", domain.MaxEmailChars, "users_email_max_length",
 		"INSERT INTO users (email, username, password_digest) VALUES ($1, 'limit-user', 'digest')"},
 }
