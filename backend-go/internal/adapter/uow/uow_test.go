@@ -27,26 +27,6 @@ import (
 // dbtest の内部でスキップする）。review の書き込みと burger の統計の再計算が 1 つのトランザクションで
 // 行われること（S7・S17）を、統計の行と domain の計算の一致で確かめる。
 
-// insertRow は sql（id を RETURN する必要がある）で insert し、新しい id を返す。
-func insertRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, args ...any) int64 {
-	t.Helper()
-	var id int64
-	if err := conn.QueryRow(ctx, sql, args...).Scan(&id); err != nil {
-		t.Fatalf("insert %q: %v", sql, err)
-	}
-	return id
-}
-
-// insertUserRow は insertRow と同様だが、users の id（UUID の正規形の文字列）を返す。
-func insertUserRow(ctx context.Context, t *testing.T, conn *pgx.Conn, sql string, args ...any) string {
-	t.Helper()
-	var id string
-	if err := conn.QueryRow(ctx, sql, args...).Scan(&id); err != nil {
-		t.Fatalf("insert %q: %v", sql, err)
-	}
-	return id
-}
-
 const (
 	insertUser   = `INSERT INTO users (email, username, password_digest, admin) VALUES ($1, $2, 'x', $3) RETURNING id`
 	insertBurger = `INSERT INTO burgers (name) VALUES ($1) RETURNING id`
@@ -83,7 +63,7 @@ func newWorld(t *testing.T) *world {
 	w.queries.shop = query.NewShopQuery(conn)
 	w.reviews = usecase.NewReviews(w.queries.review, w.unit, w.recalc, photos)
 	w.users = usecase.NewUsers(query.NewUserQuery(conn), domain.NewUsers(repository.NewUserRepository(conn)), w.unit, w.recalc, infra.BcryptPasswordHasher{})
-	w.shop = insertRow(ctx, t, conn,
+	w.shop = dbtest.InsertRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
 	return w
@@ -92,7 +72,7 @@ func newWorld(t *testing.T) *world {
 // burger は、shop に紐づく burger を作って id を返す。
 func (w *world) burger(t *testing.T, name string) int64 {
 	t.Helper()
-	id := insertRow(w.ctx, t, w.conn, insertBurger, name)
+	id := dbtest.InsertRow(w.ctx, t, w.conn, insertBurger, name)
 	if _, err := w.conn.Exec(w.ctx, `INSERT INTO shops_burgers (shop_id, burger_id) VALUES ($1, $2)`, w.shop, id); err != nil {
 		t.Fatalf("link shop %d burger %d: %v", w.shop, id, err)
 	}
@@ -102,7 +82,7 @@ func (w *world) burger(t *testing.T, name string) int64 {
 // user は user を作って、viewer として使える domain.User を返す。
 func (w *world) user(t *testing.T, name string) domain.User {
 	t.Helper()
-	id := insertUserRow(w.ctx, t, w.conn, insertUser, name+"@example.com", name, false)
+	id := dbtest.InsertUserRow(w.ctx, t, w.conn, insertUser, name+"@example.com", name, false)
 	return domain.User{ID: id, Username: name}
 }
 
@@ -359,7 +339,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	alice := w.user(t, "alice")
-	shopB := insertRow(ctx, t, conn,
+	shopB := dbtest.InsertRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Shop B", 1, nil, nil)
 
