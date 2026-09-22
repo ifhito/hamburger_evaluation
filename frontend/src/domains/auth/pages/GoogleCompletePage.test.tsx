@@ -437,12 +437,15 @@ describe("失敗の案内の文言", () => {
 });
 
 describe("Google の結果の画面の見出し・読み上げ", () => {
-  it("コードを交換している間は、見出しと「少しお待ちください」を、読み上げの対象(role=status)として出す", async () => {
+  it("コードを交換している間は、見出しと「少しお待ちください」を出し、読み上げの対象(role=status)にも、同じ内容を伝える", async () => {
     exchangeGoogleCode.mockReturnValue(new Promise(() => {}));
     const page = await showAt("/auth/google/complete?code=one-time-code");
 
+    expect(page.querySelector("h1")?.textContent).toBe("Signing you in with Google…");
+    expect(page.textContent).toContain("Just a moment");
     const status = need(page.querySelector("[role=status]"), "status");
-    expect(status.querySelector("h1")?.textContent).toBe("Signing you in with Google…");
+    // 空のまま先に描いてから、次の描画で埋める(中身の変化として気づかせるため)ので、埋まるまで待つ。
+    await eventually(() => expect(status.textContent).toContain("Signing you in with Google…"));
     expect(status.textContent).toContain("Just a moment");
   });
 

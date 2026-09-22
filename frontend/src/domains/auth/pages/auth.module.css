@@ -87,8 +87,14 @@
   width: min(360px, 100%);
 }
 
-.actions > button {
-  width: 100%;
+/* 画面には出さず、読み上げにだけ伝える(AuthLoading の知らせの領域)。 */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 @media (max-width: 720px) {

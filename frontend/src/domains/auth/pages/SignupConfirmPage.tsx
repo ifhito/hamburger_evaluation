@@ -5,7 +5,7 @@ import { useAuth } from "../AuthProvider";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { Layout } from "../../../components/Layout";
 import { Alert } from "../../../components/ui/Alert";
-import { AuthLoading } from "../components/AuthLoading";
+import { AuthLoading } from "./AuthLoading";
 import styles from "./auth.module.css";
 
 // 確認メールのリンク(/signup/confirm?token=…)の受け皿。トークンの有効・無効の判断は backend だけが持ち、

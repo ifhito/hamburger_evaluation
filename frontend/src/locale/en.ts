@@ -55,7 +55,7 @@ const en = {
       error: "Failed to create account",
       sent: {
         title: "Check your email",
-        message: "We sent a confirmation email to <email>{{email}}</email>. Open the link in it to finish creating your account.",
+        message: "We sent a confirmation email to <email/>. Open the link in it to finish creating your account.",
         hint: "If you don't see it, check your spam folder. To change your details, sign up again.",
         back: "Sign up again",
       },

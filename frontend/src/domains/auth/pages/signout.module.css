@@ -1,0 +1,5 @@
+/* この画面は S47(認証の画面のリデザイン)の対象外。auth.module.css(リデザインの部品向け)とは分けて、
+   見た目を変えない(auth.module.css の .muted は --ui-text-muted に変わったため、共有すると色が変わってしまう)。 */
+.muted {
+  color: var(--color-text-muted);
+}

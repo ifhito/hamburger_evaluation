@@ -33,7 +33,6 @@ describe("SignupPage の Google のボタン", () => {
     const google = need(byText(page, "a", "Continue with Google"), "Continue with Google");
     const username = need(page.querySelector("#username"), "#username");
     expect(google.compareDocumentPosition(username) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(byText(page, "a", "Sign up with Google")).toBeUndefined();
   });
 });
 

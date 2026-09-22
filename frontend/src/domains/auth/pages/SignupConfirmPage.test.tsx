@@ -52,12 +52,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SignupConfirmPage(確認メールのリンクの受け皿)", () => {
-  it("確認している間は、見出しと「少しお待ちください」を、読み上げの対象(role=status)として出す", async () => {
+  it("確認している間は、見出しと「少しお待ちください」を出し、読み上げの対象(role=status)にも、同じ内容を伝える", async () => {
     confirmSignup.mockReturnValue(new Promise(() => {}));
     const page = await show();
 
+    expect(page.querySelector("h1")?.textContent).toBe("Confirming your email address…");
+    expect(page.textContent).toContain("Just a moment");
     const status = need(page.querySelector("[role=status]"), "status");
-    expect(status.querySelector("h1")?.textContent).toBe("Confirming your email address…");
+    // 空のまま先に描いてから、次の描画で埋める(中身の変化として気づかせるため)ので、埋まるまで待つ。
+    await eventually(() => expect(status.textContent).toContain("Confirming your email address…"));
     expect(status.textContent).toContain("Just a moment");
   });
 

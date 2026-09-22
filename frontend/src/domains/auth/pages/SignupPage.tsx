@@ -41,7 +41,8 @@ export default function SignupPage() {
           <h1 className={styles.title}>{t("auth.signup.sent.title")}</h1>
           <div className={styles.form}>
             <p>
-              <Trans i18nKey="auth.signup.sent.message" values={{ email: sentTo }} components={{ email: <b /> }} />
+              {/* メールアドレスは values(再び文言として解釈される)ではなく、components の中身として渡す(利用者の入力を、文言の組み立てに混ぜない) */}
+              <Trans i18nKey="auth.signup.sent.message" components={{ email: <b>{sentTo}</b> }} />
             </p>
             <p className={styles.hint}>{t("auth.signup.sent.hint")}</p>
             <Button type="button" variant="secondary" onClick={() => setSentTo(null)}>
