@@ -1,42 +1,24 @@
-/* 枠・角丸・背景・overflow:hidden は、S45 の Card(components/ui/card.module.css)の .card から借りる。 */
+/* 枠・角丸・背景・overflow:hidden は S45 の Card(components/ui/card.module.css)の .card、写真・本文の余白・
+   日付・コメント・投稿者の行は components/reviewCard.module.css(reviews 一覧の ReviewListCard と共有)から借りる。
+   この画面だけの見た目は、上の行に置くバーガー名(.name)だけ。 */
 .card {
   composes: card from '../../../components/ui/card.module.css';
 }
 
-.photo,
-.noPhoto {
-  display: block;
-  width: 100%;
-  height: 240px;
-}
-
 .photo {
-  object-fit: cover;
+  composes: photo from '../../../components/reviewCard.module.css';
 }
 
 .noPhoto {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--ui-surface-2);
-  font-size: 14px;
-  color: var(--ui-text-muted);
+  composes: noPhoto from '../../../components/reviewCard.module.css';
 }
 
 .body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 20px 24px 12px;
-  font-family: var(--ui-font);
-  color: var(--ui-text);
+  composes: body from '../../../components/reviewCard.module.css';
 }
 
 .row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  composes: row from '../../../components/reviewCard.module.css';
 }
 
 .name {
@@ -46,35 +28,22 @@
   overflow-wrap: anywhere;
 }
 
+/* .name は review.burger が null のとき出ないので、date だけが残っても右に寄るよう、単独でも効く形で押す
+   (親の justify-content: space-between だけだと、子が 1 つのときは効かない)。 */
 .date {
+  composes: date from '../../../components/reviewCard.module.css';
   flex: none;
   margin-left: auto;
-  font-size: 14px;
-  color: var(--ui-text-muted);
 }
 
 .ratingOnly {
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
+  composes: ratingOnly from '../../../components/reviewCard.module.css';
 }
 
 .comment {
-  line-height: 1.8;
-  overflow-wrap: anywhere;
+  composes: comment from '../../../components/reviewCard.module.css';
 }
 
 .foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  color: var(--ui-text-muted);
-}
-
-@media (max-width: 720px) {
-  .photo,
-  .noPhoto {
-    height: 200px;
-  }
+  composes: foot from '../../../components/reviewCard.module.css';
 }
