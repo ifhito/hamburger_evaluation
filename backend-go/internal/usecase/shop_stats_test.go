@@ -326,64 +326,24 @@ func TestShopStatsWorkerRunOnce(t *testing.T) {
 	})
 }
 
-// TestStatsWorkerRequestsShopRecalculation は、バーガーの統計のワーカーが、統計を計算し直すのと同じトランザクションで、
-// そのバーガーが紐づくショップの集計の再計算を依頼し、どちらかが失敗すれば、依頼の削除(完了)もしないことを確かめる。
-func TestStatsWorkerRequestsShopRecalculation(t *testing.T) {
+// TestStatsWorkerDoesNotTouchShopStats は、バーガーの統計のワーカー(StatsWorker)が、ショップの集計に一切
+// 触れないことを確かめる(依頼のレビュー指摘への対応: ワーカーからワーカーへの連鎖をやめ、書き込みの経路が
+// 直接、両方の依頼を登録する形にした。バーガーの統計の再計算の成功・失敗が、ショップ側の都合(登録の失敗など)に
+// 引きずられない)。
+func TestStatsWorkerDoesNotTouchShopStats(t *testing.T) {
 	ctx := context.Background()
-	burgerDue := dueOf(domain.RecalcRequest{BurgerID: uid.N(7), Version: 3})
-
-	t.Run("バーガーの統計の保存のあと、依頼の削除の前に、紐づくショップの依頼を、同じトランザクションで昇順に登録する", func(t *testing.T) {
-		stats := &uowtest.Stats{Due: burgerDue}
-		shopStats := &uowtest.ShopStats{BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(4), uid.N(2)}, nil }}
-		uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
-		worker := usecase.NewStatsWorker(stats, uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), uowtest.Clock{}, defaultWorkerConfig)
-		if n, err := worker.RunOnce(ctx); err != nil || n != 1 {
-			t.Fatalf("RunOnce = (%d, %v), want (1, nil)", n, err)
-		}
-		if want := []string{"due", "lock:" + uid.N(7), "facts:" + uid.N(7), "save:" + uid.N(7), "complete:" + uid.N(7) + "@3"}; !reflect.DeepEqual(stats.Ops, want) {
-			t.Errorf("バーガーの操作 = %v, want %v(S18 と同じ)", stats.Ops, want)
-		}
-		if want := []string{"burger-shops:" + uid.N(7), "request:" + uid.N(2), "request:" + uid.N(4)}; !reflect.DeepEqual(shopStats.Ops, want) {
-			t.Errorf("ショップの操作 = %v, want %v", shopStats.Ops, want)
-		}
-		if uow.Commits != 1 || uow.Rollbacks != 0 {
-			t.Errorf("commit/rollback = %d/%d, want 1/0(1 つのトランザクション)", uow.Commits, uow.Rollbacks)
-		}
-	})
-
-	t.Run("ショップの依頼を登録できなければ、バーガーの依頼は消さず(rollback)、失敗として記録して再試行する", func(t *testing.T) {
-		stats := &uowtest.Stats{Due: burgerDue}
-		shopStats := &uowtest.ShopStats{
-			BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(2)}, nil },
-			RequestErr:  errors.New("依頼を登録できない"),
-		}
-		uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
-		logs := captureLogs(t)
-		worker := usecase.NewStatsWorker(stats, uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), uowtest.Clock{}, defaultWorkerConfig)
-		n, err := worker.RunOnce(ctx)
-		if err != nil || n != 0 {
-			t.Fatalf("RunOnce = (%d, %v), want (0, nil)", n, err)
-		}
-		for _, op := range stats.Ops {
-			if strings.HasPrefix(op, "complete:") {
-				t.Errorf("ショップの依頼が失敗したのに、バーガーの依頼を消した: %v", stats.Ops)
-			}
-		}
-		if len(stats.Failures) != 1 || uow.Rollbacks != 1 || !strings.Contains(logs.String(), "burger stats recalculation failed") {
-			t.Errorf("failures = %+v, rollbacks = %d, logs = %q, want 失敗の記録・rollback 1 回・error のログ", stats.Failures, uow.Rollbacks, logs)
-		}
-	})
-
-	t.Run("ショップに紐づかないバーガーは、ショップの依頼を登録せず、通常どおり完了する", func(t *testing.T) {
-		stats := &uowtest.Stats{Due: burgerDue}
-		shopStats := &uowtest.ShopStats{}
-		uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
-		worker := usecase.NewStatsWorker(stats, uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), uowtest.Clock{}, defaultWorkerConfig)
-		if n, err := worker.RunOnce(ctx); err != nil || n != 1 {
-			t.Fatalf("RunOnce = (%d, %v), want (1, nil)", n, err)
-		}
-		if want := []string{"burger-shops:" + uid.N(7)}; !reflect.DeepEqual(shopStats.Ops, want) {
-			t.Errorf("ショップの操作 = %v, want 一覧の読み取りだけ %v", shopStats.Ops, want)
-		}
-	})
+	stats := &uowtest.Stats{Due: dueOf(domain.RecalcRequest{BurgerID: uid.N(7), Version: 3})}
+	shopStats := &uowtest.ShopStats{RequestErr: errors.New("ショップ側が壊れていても、バーガーの再計算には無関係")}
+	uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
+	worker := usecase.NewStatsWorker(stats, uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), uowtest.Clock{}, defaultWorkerConfig)
+	n, err := worker.RunOnce(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("RunOnce = (%d, %v), want (1, nil)(ショップ側の RequestErr に影響されない)", n, err)
+	}
+	if len(shopStats.Ops) != 0 {
+		t.Errorf("ショップの操作 = %v, want なし(バーガーのワーカーは、ショップの集計に触れない)", shopStats.Ops)
+	}
+	if len(stats.Failures) != 0 {
+		t.Errorf("バーガーの失敗 = %+v, want なし", stats.Failures)
+	}
 }

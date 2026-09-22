@@ -72,13 +72,14 @@ func newMailKit(t *testing.T, smtpHost string, smtpPort int) *mailKit {
 
 	unitOfWork := uow.New(pool)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
+	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	kit := &mailKit{pool: pool, now: time.Date(2026, 1, 1, 12, 0, 30, 0, time.UTC)}
 	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pool)),
 		unitOfWork, hasher, mailer, codec, usecase.SignupConfig{BaseURL: "https://app.example.com", Now: func() time.Time { return kit.now }})
 	kit.router = handler.NewRouter(pool, usecase.NewAuth(userQuery, hasher, codec, codec), signups,
 		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)),
-		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, hasher), nil, nil, nil)
+		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, shopRecalc, hasher), nil, nil, nil)
 	return kit
 }
 

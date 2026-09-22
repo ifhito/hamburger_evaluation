@@ -39,16 +39,17 @@ const (
 // world は、公開中のショップを 1 つ持つ、テスト用のデータベースの状態である。そのショップに結び付いた
 // バーガーや、ユーザー、レビューを、必要に応じて作る。
 type world struct {
-	ctx     context.Context
-	conn    *pgx.Conn
-	dbURL   string
-	shop    string
-	unit    *uow.UnitOfWork
-	recalc  *usecase.BurgerStatsRecalculator
-	worker  *usecase.StatsWorker
-	reviews *usecase.Reviews
-	users   *usecase.Users
-	queries struct {
+	ctx        context.Context
+	conn       *pgx.Conn
+	dbURL      string
+	shop       string
+	unit       *uow.UnitOfWork
+	recalc     *usecase.BurgerStatsRecalculator
+	shopRecalc *usecase.ShopStatsRecalculator
+	worker     *usecase.StatsWorker
+	reviews    *usecase.Reviews
+	users      *usecase.Users
+	queries    struct {
 		review *query.ReviewQuery
 		shop   *query.ShopQuery
 	}
@@ -64,12 +65,13 @@ func newWorld(t *testing.T) *world {
 	w := &world{ctx: ctx, conn: conn, dbURL: dbURL}
 	w.unit = uow.New(conn)
 	w.recalc = usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
+	w.shopRecalc = usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	w.worker = statsworkertest.NewWorker(conn, infra.SystemClock{})
 	photos := storage.NewDisk(t.TempDir(), "/photos")
 	w.queries.review = query.NewReviewQuery(conn)
 	w.queries.shop = query.NewShopQuery(conn)
-	w.reviews = usecase.NewReviews(w.queries.review, w.unit, w.recalc, photos)
-	w.users = usecase.NewUsers(query.NewUserQuery(conn), domain.NewUsers(repository.NewUserRepository(conn)), w.unit, w.recalc, infra.BcryptPasswordHasher{})
+	w.reviews = usecase.NewReviews(w.queries.review, w.unit, w.recalc, w.shopRecalc, photos)
+	w.users = usecase.NewUsers(query.NewUserQuery(conn), domain.NewUsers(repository.NewUserRepository(conn)), w.unit, w.recalc, w.shopRecalc, infra.BcryptPasswordHasher{})
 	w.shop = dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
@@ -225,7 +227,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 			t.Fatalf("接続プールを開けなかった: %v", err)
 		}
 		t.Cleanup(pool.Close)
-		poolReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, storage.NewDisk(t.TempDir(), "/photos"))
+		poolReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
 
 		dave := w.user(t, "dave")
 		erin := w.user(t, "erin")
@@ -597,7 +599,7 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 			t.Fatalf("接続プールを開けなかった: %v", err)
 		}
 		t.Cleanup(pool.Close)
-		poolUsers := usecase.NewUsers(query.NewUserQuery(pool), domain.NewUsers(repository.NewUserRepository(pool)), uow.New(pool), w.recalc, infra.BcryptPasswordHasher{})
+		poolUsers := usecase.NewUsers(query.NewUserQuery(pool), domain.NewUsers(repository.NewUserRepository(pool)), uow.New(pool), w.recalc, w.shopRecalc, infra.BcryptPasswordHasher{})
 
 		// 2 人が、同じ 4 つのバーガーにレビューする。退会は、再計算の依頼をバーガー ID の昇順に登録する
 		// ので、2 人が互いに逆の順序で同じ行を待ち合う(デッドロック)ことがない。たまたま順番が合って

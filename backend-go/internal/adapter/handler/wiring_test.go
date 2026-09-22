@@ -25,9 +25,9 @@ func shopsUsecase(query usecase.ShopQuery, repo domain.ShopRepository) *usecase.
 }
 
 func reviewsUsecase(repo *reviewStoreFake, photos usecase.PhotoStorage) *usecase.Reviews {
-	return usecase.NewReviews(repo, &uowtest.UoW{Reviews: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), photos)
+	return usecase.NewReviews(repo, &uowtest.UoW{Reviews: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), photos)
 }
 
 func usersUsecase(store *userStoreFake, hasher usecase.PasswordHasher) *usecase.Users {
-	return usecase.NewUsers(store, domain.NewUsers(store), &uowtest.UoW{Users: store}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), hasher)
+	return usecase.NewUsers(store, domain.NewUsers(store), &uowtest.UoW{Users: store}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), hasher)
 }

@@ -84,7 +84,7 @@ func (s hookedStats) ListBurgerReviewFacts(ctx context.Context, burgerID string)
 
 // hookedWorker は、world の接続で動き、hook を挟んだ統計のワーカーを返す。
 func (w *world) hookedWorker(clock usecase.Clock, maxAttempts int, hook func(ctx context.Context, burgerID string) error) *usecase.StatsWorker {
-	return usecase.NewStatsWorker(query.NewBurgerStatsQuery(w.conn), hookedUnit{UnitOfWork: w.unit, hook: hook}, w.recalc, usecase.NewShopStatsRecalculator(clock), clock,
+	return usecase.NewStatsWorker(query.NewBurgerStatsQuery(w.conn), hookedUnit{UnitOfWork: w.unit, hook: hook}, w.recalc, clock,
 		usecase.StatsWorkerConfig{Batch: 100, MaxAttempts: maxAttempts})
 }
 
@@ -214,7 +214,7 @@ func TestStatsWorkerConcurrentWrite(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	pool := w.pool(t)
-	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, storage.NewDisk(t.TempDir(), "/photos"))
+	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
 
 	t.Run("再計算の最中に新しい投稿が確定すると、依頼は消えずに残り、次の再計算で最新になる。投稿は再計算に待たされない", func(t *testing.T) {
 		alice, bob := w.user(t, "alice"), w.user(t, "bob")

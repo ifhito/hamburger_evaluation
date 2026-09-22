@@ -32,11 +32,12 @@ const (
 // NewWorker は、db に対して動く統計の再計算のワーカーを返す。clock は、統計の計算時刻と、
 // 失敗した依頼の次の再試行の時刻に使う(テストで時刻を進めるときは、進められる Clock を渡す)。
 //
-// このワーカーは、バーガーの統計を計算し直すときに、そのバーガーが紐づくショップの集計の再計算の依頼を登録する。
-// ショップの集計そのものは、NewShopWorker のワーカー(または SettleAll)が計算する。
+// このワーカーは、ショップの集計には触れない(バーガーの統計とショップの集計は、互いの失敗に引きずられないよう、
+// 別々の失敗の単位にしてある。ショップの再計算の依頼は、レビューの書き込み・退会の usecase が、バーガーの依頼と
+// 同じトランザクションで直接登録する)。ショップの集計そのものは、NewShopWorker のワーカー(または SettleAll)が計算する。
 func NewWorker(db DB, clock usecase.Clock) *usecase.StatsWorker {
 	recalc := usecase.NewBurgerStatsRecalculator(clock)
-	return usecase.NewStatsWorker(query.NewBurgerStatsQuery(db), uow.New(db), recalc, usecase.NewShopStatsRecalculator(clock), clock,
+	return usecase.NewStatsWorker(query.NewBurgerStatsQuery(db), uow.New(db), recalc, clock,
 		usecase.StatsWorkerConfig{Batch: testBatch, MaxAttempts: testMaxAttempts})
 }
 
