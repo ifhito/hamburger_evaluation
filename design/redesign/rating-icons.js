@@ -1,7 +1,10 @@
 // 評価のバーガーのアイコン(見本の HTML 用)。1 食材 = 1 本の、波打つ線(管のような線)。塗りつぶしの閉じた形はやめた。
 //   線そのものが色を持ち、黒い輪郭線は無い。食材どうしの間には、はっきりした隙間を空ける。
-//   水位(評価 ÷ 最大値)より下の食材は、その食材の色の線。水位より上の食材は、灯っていない管のように、薄いグレーの線(塗りは無し・線だけ)。
-//   案 A(部品ごと・参考)は、水位の代わりに unit(下から何点目で灯るか)で、同じ点灯/消灯を決める。
+//   点灯(その食材の色の実線)/消灯(灯っていない管のように、薄いグレーの点線。塗りは無し・線だけ)の 2 値。
+//   色だけでなく線の形(実線/点線)でも、点灯・消灯の違いが伝わるようにする。
+//   案 B(水位。評価 ÷ 最大値の高さより下が点灯)と 案 A(部品ごと。unit(下から何点目で灯るか)より下が点灯)の 2 通りがあり、
+//   どちらも実際に使う: 1 件の評価(必ず整数)・評価の入力は、段階がはっきり分かる案 A。複数のレビューから出す平均評価
+//   (小数になる)は、小数の違いが見た目に出る案 B。
 // 図形は SVG のパス(M・C の絶対座標だけ)で、capture_mock.js が、この一覧(shapes)を、そのまま Penpot のパスにする。
 // 見た目の値(色・大きさ・線の太さ)は、ここが 1 か所の元。数字は、必ずアイコンのそばに書く(形や色だけで伝えない)。
 (() => {
@@ -66,7 +69,8 @@
   // 白黒にしたときの色(CSS の grayscale と同じ係数)
   const grayOf = (hex) => { const v = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); const g = Math.round(0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]); return '#' + g.toString(16).padStart(2, '0').repeat(3); };
 
-  // 評価と大きさから、描く線の一覧を作る。食材ごとに、点灯(その食材の色)/ 消灯(EMPTY)のどちらかを選ぶだけ(塗りは無し)
+  // 評価と大きさから、描く線の一覧を作る。食材ごとに、点灯(その食材の色・実線)/ 消灯(EMPTY・点線)のどちらかを選ぶだけ(塗りは無し)。
+  // 色だけでなく線の形でも点灯/消灯が分かるように、消灯は点線にする(色の区別がつきにくくても伝わるように)。
   // variant: 'B' 水位(連続値) / 'A' 部品ごと(unit の段階)。value は、数字に出す値(1 桁に丸めた値)。max は評価の最大値
   const resolve = ({ variant = 'B', value = 0, max = 5, size = 'md', gray = false }) => {
     const sz = SIZE[size], scale = sz.w / VB.w, sw = n2(sz.stroke / scale);
@@ -75,14 +79,19 @@
     const unitValue = (value / max) * 5; // 案 A は 5 段。最大値が違っても 5 段の割合にする
     const shapes = (size === 'xs' ? PARTS_XS : PARTS).map((p) => {
       const lit = variant === 'A' ? unitValue >= p.unit : p.y >= level;
-      return { part: p.id, d: p.d, fill: null, stroke: tone(lit ? p.color : EMPTY), sw, bbox: p.bbox, round: true };
+      // 点線の間隔(線の太さの何倍か)は、大きさが違っても同じ比になる(sw は大きさに応じて既にスケールしている)
+      const dash = lit ? null : `${n2(sw * 1.6)} ${n2(sw * 1.6)}`;
+      return { part: p.id, d: p.d, fill: null, stroke: tone(lit ? p.color : EMPTY), sw, dash, bbox: p.bbox, round: true };
     });
     return { vb: [VB.w, VB.h], width: sz.w, height: n2(sz.w * VB.h / VB.w), shapes };
   };
 
   const svgOf = (icon) => {
     let body = '';
-    icon.shapes.forEach((s) => { body += `<path d="${s.d}" fill="none" stroke="${s.stroke}" stroke-width="${s.sw}" stroke-linecap="round" stroke-linejoin="round"/>`; });
+    icon.shapes.forEach((s) => {
+      const dash = s.dash ? ` stroke-dasharray="${s.dash}"` : '';
+      body += `<path d="${s.d}" fill="none" stroke="${s.stroke}" stroke-width="${s.sw}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`;
+    });
     return `<svg viewBox="0 0 ${icon.vb[0]} ${icon.vb[1]}" width="${icon.width}" height="${icon.height}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
   };
 
