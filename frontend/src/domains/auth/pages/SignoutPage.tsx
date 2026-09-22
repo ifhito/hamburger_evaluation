@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { Layout } from "../../../components/Layout";
-import styles from "./auth.module.css";
+import styles from "./signout.module.css";
 
 export default function SignoutPage() {
   const { t } = useTranslation();

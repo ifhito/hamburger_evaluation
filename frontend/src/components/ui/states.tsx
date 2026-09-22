@@ -25,7 +25,7 @@ export function EmptyState({ action }: Props) {
 }
 
 // 読み込み中: 焼き途中のバーガー(見た目だけの水位。評価ではない)+ 灰色の帯。
-const LOADING_LEVEL = 0.6
+export const LOADING_LEVEL = 0.6
 export function Loading() {
   const { t } = useTranslation()
   return (

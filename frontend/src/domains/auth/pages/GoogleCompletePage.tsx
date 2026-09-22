@@ -5,10 +5,12 @@ import { useAuth } from "../AuthProvider";
 import { GoogleExchangeError, authApi } from "../api/authApiClient";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { appPathOrNull } from "../../../app/router/returnTo";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Layout } from "../../../components/Layout";
+import { Alert } from "../../../components/ui/Alert";
+import { Button } from "../../../components/ui/Button";
 import { isGoogleSignIn } from "../googleFlow";
+import { getToken } from "../storage";
+import { AuthLoading } from "./AuthLoading";
 import styles from "./auth.module.css";
 
 interface Failure {
@@ -91,32 +93,39 @@ export default function GoogleCompletePage() {
     setAttempt((n) => n + 1);
   };
   const shown: Failure | null = code ? failure : { messages: [t("auth.google.complete.expired")], returnTo: "", retryable: false };
-  // 失敗の画面の導線は、ログインの状態の復元(GET /me)が済んでから決める(復元の前は、ログイン中でも、user がまだない)。
+  // 見出し(サインインの失敗 / 連携の失敗)は、保存済みのトークンの有無だけで決める(GET /me の応答を待たない)。
+  // user は GET /me が終わるまで null のままなので、待つと、ログイン中の利用者にも一瞬「サインインできませんでした」が出てしまう。
+  const isLinkAttempt = getToken() !== null;
+  // 失敗の画面の導線(戻り先のリンク)は、ログインの状態の復元(GET /me)が済んでから決める(復元の前は、ログイン中でも、user がまだない)。
 
   return (
-    <Layout title={t("auth.google.complete.title")}>
+    <Layout>
       {shown ? (
-        <div className={styles.form}>
-          <ErrorMessage message={shown.messages} />
-          {shown.retryable && (
-            <Button type="button" variant="secondary" onClick={retry}>
-              {t("auth.google.complete.retry")}
-            </Button>
-          )}
-          {!restoringAuth && (
-            <p className={styles.hint}>
-              {user ? (
-                <Link to={`/users/${user.id}`}>{t("auth.google.complete.backToProfile")}</Link>
+        <div className={styles.status}>
+          <h1 className={styles.title}>{t(isLinkAttempt ? "auth.google.complete.linkFailedTitle" : "auth.google.complete.failedTitle")}</h1>
+          <div className={styles.alertBox}>
+            <Alert message={shown.messages} />
+          </div>
+          <div className={styles.actions}>
+            {shown.retryable && (
+              <Button type="button" variant="secondary" block onClick={retry}>
+                {t("auth.google.complete.retry")}
+              </Button>
+            )}
+            {!restoringAuth &&
+              (user ? (
+                <Link to={`/users/${user.id}`} className={styles.textlink}>
+                  {t("auth.google.complete.backToProfile")}
+                </Link>
               ) : (
-                <Link to="/signin" state={shown.returnTo ? { from: shown.returnTo } : undefined}>
+                <Link to="/signin" state={shown.returnTo ? { from: shown.returnTo } : undefined} className={styles.textlink}>
                   {t("auth.google.complete.backToSignin")}
                 </Link>
-              )}
-            </p>
-          )}
+              ))}
+          </div>
         </div>
       ) : (
-        <p className={styles.muted}>{t("auth.google.complete.loading")}</p>
+        <AuthLoading title={t("auth.google.complete.loading")} />
       )}
     </Layout>
   );

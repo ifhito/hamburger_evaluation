@@ -1,52 +1,68 @@
 .group {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  max-width: 25rem;
-  margin-top: 1rem;
+  gap: 12px;
 }
 
 /* 「または」の区切り。両側に線を引く。 */
 .or {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
+  gap: 12px;
+  margin: 4px 0;
+  font-family: var(--ui-font);
+  font-size: 13px;
+  color: var(--ui-text-muted);
 }
 
 .or::before,
 .or::after {
   content: "";
   flex: 1;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--ui-border);
 }
 
+/* Google のボタン。ライト(白い面 + 灰色の枠)の色は、Google のブランドの決まりで必須の値(このアプリのトークンとは別。
+   他の部品には使わない)。高さ・角丸は、入力欄・ボタンと同じ 44px・8px。「G」は 18px で固定(伸ばさない)。 */
 .button {
-  display: inline-flex;
+  --google-fill: #ffffff;
+  --google-stroke: #747775;
+  --google-text: #1f1f1f;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: #fff;
-  color: var(--color-text);
+  gap: 10px;
+  width: 100%;
+  height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--google-stroke);
+  border-radius: 8px;
+  background: var(--google-fill);
+  color: var(--google-text);
+  font-family: var(--ui-font);
+  font-size: 14px;
   font-weight: 500;
-  font-size: 0.875rem;
+  line-height: 20px;
+  white-space: nowrap;
   text-decoration: none;
+  cursor: pointer;
 }
 
+/* グローバルの a:hover(下線)より詳細度が高い .button の規則で、ホバーでも下線を出さない */
 .button:hover {
-  background: var(--color-secondary-bg);
-  /* グローバルの a:hover(下線)より詳細度が高い .button の規則で、ホバーでも下線を出さない */
   text-decoration: none;
 }
 
 .button:focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--ui-text);
   outline-offset: 2px;
+}
+
+/* 移動中: 押せない。文字は薄めすぎず、灰色の文字(補足と同じ色)にする。「G」は標準の色のまま(透明にしない) */
+.button[aria-busy="true"] {
+  color: var(--ui-text-muted);
+  cursor: default;
+  pointer-events: none;
 }
 
 .logo {
