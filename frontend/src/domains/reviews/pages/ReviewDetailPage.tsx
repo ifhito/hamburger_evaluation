@@ -94,7 +94,7 @@ export default function ReviewDetailPage() {
                 <time dateTime={review.createdAt}>{formatDate(review.createdAt)}</time>
               </div>
             </div>
-            {ratingRange === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingRange.max} size="sm" />}
+            {ratingRange === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingRange.max} size="sm" variant="stepped" />}
             <p className={styles.comment}>{review.comment}</p>
             {review.canEdit && (
               <div className={styles.actions}>

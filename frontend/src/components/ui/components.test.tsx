@@ -190,22 +190,32 @@ describe("RatingBurger(表示)", () => {
     expect(svgOf(html(<RatingBurger value={3} max={0} size="lg" />))).toBe(svgOf(html(<RatingBurgerIcon ratio={0} size="lg" />)));
   });
 
-  it("評価が 0 のときは、すべての食材が消灯の灰色の線で、塗り(fill)は使わない", () => {
+  it("評価が 0 のときは、すべての食材が消灯の灰色の点線で、塗り(fill)は使わない", () => {
     const out = html(<RatingBurger value={0} max={5} size="lg" />);
     expect(out).not.toContain('fill="#');
     expect(out.match(/stroke="#8e8e89"/g)?.length).toBe(6);
+    expect(out.match(/stroke-dasharray="[^"]+"/g)?.length).toBe(6);
   });
 
-  it("評価が最大のときは、すべての食材が自分の色の線で点灯し、消灯の灰色がない", () => {
+  it("評価が最大のときは、すべての食材が自分の色の実線で点灯し、消灯の灰色・点線がない", () => {
     const out = html(<RatingBurger value={5} max={5} size="lg" />);
     expect(out).not.toContain('stroke="#8e8e89"');
+    expect(out).not.toContain("stroke-dasharray");
   });
 
-  it("水位の途中では、水位より下の食材が自分の色、上が消灯の灰色の線になる(塗りは使わない)", () => {
+  it("水位の途中では、水位より下の食材が自分の色の実線、上が消灯の灰色・点線になる(塗りは使わない)", () => {
     const out = html(<RatingBurgerIcon ratio={0.55} size="lg" />);
     expect(out).not.toContain('fill="#');
     expect((out.match(/stroke="#8e8e89"/g)?.length ?? 0)).toBeGreaterThan(0);
     expect(out).toMatch(/stroke="#(?!8e8e89)[0-9a-f]{6}"/);
+    expect((out.match(/stroke-dasharray/g)?.length ?? 0)).toBe((out.match(/stroke="#8e8e89"/g)?.length ?? 0));
+  });
+
+  it("'stepped'(1 件の評価・入力向け)は、部品ごとの段階で点灯し、既定の 'level'(平均評価向け)とは点灯数が違うことがある", () => {
+    const level = html(<RatingBurger value={4} max={5} size="lg" />);
+    const stepped = html(<RatingBurger value={4} max={5} size="lg" variant="stepped" />);
+    const litCount = (out: string) => (out.match(/stroke-dasharray/g) ?? []).length === 0 ? 6 : 6 - (out.match(/stroke-dasharray/g) ?? []).length;
+    expect(litCount(stepped)).toBeLessThan(litCount(level));
   });
 
   it("絵だけの部品は、装飾として読み上げず、数字を持たない", () => {
@@ -296,8 +306,8 @@ describe("RatingInput(入力)", () => {
     expect(out).toContain("out of 5");
   });
 
-  it("バーガーの水位は、選んだ値 ÷ 最大値。まだ選んでいない(null)ときは空", () => {
-    const iconOf = (ratio: number) => svgOf(html(<RatingBurgerIcon ratio={ratio} size="lg" />));
+  it("バーガーは、選んだ値 ÷ 最大値の段階(案A・stepped。必ず整数の入力のため)。まだ選んでいない(null)ときは空", () => {
+    const iconOf = (ratio: number) => svgOf(html(<RatingBurgerIcon ratio={ratio} size="lg" variant="stepped" />));
     expect(svgOf(input({ value: 3 }))).toBe(iconOf(0.6));
     expect(svgOf(input({ value: 3, min: 1, max: 7 }))).toBe(iconOf(3 / 7));
     expect(svgOf(input({ value: null }))).toBe(iconOf(0));
