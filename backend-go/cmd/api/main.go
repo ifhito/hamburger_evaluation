@@ -138,9 +138,14 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	// あとから行う。起動した直後に、前回の停止までに溜まっていた依頼を処理する。停止では、サーバーを
 	// 止めたあとに、処理中のバッチを終えてから止める(順序は、defer が後ろから実行されることを使い、
 	// サーバー停止 → ワーカー停止 → メール送信の停止 → プールを閉じる、になる)。
-	statsWorker := usecase.NewStatsWorker(query.NewBurgerStatsQuery(pool), unitOfWork, recalc, infra.SystemClock{},
-		usecase.StatsWorkerConfig{Batch: cfg.StatsWorkerBatch, MaxAttempts: cfg.StatsWorkerMaxAttempts})
-	statsLoop := infra.StartStatsWorker(statsWorker, cfg.StatsWorkerInterval)
+	// ショップの集計(件数・平均・写真)も、同じ仕組みで、あとから計算する。バーガーの統計のワーカーが、統計を計算し
+	// 直したバーガーが紐づくショップの再計算を依頼し、ショップの集計のワーカーが、その依頼を、同じサイクルの中で
+	// 続けて処理する。
+	workerCfg := usecase.StatsWorkerConfig{Batch: cfg.StatsWorkerBatch, MaxAttempts: cfg.StatsWorkerMaxAttempts}
+	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
+	statsWorker := usecase.NewStatsWorker(query.NewBurgerStatsQuery(pool), unitOfWork, recalc, shopRecalc, infra.SystemClock{}, workerCfg)
+	shopStatsWorker := usecase.NewShopStatsWorker(query.NewShopStatsQuery(pool), unitOfWork, shopRecalc, infra.SystemClock{}, workerCfg)
+	statsLoop := infra.StartStatsWorker(infra.NewStatsCycle(statsWorker, shopStatsWorker), cfg.StatsWorkerInterval)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()

@@ -236,6 +236,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 			"user_identities_email_max_length": domain.MaxEmailChars,
 
 			"burger_stats_recalc_requests_last_error_max_length": domain.MaxRecalcFailureReasonChars,
+			"shop_stats_recalc_requests_last_error_max_length":   domain.MaxRecalcFailureReasonChars,
 
 			"oauth_grants_client_id_max_length":   domain.MaxOAuthURILength,
 			"oauth_grants_client_name_max_length": domain.MaxOAuthClientNameLength,
@@ -333,6 +334,76 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertPgError(t, err, "23503", "burger_stats_recalc_requests_burger_id_fkey")
 	})
 
+	// ショップの集計と、その再計算の依頼(000015・000016)。集計はショップごとに 1 行で、件数は負にならず、平均は
+	// 1〜5 で、レビューがあるときだけ入る(件数 0 なら NULL)。ショップを消すと、集計と依頼が連鎖して消える。
+	// 依頼の version は、バーガーの依頼と同じく、消して作り直しても戻らない。
+	t.Run("ショップの集計と依頼は、制約を守り、ショップの削除に連鎖して消え、依頼の version は戻らない", func(t *testing.T) {
+		var shopID string
+		if err := conn.QueryRow(ctx, "INSERT INTO shops (name, status) VALUES ('集計の確認用ショップ', 1) RETURNING id::text").Scan(&shopID); err != nil {
+			t.Fatalf("insert shop: %v", err)
+		}
+		insertStat := "INSERT INTO shop_stats (shop_id, review_count, average_rating, calculated_at) VALUES ($1, $2, $3, now())"
+		if _, err := conn.Exec(ctx, insertStat, shopID, 2, 4.5); err != nil {
+			t.Fatalf("insert shop_stats: %v", err)
+		}
+		_, err := conn.Exec(ctx, insertStat, shopID, 2, 4.5)
+		assertPgError(t, err, "23505", "shop_stats_pkey")
+		for _, tt := range []struct {
+			name       string
+			sql        string
+			args       []any
+			code       string
+			constraint string
+		}{
+			{"件数が負の集計は入らない", "UPDATE shop_stats SET review_count = -1, average_rating = NULL WHERE shop_id = $1", []any{shopID}, "23514", "shop_stats_review_count_check"},
+			{"平均が 1 未満の集計は入らない", "UPDATE shop_stats SET average_rating = 0.9 WHERE shop_id = $1", []any{shopID}, "23514", "shop_stats_average_rating_check"},
+			{"平均が 5 を超える集計は入らない", "UPDATE shop_stats SET average_rating = 5.1 WHERE shop_id = $1", []any{shopID}, "23514", "shop_stats_average_rating_check"},
+			{"レビューがあるのに平均がない集計は入らない", "UPDATE shop_stats SET average_rating = NULL WHERE shop_id = $1", []any{shopID}, "23514", "shop_stats_average_rating_presence_check"},
+			{"レビューがないのに平均がある集計は入らない", "UPDATE shop_stats SET review_count = 0 WHERE shop_id = $1", []any{shopID}, "23514", "shop_stats_average_rating_presence_check"},
+			{"存在しないショップの集計は入らない", insertStat, []any{"00000000-0000-4000-8000-000000000000", 1, 3.0}, "23503", "shop_stats_shop_id_fkey"},
+			{"存在しないショップの依頼は入らない", "INSERT INTO shop_stats_recalc_requests (shop_id) VALUES ($1)", []any{"00000000-0000-4000-8000-000000000000"}, "23503", "shop_stats_recalc_requests_shop_id_fkey"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := conn.Exec(ctx, tt.sql, tt.args...)
+				assertPgError(t, err, tt.code, tt.constraint)
+			})
+		}
+		if _, err := conn.Exec(ctx, "INSERT INTO shop_stats (shop_id, review_count, calculated_at) VALUES ($1, 0, now()) ON CONFLICT (shop_id) DO UPDATE SET review_count = 0, average_rating = NULL", shopID); err != nil {
+			t.Errorf("レビューなし(件数 0・平均 NULL)の集計を保存できない: %v", err)
+		}
+
+		insertVersion := func() int64 {
+			t.Helper()
+			var v int64
+			if err := conn.QueryRow(ctx, "INSERT INTO shop_stats_recalc_requests (shop_id) VALUES ($1) RETURNING version", shopID).Scan(&v); err != nil {
+				t.Fatalf("insert shop_stats_recalc_requests: %v", err)
+			}
+			return v
+		}
+		first := insertVersion()
+		_, err = conn.Exec(ctx, "INSERT INTO shop_stats_recalc_requests (shop_id) VALUES ($1)", shopID)
+		assertPgError(t, err, "23505", "shop_stats_recalc_requests_pkey")
+		if _, err := conn.Exec(ctx, "DELETE FROM shop_stats_recalc_requests WHERE shop_id = $1", shopID); err != nil {
+			t.Fatalf("delete shop_stats_recalc_requests: %v", err)
+		}
+		if second := insertVersion(); second <= first {
+			t.Errorf("作り直した依頼の version = %d, want > %d", second, first)
+		}
+		_, err = conn.Exec(ctx, "UPDATE shop_stats_recalc_requests SET attempts = -1 WHERE shop_id = $1", shopID)
+		assertPgError(t, err, "23514", "shop_stats_recalc_requests_attempts_check")
+
+		if _, err := conn.Exec(ctx, "DELETE FROM shops WHERE id = $1", shopID); err != nil {
+			t.Fatalf("delete shop: %v", err)
+		}
+		var stats, requests int
+		if err := conn.QueryRow(ctx, "SELECT (SELECT count(*) FROM shop_stats WHERE shop_id = $1), (SELECT count(*) FROM shop_stats_recalc_requests WHERE shop_id = $1)", shopID).Scan(&stats, &requests); err != nil {
+			t.Fatal(err)
+		}
+		if stats != 0 || requests != 0 {
+			t.Errorf("ショップを消したあとの集計 = %d 行・依頼 = %d 行, want どちらも 0(連鎖して消える)", stats, requests)
+		}
+	})
+
 	// すべての migration を down すると空の database に戻る。
 	dbtest.Apply(ctx, t, conn, downs)
 	t.Run("すべてのマイグレーションを down すると、空のスキーマに戻る", func(t *testing.T) {
@@ -356,7 +427,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	t.Helper()
 
-	wantTables := []string{"burger_stats", "burger_stats_recalc_requests", "burgers", "login_handoffs", "mail_deliveries", "oauth_grants", "oauth_token_sessions", "reviews", "shops", "shops_burgers", "signup_verifications", "user_identities", "users"}
+	wantTables := []string{"burger_stats", "burger_stats_recalc_requests", "burgers", "login_handoffs", "mail_deliveries", "oauth_grants", "oauth_token_sessions", "reviews", "shop_stats", "shop_stats_recalc_requests", "shops", "shops_burgers", "signup_verifications", "user_identities", "users"}
 	gotTables := queryStrings(ctx, t, conn,
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
@@ -434,6 +505,19 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		// photo_key は 000007 で追加されたので、ordinal position では
 		// 最後に来る。
 		"reviews/photo_key/text/YES",
+		// shop_stats は 000015、shop_stats_recalc_requests は 000016 で追加された(ショップの集計と、その再計算の依頼)。
+		"shop_stats/shop_id/uuid/NO",
+		"shop_stats/review_count/bigint/NO",
+		"shop_stats/average_rating/double precision/YES",
+		"shop_stats/photo_key/text/YES",
+		"shop_stats/calculated_at/timestamp with time zone/NO",
+		"shop_stats_recalc_requests/shop_id/uuid/NO",
+		"shop_stats_recalc_requests/version/bigint/NO",
+		"shop_stats_recalc_requests/attempts/integer/NO",
+		"shop_stats_recalc_requests/next_attempt_at/timestamp with time zone/YES",
+		"shop_stats_recalc_requests/last_error/text/YES",
+		"shop_stats_recalc_requests/created_at/timestamp with time zone/NO",
+		"shop_stats_recalc_requests/updated_at/timestamp with time zone/NO",
 		"shops/id/uuid/NO",
 		"shops/name/text/NO",
 		"shops/status/smallint/NO",
@@ -532,6 +616,15 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burger_stats_recalc_requests/burger_stats_recalc_requests_burger_id_fkey/f",
 		"burger_stats_recalc_requests/burger_stats_recalc_requests_attempts_check/c",
 		"burger_stats_recalc_requests/burger_stats_recalc_requests_last_error_max_length/c",
+		"shop_stats/shop_stats_pkey/p",
+		"shop_stats/shop_stats_shop_id_fkey/f",
+		"shop_stats/shop_stats_review_count_check/c",
+		"shop_stats/shop_stats_average_rating_check/c",
+		"shop_stats/shop_stats_average_rating_presence_check/c",
+		"shop_stats_recalc_requests/shop_stats_recalc_requests_pkey/p",
+		"shop_stats_recalc_requests/shop_stats_recalc_requests_shop_id_fkey/f",
+		"shop_stats_recalc_requests/shop_stats_recalc_requests_attempts_check/c",
+		"shop_stats_recalc_requests/shop_stats_recalc_requests_last_error_max_length/c",
 		"oauth_grants/oauth_grants_pkey/p",
 		"oauth_grants/oauth_grants_user_id_fkey/f",
 		"oauth_grants/oauth_grants_user_client_key/u",
@@ -650,6 +743,8 @@ var textLimitCases = []textLimitCase{
 		"INSERT INTO user_identities (user_id, provider, provider_user_id, email) VALUES ((SELECT id FROM users ORDER BY created_at LIMIT 1), 'google', 'sub-' || md5(random()::text), $1)"},
 	{"burger_stats_recalc_requests.last_error", domain.MaxRecalcFailureReasonChars, "burger_stats_recalc_requests_last_error_max_length",
 		"INSERT INTO burger_stats_recalc_requests (burger_id, last_error) VALUES ((SELECT id FROM burgers ORDER BY created_at LIMIT 1), $1)"},
+	{"shop_stats_recalc_requests.last_error", domain.MaxRecalcFailureReasonChars, "shop_stats_recalc_requests_last_error_max_length",
+		"INSERT INTO shop_stats_recalc_requests (shop_id, last_error) VALUES ((SELECT id FROM shops ORDER BY created_at LIMIT 1), $1)"},
 }
 
 // assertTextLimits は、各列で「上限ちょうど（マルチバイトを含む）は入る」「1 文字超えると

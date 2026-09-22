@@ -102,14 +102,7 @@ func CalculateBurgerScore(facts []ReviewFact, now time.Time) BurgerScore {
 		return BurgerScore{WeightedAverage: 0.0, Confidence: 0.0, SampleSize: 0}
 	}
 
-	var totalWeight, weightedSum float64
-	for _, fact := range facts {
-		weight := ReviewerTrustScore(fact.ReviewerHistory) * recencyFactor(fact.CreatedAt, now)
-		totalWeight += weight
-		weightedSum += fact.Rating * weight
-	}
-
-	weightedAverage := weightedSum / totalWeight
+	weightedAverage, totalWeight := weightedAverageRating(facts, now)
 
 	count := float64(len(facts))
 	reviewFactor := math.Min(count/10.0, 1.0)
@@ -121,6 +114,20 @@ func CalculateBurgerScore(facts []ReviewFact, now time.Time) BurgerScore {
 		Confidence:      roundHalfAwayFromZero(clampFloat(confidence, 0.0, 1.0), 10000),
 		SampleSize:      len(facts),
 	}
+}
+
+// weightedAverageRating は、レビューの評価の加重平均(丸める前の値)と、重みの合計を返す。各レビューの重みは、
+// 投稿者の信頼度(ReviewerTrustScore)に、半減期 180 日の新しさの減衰(recencyFactor)を掛けたものである。
+// facts は 1 件以上でなければならない(空だと 0 で割る)。バーガーのスコア(CalculateBurgerScore)と、ショップの
+// 集計(CalculateShopStat)が共有する、重み付けの計算の本体である。
+func weightedAverageRating(facts []ReviewFact, now time.Time) (average, totalWeight float64) {
+	var weightedSum float64
+	for _, fact := range facts {
+		weight := ReviewerTrustScore(fact.ReviewerHistory) * recencyFactor(fact.CreatedAt, now)
+		totalWeight += weight
+		weightedSum += fact.Rating * weight
+	}
+	return weightedSum / totalWeight, totalWeight
 }
 
 // AverageRating は Burgers::BurgerEntity#average_rating を移植する。rating の

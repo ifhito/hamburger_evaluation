@@ -25,14 +25,17 @@ type StatsWorker struct {
 	query  BurgerStatsQuery
 	uow    UnitOfWork
 	recalc *BurgerStatsRecalculator
+	shops  *ShopStatsRecalculator
 	clock  Clock
 	cfg    StatsWorkerConfig
 }
 
 // NewStatsWorker は StatsWorker を返す。query は、トランザクションの外で依頼の一覧を読むための
-// ものである(依頼ごとの再計算は、uow の中で、そのトランザクションの読み取りを使う)。
-func NewStatsWorker(query BurgerStatsQuery, uow UnitOfWork, recalc *BurgerStatsRecalculator, clock Clock, cfg StatsWorkerConfig) *StatsWorker {
-	return &StatsWorker{query: query, uow: uow, recalc: recalc, clock: clock, cfg: cfg}
+// ものである(依頼ごとの再計算は、uow の中で、そのトランザクションの読み取りを使う)。shops は、バーガーの
+// 統計を計算し直したあと、そのバーガーが紐づくショップの集計の再計算を依頼するために使う(ショップの集計そのものは、
+// ShopStatsWorker があとから計算する)。
+func NewStatsWorker(query BurgerStatsQuery, uow UnitOfWork, recalc *BurgerStatsRecalculator, shops *ShopStatsRecalculator, clock Clock, cfg StatsWorkerConfig) *StatsWorker {
+	return &StatsWorker{query: query, uow: uow, recalc: recalc, shops: shops, clock: clock, cfg: cfg}
 }
 
 // RunOnce は、再計算の時期が来ている依頼を、上限 Batch 件まで取り出し、バーガーごとに再計算する。
@@ -75,6 +78,12 @@ func (w *StatsWorker) RunOnce(ctx context.Context) (int, error) {
 func (w *StatsWorker) recalculate(ctx context.Context, req domain.RecalcRequest) error {
 	return w.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		if err := w.recalc.Recalculate(ctx, tx, req.BurgerID); err != nil {
+			return err
+		}
+		// バーガーの統計が変わると、そのバーガーが紐づくショップの集計も変わりうるので、その再計算を、同じ
+		// トランザクションで依頼する(どちらかが失敗すれば、両方が取り消される。ショップに紐づかないバーガーは、
+		// 依頼が登録されない)。
+		if err := w.shops.RequestRecalculationForBurger(ctx, tx, req.BurgerID); err != nil {
 			return err
 		}
 		// 消せなかった(false)のは、再計算の最中に新しい書き込みが入ったということで、正常である。

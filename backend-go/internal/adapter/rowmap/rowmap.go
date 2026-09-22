@@ -93,3 +93,18 @@ func UserIdentity(row sqlcgen.UserIdentity) domain.UserIdentity {
 		CreatedAt:      row.CreatedAt.Time,
 	}
 }
+
+// ShopSummary は、ショップに LEFT JOIN した集計の列(shop_stats。まだ集計されていないショップは、件数 0・
+// 平均と写真は NULL)を、domain.ShopSummary にする。写真の URL は、usecase が写真の保存先を介して導く。
+func ShopSummary(reviewCount int64, averageRating pgtype.Float8, photoKey pgtype.Text) domain.ShopSummary {
+	summary := domain.ShopSummary{ReviewCount: reviewCount}
+	if averageRating.Valid {
+		average := averageRating.Float64
+		summary.AverageRating = &average
+	}
+	if photoKey.Valid {
+		key := photoKey.String
+		summary.PhotoKey = &key
+	}
+	return summary
+}

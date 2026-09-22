@@ -14,18 +14,16 @@ import (
 // domain.ErrShopNotFound を返す。読み取り専用で、書き込みのメソッドは
 // 置かない（書き込みは domain.Shops を通す）。
 type ShopQuery interface {
-	// ListShops は、keyword に一致する見える shop を、name、次に id の順で
-	// 返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別
-	// しない。空ならすべてに一致する）。2 つ目の戻り値は、offset+limit 件より
-	// 後ろにも見える shop があるか（has_more）で、実装は limit+1 件を取得して判定する。
-	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error)
-	// ListShopSummaries は、shop それぞれの集計(レビューの件数・評価の平均・ショップの写真のキー)を、
-	// shop の id をキーにして返す。1 回の集約で求める(shop の件数に比例してクエリを増やさない)。
-	// レビューのない shop は、結果に含まれないことがある(呼び出し側が、その shop を空の集計(件数 0・平均と
-	// 写真は nil)として扱う)。集計の意味は domain.ShopSummary が定義する。
-	ListShopSummaries(ctx context.Context, shopIDs []string) (map[string]domain.ShopSummary, error)
-	// GetShopWithCreator は shop とその creator を返す。Reviews は空の
-	// ままである。
+	// ListShops は、keyword に一致する見える shop を、name、次に id の順で、集計(件数・評価の平均・ショップの
+	// 写真のキー)つきで返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別しない。空ならすべてに
+	// 一致する）。集計は、保存された値(shop_stats)を、同じクエリで添える(shop の件数に比例してクエリを増やさない。
+	// まだ集計されていない shop は、空の集計(件数 0・平均と写真は nil))。集計の意味は domain.CalculateShopStat が
+	// 定義し、レビューの書き込みのあとに、バックグラウンドのワーカーが計算し直す(結果整合)。
+	// 2 つ目の戻り値は、offset+limit 件より後ろにも見える shop があるか（has_more）で、実装は limit+1 件を
+	// 取得して判定する。
+	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error)
+	// GetShopWithCreator は shop とその creator を、集計(保存された値。ListShops と同じ)つきで返す。
+	// Reviews は空のままである。
 	GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error)
 	// ListShopReviews は、shop の burger に対する discard されていない review
 	// （author が discard 済みの user である review は除く）を、新しい順に
@@ -71,21 +69,12 @@ func (s *Shops) withPhotoURL(summary domain.ShopSummary) domain.ShopSummary {
 // 上限は 100）。2 つ目の戻り値は、次のページがあるか（has_more）である。
 func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.ShopListing, bool, error) {
 	limit, offset := clampPage(page, perPage)
-	shops, hasMore, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
+	listings, hasMore, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
 	if err != nil {
 		return nil, false, fmt.Errorf("list shops: %w", err)
 	}
-	ids := make([]string, 0, len(shops))
-	for _, shop := range shops {
-		ids = append(ids, shop.ID)
-	}
-	summaries, err := s.query.ListShopSummaries(ctx, ids) // 一覧 1 ページにつき 1 回(shop の件数に比例しない)
-	if err != nil {
-		return nil, false, fmt.Errorf("list shop summaries: %w", err)
-	}
-	listings := make([]domain.ShopListing, 0, len(shops))
-	for _, shop := range shops {
-		listings = append(listings, domain.ShopListing{Shop: shop, Summary: s.withPhotoURL(summaries[shop.ID])})
+	for i := range listings {
+		listings[i].Summary = s.withPhotoURL(listings[i].Summary)
 	}
 	return listings, hasMore, nil
 }
@@ -106,13 +95,9 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id string) (domain
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("list shop reviews: %w", err)
 	}
-	summaries, err := s.query.ListShopSummaries(ctx, []string{id})
-	if err != nil {
-		return domain.ShopDetail{}, fmt.Errorf("get shop summary: %w", err)
-	}
 	detail.Reviews = reviews
 	detail.CanReview = detail.CanBeReviewedByViewer(viewer)
-	detail.Summary = s.withPhotoURL(summaries[detail.ID])
+	detail.Summary = s.withPhotoURL(detail.Summary)
 	return detail, nil
 }
 
