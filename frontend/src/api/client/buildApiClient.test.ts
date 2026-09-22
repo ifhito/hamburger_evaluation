@@ -1,8 +1,29 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import type { InternalAxiosRequestConfig } from "axios";
+import i18n from "../../lib/i18n";
 import { ApiError, buildApiClient } from "./buildApiClient";
 
 describe("buildApiClient", () => {
+  afterEach(() => {
+    void i18n.changeLanguage("en");
+  });
+
+  it("選んだ言語を、すべての要求に Accept-Language として送る(R6・AC7)", async () => {
+    const client = buildApiClient();
+    let sentHeaders: Record<string, unknown> = {};
+    client.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+      sentHeaders = { ...config.headers };
+      return { data: {}, status: 200, statusText: "OK", headers: {}, config };
+    };
+
+    await client.get("/shops");
+    expect(sentHeaders["Accept-Language"]).toBe("en");
+
+    await i18n.changeLanguage("ja");
+    await client.get("/shops");
+    expect(sentHeaders["Accept-Language"]).toBe("ja");
+  });
+
   it("FormData はキー変換せずそのまま送る", async () => {
     const client = buildApiClient();
     let sent: unknown;
