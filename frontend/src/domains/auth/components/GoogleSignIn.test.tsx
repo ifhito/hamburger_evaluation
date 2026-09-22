@@ -4,12 +4,13 @@ import "../../../lib/i18n";
 import { GoogleSignIn, GoogleSignInLink } from "./GoogleSignIn";
 
 describe("GoogleSignInLink(「Google で続ける」のリンク)", () => {
-  it("ボタンではなくリンク(a)で、指定された URL と文言を持ち、ロゴは読み上げない", () => {
+  it("ボタンではなくリンク(a)で、指定された URL と文言を持ち、ロゴ(インラインの svg)は読み上げない", () => {
     const html = renderToStaticMarkup(<GoogleSignInLink href="/api/auth/google/start?return_to=%2Fshops" label="Continue with Google" />);
     expect(html).toContain("<a ");
     expect(html).toContain('href="/api/auth/google/start?return_to=%2Fshops"');
     expect(html).toContain("Continue with Google");
-    expect(html).toContain('alt=""');
+    expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
+    expect(html).not.toContain("<img");
     expect(html).not.toContain("<button");
   });
 });
@@ -37,8 +38,9 @@ describe("GoogleSignIn(サインイン・新規登録の画面に置くボタン
     const signin = renderToStaticMarkup(<GoogleSignIn mode="signin" />);
     const signup = renderToStaticMarkup(<GoogleSignIn mode="signup" />);
 
-    expect(signin.indexOf("<p ")).toBeLessThan(signin.indexOf("<a "));
-    expect(signup.indexOf("<a ")).toBeLessThan(signup.indexOf("<p "));
+    // 区切り(「または」)の位置は、外側の .group の <div> と紛れないよう、テキスト自体の位置で比べる。
+    expect(signin.indexOf(">or<")).toBeLessThan(signin.indexOf("<a "));
+    expect(signup.indexOf("<a ")).toBeLessThan(signup.indexOf(">or<"));
   });
 
   it("取得できていない間・Google がない・別の方法だけのときは、何も出さない", () => {
