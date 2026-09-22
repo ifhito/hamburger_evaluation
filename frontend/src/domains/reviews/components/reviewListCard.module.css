@@ -1,6 +1,6 @@
 /* 枠・角丸・背景・overflow:hidden は S45 の Card(components/ui/card.module.css)の .card、写真・本文の余白・
-   日付・コメント・投稿者の行は components/reviewCard.module.css(reviews 一覧の ReviewListCard と共有)から借りる。
-   この画面だけの見た目は、上の行に置くバーガー名(.name)だけ。 */
+   日付・コメント・投稿者の行は components/reviewCard.module.css(ショップ詳細の ShopReviewCard と共有)から借りる。
+   この画面だけの見た目は、コメントの下に置く対象のバーガー名(.target)だけ。 */
 .card {
   composes: card from '../../../components/ui/card.module.css';
 }
@@ -21,27 +21,22 @@
   composes: row from '../../../components/reviewCard.module.css';
 }
 
-.name {
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-/* .name は review.burger が null のとき出ないので、date だけが残っても右に寄るよう、単独でも効く形で押す
-   (親の justify-content: space-between だけだと、子が 1 つのときは効かない)。 */
-.date {
-  composes: date from '../../../components/reviewCard.module.css';
-  flex: none;
-  margin-left: auto;
-}
-
 .ratingOnly {
   composes: ratingOnly from '../../../components/reviewCard.module.css';
 }
 
+.date {
+  composes: date from '../../../components/reviewCard.module.css';
+}
+
 .comment {
   composes: comment from '../../../components/reviewCard.module.css';
+}
+
+.target {
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .foot {
