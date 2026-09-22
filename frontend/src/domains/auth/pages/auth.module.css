@@ -19,7 +19,6 @@
   color: var(--ui-text-muted);
 }
 
-.stack,
 .form {
   display: flex;
   flex-direction: column;
@@ -77,6 +76,22 @@
 .alertBox {
   width: 100%;
   text-align: left;
+}
+
+/* デザイン(design/redesign/google-complete.html の .notice)の案内の箱(exists-oauth: 「元の画面に戻ります」)。 */
+.notice {
+  width: 100%;
+  padding: 16px 20px;
+  border: 1px solid var(--ui-text);
+  border-radius: 8px;
+  background: var(--ui-surface-2);
+  line-height: 1.7;
+  text-align: left;
+}
+
+.notice b {
+  display: block;
+  font-weight: 700;
 }
 
 .actions {

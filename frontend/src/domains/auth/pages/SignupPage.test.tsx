@@ -33,6 +33,22 @@ describe("SignupPage の Google のボタン", () => {
     const google = need(byText(page, "a", "Continue with Google"), "Continue with Google");
     const username = need(page.querySelector("#username"), "#username");
     expect(google.compareDocumentPosition(username) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(google.closest("form")).not.toBeNull();
+  });
+
+  it("「サインイン」の導線は、<form> の中(送信ボタンのあと)にある(design/redesign/signup.html。ヘッダーにも同じ文言のリンクがあるので、<form> の中だけを探す)", async () => {
+    const page = await mount(
+      <Provider store={createStore()}>
+        <AuthProvider>
+          <MemoryRouter initialEntries={["/signup"]}>
+            <SignupPage />
+          </MemoryRouter>
+        </AuthProvider>
+      </Provider>,
+    );
+
+    const form = need(page.querySelector("form"), "form");
+    expect(byText<HTMLAnchorElement>(form, "a", "Sign in")).toBeDefined();
   });
 });
 
