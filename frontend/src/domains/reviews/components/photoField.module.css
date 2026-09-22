@@ -1,0 +1,86 @@
+.field {
+  composes: field from '../../../components/ui/field.module.css';
+}
+
+.label {
+  composes: label from '../../../components/ui/field.module.css';
+}
+
+.optional {
+  composes: optional from '../../../components/ui/field.module.css';
+}
+
+.hint {
+  composes: hint from '../../../components/ui/field.module.css';
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 280px;
+  padding: 24px;
+  border: 1px solid var(--ui-control-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface-2);
+  text-align: center;
+}
+
+.titleSm {
+  font-weight: 700;
+}
+
+.preview {
+  display: flex;
+  height: 280px;
+  border-radius: var(--ui-radius);
+  overflow: hidden;
+  background: var(--ui-surface-2);
+}
+
+.previewImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.file {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.fname {
+  font-weight: 500;
+}
+
+.muted {
+  color: var(--ui-text-muted);
+}
+
+.buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .drop {
+    min-height: 220px;
+  }
+
+  .preview {
+    height: 220px;
+  }
+}
