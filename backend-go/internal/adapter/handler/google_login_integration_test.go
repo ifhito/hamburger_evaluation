@@ -522,6 +522,8 @@ type exchangeBody struct {
 	ReturnTo string   `json:"return_to"`
 	Linked   bool     `json:"linked"`
 	Errors   []string `json:"errors"`
+	// Reason は、失敗の理由を示す、言語によらない識別子(messages.go の key* 定数と同じ文字列)。
+	Reason string `json:"reason"`
 }
 
 func decodeExchange(t *testing.T, rec *httptest.ResponseRecorder) exchangeBody {
@@ -620,6 +622,9 @@ func TestGoogleSignIn(t *testing.T) {
 			body := decodeExchange(t, rec)
 			if rec.Code != http.StatusConflict || body.Token != "" || len(body.Errors) != 1 || !strings.Contains(body.Errors[0], "already exists") {
 				t.Fatalf("%s: %d %s", email, rec.Code, rec.Body)
+			}
+			if body.Reason != "google.account_exists" {
+				t.Errorf("%s: reason = %q, want google.account_exists", email, body.Reason)
 			}
 			if n := k.count(t, "user_identities"); n != 0 {
 				t.Errorf("%s: 結び付きが作られた", email)
@@ -819,6 +824,9 @@ func TestGoogleSignIn(t *testing.T) {
 				if rec.Code != http.StatusBadRequest || body.Token != "" || len(body.Errors) != 1 || !strings.Contains(body.Errors[0], "failed") {
 					t.Fatalf("%d %s", rec.Code, rec.Body)
 				}
+				if body.Reason != "google.sign_in_failed" {
+					t.Errorf("reason = %q, want google.sign_in_failed", body.Reason)
+				}
 				if k.count(t, "users") != 2 || k.count(t, "user_identities") != 0 {
 					t.Fatal("失敗したのに、利用者か結び付きが作られた")
 				}
@@ -833,8 +841,12 @@ func TestGoogleSignIn(t *testing.T) {
 		if rec := k.exchange(code); rec.Code != http.StatusOK {
 			t.Fatalf("1 回目 = %d", rec.Code)
 		}
-		if rec := k.exchange(code); rec.Code != http.StatusBadRequest {
+		rec := k.exchange(code)
+		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("2 回目 = %d, want 400", rec.Code)
+		}
+		if got := decodeExchange(t, rec).Reason; got != "google.code_invalid" {
+			t.Errorf("2 回目の reason = %q, want google.code_invalid", got)
 		}
 		expiring := k.run(t, "").code
 		if _, err := k.conn.Exec(context.Background(), `UPDATE login_handoffs SET expires_at = now() - interval '1 second'`); err != nil {
@@ -1222,10 +1234,16 @@ func TestGoogleLinking(t *testing.T) {
 		if taken.Code != http.StatusConflict || !strings.Contains(taken.Body.String(), "another account") {
 			t.Fatalf("別の利用者の Google = %d %s", taken.Code, taken.Body)
 		}
+		if got := decodeExchange(t, taken).Reason; got != "google.identity_taken" {
+			t.Errorf("別の利用者の Google の reason = %q, want google.identity_taken", got)
+		}
 		k.idp.SetUser(fakeoidc.User{Sub: "sub-other", Email: "other@gmail.example", EmailVerified: true, Name: "Other"})
 		already := k.exchange(linkFlow(t, k, k.bob).code)
 		if already.Code != http.StatusConflict || !strings.Contains(already.Body.String(), "already connected") {
 			t.Fatalf("すでに結び付いた利用者 = %d %s", already.Code, already.Body)
+		}
+		if got := decodeExchange(t, already).Reason; got != "google.already_linked" {
+			t.Errorf("すでに結び付いた利用者の reason = %q, want google.already_linked", got)
 		}
 		if n := k.count(t, "user_identities"); n != 1 {
 			t.Fatalf("結び付きが %d 件", n)
