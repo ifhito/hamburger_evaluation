@@ -45,6 +45,10 @@
   resize: vertical;
 }
 
+.short {
+  min-height: 96px;
+}
+
 .hint {
   font-size: 13px;
   line-height: 1.6;

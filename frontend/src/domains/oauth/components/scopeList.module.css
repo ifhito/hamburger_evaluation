@@ -1,0 +1,19 @@
+/* margin・padding・枠・行の間隔(gap)は、置き場所ごとに違うので、呼び出し側の className で決める
+   (composes ではなく class を並べるだけなので、この基底の側では、これらの値を持たない)。 */
+.scopes {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.scopeItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  line-height: 1.7;
+}
+
+.scopeText {
+  overflow-wrap: anywhere;
+}
