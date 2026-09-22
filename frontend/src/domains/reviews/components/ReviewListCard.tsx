@@ -19,7 +19,7 @@ export function ReviewListCard({ review, ratingMax }: { review: Review; ratingMa
       )}
       <div className={styles.body}>
         <div className={styles.row}>
-          {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} />}
+          {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} variant="stepped" />}
           <time className={styles.date} dateTime={review.createdAt}>
             {formatDate(review.createdAt)}
           </time>

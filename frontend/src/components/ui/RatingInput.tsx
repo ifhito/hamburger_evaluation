@@ -52,7 +52,7 @@ export function RatingInput({ label, value, onChange, min, max }: Props) {
       </span>
       <div className={styles.box} role="radiogroup" aria-labelledby={labelId} aria-orientation="horizontal">
         <div className={styles.view}>
-          <RatingBurgerIcon ratio={value === null ? 0 : value / max} size="lg" />
+          <RatingBurgerIcon ratio={value === null ? 0 : value / max} size="lg" variant="stepped" />
           <div className={styles.num}>
             <b>{value ?? '–'}</b>
             <span className={styles.of}>{t('common.ratingOutOf', { max })}</span>
