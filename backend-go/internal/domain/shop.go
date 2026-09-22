@@ -162,6 +162,12 @@ type UserRef struct {
 	Username string
 }
 
+// ShopRef は、review の詳細に埋め込まれる {id, name} の projection である。
+type ShopRef struct {
+	ID   string
+	Name string
+}
+
 // ShopDetail は、creator と discard されていない review を持つ shop である。
 type ShopDetail struct {
 	Shop
