@@ -210,7 +210,8 @@ class Design:
 
     def icon(self, page: str, n: dict, ox: float, oy: float, frame: str, parent: str) -> None:
         """評価のバーガー(SVG のパスの一覧)を、Penpot のパス図形にする。M・L・C・Z の絶対座標だけを受け取る。
-        塗りは、単色か、軸に沿った硬い境目のグラデーション(水位・半分)、白抜き。輪郭の太さは、アイコンの拡大率に合わせる。"""
+        塗りは、単色か、軸に沿った硬い境目のグラデーション(水位・半分)、白抜き。輪郭の太さは、アイコンの拡大率に合わせる。
+        stroke に dash(点線の間隔)があれば、Penpot の strokeStyle を dashed にする(消灯の線)。無ければ solid(点灯の線)。"""
         ic = n["icon"]
         k = n["w"] / ic["vb"][0]
         gid = self.group(page, n["name"], frame, (ox + n["x"], oy + n["y"], n["w"], n["h"]))
@@ -241,7 +242,7 @@ class Design:
             else:
                 fills = [self.fill(f["color"])]
             obj = {"id": str(uuid.uuid4()), "name": s["part"], "type": "path", "parentId": gid, "frameId": frame, "content": content, "fills": fills,
-                   "strokes": [{"strokeColor": s["stroke"], "strokeOpacity": 1, "strokeWidth": round(s["sw"] * k, 3), "strokeStyle": "solid", "strokeAlignment": "center", **({"strokeCapStart": "round", "strokeCapEnd": "round"} if s.get("round") else {})}],
+                   "strokes": [{"strokeColor": s["stroke"], "strokeOpacity": 1, "strokeWidth": round(s["sw"] * k, 3), "strokeStyle": "dashed" if s.get("dash") else "solid", "strokeAlignment": "center", **({"strokeCapStart": "round", "strokeCapEnd": "round"} if s.get("round") else {})}],
                    **geom(px(bx), py(by), bw * k, bh * k)}
             self.add_obj(page, obj)
 
