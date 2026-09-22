@@ -17,6 +17,9 @@ const en = {
     },
     ratingAria: "Rating {{value}} out of {{max}}",
     ratingOutOf: "out of {{max}}",
+    // ショップ・バーガーのレビューの件数(一覧のポスターカード、ショップ・レビュー詳細の大きな平均値の下)。
+    reviewCount_one: "{{count}} review",
+    reviewCount_other: "{{count}} reviews",
     // 空・読み込み中・見つからないときの画面の文言(デザインの英語版のとおり)。
     states: {
       empty: { title: "Nobody's eaten here yet", description: "Why not write the first review?" },
@@ -126,27 +129,23 @@ const en = {
   reviews: {
     list: {
       title: "Reviews",
+      searchLabel: "Search by keyword",
       searchPlaceholder: "Search by keyword\u2026",
+      ratingFilterLabel: "Filter by rating",
       allRatings: "All ratings",
-      newReview: "+ New Review",
-      loading: "Loading\u2026",
-      noReviews: "No reviews yet.",
+      ratingOption: "Rating {{value}}",
+      newReview: "Write a review",
       loadError: "Failed to load reviews.",
-      avg: "avg",
-      reviews: "reviews",
-      viewLink: "View \u2192",
       loadMore: "Load more",
     },
     detail: {
-      title: "Review Detail",
-      loading: "Loading\u2026",
-      loadError: "Failed to load review.",
-      avgRating: "Avg rating:",
-      by: "By",
+      backToReviews: "\u2190 Back to reviews",
+      backToReviewsAction: "Back to reviews",
+      reviewsHeading: "Reviews",
+      newestFirst: "Newest first",
       edit: "Edit",
       delete: "Delete",
       deleteConfirm: "Delete this review?",
-      backToReviews: "\u2190 Back to reviews",
     },
     new: {
       title: "New Review",
@@ -250,8 +249,6 @@ const en = {
       addShop: "Add a shop",
       moderate: "Moderate shops",
       noPhoto: "No photo",
-      reviewCount_one: "{{count}} review",
-      reviewCount_other: "{{count}} reviews",
       noReviewsYet: "No reviews yet",
     },
     // \u4e00\u89a7\u30fb\u8a73\u7d30\u306e\u3001\u516c\u958b\u4e2d\u3067\u306a\u3044\u30b7\u30e7\u30c3\u30d7\u306e\u672d(\u5229\u7528\u8005\u5411\u3051\u3002\u7ba1\u7406\u306e\u30d5\u30a3\u30eb\u30bf\u30fc\u306e\u6587\u8a00(shops.status)\u3068\u306f\u5225)\u3002
