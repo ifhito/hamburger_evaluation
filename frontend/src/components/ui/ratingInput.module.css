@@ -1,14 +1,10 @@
-/* fieldset の枠は使わない(既定では、凡例が枠の線にまたがって置かれる)。ラベルは箱の上に置く */
 .pick {
   font-family: var(--ui-font);
   min-width: 0;
-  padding: 0;
-  border: 0;
 }
 
 .label {
   display: block;
-  padding: 0;
   margin-bottom: 6px;
   font-size: 14px;
   font-weight: 500;
@@ -53,8 +49,8 @@
   gap: 8px;
 }
 
+/* button 主体(デザインの .step)。ブラウザ既定のボタンの見た目(色・フォント)を打ち消し、元の label の見た目に合わせる */
 .step {
-  position: relative;
   display: flex;
   flex: 1;
   align-items: center;
@@ -64,8 +60,10 @@
   border: 1px solid var(--ui-control-border);
   border-radius: 8px;
   background: var(--ui-bg);
+  font-family: inherit;
   font-size: 16px;
   font-weight: 700;
+  color: inherit;
   cursor: pointer;
 }
 
@@ -84,16 +82,7 @@
   }
 }
 
-/* 本物のラジオボタンは見えなくして、ボタンの見た目の label に任せる(キーボードの操作は、ラジオボタンのまま) */
-.radio {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.step:has(.radio:focus-visible) {
+.step:focus-visible {
   outline: 2px solid var(--ui-text);
   outline-offset: 2px;
 }
