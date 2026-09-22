@@ -1,15 +1,16 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useUser } from "../hooks/useUser";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
-import { formatDate } from "../../../lib/date";
-import { formatRating } from "../../../lib/rating";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
+import { Alert } from "../../../components/ui/Alert";
+import { Button } from "../../../components/ui/Button";
+import { LinkButton } from "../../../components/ui/LinkButton";
+import { EmptyState, Loading } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
 import { ShareLinkButton } from "../components/ShareLinkButton";
+import { ProfileReviewCard } from "../components/ProfileReviewCard";
 import { ConnectedApps } from "../../oauth/components/ConnectedApps";
 import { GoogleConnection } from "../../auth/components/GoogleConnection";
 import styles from "./userDetail.module.css";
@@ -38,61 +39,56 @@ export default function UserDetailPage() {
   } = useReviews({ userId: id }, { enabled: id !== undefined && user !== undefined });
 
   return (
-    <Layout title={user ? t("users.detail.namedProfile", { name: user.username }) : t("users.detail.profileTitle")}>
-      {(userLoading || reviewsLoading) && (
-        <p className={styles.muted}>{t("users.detail.loading")}</p>
-      )}
-      {userError && <ErrorMessage message={t("users.detail.loadError")} />}
+    // 名前は、プロフィールの見出し(h1)として、下の本体に出す。取得できるまでの間だけ、画面の見出しを出す
+    <Layout title={user ? undefined : t("users.detail.profileTitle")}>
+      {userLoading && <Loading />}
+      {userError && <Alert message={t("users.detail.loadError")} />}
 
       {user && (
-        <div className={styles.profile}>
-          <div className={styles.profileCard}>
-            <h2 className={styles.username}>{user.username}</h2>
+        <section className={styles.profile}>
+          <span className={styles.avatar} aria-hidden="true">
+            {[...user.username][0]}
+          </span>
+          <div className={styles.main}>
+            <h1 className={styles.username}>{user.username}</h1>
             {/* 自己紹介文は利用者が自由に書くので、HTML として解釈せず、改行だけを保った文字として描画する */}
             {user.bio && <p className={styles.bio}>{user.bio}</p>}
             {/* email は API が本人の閲覧時だけ返す。閲覧者の比較ではなく、API の返却有無で出し分ける */}
             {user.email && <p className={styles.email}>{user.email}</p>}
+            <div className={styles.actions}>
+              <ShareLinkButton userId={user.id} />
+              {user.canEdit && <LinkButton to={`/users/${user.id}/edit`}>{t("users.detail.editProfile")}</LinkButton>}
+            </div>
           </div>
-          <div className={styles.profileActions}>
-            <ShareLinkButton userId={user.id} />
-            {user.canEdit && (
-              <Link to={`/users/${user.id}/edit`} className={styles.editLink}>
-                {t("users.detail.editProfile")}
-              </Link>
-            )}
-          </div>
-        </div>
+        </section>
       )}
 
       {/* Google の連携と、許可したアプリの一覧は、本人のプロフィールにだけ出す(本人かどうかは backend が返す canEdit で決める) */}
       {user?.canEdit && authUser && <GoogleConnection viewerId={authUser.id} />}
       {user?.canEdit && authUser && <ConnectedApps viewerId={authUser.id} />}
 
-      <h2 className={styles.reviewsHeading}>{t("users.detail.reviewsHeading")}</h2>
-      {reviewsError && <ErrorMessage message={t("users.detail.reviewsLoadError")} />}
-      {userReviews && userReviews.length === 0 && (
-        <p className={styles.muted}>{t("users.detail.noReviews")}</p>
-      )}
-      <div className={styles.reviewList}>
-        {userReviews?.map((review) => (
-          <div key={review.id} className={styles.reviewCard}>
-            <div className={styles.reviewHeader}>
-              <span>{formatRating(review.rating, ratingRange?.max)}</span>
-              <span className={styles.reviewDate}>{formatDate(review.createdAt)}</span>
-            </div>
-            <p className={styles.reviewComment}>{review.comment}</p>
-            <Link to={`/reviews/${review.id}`} className={styles.reviewComment}>
-              {t("users.detail.viewLink")}
-            </Link>
+      {user && (
+        <section>
+          <div className={styles.sectionHead}>
+            <h2 className={styles.heading}>{t("users.detail.reviewsHeading")}</h2>
+            {userReviews && userReviews.length > 0 && <span className={styles.count}>{t("users.detail.newestFirst")}</span>}
           </div>
-        ))}
-      </div>
-      {hasNextPage && (
-        <div className={styles.loadMore}>
-          <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
-            {t("users.detail.loadMore")}
-          </Button>
-        </div>
+          {reviewsLoading && <Loading />}
+          {reviewsError && <Alert message={t("users.detail.reviewsLoadError")} />}
+          {userReviews && userReviews.length === 0 && (user.canEdit ? <EmptyState /> : <p className={styles.muted}>{t("users.detail.noReviews")}</p>)}
+          <div className={styles.reviewList}>
+            {userReviews?.map((review) => (
+              <ProfileReviewCard key={review.id} review={review} ratingMax={ratingRange?.max} />
+            ))}
+          </div>
+          {hasNextPage && (
+            <div className={styles.loadMore}>
+              <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
+                {t("users.detail.loadMore")}
+              </Button>
+            </div>
+          )}
+        </section>
       )}
     </Layout>
   );

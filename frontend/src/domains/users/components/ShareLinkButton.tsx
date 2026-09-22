@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { copyToClipboard } from "../../../lib/clipboard";
-import { Button } from "../../../components/Button";
+import { Button } from "../../../components/ui/Button";
 import styles from "./shareLinkButton.module.css";
 
 // プロフィールの共有用リンク(このサイトのオリジンに /users/<ユーザーの ID> を付けたもの)をコピーするボタン。
@@ -17,16 +17,13 @@ export function ShareLinkButton({ userId }: { userId: string }) {
     setState((await copyToClipboard(url)) ? "copied" : "manual");
   };
 
+  // 親(プロフィールの操作の並び。折り返す横並び)の中に、そのまま並べる。コピーできなかったときの入力欄は、次の行いっぱいに広げる。
   return (
-    <div className={styles.share}>
-      <Button type="button" variant="secondary" onClick={() => void handleClick()}>
-        {t("users.detail.copyLink")}
+    <>
+      {/* コピーできたことは、ボタンの文言の入れ替えで伝える(あとから知らせの要素を足すと、読み上げられないことがあるため) */}
+      <Button type="button" variant="secondary" aria-live="polite" onClick={() => void handleClick()}>
+        {state === "copied" ? t("users.detail.linkCopied") : t("users.detail.copyLink")}
       </Button>
-      {state === "copied" && (
-        <span role="status" className={styles.copied}>
-          {t("users.detail.linkCopied")}
-        </span>
-      )}
       {state === "manual" && (
         <div className={styles.manual}>
           <label htmlFor="share-link" className={styles.manualLabel}>
@@ -41,6 +38,6 @@ export function ShareLinkButton({ userId }: { userId: string }) {
           />
         </div>
       )}
-    </div>
+    </>
   );
 }

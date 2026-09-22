@@ -1,0 +1,8 @@
+.linkButton {
+  composes: btn secondary from './button.module.css';
+  text-decoration: none;
+}
+
+.linkButton:hover {
+  text-decoration: none;
+}

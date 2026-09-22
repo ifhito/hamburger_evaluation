@@ -1,17 +1,33 @@
-import { useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useUpdateUser, useDeleteUser } from "../hooks/useUserMutations";
 import { useUser } from "../hooks/useUser";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { useMeta } from "../../../api/meta";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
-import { Input } from "../../../components/Input";
+import { Alert } from "../../../components/ui/Alert";
+import { Button } from "../../../components/ui/Button";
+import { LinkButton } from "../../../components/ui/LinkButton";
+import { Loading } from "../../../components/ui/states";
+import { TextField, TextArea } from "../../../components/ui/TextField";
+import { TextLink } from "../../../components/ui/TextLink";
 import { Layout } from "../../../components/Layout";
-import { Textarea } from "../../../components/Textarea";
 import styles from "./userUpdate.module.css";
+
+// 編集の画面の枠(戻るリンク・見出し)。どの状態(読み込み中・失敗・編集できない・フォーム)でも同じ。
+function EditColumn({ id, children }: { id: string | undefined; children: ReactNode }) {
+  const { t } = useTranslation();
+  return (
+    <Layout>
+      <div className={styles.column}>
+        <TextLink to={`/users/${id}`}>{t("users.update.backToProfile")}</TextLink>
+        <h1 className={styles.title}>{t("users.update.title")}</h1>
+        {children}
+      </div>
+    </Layout>
+  );
+}
 
 // 編集フォーム本体。編集してよい(backend の canEdit が true の)ときだけ、UserUpdatePage が表示する。
 function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) {
@@ -27,7 +43,8 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
   const [email, setEmail] = useState(authUser?.email ?? "");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
-  const [serverError, setServerError] = useState<string | string[] | null>(null);
+  // 失敗の見出しは画面の言葉、文言(messages)は API が返したものをそのまま出す
+  const [serverError, setServerError] = useState<{ title: string; messages: string | string[] } | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -55,7 +72,10 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
       refreshUser({ username: updated.username, email: updated.email });
       void navigate(`/users/${id}`);
     } catch (e) {
-      setServerError(e instanceof ApiError ? e.messages : [t("users.update.updateError")]);
+      setServerError({
+        title: t("users.update.updateErrorTitle"),
+        messages: e instanceof ApiError ? e.messages : [t("users.update.updateError")],
+      });
     } finally {
       setIsUpdating(false);
     }
@@ -69,17 +89,20 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
       await logout();
       void navigate("/reviews");
     } catch (e) {
-      setServerError(e instanceof ApiError ? e.messages : [t("users.update.deleteError")]);
+      setServerError({
+        title: t("users.update.deleteErrorTitle"),
+        messages: e instanceof ApiError ? e.messages : [t("users.update.deleteError")],
+      });
     } finally {
       setIsDeleting(false);
     }
   };
 
   return (
-    <Layout title={t("users.update.title")}>
+    <EditColumn id={id}>
       <form onSubmit={(e) => void handleUpdate(e)} className={styles.form} noValidate>
-        {serverError && <ErrorMessage message={serverError} />}
-        <Input
+        {serverError && <Alert title={serverError.title} message={serverError.messages} />}
+        <TextField
           id="username"
           label={t("users.update.username")}
           value={username}
@@ -87,7 +110,7 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
           counter={{ value: username, max: meta?.text.usernameMaxChars }}
           autoComplete="username"
         />
-        <Textarea
+        <TextArea
           id="bio"
           label={t("users.update.bio")}
           value={bio}
@@ -95,7 +118,7 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
           counter={{ value: bio, max: meta?.text.bioMaxChars }}
           rows={5}
         />
-        <Input
+        <TextField
           id="email"
           label={t("users.update.email")}
           type="email"
@@ -103,7 +126,7 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
         />
-        <Input
+        <TextField
           id="password"
           label={t("users.update.newPassword")}
           type="password"
@@ -112,7 +135,7 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
           autoComplete="new-password"
           hint={meta && t("auth.passwordHint", { min: meta.password.minBytes, max: meta.password.maxBytes })}
         />
-        <Input
+        <TextField
           id="passwordConfirmation"
           label={t("users.update.confirmPassword")}
           type="password"
@@ -121,29 +144,22 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
           autoComplete="new-password"
         />
         <div className={styles.actions}>
-          <Button type="submit" isLoading={isUpdating}>
+          <Button type="submit" wide isLoading={isUpdating}>
             {t("users.update.submit")}
           </Button>
-          <Link to={`/users/${id}`}>
-            <Button type="button" variant="secondary">
-              {t("users.update.cancel")}
-            </Button>
-          </Link>
+          <LinkButton to={`/users/${id}`}>{t("users.update.cancel")}</LinkButton>
         </div>
       </form>
 
-      <hr className={styles.divider} />
-      <div>
-        <h3 className={styles.dangerZone}>{t("users.update.dangerZone")}</h3>
-        <Button
-          variant="danger"
-          isLoading={isDeleting}
-          onClick={() => void handleDelete()}
-        >
+      <div className={styles.divider} />
+      <section>
+        <h2 className={styles.dangerHeading}>{t("users.update.deleteHeading")}</h2>
+        <p className={styles.dangerText}>{t("users.update.deleteWarning")}</p>
+        <Button variant="danger" isLoading={isDeleting} onClick={() => void handleDelete()}>
           {t("users.update.deleteAccount")}
         </Button>
-      </div>
-    </Layout>
+      </section>
+    </EditColumn>
   );
 }
 
@@ -158,24 +174,26 @@ export default function UserUpdatePage() {
 
   if (authLoading || isLoading) {
     return (
-      <Layout title={t("users.update.title")}>
-        <p className={styles.muted}>{t("users.detail.loading")}</p>
-      </Layout>
+      <EditColumn id={id}>
+        <Loading />
+      </EditColumn>
     );
   }
   if (error || !profile) {
     return (
-      <Layout title={t("users.update.title")}>
-        <ErrorMessage message={t("users.detail.loadError")} />
-      </Layout>
+      <EditColumn id={id}>
+        <Alert message={t("users.detail.loadError")} />
+      </EditColumn>
     );
   }
   if (!profile.canEdit) {
     return (
-      <Layout title={t("users.update.title")}>
-        <ErrorMessage message={t("users.update.forbidden")} />
-        <Link to={`/users/${id}`}>{t("users.update.backToProfile")}</Link>
-      </Layout>
+      <EditColumn id={id}>
+        <Alert message={t("users.update.forbidden")} />
+        <TextLink to={`/users/${id}`} className={styles.below}>
+          {t("users.update.backToProfile")}
+        </TextLink>
+      </EditColumn>
     );
   }
   return <UserUpdateForm id={profile.id} initialBio={profile.bio} />;
