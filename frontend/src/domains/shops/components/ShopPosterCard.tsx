@@ -37,7 +37,7 @@ export function ShopPosterCard({ shop, ratingMax }: { shop: Shop; ratingMax: num
         <p className={styles.meta}>
           {shop.reviewCount > 0 && shop.averageRating !== null ? (
             ratingMax === undefined ? (
-              <b>{shop.averageRating}</b>
+              <b>{shop.averageRating.toFixed(1)}</b>
             ) : (
               <RatingBurger value={shop.averageRating} max={ratingMax} fractionDigits={1} />
             )
