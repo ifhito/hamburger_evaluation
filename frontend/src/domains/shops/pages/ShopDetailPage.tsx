@@ -7,7 +7,7 @@ import { useRatingRange } from "../../reviews/hooks/useRatingRange";
 import { Badge } from "../../../components/ui/Badge";
 import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
-import { RatingBurgerIcon } from "../../../components/ui/RatingBurger";
+import { RatingSummary } from "../../../components/ui/RatingBurger";
 import { EmptyState, Loading, NotFound } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
 import { ShopReviewCard } from "../components/ShopReviewCard";
@@ -82,18 +82,7 @@ export default function ShopDetailPage() {
         {shop.status !== "rejected" &&
           (shop.reviewCount > 0 ? (
             <>
-              <section className={styles.summary}>
-                {shop.averageRating !== null && (
-                  <span className={styles.avg} aria-label={ratingRange ? t("common.ratingAria", { value: shop.averageRating.toFixed(1), max: ratingRange.max }) : undefined}>
-                    {shop.averageRating.toFixed(1)}
-                  </span>
-                )}
-                <div>
-                  <RatingBurgerIcon ratio={shop.averageRating !== null && ratingRange ? shop.averageRating / ratingRange.max : 0} size="lg" />
-                  <p className={styles.count}>{t("shops.list.reviewCount", { count: shop.reviewCount })}</p>
-                </div>
-                {cta}
-              </section>
+              <RatingSummary value={shop.averageRating} max={ratingRange?.max} count={shop.reviewCount} action={cta} />
               <div className={styles.sectionHead}>
                 <h2 className={styles.heading}>{t("shops.detail.reviewsHeading")}</h2>
                 <span className={styles.count}>{t("shops.detail.newestFirst")}</span>

@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { resolveBurger, roundRating, WHITE, type BurgerSize } from './burgerShapes'
 import styles from './ratingBurger.module.css'
@@ -70,5 +70,39 @@ export function RatingBurger({ value, max, size = 'md', fractionDigits }: Props)
       <RatingBurgerIcon ratio={max > 0 ? shown / max : 0} size={size} />
       <b aria-hidden="true">{text}</b>
     </span>
+  )
+}
+
+interface SummaryProps {
+  // 平均。レビューがまだなければ null(デザインの大きな数字は出さない)。
+  value: number | null
+  // GET /meta の rating.max。未取得なら undefined で、装飾のバーガーは空のまま。
+  max: number | undefined
+  count: number
+  // 「レビューを書く」などの操作(あれば、右端に置く)。
+  action?: ReactNode
+}
+
+// ショップ詳細・レビュー詳細で共有する、大きな平均値 + 装飾のバーガー + 件数(design/redesign の .summary /
+// .shop-summary)。RatingBurger と違い、数字とバーガーを別々の大きさで見せるための専用の組み合わせ。
+export function RatingSummary({ value, max, count, action }: SummaryProps) {
+  const { t } = useTranslation()
+  const ratio = value !== null && max !== undefined && max > 0 ? roundRating(value) / max : 0
+  return (
+    <section className={styles.summary}>
+      {value !== null && (
+        <span
+          className={styles.avg}
+          aria-label={max !== undefined ? t('common.ratingAria', { value: value.toFixed(1), max }) : undefined}
+        >
+          {value.toFixed(1)}
+        </span>
+      )}
+      <div className={styles.summaryCount}>
+        <RatingBurgerIcon ratio={ratio} size="lg" />
+        <p className={styles.count}>{t('common.reviewCount', { count })}</p>
+      </div>
+      {action && <div className={styles.summaryAction}>{action}</div>}
+    </section>
   )
 }

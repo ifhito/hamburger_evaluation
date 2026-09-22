@@ -17,3 +17,48 @@
   line-height: 1;
   color: var(--ui-text);
 }
+
+/* ショップ詳細・レビュー詳細の、大きな平均値 + 装飾のバーガー + 件数 + 操作(design/redesign の .summary)。 */
+.summary {
+  font-family: var(--ui-font);
+  color: var(--ui-text);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 0 32px;
+}
+
+.summaryAction {
+  margin-left: auto;
+}
+
+.avg {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.summaryCount {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.count {
+  font-size: 14px;
+  color: var(--ui-text-muted);
+}
+
+@media (max-width: 720px) {
+  .summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 24px;
+  }
+
+  .summaryAction {
+    width: 100%;
+    margin-left: 0;
+  }
+}

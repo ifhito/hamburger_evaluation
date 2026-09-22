@@ -11,14 +11,14 @@ interface Props {
 // 空・読み込み中・見つからないときの画面。文言は locale から出す(遊びの文言。API が返すエラーの文言とは別)。
 // 絵は装飾で、読み上げない。
 
-// まだ何もないとき: 空のバーガー + 促し。
-export function EmptyState({ action }: Props) {
+// まだ何もないとき: 空のバーガー + 促し。文言は、指定がなければ、共通の遊びの文言(画面ごとの文言が、デザインにあるときだけ指定する)。
+export function EmptyState({ title, description, action }: Props & { title?: string; description?: string }) {
   const { t } = useTranslation()
   return (
     <section className={styles.panel}>
       <RatingBurgerIcon ratio={0} size="lg" />
-      <h2 className={styles.title}>{t('common.states.empty.title')}</h2>
-      <p className={styles.sub}>{t('common.states.empty.description')}</p>
+      <h2 className={styles.title}>{title ?? t('common.states.empty.title')}</h2>
+      <p className={styles.sub}>{description ?? t('common.states.empty.description')}</p>
       {action}
     </section>
   )
