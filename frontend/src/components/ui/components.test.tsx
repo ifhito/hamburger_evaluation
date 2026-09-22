@@ -16,8 +16,6 @@ const html = (node: React.ReactElement) => renderToStaticMarkup(node);
 // CSS モジュールの class 名は「_名前_ハッシュ」。名前だけを取り出して、完全一致で比べる(danger が dangerSolid・offDanger に一致しないように)。
 const classNames = (markup: string) =>
   (markup.match(/class="([^"]*)"/)?.[1] ?? "").split(" ").map((c) => c.replace(/^_(.+)_[0-9a-f]+$/, "$1"));
-// 水位の塗り分け(gradient)の id は描くたびに違うので、id とその参照を除いて、図形だけを比べる。
-const shapesOf = (markup: string) => markup.replace(/ id="[^"]*"/g, "").replace(/url\(#[^)]*\)/g, "url(#)");
 
 describe("Button", () => {
   it("種類ごとに、別々の class を 1 つだけ持つ", () => {
@@ -165,7 +163,7 @@ describe("空・読み込み中・見つからないときの画面", () => {
   });
 });
 
-const svgOf = (markup: string) => shapesOf(markup.match(/<svg[\s\S]*<\/svg>/)![0]);
+const svgOf = (markup: string) => markup.match(/<svg[\s\S]*<\/svg>/)![0];
 
 describe("RatingBurger(表示)", () => {
   it("数字を必ず併記し、読み上げは「Rating 4.5 out of 5」の 1 つの画像として伝え、絵と数字を二重に読み上げない", () => {
@@ -192,32 +190,28 @@ describe("RatingBurger(表示)", () => {
     expect(svgOf(html(<RatingBurger value={3} max={0} size="lg" />))).toBe(svgOf(html(<RatingBurgerIcon ratio={0} size="lg" />)));
   });
 
-  it("評価が 0 または最大のときは、水位の途中で塗る部品がなく、塗り分けがない", () => {
-    expect(html(<RatingBurger value={0} max={5} size="lg" />)).not.toContain("linearGradient");
-    expect(html(<RatingBurger value={5} max={5} size="lg" />)).not.toContain("linearGradient");
+  it("評価が 0 のときは、すべての食材が消灯の灰色の線で、塗り(fill)は使わない", () => {
+    const out = html(<RatingBurger value={0} max={5} size="lg" />);
+    expect(out).not.toContain('fill="#');
+    expect(out.match(/stroke="#8e8e89"/g)?.length).toBe(6);
   });
 
-  it("水位の途中の部品は、下から上へ塗り分け、参照する gradient の id が実際にある", () => {
+  it("評価が最大のときは、すべての食材が自分の色の線で点灯し、消灯の灰色がない", () => {
+    const out = html(<RatingBurger value={5} max={5} size="lg" />);
+    expect(out).not.toContain('stroke="#8e8e89"');
+  });
+
+  it("水位の途中では、水位より下の食材が自分の色、上が消灯の灰色の線になる(塗りは使わない)", () => {
     const out = html(<RatingBurgerIcon ratio={0.55} size="lg" />);
-    expect(out).toContain('x1="0" y1="1" x2="0" y2="0"');
-    // 下から水位まで部品の色、その上は白(境目は同じ位置)
-    expect(out).toMatch(/<stop offset="0" stop-color="(#[0-9a-f]+)"><\/stop><stop offset="([\d.]+)" stop-color="\1"><\/stop><stop offset="\2" stop-color="#ffffff"><\/stop><stop offset="1" stop-color="#ffffff">/);
-    const refs = [...out.matchAll(/fill="url\(#([^)]+)\)"/g)].map((m) => m[1]);
-    expect(refs.length).toBeGreaterThan(0);
-    for (const ref of refs) expect(out).toContain(`<linearGradient id="${ref}"`);
+    expect(out).not.toContain('fill="#');
+    expect((out.match(/stroke="#8e8e89"/g)?.length ?? 0)).toBeGreaterThan(0);
+    expect(out).toMatch(/stroke="#(?!8e8e89)[0-9a-f]{6}"/);
   });
 
   it("絵だけの部品は、装飾として読み上げず、数字を持たない", () => {
     const out = html(<RatingBurgerIcon ratio={0.5} size="sm" />);
     expect(out).toContain('aria-hidden="true"');
     expect(out).not.toContain("<b");
-  });
-
-  it("同じ画面に複数置いても、水位の塗り分け(gradient)の id が重ならない", () => {
-    const out = html(<><RatingBurgerIcon ratio={0.55} /><RatingBurgerIcon ratio={0.55} /></>);
-    const ids = [...out.matchAll(/<linearGradient id="([^"]+)"/g)].map((m) => m[1]);
-    expect(ids.length).toBeGreaterThan(1);
-    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 
