@@ -4,7 +4,6 @@ import { ApiError } from "../../../api/client/buildApiClient";
 import { useMeta } from "../../../api/meta";
 import { Alert } from "../../../components/ui/Alert";
 import { Button } from "../../../components/ui/Button";
-import { Card } from "../../../components/ui/Card";
 import { authApi } from "../api/authApiClient";
 import { isNavigable } from "../../oauth/navigation";
 import { GOOGLE_PROVIDER, googleEnabled } from "../googleFlow";
@@ -44,7 +43,9 @@ function GoogleConnectionView({ state, actionError, disconnected, retrying, busy
   const identity = state.kind === "loaded" ? state.identity : null;
   return (
     <section className={section.section}>
-      <h2 className={section.heading}>{t("auth.google.profile.heading")}</h2>
+      <div className={section.sectionHead}>
+        <h2 className={section.heading}>{t("auth.google.profile.heading")}</h2>
+      </div>
       {actionError && (
         <div className={styles.alert}>
           <Alert title={actionError.title} message={actionError.messages} />
@@ -66,32 +67,30 @@ function GoogleConnectionView({ state, actionError, disconnected, retrying, busy
         </>
       )}
       {state.kind === "loaded" && (
-        <Card>
-          <div className={styles.row}>
-            <div className={styles.info}>
-              <b className={styles.name}>{t("auth.google.profile.accountName")}</b>
-              {identity ? (
-                <>
-                  {/* メールは Google が返した文字列なので、HTML として解釈せず、文字として描画する */}
-                  <p className={styles.meta}>{t("auth.google.profile.connectedAs", { email: identity.email })}</p>
-                  {!identity.canUnlink && <p className={styles.reason}>{t("auth.google.profile.cannotUnlink")}</p>}
-                </>
-              ) : (
-                <p className={styles.meta}>{t("auth.google.profile.notConnected")}</p>
-              )}
-            </div>
-            {identity?.canUnlink && (
-              <Button type="button" variant="danger" isLoading={busy === "disconnect"} onClick={onDisconnect}>
-                {t("auth.google.profile.disconnect")}
-              </Button>
-            )}
-            {!identity && (
-              <Button type="button" variant="secondary" isLoading={busy === "connect"} onClick={onConnect}>
-                {t("auth.google.profile.connect")}
-              </Button>
+        <article className={styles.appitem}>
+          <div className={styles.info}>
+            <b className={styles.name}>{t("auth.google.profile.accountName")}</b>
+            {identity ? (
+              <>
+                {/* メールは Google が返した文字列なので、HTML として解釈せず、文字として描画する */}
+                <p className={styles.meta}>{t("auth.google.profile.connectedAs", { email: identity.email })}</p>
+                {!identity.canUnlink && <p className={styles.reason}>{t("auth.google.profile.cannotUnlink")}</p>}
+              </>
+            ) : (
+              <p className={styles.meta}>{t("auth.google.profile.notConnected")}</p>
             )}
           </div>
-        </Card>
+          {identity?.canUnlink && (
+            <Button type="button" variant="danger" isLoading={busy === "disconnect"} onClick={onDisconnect}>
+              {t("auth.google.profile.disconnect")}
+            </Button>
+          )}
+          {!identity && (
+            <Button type="button" variant="secondary" isLoading={busy === "connect"} onClick={onConnect}>
+              {t("auth.google.profile.connect")}
+            </Button>
+          )}
+        </article>
       )}
     </section>
   );
