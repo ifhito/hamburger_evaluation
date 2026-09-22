@@ -46,6 +46,44 @@ describe("PhotoField", () => {
     expect(onChange.mock.calls[0][0].name).toBe("shrunk.jpg");
   });
 
+  it("続けて 2 枚選んだときは、あとに選んだ方が勝つ(先に選んだ方の小さくする処理が遅れて終わっても上書きしない)", async () => {
+    const { shrinkPhoto } = await import("../../../lib/photoResize");
+    const deferred = new Map<string, { resolve: (f: File) => void }>();
+    vi.mocked(shrinkPhoto).mockImplementation(
+      (f: File) =>
+        new Promise<File>((resolve) => {
+          deferred.set(f.name, { resolve: (shrunk) => resolve(shrunk) });
+        }),
+    );
+
+    const onChange = vi.fn();
+    const page = await mount(<PhotoField photo={null} onChange={onChange} limits={limits} />);
+    const input = need(page.querySelector<HTMLInputElement>('input[type="file"]'), "file input");
+
+    const selectFile = async (name: string) => {
+      Object.defineProperty(input, "files", { value: [file(name, 10)], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    };
+
+    await selectFile("first.png");
+    await selectFile("second.png");
+
+    // 先に選んだ方(first)が、あとから終わる。
+    const firstShrunk = new File(["a"], "first-shrunk.jpg", { type: "image/jpeg" });
+    const secondShrunk = new File(["b"], "second-shrunk.jpg", { type: "image/jpeg" });
+    await act(async () => {
+      need(deferred.get("second.png"), "second.png の処理").resolve(secondShrunk);
+    });
+    await act(async () => {
+      need(deferred.get("first.png"), "first.png の処理").resolve(firstShrunk);
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(secondShrunk);
+  });
+
   it("付いた状態は、写真のプレビューと「変える」「外す」を出す。「外す」で onChange(null) が呼ばれる", async () => {
     const onChange = vi.fn();
     const attached = file("shrunk.jpg", 50);

@@ -15,7 +15,7 @@ import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
 import { TextArea } from "../../../components/ui/TextField";
 import { RatingInput } from "../../../components/ui/RatingInput";
-import { Loading } from "../../../components/ui/states";
+import { Loading, NotFound } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
 import { PhotoField } from "../components/PhotoField";
 import styles from "./reviewForm.module.css";
@@ -27,7 +27,7 @@ export default function ReviewEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
-  const { data: review, isLoading: reviewLoading } = useReview(id, user?.id ?? null, { enabled: !authLoading });
+  const { data: review, isLoading: reviewLoading, error } = useReview(id, user?.id ?? null, { enabled: !authLoading });
   const isLoading = reviewLoading || authLoading;
   const { update } = useUpdateReview(id ?? "");
   const ratingRange = useRatingRange();
@@ -43,6 +43,21 @@ export default function ReviewEditPage() {
   useEffect(() => {
     if (review) reset({ rating: review.rating, comment: review.comment ?? "" });
   }, [review, reset]);
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <Loading />
+      </Layout>
+    );
+  }
+  if (error || !review) {
+    return (
+      <Layout>
+        <NotFound action={<LinkButton to="/reviews">{t("reviews.detail.backToReviewsAction")}</LinkButton>} />
+      </Layout>
+    );
+  }
 
   const onSubmit = handleSubmit(async (data) => {
     setServerError(null);
@@ -62,25 +77,21 @@ export default function ReviewEditPage() {
       <div className={styles.container}>
         <TextLink to={`/reviews/${id}`}>{t("reviews.edit.backToReview")}</TextLink>
         <h1 className={styles.title}>{t("reviews.edit.title")}</h1>
-        {review?.burger && (
+        {review.burger && (
           <p className={styles.shopline}>
             <b>{review.burger.name}</b>
             {review.shop && <span>{review.shop.name}</span>}
           </p>
         )}
 
-        {isLoading && <Loading />}
-
-        {!isLoading && review && !review.canEdit && (
+        {!review.canEdit ? (
           <div className={styles.narrow}>
             <Alert title={t("reviews.edit.forbiddenTitle")} message={t("reviews.edit.forbiddenBody")} />
             <p className={styles.forbidden}>
               <TextLink to={`/reviews/${id}`}>{t("reviews.edit.backToReview")}</TextLink>
             </p>
           </div>
-        )}
-
-        {!isLoading && review?.canEdit && (
+        ) : (
           <form onSubmit={(e) => void onSubmit(e)} noValidate>
             {serverError && <Alert title={t("reviews.edit.errorTitle")} message={serverError} />}
             <div className={styles.formgrid}>

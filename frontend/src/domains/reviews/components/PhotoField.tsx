@@ -27,12 +27,15 @@ interface Props {
 
 // 写真の追加欄(design/redesign/review-new.html・review-photo.html・review-edit.html)。空・選んだ直後(この
 // 端末で小さくしている間)・付いた、の 3 つの見た目を、1 つの部品で扱う。小さくする処理そのものは
-// lib/photoResize の shrinkPhoto(送信の直前にも、安全のためもう一度呼ばれる。すでに収まっていれば何もしない)。
+// lib/photoResize の shrinkPhoto(ここで一度だけ行う。送信の直前にはもう一度呼ばない。二重にデコードしないため)。
 export function PhotoField({ photo, onChange, limits, onShrinkingChange, existingPhotoUrl, existingPhotoCaption, allowRemove = false }: Props) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [shrinking, setShrinking] = useState(false);
   const [originalSize, setOriginalSize] = useState<number | null>(null);
+  // 選び直しを見分ける通し番号。速く終わった、あとの選択の結果を、遅れて終わった前の選択の結果が
+  // 上書きしないようにする(2 つの写真を続けて選んだときの、非同期処理の追い越しへの対策)。
+  const selection = useRef(0);
   // 選んだ写真の、表示用の一時 URL。photo が変わるたびに作り直す(useMemo)。作った URL は、差し替え・
   // アンマウント時に必ず revoke する(メモリを持ち続けないため。副作用だけの useEffect で、state は更新しない)。
   const objectUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
@@ -43,6 +46,7 @@ export function PhotoField({ photo, onChange, limits, onShrinkingChange, existin
   }, [objectUrl]);
 
   const handleSelect = async (file: File) => {
+    const mySelection = ++selection.current;
     setOriginalSize(file.size);
     if (!limits) {
       onChange(file);
@@ -51,10 +55,13 @@ export function PhotoField({ photo, onChange, limits, onShrinkingChange, existin
     setShrinking(true);
     onShrinkingChange?.(true);
     try {
-      onChange(await shrinkPhoto(file, limits));
+      const shrunk = await shrinkPhoto(file, limits);
+      if (mySelection === selection.current) onChange(shrunk);
     } finally {
-      setShrinking(false);
-      onShrinkingChange?.(false);
+      if (mySelection === selection.current) {
+        setShrinking(false);
+        onShrinkingChange?.(false);
+      }
     }
   };
 
@@ -89,7 +96,7 @@ export function PhotoField({ photo, onChange, limits, onShrinkingChange, existin
       ) : previewUrl ? (
         <div>
           <div className={styles.preview}>
-            <img src={previewUrl} alt="" className={styles.previewImg} />
+            <img src={previewUrl} alt={showsExisting ? t("reviews.photo.currentAlt") : t("reviews.photo.alt")} className={styles.previewImg} />
           </div>
           <div className={styles.file}>
             <span className={styles.fname}>{showsExisting ? t("reviews.photo.currentFile") : photo?.name}</span>

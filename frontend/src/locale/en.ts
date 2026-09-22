@@ -169,6 +169,7 @@ const en = {
       label: "Photo",
       optional: "(optional)",
       alt: "Review photo",
+      currentAlt: "Current review photo",
       add: "Add a photo",
       hint: "JPEG, PNG or WebP, up to 5MB. Large photos are shrunk on your device before sending.",
       choose: "Choose a photo",
