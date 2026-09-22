@@ -3,8 +3,10 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { ApiError } from "../../../api/client/buildApiClient";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
+import { Alert } from "../../../components/ui/Alert";
+import { Badge } from "../../../components/ui/Badge";
+import { Button } from "../../../components/ui/Button";
+import { RatingBurgerIcon } from "../../../components/ui/RatingBurger";
 import { Layout } from "../../../components/Layout";
 import { oauthApi } from "../api/oauthApiClient";
 import { phaseFor, redirectPhase, searchToDecide, startConsent, NotNavigableError, type ConsentState } from "../consentFlow";
@@ -16,6 +18,19 @@ function moveToApp(setState: Dispatch<SetStateAction<ConsentState | null>>, sear
   const next = redirectPhase(target);
   setState({ search, phase: next });
   if (next.status === "redirecting") window.location.assign(target);
+}
+
+// 「確認しています…」「接続しています…」の状態画面。水位の絵は装飾(読み上げない)。見出しだけ読み上げに伝える。
+function StatusView({ ratio, title, description }: { ratio: number; title: string; description: string }) {
+  return (
+    <div className={styles.status}>
+      <RatingBurgerIcon ratio={ratio} size="lg" />
+      <h1 aria-live="polite" className={styles.statusTitle}>
+        {title}
+      </h1>
+      <p className={styles.muted}>{description}</p>
+    </div>
+  );
 }
 
 // AI アプリが、利用者のログインと許可だけでこのアプリにつなぐための、許可を尋ねる画面。
@@ -68,40 +83,65 @@ export default function OAuthConsentPage() {
   const isDeciding = decidingSearch === search;
 
   return (
-    <Layout title={t("oauth.consent.title")}>
-      {phase.status === "loading" && <p className={styles.muted}>{t("oauth.consent.loading")}</p>}
-      {phase.status === "redirecting" && <p className={styles.muted}>{t("oauth.consent.connecting")}</p>}
-      {phase.status === "failed" && (
-        <>
-          <ErrorMessage message={failureMessages(phase.error)} />
-          <p className={styles.muted}>{t("oauth.consent.loadError")}</p>
-        </>
-      )}
-      {phase.status === "asking" && (
-        <div className={styles.card}>
-          {/* アプリの名前は、アプリが自由に決めるので、HTML として解釈せず、文字として描画する */}
-          <p className={styles.intro}>{t("oauth.consent.intro", { name: phase.view.client.name })}</p>
-          <p className={styles.meta}>{t("oauth.consent.appId", { id: phase.view.client.id })}</p>
-          <div>
-            <p className={styles.heading}>{t("oauth.consent.permissionsHeading")}</p>
-            <ul className={styles.scopes}>
-              {phase.view.scopes.map((scope) => (
-                <li key={scope.name}>{scope.description}</li>
-              ))}
-            </ul>
-          </div>
-          {returnHost && <p className={styles.meta}>{t("oauth.consent.returnsTo", { host: returnHost })}</p>}
-          {user && <p className={styles.signedIn}>{t("oauth.consent.signedInAs", { name: user.username })}</p>}
-          <div className={styles.actions}>
-            <Button type="button" isLoading={isDeciding} onClick={() => void decide(true)}>
-              {t("oauth.consent.allow")}
-            </Button>
-            <Button type="button" variant="secondary" disabled={isDeciding} onClick={() => void decide(false)}>
-              {t("oauth.consent.deny")}
-            </Button>
-          </div>
-        </div>
-      )}
+    <Layout>
+      <div className={styles.consent}>
+        {phase.status === "loading" && <StatusView ratio={0.6} title={t("oauth.consent.loadingTitle")} description={t("oauth.consent.loading")} />}
+        {phase.status === "redirecting" && (
+          <StatusView ratio={0.9} title={t("oauth.consent.connectingTitle")} description={t("oauth.consent.connecting")} />
+        )}
+        {phase.status === "failed" && (
+          <>
+            <p className={styles.eyebrow}>{t("oauth.consent.eyebrow")}</p>
+            <h1 className={styles.heading}>{t("oauth.consent.failedHeading")}</h1>
+            <Alert title={t("oauth.consent.cannotCompleteTitle")} message={failureMessages(phase.error)} />
+            <p className={styles.below}>{t("oauth.consent.tryAgain")}</p>
+          </>
+        )}
+        {phase.status === "asking" && (
+          <>
+            <p className={styles.eyebrow}>{t("oauth.consent.eyebrow")}</p>
+            <h1 className={styles.heading}>{t("oauth.consent.heading")}</h1>
+
+            <div className={styles.appbox}>
+              <span className={styles.avatar} aria-hidden="true">
+                {[...phase.view.client.name][0]}
+              </span>
+              <div className={styles.appboxInfo}>
+                {/* アプリの名前は、アプリが自由に決めるので、HTML として解釈せず、文字として描画する */}
+                <p className={styles.appName}>{phase.view.client.name}</p>
+                <p className={styles.appId}>{t("oauth.consent.appId", { id: phase.view.client.id })}</p>
+              </div>
+            </div>
+
+            <section className={styles.perm}>
+              <h2 className={styles.permHeading}>{t("oauth.consent.permissionsHeading")}</h2>
+              <ul className={styles.scopes}>
+                {phase.view.scopes.map((scope) => (
+                  <li key={scope.name} className={styles.scopeItem}>
+                    <span>{scope.description}</span>
+                    {/* 書き込みの範囲かは、API の印(writes)だけで決める(範囲の名前を比べない) */}
+                    {scope.writes && <Badge tone="accent">{t("oauth.writeAccess")}</Badge>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <div className={styles.facts}>
+              {returnHost && <p>{t("oauth.consent.returnsTo", { host: returnHost })}</p>}
+              {user && <p>{t("oauth.consent.signedInAs", { name: user.username })}</p>}
+            </div>
+
+            <div className={styles.actions}>
+              <Button type="button" wide isLoading={isDeciding} onClick={() => void decide(true)}>
+                {t("oauth.consent.allow")}
+              </Button>
+              <Button type="button" variant="secondary" wide disabled={isDeciding} onClick={() => void decide(false)}>
+                {t("oauth.consent.deny")}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
     </Layout>
   );
 }
