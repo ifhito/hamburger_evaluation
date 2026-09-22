@@ -1,12 +1,3 @@
-.card {
-  overflow: hidden;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius);
-  background: var(--ui-bg);
-  font-family: var(--ui-font);
-  color: var(--ui-text);
-}
-
 .photo,
 .noPhoto {
   display: block;
@@ -70,22 +61,6 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
-}
-
-.more {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ui-text);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.more:focus-visible {
-  outline: 2px solid var(--ui-text);
-  outline-offset: 2px;
 }
 
 @media (max-width: 720px) {
