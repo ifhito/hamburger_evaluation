@@ -9,7 +9,11 @@ export default {
       // /api を取り除いて API へ渡す(Vite の dev proxy と同じ規則)。
       const target = new URL(url.pathname.replace(/^\/api/, "") || "/", env.API_ORIGIN);
       target.search = url.search;
-      return fetch(new Request(target, request));
+      // redirect: "manual" が要る。既定では fetch が 3xx を Worker の中で
+      // 追いかけてしまい、リダイレクト先の中身を 200 として返す。そうなると
+      // ブラウザの URL が変わらず、Google ログインのような 302 を前提にした
+      // 流れが壊れる(アプリが知らない /api/... のまま描画され 404 になる)。
+      return fetch(new Request(target, request), { redirect: "manual" });
     }
     return env.ASSETS.fetch(request);
   },
