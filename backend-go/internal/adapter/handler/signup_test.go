@@ -215,7 +215,7 @@ func newSignupKitWithHasher(t *testing.T, hasher usecase.PasswordHasher) *signup
 	shopRepo := &shopStoreFake{}
 	router := handler.NewRouter(okPinger, auth, signups, shopsUsecase(shopRepo, shopRepo),
 		reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(users, domain.NewUsers(users), &uowtest.UoW{Users: users}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), hasher), nil, nil, nil)
+		usecase.NewUsers(users, domain.NewUsers(users), &uowtest.UoW{Users: users}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), hasher), nil, nil, nil)
 	return &signupKit{router: router, users: users, store: store, mailer: mailer}
 }
 

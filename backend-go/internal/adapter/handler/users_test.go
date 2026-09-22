@@ -636,10 +636,11 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)),
 		unitOfWork, hasher, mailer, codec, testSignupConfig)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
+	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(conn, auth, signups,
 		shopsUsecase(query.NewShopQuery(conn), repository.NewShopRepository(conn)),
-		usecase.NewReviews(query.NewReviewQuery(conn), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), unitOfWork, recalc, hasher), nil, nil, nil)
+		usecase.NewReviews(query.NewReviewQuery(conn), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), unitOfWork, recalc, shopRecalc, hasher), nil, nil, nil)
 	return conn, &mailedRouter{Handler: router, mailer: mailer}
 }
 

@@ -19,7 +19,7 @@ import (
 // newStatsWorker は、フェイクの UnitOfWork と統計のフェイクで、DB なしに動く StatsWorker を返す。
 func newStatsWorker(stats *uowtest.Stats, clock usecase.Clock, cfg usecase.StatsWorkerConfig) (*usecase.StatsWorker, *uowtest.UoW) {
 	uow := &uowtest.UoW{Stats: stats}
-	return usecase.NewStatsWorker(stats, uow, usecase.NewBurgerStatsRecalculator(clock), usecase.NewShopStatsRecalculator(clock), clock, cfg), uow
+	return usecase.NewStatsWorker(stats, uow, usecase.NewBurgerStatsRecalculator(clock), clock, cfg), uow
 }
 
 // dueOf は、決まった依頼の一覧を返す Due である。

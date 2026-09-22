@@ -96,13 +96,16 @@ func (w *world) hookedShopWorker(clock usecase.Clock, maxAttempts int, hook func
 		usecase.NewShopStatsRecalculator(clock), clock, usecase.StatsWorkerConfig{Batch: 100, MaxAttempts: maxAttempts})
 }
 
-// TestShopStatsWorkerChain は、レビューの書き込みから、ショップの集計が反映されるまでの流れ(書き込み → バーガーの
-// 再計算の依頼 → バーガーの統計のワーカーがショップの依頼を積む → ショップの集計のワーカーが集計を保存する)を確かめる。
+// TestShopStatsWorkerChain は、レビューの書き込みから、ショップの集計が反映されるまでの流れ(書き込みが、バーガーの
+// 依頼と同じトランザクションで、ショップの依頼も直接登録する → ショップの集計のワーカーが集計を保存する)を確かめる。
+// バーガーの統計のワーカーは、ショップの集計には一切触れない(依頼のレビュー指摘への対応。ShopStatsRecalculator の
+// コメントに理由がある: ワーカーからワーカーへ連鎖させると、ショップ側の失敗が、健全なバーガーの統計の再計算まで
+// 失敗として記録してしまう)。
 func TestShopStatsWorkerChain(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 
-	t.Run("投稿した時点では集計は変わらず、バーガーのワーカーがショップの依頼を積み(バーガーの統計と同じトランザクション)、ショップのワーカーが集計を保存して依頼を消す", func(t *testing.T) {
+	t.Run("投稿した時点で、バーガーの依頼と同じトランザクションで、ショップの依頼も積まれる。ショップのワーカーが集計を保存して依頼を消す。バーガーのワーカーは、ショップの依頼に触れない", func(t *testing.T) {
 		alice := w.user(t, "chain-alice")
 		burger := w.burger(t, "Chain Burger")
 		w.review(t, alice, burger, 4, "good")
@@ -110,15 +113,15 @@ func TestShopStatsWorkerChain(t *testing.T) {
 		if _, ok := dbtest.FetchShopStats(ctx, t, conn, w.shop); ok {
 			t.Fatal("投稿しただけで、ショップの集計ができている(集計は、あとからワーカーが計算する)")
 		}
-		if n := w.shopRequests(t, w.shop); n != 0 {
-			t.Fatalf("投稿しただけで、ショップの依頼が積まれている(積むのは、バーガーのワーカー)")
+		if n := w.shopRequests(t, w.shop); n != 1 {
+			t.Fatalf("投稿した時点でのショップの依頼 = %d 件, want 1 件(書き込みが、バーガーの依頼と同じトランザクションで登録する)", n)
 		}
 
 		if n, err := w.worker.RunOnce(ctx); err != nil || n != 1 {
 			t.Fatalf("バーガーのワーカーの RunOnce = (%d, %v), want (1, nil)", n, err)
 		}
 		if n := w.shopRequests(t, w.shop); n != 1 {
-			t.Fatalf("バーガーのワーカーのあとのショップの依頼 = %d 件, want 1 件", n)
+			t.Fatalf("バーガーのワーカーのあとのショップの依頼 = %d 件, want 1 件のまま(バーガーのワーカーは、ショップの依頼に触れない)", n)
 		}
 		if _, ok := dbtest.FetchShopStats(ctx, t, conn, w.shop); ok {
 			t.Fatal("ショップのワーカーが動く前に、集計ができている")
@@ -137,18 +140,18 @@ func TestShopStatsWorkerChain(t *testing.T) {
 		}
 	})
 
-	t.Run("同じショップの複数のバーガーの書き込みは、ショップの依頼が 1 件にまとまり、ショップの集計の再計算は 1 回で済む", func(t *testing.T) {
+	t.Run("同じショップの複数のバーガーへの書き込みは、ショップの依頼が 1 件にまとまり、ショップの集計の再計算は 1 回で済む", func(t *testing.T) {
 		alice := w.user(t, "coalesce-alice")
 		b1, b2, b3 := w.burger(t, "Coalesce 1"), w.burger(t, "Coalesce 2"), w.burger(t, "Coalesce 3")
 		w.review(t, alice, b1, 5, "a")
 		w.review(t, alice, b2, 3, "b")
 		w.review(t, alice, b3, 4, "c")
 
+		if n := w.shopRequests(t, w.shop); n != 1 {
+			t.Fatalf("ショップの依頼 = %d 件, want 1 件(3 つのバーガーへの書き込みからの依頼が 1 件にまとまる)", n)
+		}
 		if n, err := w.worker.RunOnce(ctx); err != nil || n != 3 {
 			t.Fatalf("バーガーのワーカーの RunOnce = (%d, %v), want (3, nil)(バーガーごとに 3 件)", n, err)
-		}
-		if n := w.shopRequests(t, w.shop); n != 1 {
-			t.Fatalf("ショップの依頼 = %d 件, want 1 件(3 つのバーガーからの依頼が 1 件にまとまる)", n)
 		}
 		if n, err := statsworkertest.NewShopWorker(conn, infra.SystemClock{}).RunOnce(ctx); err != nil || n != 1 {
 			t.Fatalf("ショップのワーカーの RunOnce = (%d, %v), want (1, nil)(ショップの再計算は 1 回)", n, err)
@@ -158,7 +161,7 @@ func TestShopStatsWorkerChain(t *testing.T) {
 		}
 	})
 
-	t.Run("ショップに紐づかないバーガーは、ショップの依頼を積まず、失敗もしない", func(t *testing.T) {
+	t.Run("ショップに紐づかないバーガーへの投稿は、ショップの依頼を積まず、失敗もしない", func(t *testing.T) {
 		alice := w.user(t, "orphan-alice")
 		orphan := dbtest.InsertUUIDRow(ctx, t, conn, insertBurger, "Orphan Burger") // どのショップにも紐づけない
 		if _, err := conn.Exec(ctx, `INSERT INTO reviews (rating, user_id, burger_id) VALUES (3, $1, $2)`, alice.ID, orphan); err != nil {
@@ -358,7 +361,7 @@ func TestShopStatsConvergesAfterConcurrentWrite(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	pool := w.pool(t)
-	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, storage.NewDisk(t.TempDir(), "/photos"))
+	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
 
 	alice, bob := w.user(t, "conv-alice"), w.user(t, "conv-bob")
 	b1, b2 := w.burger(t, "Converge 1"), w.burger(t, "Converge 2")
@@ -515,7 +518,7 @@ func TestShopStatsWorkersConcurrently(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	pool := w.pool(t)
-	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, storage.NewDisk(t.TempDir(), "/photos"))
+	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
 
 	const writers, perWriter = 4, 5
 	burgers := make([]string, writers)

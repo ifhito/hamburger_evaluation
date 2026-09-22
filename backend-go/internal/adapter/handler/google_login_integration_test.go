@@ -222,10 +222,11 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 		t.Fatal(err)
 	}
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
+	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(pool, usecase.NewAuth(userQuery, hasherFake{}, codec, codec), unusedSignups(),
 		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)),
-		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(userQuery, domain.NewUsers(repository.NewUserRepository(pool)), unitOfWork, recalc, hasherFake{}),
+		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewUsers(userQuery, domain.NewUsers(repository.NewUserRepository(pool)), unitOfWork, recalc, shopRecalc, hasherFake{}),
 		nil, nil, nil, handler.WithGoogleLogin(google))
 
 	// ログの出力を捕まえて、秘密の値が出ていないことを確かめられるようにする。
