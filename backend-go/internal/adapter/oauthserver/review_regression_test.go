@@ -247,7 +247,7 @@ func TestWithdrawalRevokesTheUsersGrantsAndTokens(t *testing.T) {
 
 	userQuery := query.NewUserQuery(r.pool)
 	users := usecase.NewUsers(userQuery, domain.NewUsers(repository.NewUserRepository(r.pool)), uow.New(r.pool),
-		usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), noHasher{})
+		usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), noHasher{})
 	if err := users.Delete(r.ctx, domain.User{ID: r.userID}, r.userID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}

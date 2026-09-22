@@ -29,11 +29,12 @@ func NewShopQuery(db sqlcgen.DBTX) *ShopQuery {
 
 var _ usecase.ShopQuery = (*ShopQuery)(nil)
 
-// ListShops は、keyword に一致する可視の shop を name、id の順に並べて返す。
+// ListShops は、keyword に一致する可視の shop を name、id の順に並べて、集計(shop_stats の保存された値。
+// まだ集計されていないショップは空の集計)つきで返す。集計は LEFT JOIN で添えるので、クエリは 1 回である。
 // keyword はエスケープ済みの ILIKE パラメータとして渡され、SQL に連結される
 // ことはない。次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて
 // 返す。2 つ目の戻り値は、offset+limit 件より後ろにも見える shop があるか（has_more）である。
-func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
+func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error) {
 	params := sqlcgen.ListShopsParams{
 		ViewAll:    vis.ViewAll,
 		PageLimit:  limit + 1,
@@ -48,18 +49,18 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 		return nil, false, fmt.Errorf("list shops: %w", err)
 	}
 	rows, hasMore := trimPage(rows, limit)
-	shops := make([]domain.Shop, 0, len(rows))
+	listings := make([]domain.ShopListing, 0, len(rows))
 	for _, row := range rows {
 		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
 		if err != nil {
 			return nil, false, fmt.Errorf("list shops: %w", err)
 		}
-		shops = append(shops, shop)
+		listings = append(listings, domain.ShopListing{Shop: shop, Summary: rowmap.ShopSummary(row.ReviewCount, row.AverageRating, row.PhotoKey)})
 	}
-	return shops, hasMore, nil
+	return listings, hasMore, nil
 }
 
-// GetShopWithCreator は shop とその creator を返す（Reviews は空のまま）。
+// GetShopWithCreator は shop とその creator を、集計(shop_stats の保存された値)つきで返す（Reviews は空のまま）。
 // または domain.ErrShopNotFound を返す。
 func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error) {
 	row, err := r.q.GetShopWithCreator(ctx, id)
@@ -73,7 +74,7 @@ func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.S
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("get shop with creator: %w", err)
 	}
-	detail := domain.ShopDetail{Shop: shop}
+	detail := domain.ShopDetail{Shop: shop, Summary: rowmap.ShopSummary(row.ReviewCount, row.AverageRating, row.PhotoKey)}
 	if row.CreatorID != nil {
 		// users.id は外部キーなので、LEFT JOIN で creator が見つかっている。
 		detail.Creator = &domain.UserRef{ID: *row.CreatorID, Username: row.CreatorUsername.String}

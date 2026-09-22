@@ -104,6 +104,24 @@ type Shop struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type ShopStat struct {
+	ShopID        string
+	ReviewCount   int64
+	AverageRating pgtype.Float8
+	PhotoKey      pgtype.Text
+	CalculatedAt  pgtype.Timestamptz
+}
+
+type ShopStatsRecalcRequest struct {
+	ShopID        string
+	Version       int64
+	Attempts      int32
+	NextAttemptAt pgtype.Timestamptz
+	LastError     pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type ShopsBurger struct {
 	ShopID   string
 	BurgerID string

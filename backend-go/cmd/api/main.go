@@ -128,19 +128,25 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		photoFiles = handler.PhotoFileServer(cfg.PhotoDiskDir)
 	}
 
-	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)))
-	// 統計の再計算役(BurgerStatsRecalculator)は、その手順を持ち、現在時刻を外から受け取る。
+	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)), photos)
+	// 統計の再計算役(BurgerStatsRecalculator・ShopStatsRecalculator)は、その手順を持ち、現在時刻を外から受け取る。
+	// 書き込み(レビュー・退会)は、バーガーの統計とショップの集計、両方の再計算の依頼を、同じトランザクションで
+	// 登録する(ShopStatsRecalculator のコメントに、ワーカーからではなく書き込みから呼ぶ理由がある)。
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
-	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, photos)
-	users := usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, infra.BcryptPasswordHasher{})
+	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
+	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, photos)
+	users := usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, shopRecalc, infra.BcryptPasswordHasher{})
 
 	// 統計の再計算は、書き込みの応答を待たせないよう、バックグラウンドのワーカー(goroutine 1 本)が
 	// あとから行う。起動した直後に、前回の停止までに溜まっていた依頼を処理する。停止では、サーバーを
 	// 止めたあとに、処理中のバッチを終えてから止める(順序は、defer が後ろから実行されることを使い、
 	// サーバー停止 → ワーカー停止 → メール送信の停止 → プールを閉じる、になる)。
-	statsWorker := usecase.NewStatsWorker(query.NewBurgerStatsQuery(pool), unitOfWork, recalc, infra.SystemClock{},
-		usecase.StatsWorkerConfig{Batch: cfg.StatsWorkerBatch, MaxAttempts: cfg.StatsWorkerMaxAttempts})
-	statsLoop := infra.StartStatsWorker(statsWorker, cfg.StatsWorkerInterval)
+	// ショップの集計(件数・平均・写真)も、同じ仕組みで、あとから計算する。worker は計算するだけで、依頼の登録は
+	// しない(上の reviews・users が登録する)。
+	workerCfg := usecase.StatsWorkerConfig{Batch: cfg.StatsWorkerBatch, MaxAttempts: cfg.StatsWorkerMaxAttempts}
+	statsWorker := usecase.NewStatsWorker(query.NewBurgerStatsQuery(pool), unitOfWork, recalc, infra.SystemClock{}, workerCfg)
+	shopStatsWorker := usecase.NewShopStatsWorker(query.NewShopStatsQuery(pool), unitOfWork, shopRecalc, infra.SystemClock{}, workerCfg)
+	statsLoop := infra.StartStatsWorker(infra.NewStatsCycle(statsWorker, shopStatsWorker), cfg.StatsWorkerInterval)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()

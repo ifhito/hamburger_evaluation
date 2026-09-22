@@ -30,7 +30,9 @@ type StatsWorker struct {
 }
 
 // NewStatsWorker は StatsWorker を返す。query は、トランザクションの外で依頼の一覧を読むための
-// ものである(依頼ごとの再計算は、uow の中で、そのトランザクションの読み取りを使う)。
+// ものである(依頼ごとの再計算は、uow の中で、そのトランザクションの読み取りを使う)。ショップの集計の再計算の
+// 依頼は、ここでは登録しない(書き込みの経路が、バーガーの依頼と同じトランザクションで登録する。理由は
+// ShopStatsRecalculator のコメントを参照)。
 func NewStatsWorker(query BurgerStatsQuery, uow UnitOfWork, recalc *BurgerStatsRecalculator, clock Clock, cfg StatsWorkerConfig) *StatsWorker {
 	return &StatsWorker{query: query, uow: uow, recalc: recalc, clock: clock, cfg: cfg}
 }

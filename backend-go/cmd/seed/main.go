@@ -163,6 +163,25 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 			return err
 		}
 	}
+	// ショップの集計(件数・平均・写真)は、アプリが動いているとき、バックグラウンドのワーカーが計算する。seed は、
+	// 集計の規則(重み付きの平均など)を複製せず、ショップの再計算の依頼を積むだけにする(ワーカーが動けば、
+	// 数秒で集計が埋まる。動いていなければ、次に動いたときに埋まる)。
+	return requestShopStatsRecalculation(ctx, tx, burgers)
+}
+
+// requestShopStatsRecalculation は、burgerIDs のバーガーが紐づくショップの、集計の再計算を依頼する(すでに
+// 依頼があれば、最初からやり直す。db/queries/shop_stats_recalc_requests.sql の UpsertShopStatsRecalcRequest と
+// 同じ内容)。
+func requestShopStatsRecalculation(ctx context.Context, tx pgx.Tx, burgerIDs []string) error {
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO shop_stats_recalc_requests (shop_id)
+		 SELECT DISTINCT shop_id FROM shops_burgers WHERE burger_id = ANY($1::uuid[])
+		 ON CONFLICT (shop_id) DO UPDATE
+		 SET version = nextval('shop_stats_recalc_requests_version_seq'),
+		     attempts = 0, next_attempt_at = NULL, last_error = NULL, updated_at = now()`,
+		burgerIDs); err != nil {
+		return fmt.Errorf("request shop stats recalculation: %w", err)
+	}
 	return nil
 }
 
