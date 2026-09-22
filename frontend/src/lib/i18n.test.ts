@@ -2,6 +2,7 @@
 // lib/i18n.ts は、読み込まれた瞬間の navigator.language / localStorage で、既定の言語を決める(モジュールの
 // 先頭で実行される副作用)。シナリオごとに違う条件で確かめるため、毎回 vi.resetModules() してから読み直す。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LANGUAGE_STORAGE_KEY } from "./i18n";
 
 function setNavigatorLanguages(...languages: string[]): void {
   Object.defineProperty(window.navigator, "language", { value: languages[0], configurable: true });
@@ -40,7 +41,7 @@ describe("lib/i18n の既定の言語(AC1・AC4・AC6)", () => {
 
   it("保存した言語があれば、ブラウザの言語より優先する(AC2)", async () => {
     setNavigatorLanguages("ja-JP");
-    localStorage.setItem("burgerstack:lang", "en");
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "en");
     const { default: i18n } = await loadI18n();
     expect(i18n.language).toBe("en");
   });
@@ -70,7 +71,7 @@ describe("lib/i18n の切り替え(AC2・AC6)", () => {
     const { default: i18n } = await loadI18n();
     await i18n.changeLanguage("ja");
     expect(document.documentElement.lang).toBe("ja");
-    expect(localStorage.getItem("burgerstack:lang")).toBe("ja");
+    expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe("ja");
 
     const { default: reloaded } = await loadI18n();
     expect(reloaded.language).toBe("ja");
