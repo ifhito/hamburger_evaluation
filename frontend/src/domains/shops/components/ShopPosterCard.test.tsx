@@ -37,3 +37,14 @@ describe("ShopPosterCard の平均評価", () => {
     expect(page.textContent).toContain("4.0");
   });
 });
+
+describe("ShopPosterCard のクリック判定", () => {
+  // カードのどこを押しても、ショップ詳細に移動できる(stretched link)。実際のリンクは店名の 1 つだけ
+  // (読み上げで、同じ行き先を二重に伝えないため)。
+  it("リンクは 1 つだけで、カード全体(写真を含む)を覆う", async () => {
+    const page = await show(<ShopPosterCard shop={shop({ id: "42", photoUrl: "https://example.com/p.jpg" })} ratingMax={5} />);
+    const links = page.querySelectorAll("a");
+    expect(links.length).toBe(1);
+    expect(links[0].getAttribute("href")).toBe("/shops/42");
+  });
+});
