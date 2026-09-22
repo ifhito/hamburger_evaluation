@@ -39,6 +39,22 @@
   height: 16px;
   border-radius: 8px;
   background: var(--ui-surface-2);
+  animation: skelPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skelPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel {
+    animation: none;
+  }
 }
 
 .skel:nth-child(2) {
