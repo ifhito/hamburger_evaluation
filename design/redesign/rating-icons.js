@@ -1,68 +1,47 @@
-// 評価のバーガーのアイコン(見本の HTML 用)。線画のバーガーを、評価の分だけ下から塗る。
-//   案 B(採用): 水位。1 つのバーガー全体を、下から「評価 ÷ 最大値」の高さまで塗る(連続値)。
-//   案 A(参考): 部品ごと。下から 1 点 = 1 部品(バンズ・パティ・チーズ・野菜・上のバンズ)。半分は、その部品の左半分。
-// 図形は SVG のパス(M・L・C・Z の絶対座標だけ)で、capture_mock.js が、この一覧(shapes)を、そのまま Penpot のパスにする。
+// 評価のバーガーのアイコン(見本の HTML 用)。1 食材 = 1 本の、波打つ線(管のような線)。塗りつぶしの閉じた形はやめた。
+//   線そのものが色を持ち、黒い輪郭線は無い。食材どうしの間には、はっきりした隙間を空ける。
+//   水位(評価 ÷ 最大値)より下の食材は、その食材の色の線。水位より上の食材は、灯っていない管のように、薄いグレーの線(塗りは無し・線だけ)。
+//   案 A(部品ごと・参考)は、水位の代わりに unit(下から何点目で灯るか)で、同じ点灯/消灯を決める。
+// 図形は SVG のパス(M・C の絶対座標だけ)で、capture_mock.js が、この一覧(shapes)を、そのまま Penpot のパスにする。
 // 見た目の値(色・大きさ・線の太さ)は、ここが 1 か所の元。数字は、必ずアイコンのそばに書く(形や色だけで伝えない)。
 (() => {
   const VB = { w: 120, h: 100 };
   const TOP = 2, BOTTOM = 98; // バーガー全体の上端と下端(水位の 0% と 100%)
-  const INK = '#111111', EMPTY = '#8e8e89';
-  const COLOR = { bun: '#d8a45b', patty: '#6b4432', cheese: '#e9b824', lettuce: '#86b25a', tomato: '#d1533d', seed: '#f7edd3', pocket: '#f2b6a8', mark: '#a2795f', vein: '#c5dda8' };
-  // 大きさ(アイコンの幅 px)と、線の太さ(px)。小さいほど、線を細くしすぎない。細部(ごま・焼き目など)は、大きい 2 つだけ
-  const SIZE = { lg: { w: 160, stroke: 3, detail: true }, md: { w: 64, stroke: 2, detail: true }, sm: { w: 40, stroke: 1.5, detail: false }, xs: { w: 24, stroke: 1.25, detail: false } };
+  const EMPTY = '#8e8e89'; // 灯っていない(水位より上)の線の色
+  const COLOR = { bun: '#d8a45b', patty: '#6b4432', cheese: '#e9b824', lettuce: '#86b25a', tomato: '#d1533d' };
+  // 大きさ(アイコンの幅 px)と、線の太さ(px)
+  const SIZE = { lg: { w: 160, stroke: 3 }, md: { w: 64, stroke: 2 }, sm: { w: 40, stroke: 1.5 }, xs: { w: 24, stroke: 1.25 } };
   const n2 = (v) => Math.round(v * 100) / 100;
 
-  // ---- パスの部品(M・L・C・Z だけを使う) ----
-  const K = 0.5523;
-  const rrect = (x, y, w, h, r) => { const k = r * K; return `M ${x + r} ${y} L ${x + w - r} ${y} C ${x + w - r + k} ${y} ${x + w} ${y + r - k} ${x + w} ${y + r} L ${x + w} ${y + h - r} C ${x + w} ${y + h - r + k} ${x + w - r + k} ${y + h} ${x + w - r} ${y + h} L ${x + r} ${y + h} C ${x + r - k} ${y + h} ${x} ${y + h - r + k} ${x} ${y + h - r} L ${x} ${y + r} C ${x} ${y + r - k} ${x + r - k} ${y} ${x + r} ${y} Z`; };
-  const ellipse = (cx, cy, rx, ry, deg) => {
-    const t = (deg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
-    const p = (x, y) => `${n2(cx + x * c - y * s)} ${n2(cy + x * s + y * c)}`;
-    const kx = rx * K, ky = ry * K;
-    return `M ${p(rx, 0)} C ${p(rx, ky)} ${p(kx, ry)} ${p(0, ry)} C ${p(-kx, ry)} ${p(-rx, ky)} ${p(-rx, 0)} C ${p(-rx, -ky)} ${p(-kx, -ry)} ${p(0, -ry)} C ${p(kx, -ry)} ${p(rx, -ky)} ${p(rx, 0)} Z`;
+  // SVG の Q(2 次ベジエ)・T(その反転)を、C(3 次ベジエ)へ、同じ曲線のまま変換する(パスは M・C だけにするため。上のコメント参照)
+  const quadToCubic = (d) => {
+    const t = d.match(/[MQTZ]|-?[\d.]+/g);
+    let i = 0, x = 0, y = 0, qx = 0, qy = 0, out = '';
+    const num = () => parseFloat(t[i++]);
+    while (i < t.length) {
+      const c = t[i++];
+      if (c === 'M') { x = num(); y = num(); out += `M ${n2(x)} ${n2(y)}`; }
+      else if (c === 'Q' || c === 'T') {
+        const cx = c === 'Q' ? num() : 2 * x - qx, cy = c === 'Q' ? num() : 2 * y - qy; // T は、直前の Q の制御点を、いまの始点で反転する
+        const ex = num(), ey = num();
+        out += ` C ${n2(x + (2 / 3) * (cx - x))} ${n2(y + (2 / 3) * (cy - y))} ${n2(ex + (2 / 3) * (cx - ex))} ${n2(ey + (2 / 3) * (cy - ey))} ${n2(ex)} ${n2(ey)}`;
+        qx = cx; qy = cy; x = ex; y = ey;
+      } else if (c === 'Z') out += ' Z';
+    }
+    return out;
   };
-  const scallops = (x0, x1, y, count, depth) => { // 左から右へ、下に膨らむ縁(ちぢれたレタス)
-    const dx = (x1 - x0) / count, c = depth / 0.75;
-    let d = '';
-    for (let i = 0; i < count; i++) { const x = x0 + dx * i; d += ` C ${n2(x + dx * 0.15)} ${n2(y + c)} ${n2(x + dx * 0.85)} ${n2(y + c)} ${n2(x + dx)} ${y}`; }
-    return d;
-  };
-  const seeds = [[34, 17, -30], [52, 11, -10], [70, 10, 10], [88, 16, 30], [24, 27, -40], [43, 23, -15], [61, 19, 0], [79, 22, 15], [97, 27, 40], [52, 32, -5], [70, 32, 5], [34, 34, -20], [88, 34, 20]];
 
-  // 下から重ねる順(上に重なる部品が後)。unit は案 A で「何点目で塗るか」(1〜5)
+  // 下から重ねる順。unit は案 A で「何点目で灯るか」(1〜5)。y は、水位・案 A と比べる代表の Y 座標(パスの始点。下ほど大きい)
   const PARTS = [
-    { id: '下のバンズ', unit: 1, color: COLOR.bun, d: 'M 8 82 L 112 82 C 112 91 108 98 98 98 L 22 98 C 12 98 8 91 8 82 Z', details: [] },
-    { id: 'パティ', unit: 2, color: COLOR.patty, d: 'M 5 71.5 C 5 64 9 62 17 62 L 103 62 C 111 62 115 64 115 71.5 C 115 79 111 81 103 81 L 17 81 C 9 81 5 79 5 71.5 Z',
-      details: [[22, 69, 32, 76], [40, 68, 48, 75], [58, 69, 66, 76], [76, 68, 84, 75], [92, 69, 100, 76]].map(([x1, y1, x2, y2]) => ({ d: `M ${x1} ${y1} C ${x1 + 3} ${y1 + 1} ${x2 - 3} ${y2 - 1} ${x2} ${y2}`, stroke: COLOR.mark, w: 1.6, at: [x2, y2] })) },
-    { id: 'チーズ', unit: 3, color: COLOR.cheese, d: 'M 8 54 L 112 54 L 112 61 L 98 61 C 98 81 88 81 88 61 L 60 61 C 60 69 54 69 54 61 L 32 61 C 32 75.7 22 75.7 22 61 L 8 61 Z', details: [] },
-    { id: 'トマト', unit: 4, color: COLOR.tomato, d: [rrect(10, 46, 32, 10, 5), rrect(44, 46, 32, 10, 5), rrect(78, 46, 32, 10, 5)].join(' '),
-      details: [26, 60, 94].map((cx) => ({ d: ellipse(cx, 52, 7, 1.6, 0), fill: COLOR.pocket, at: [cx, 52] })) },
-    { id: 'レタス', unit: 4, color: COLOR.lettuce, d: `M 2 38 L 2 44${scallops(2, 118, 44, 9, 5.25)} L 118 38 Z`,
-      details: [[20, 44], [46, 44], [72, 44], [98, 44]].map(([x, y]) => ({ d: `M ${x} ${y - 3} C ${x + 2} ${y - 1} ${x + 3} ${y + 1} ${x + 2} ${y + 3}`, stroke: COLOR.vein, w: 1.3, at: [x, y] })) },
-    { id: '上のバンズ', unit: 5, color: COLOR.bun, d: 'M 6 36 C 6 15 30 2 60 2 C 90 2 114 15 114 36 C 114 38 113 39 111 39 L 9 39 C 7 39 6 38 6 36 Z',
-      details: seeds.map(([cx, cy, a]) => ({ d: ellipse(cx, cy, 3.4, 1.8, a), fill: COLOR.seed, stroke: COLOR.mark, w: 0.9, at: [cx, cy] })) },
+    { id: '下のバンズ', unit: 1, y: 82, color: COLOR.bun, d: 'M 12 82 C 12 94 30 98 60 98 C 90 98 108 94 108 82' },
+    { id: 'パティ', unit: 2, y: 76, color: COLOR.patty, d: quadToCubic('M 9 76 Q 28 70 47 76 T 85 76 T 111 76') },
+    { id: 'チーズ', unit: 3, y: 63, color: COLOR.cheese, d: quadToCubic('M 10 63 Q 26 58 42 63 T 74 63 T 110 63') },
+    { id: 'トマト', unit: 4, y: 50, color: COLOR.tomato, d: quadToCubic('M 11 50 Q 27 45 43 50 T 77 50 T 109 50') },
+    { id: 'レタス', unit: 4, y: 37, color: COLOR.lettuce, d: quadToCubic('M 6 37 Q 16 28 26 37 Q 36 28 46 37 Q 56 28 66 37 Q 76 28 86 37 Q 96 28 106 37 Q 112 33 114 37') },
+    { id: '上のバンズ', unit: 5, y: 34, color: COLOR.bun, d: 'M 14 34 C 14 12 30 2 60 2 C 90 2 106 12 106 34' },
   ];
 
-  // 小さいサイズ(案 B だけ)の簡略版: 細部と細かい縁(ちぢれ・トマトの輪切り・しずく)をやめて、部品を太くし、水位の高さが読めるようにする。
-  // 40px は 5 部品(バンズ・パティ・チーズ・レタス・上のバンズ)、24px は 3 部品(上のバンズ・パティ(具)・下のバンズ)。
-  const BUN_TOP = 'M 6 36 C 6 15 30 2 60 2 C 90 2 114 15 114 36 C 114 38 113 39 111 39 L 9 39 C 7 39 6 38 6 36 Z';
-  const BUN_BOTTOM = 'M 8 82 L 112 82 C 112 91 108 98 98 98 L 22 98 C 12 98 8 91 8 82 Z';
-  const SIMPLE = {
-    sm: [
-      { id: '下のバンズ', unit: 1, color: COLOR.bun, d: BUN_BOTTOM, details: [] },
-      { id: 'パティ', unit: 2, color: COLOR.patty, d: 'M 5 70 C 5 63 9 61 17 61 L 103 61 C 111 61 115 63 115 70 C 115 78 111 82 103 82 L 17 82 C 9 82 5 78 5 70 Z', details: [] },
-      { id: 'チーズ', unit: 3, color: COLOR.cheese, d: rrect(6, 50, 108, 12, 3), details: [] },
-      { id: 'レタス', unit: 4, color: COLOR.lettuce, d: rrect(2, 37, 116, 14, 7), details: [] },
-      { id: '上のバンズ', unit: 5, color: COLOR.bun, d: BUN_TOP, details: [] },
-    ],
-    xs: [
-      { id: '下のバンズ', unit: 1, color: COLOR.bun, d: BUN_BOTTOM, details: [] },
-      { id: 'パティ(具)', unit: 3, color: COLOR.patty, d: rrect(4, 40, 112, 42, 12), details: [] },
-      { id: '上のバンズ', unit: 5, color: COLOR.bun, d: BUN_TOP, details: [] },
-    ],
-  };
-
-  // パスの外接の四角(曲線を刻んで測る)。Penpot と SVG のグラデーションの位置合わせに使う
+  // パスの外接の四角(曲線を刻んで測る)。Penpot の図形のジオメトリに使う
   const bboxOf = (d) => {
     const t = d.match(/[MLCZ]|-?[\d.]+/g);
     let i = 0, cx = 0, cy = 0, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
@@ -79,54 +58,32 @@
     }
     return [n2(x0), n2(y0), n2(x1 - x0), n2(y1 - y0)];
   };
-  [...PARTS, ...SIMPLE.sm, ...SIMPLE.xs].forEach((p) => { p.bbox = bboxOf(p.d); p.details.forEach((q) => { q.bbox = bboxOf(q.d); }); });
+  PARTS.forEach((p) => { p.bbox = bboxOf(p.d); });
+  // 極小(24px)だけの簡略版: 6 本の線は隙間が潰れて見分けられないため、3 本(下のバンズ・チーズ(具の代表)・上のバンズ)に間引く。
+  // 同じパス・色をそのまま使い、線を新しく作らない(パティ・トマト・レタスの線を抜くだけ)
+  const PARTS_XS = PARTS.filter((p) => ['下のバンズ', 'チーズ', '上のバンズ'].includes(p.id));
 
   // 白黒にしたときの色(CSS の grayscale と同じ係数)
   const grayOf = (hex) => { const v = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); const g = Math.round(0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]); return '#' + g.toString(16).padStart(2, '0').repeat(3); };
 
-  // 評価と大きさから、描く図形の一覧を作る。fill は { color }(全部塗る)/ { color, axis, t }(軸に沿って、始め(y は下、x は左)から t の割合だけ color、残りは白)/ { color: '#ffffff' }(白抜き)
-  // variant: 'B' 水位 / 'A' 部品ごと。value は、数字に出す値(1 桁に丸めた値)。max は評価の最大値
+  // 評価と大きさから、描く線の一覧を作る。食材ごとに、点灯(その食材の色)/ 消灯(EMPTY)のどちらかを選ぶだけ(塗りは無し)
+  // variant: 'B' 水位(連続値) / 'A' 部品ごと(unit の段階)。value は、数字に出す値(1 桁に丸めた値)。max は評価の最大値
   const resolve = ({ variant = 'B', value = 0, max = 5, size = 'md', gray = false }) => {
     const sz = SIZE[size], scale = sz.w / VB.w, sw = n2(sz.stroke / scale);
     const tone = (c) => (gray ? grayOf(c) : c);
-    const shapes = [];
-    const level = BOTTOM - (BOTTOM - TOP) * (Math.max(0, Math.min(value, max)) / max); // 水位の y(これより下が塗られる)
-    const unitValue = (value / max) * 5; // 案 A は 5 部品。最大値が違っても 5 段の割合にする
-    const stateOf = (p) => {
-      if (variant === 'A') { if (unitValue >= p.unit) return { full: true }; if (unitValue >= p.unit - 0.5) return { half: true }; return { empty: true }; }
-      const [, y, , h] = p.bbox;
-      if (y >= level) return { full: true };
-      if (y + h <= level) return { empty: true };
-      return { part: true, t: n2((y + h - level) / h) };
-    };
-    (variant === 'B' && SIMPLE[size] ? SIMPLE[size] : PARTS).forEach((p) => {
-      const st = stateOf(p);
-      const [bx, , bw] = p.bbox;
-      const fill = st.empty ? { color: '#ffffff' } : st.full ? { color: tone(p.color) } : st.half ? { color: tone(p.color), axis: 'x', t: n2((60 - bx) / bw) } : { color: tone(p.color), axis: 'y', t: st.t };
-      shapes.push({ part: p.id, d: p.d, fill, stroke: st.empty ? EMPTY : INK, sw, bbox: p.bbox });
-      if (!sz.detail || st.empty) return;
-      p.details.forEach((q) => { // 細部は、塗ってある側にあるものだけ描く
-        const [ax, ay] = q.at;
-        if (variant === 'B' ? ay < level : st.half && ax > 60) return;
-        shapes.push({ part: p.id + 'の細部', d: q.d, fill: q.fill ? { color: tone(q.fill) } : null, stroke: tone(q.stroke || COLOR.mark), sw: n2(Math.max(0.8, (q.w || 0.9) * sz.w / 160) / scale), bbox: q.bbox });
-      });
+    const level = BOTTOM - (BOTTOM - TOP) * (Math.max(0, Math.min(value, max)) / max); // 水位の y(これ以上(下)の食材が点灯)
+    const unitValue = (value / max) * 5; // 案 A は 5 段。最大値が違っても 5 段の割合にする
+    const shapes = (size === 'xs' ? PARTS_XS : PARTS).map((p) => {
+      const lit = variant === 'A' ? unitValue >= p.unit : p.y >= level;
+      return { part: p.id, d: p.d, fill: null, stroke: tone(lit ? p.color : EMPTY), sw, bbox: p.bbox, round: true };
     });
     return { vb: [VB.w, VB.h], width: sz.w, height: n2(sz.w * VB.h / VB.w), shapes };
   };
 
-  let uid = 0;
   const svgOf = (icon) => {
-    let defs = '', body = '';
-    icon.shapes.forEach((s) => {
-      let fill = s.fill ? s.fill.color : 'none';
-      if (s.fill && s.fill.axis) {
-        const id = `bg${++uid}`, [x1, y1, x2, y2] = s.fill.axis === 'y' ? [0, 1, 0, 0] : [0, 0, 1, 0], t = s.fill.t;
-        defs += `<linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"><stop offset="0" stop-color="${s.fill.color}"/><stop offset="${t}" stop-color="${s.fill.color}"/><stop offset="${n2(t + 0.0001)}" stop-color="#ffffff"/><stop offset="1" stop-color="#ffffff"/></linearGradient>`;
-        fill = `url(#${id})`;
-      }
-      body += `<path d="${s.d}" fill="${fill}" stroke="${s.stroke}" stroke-width="${s.sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
-    });
-    return `<svg viewBox="0 0 ${icon.vb[0]} ${icon.vb[1]}" width="${icon.width}" height="${icon.height}" xmlns="http://www.w3.org/2000/svg"><defs>${defs}</defs>${body}</svg>`;
+    let body = '';
+    icon.shapes.forEach((s) => { body += `<path d="${s.d}" fill="none" stroke="${s.stroke}" stroke-width="${s.sw}" stroke-linecap="round" stroke-linejoin="round"/>`; });
+    return `<svg viewBox="0 0 ${icon.vb[0]} ${icon.vb[1]}" width="${icon.width}" height="${icon.height}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
   };
 
   // .burger の要素(data-score・data-size・data-variant・data-gray・data-max)に、アイコンを描く。data-decor は飾り(読み上げない)
@@ -140,5 +97,5 @@
     else { el.setAttribute('role', 'img'); el.setAttribute('aria-label', lang === 'en' ? `${value} out of ${max}` : `${max} 段階中 ${value}`); }
   };
 
-  window.Burger = { VB, SIZE, COLOR, INK, EMPTY, PARTS, SIMPLE, resolve, svgOf, mount, grayOf };
+  window.Burger = { VB, SIZE, COLOR, EMPTY, PARTS, resolve, svgOf, mount, grayOf };
 })();

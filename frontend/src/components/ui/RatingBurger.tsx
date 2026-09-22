@@ -1,6 +1,6 @@
-import { useId, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { resolveBurger, roundRating, WHITE, type BurgerSize } from './burgerShapes'
+import { resolveBurger, roundRating, type BurgerSize } from './burgerShapes'
 import styles from './ratingBurger.module.css'
 
 interface IconProps {
@@ -12,7 +12,6 @@ interface IconProps {
 // バーガーの絵だけ(装飾。読み上げの対象にしない)。数字を伴う表示は RatingBurger を使う。数字を大きく見せるなど、
 // 数字の見せ方を変える画面は、この絵と、自分の数字を組み合わせる。
 export function RatingBurgerIcon({ ratio, size = 'md' }: IconProps) {
-  const uid = useId().replace(/:/g, '')
   const icon = resolveBurger(ratio, size)
   return (
     <svg
@@ -23,28 +22,8 @@ export function RatingBurgerIcon({ ratio, size = 'md' }: IconProps) {
       aria-hidden="true"
       focusable="false"
     >
-      <defs>
-        {icon.shapes.map((s, i) =>
-          s.fill?.t === undefined ? null : (
-            <linearGradient key={i} id={`${uid}-${i}`} x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0" stopColor={s.fill.color} />
-              <stop offset={s.fill.t} stopColor={s.fill.color} />
-              <stop offset={s.fill.t} stopColor={WHITE} />
-              <stop offset="1" stopColor={WHITE} />
-            </linearGradient>
-          ),
-        )}
-      </defs>
       {icon.shapes.map((s, i) => (
-        <path
-          key={i}
-          d={s.d}
-          fill={s.fill ? (s.fill.t === undefined ? s.fill.color : `url(#${uid}-${i})`) : 'none'}
-          stroke={s.stroke}
-          strokeWidth={s.sw}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+        <path key={i} d={s.d} fill="none" stroke={s.stroke} strokeWidth={s.sw} strokeLinejoin="round" strokeLinecap="round" />
       ))}
     </svg>
   )
