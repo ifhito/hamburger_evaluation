@@ -10,7 +10,7 @@
 (() => {
   const VB = { w: 120, h: 100 };
   const TOP = 2, BOTTOM = 98; // バーガー全体の上端と下端(水位の 0% と 100%)
-  const EMPTY = '#8e8e89'; // 灯っていない(水位より上)の線の色
+  const EMPTY = '#b0b0ab'; // 灯っていない(水位より上)の線の色(白背景との比 2.18:1。指示により、3:1 の基準よりも薄さを優先)
   const COLOR = { bun: '#d8a45b', patty: '#6b4432', cheese: '#e9b824', lettuce: '#86b25a', tomato: '#d1533d' };
   // 大きさ(アイコンの幅 px)と、線の太さ(px)
   const SIZE = { lg: { w: 160, stroke: 3 }, md: { w: 64, stroke: 2 }, sm: { w: 40, stroke: 1.5 }, xs: { w: 24, stroke: 1.25 } };
