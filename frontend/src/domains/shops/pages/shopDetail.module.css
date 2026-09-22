@@ -55,23 +55,6 @@
   font-weight: 700;
 }
 
-.summary {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 12px 0 32px;
-}
-
-.summary > :last-child {
-  margin-left: auto;
-}
-
-.avg {
-  font-size: 56px;
-  font-weight: 700;
-  line-height: 1;
-}
-
 .count {
   font-size: 14px;
   color: var(--ui-text-muted);
@@ -112,18 +95,6 @@
 
   .name {
     font-size: 28px;
-  }
-
-  .summary {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    padding-bottom: 24px;
-  }
-
-  .summary > :last-child {
-    width: 100%;
-    margin-left: 0;
   }
 
   .grid {

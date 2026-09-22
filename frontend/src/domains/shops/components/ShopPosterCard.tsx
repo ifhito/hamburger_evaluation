@@ -45,7 +45,7 @@ export function ShopPosterCard({ shop, ratingMax }: { shop: Shop; ratingMax: num
             <RatingBurgerIcon ratio={0} />
           )}
           {shop.reviewCount > 0 ? (
-            <span>{t("shops.list.reviewCount", { count: shop.reviewCount })}</span>
+            <span>{t("common.reviewCount", { count: shop.reviewCount })}</span>
           ) : (
             <span>{t("shops.list.noReviewsYet")}</span>
           )}

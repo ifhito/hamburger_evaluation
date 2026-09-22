@@ -1,99 +1,78 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../../auth/AuthProvider";
 import { useReviews } from "../hooks/useReviews";
-import { formatDate } from "../../../lib/date";
-import { formatRating } from "../../../lib/rating";
+import { useAuth } from "../../auth/AuthProvider";
 import { useRatingRange } from "../hooks/useRatingRange";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
+import { Alert } from "../../../components/ui/Alert";
+import { Button } from "../../../components/ui/Button";
+import { LinkButton } from "../../../components/ui/LinkButton";
+import { EmptyState, Loading } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
+import { ReviewListCard } from "../components/ReviewListCard";
 import styles from "./reviewList.module.css";
 
+// レビュー一覧(design/redesign/reviews.html)。「レビューを書く」は、必ずショップを選ぶ必要があるため、
+// ショップ一覧へ送る(サインインしている人だけに出す。API の項目ではなく、サインインの状態で決める)。
 export default function ReviewListPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const ratingRange = useRatingRange();
   const [keyword, setKeyword] = useState("");
   const [ratingFilter, setRatingFilter] = useState<number | undefined>(undefined);
-  const ratingRange = useRatingRange();
-
   const { data: reviews, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useReviews(
-    ratingFilter !== undefined || keyword
-      ? { rating: ratingFilter, keyword: keyword || undefined }
-      : undefined
+    ratingFilter !== undefined || keyword ? { rating: ratingFilter, keyword: keyword || undefined } : undefined,
   );
+  const ratingOptions = ratingRange ? Array.from({ length: ratingRange.max - ratingRange.min + 1 }, (_, i) => ratingRange.max - i) : [];
 
   return (
-    <Layout title={t("reviews.list.title")}>
-      <div className={styles.filters}>
+    <Layout>
+      <div className={styles.head}>
+        <h1 className={styles.heading}>{t("reviews.list.title")}</h1>
+      </div>
+      <div className={styles.toolbar}>
         <input
-          className={styles.searchInput}
-          placeholder={t("reviews.list.searchPlaceholder")}
+          aria-label={t("reviews.list.searchLabel")}
+          className={styles.search}
+          type="text"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
+          placeholder={t("reviews.list.searchPlaceholder")}
         />
-        <select
-          className={styles.ratingSelect}
-          value={ratingFilter ?? ""}
-          onChange={(e) =>
-            setRatingFilter(e.target.value ? Number(e.target.value) : undefined)
-          }
-        >
-          <option value="">{t("reviews.list.allRatings")}</option>
-          {ratingRange && Array.from({ length: ratingRange.max - ratingRange.min + 1 }, (_, i) => ratingRange.max - i).map((r) => (
-            <option key={r} value={r}>
-              {"★".repeat(r)}
-            </option>
-          ))}
-        </select>
+        <div className={styles.selectWrap}>
+          <select
+            aria-label={t("reviews.list.ratingFilterLabel")}
+            className={styles.select}
+            value={ratingFilter ?? ""}
+            onChange={(e) => setRatingFilter(e.target.value ? Number(e.target.value) : undefined)}
+          >
+            <option value="">{t("reviews.list.allRatings")}</option>
+            {ratingOptions.map((r) => (
+              <option key={r} value={r}>
+                {t("reviews.list.ratingOption", { value: r })}
+              </option>
+            ))}
+          </select>
+          <span className={styles.caret} aria-hidden="true">
+            ▾
+          </span>
+        </div>
         {user && (
-          <Link to="/reviews/new" className={styles.newLink}>
+          <LinkButton variant="primary" to="/shops">
             {t("reviews.list.newReview")}
-          </Link>
+          </LinkButton>
         )}
       </div>
 
-      {error && <ErrorMessage message={t("reviews.list.loadError")} />}
-      {isLoading && <p className={styles.muted}>{t("reviews.list.loading")}</p>}
-      {reviews && reviews.length === 0 && (
-        <p className={styles.muted}>{t("reviews.list.noReviews")}</p>
-      )}
+      {isLoading && <Loading />}
+      {error && <Alert message={t("reviews.list.loadError")} />}
+      {reviews && reviews.length === 0 && <EmptyState />}
 
-      <div className={styles.list}>
+      <div className={styles.grid}>
         {reviews?.map((review) => (
-          <div key={review.id} className={styles.card}>
-            <div className={styles.cardHeader}>
-              <span className={styles.rating}>{formatRating(review.rating, ratingRange?.max)}</span>
-              <span className={styles.date}>{formatDate(review.createdAt)}</span>
-            </div>
-            <p className={styles.comment}>{review.comment}</p>
-            {review.photoUrl && (
-              <img
-                src={review.photoUrl}
-                alt={t("reviews.photo.alt")}
-                loading="lazy"
-                className={styles.photo}
-              />
-            )}
-            <div className={styles.meta}>
-              {review.user && (
-                <Link to={`/users/${review.user.id}`}>{review.user.username}</Link>
-              )}
-              {review.burger && (
-                <span>
-                  {review.burger.name} · {t("reviews.list.avg")}{" "}
-                  {review.burger.averageRating.toFixed(1)} ·{" "}
-                  {review.burger.reviewCount} {t("reviews.list.reviews")}
-                </span>
-              )}
-            </div>
-            <div className={styles.viewLink}>
-              <Link to={`/reviews/${review.id}`}>{t("reviews.list.viewLink")}</Link>
-            </div>
-          </div>
+          <ReviewListCard key={review.id} review={review} ratingMax={ratingRange?.max} />
         ))}
       </div>
+
       {hasNextPage && (
         <div className={styles.loadMore}>
           <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
