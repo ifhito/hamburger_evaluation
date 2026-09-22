@@ -56,7 +56,7 @@ describe("AdminShopListPage(ショップの管理の一覧)", () => {
     ];
     const page = await show();
 
-    const rows = [...page.querySelectorAll("li")];
+    const rows = [...page.querySelectorAll("article")];
     const labels = (row: Element) => [...row.querySelectorAll("button, a")].map((el) => el.textContent);
     expect(labels(rows[0])).toEqual(["Edit", "Approve", "Reject"]);
     expect(labels(rows[1])).toEqual(["Edit", "Approve"]);

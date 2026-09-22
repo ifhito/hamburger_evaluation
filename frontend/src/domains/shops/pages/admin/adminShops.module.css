@@ -30,13 +30,15 @@
 }
 
 .list {
-  list-style: none;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
+/* デザイン(design/redesign/admin.html)は article.arow(繰り返す項目の並び。ul/li にしない)。
+   枠・角丸・背景・内側の余白は、S45 の Card(components/ui/card.module.css)の .card .padded から借りる。 */
 .row {
+  composes: card padded from '../../../../components/ui/card.module.css';
   display: flex;
   flex-direction: column;
   gap: 12px;

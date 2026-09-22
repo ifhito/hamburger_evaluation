@@ -7,7 +7,6 @@ import { useMeta } from "../../../../api/meta";
 import { Alert } from "../../../../components/ui/Alert";
 import { Badge } from "../../../../components/ui/Badge";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
 import { LinkButton } from "../../../../components/ui/LinkButton";
 import { EmptyState, Loading } from "../../../../components/ui/states";
 import { TextArea } from "../../../../components/ui/TextField";
@@ -89,80 +88,76 @@ export default function AdminShopListPage() {
             <p className={styles.muted}>{t("shops.admin.empty")}</p>
           ))}
 
-        <ul className={styles.list}>
+        <div className={styles.list}>
           {shops?.map((shop) => (
-            <li key={shop.id}>
-              <Card>
-                <div className={styles.row}>
-                  <div className={styles.rowHead}>
-                    <h2 className={styles.name}>{shop.name}</h2>
-                    <Badge tone={shop.status === "active" ? "accent" : "outline"}>{t(`shops.status.${shop.status}`)}</Badge>
+            <article key={shop.id} className={styles.row}>
+              <div className={styles.rowHead}>
+                <h2 className={styles.name}>{shop.name}</h2>
+                <Badge tone={shop.status === "active" ? "accent" : "outline"}>{t(`shops.status.${shop.status}`)}</Badge>
+              </div>
+              <p className={styles.meta}>
+                {t("shops.admin.creator")}: {shop.creator?.username ?? "—"}
+              </p>
+              {shop.moderationNote && (
+                <p className={styles.note}>
+                  <b>{t("shops.admin.note")}:</b> {shop.moderationNote}
+                </p>
+              )}
+              {rejectingId === shop.id ? (
+                <div className={styles.rejectForm}>
+                  <TextArea
+                    short
+                    id={`note-${shop.id}`}
+                    label={t("shops.admin.noteLabel")}
+                    optional={t("shops.admin.optional")}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    counter={{ value: note, max: textLimits?.moderationNoteMaxChars }}
+                    placeholder={t("shops.admin.notePlaceholder")}
+                  />
+                  <div className={styles.actions}>
+                    <Button type="button" variant="dark" onClick={() => void handleReject(shop.id)} isLoading={busyId === shop.id}>
+                      {t("shops.admin.confirmReject")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setRejectingId(null);
+                        setRejectError(null);
+                      }}
+                    >
+                      {t("shops.admin.cancel")}
+                    </Button>
                   </div>
-                  <p className={styles.meta}>
-                    {t("shops.admin.creator")}: {shop.creator?.username ?? "—"}
-                  </p>
-                  {shop.moderationNote && (
-                    <p className={styles.note}>
-                      <b>{t("shops.admin.note")}:</b> {shop.moderationNote}
-                    </p>
+                </div>
+              ) : (
+                <div className={styles.actions}>
+                  <LinkButton to={`/admin/shops/${shop.id}/edit`}>{t("shops.admin.edit")}</LinkButton>
+                  {/* 承認・却下を出すかは、ショップごとに backend が返す(canApprove・canReject)。状態からは決めない */}
+                  {shop.canApprove && (
+                    <Button type="button" onClick={() => void handleApprove(shop.id)} isLoading={busyId === shop.id}>
+                      {t("shops.admin.approve")}
+                    </Button>
                   )}
-                  {rejectingId === shop.id ? (
-                    <div className={styles.rejectForm}>
-                      <TextArea
-                        short
-                        id={`note-${shop.id}`}
-                        label={t("shops.admin.noteLabel")}
-                        optional={t("shops.admin.optional")}
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        counter={{ value: note, max: textLimits?.moderationNoteMaxChars }}
-                        placeholder={t("shops.admin.notePlaceholder")}
-                      />
-                      <div className={styles.actions}>
-                        <Button type="button" variant="dark" onClick={() => void handleReject(shop.id)} isLoading={busyId === shop.id}>
-                          {t("shops.admin.confirmReject")}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => {
-                            setRejectingId(null);
-                            setRejectError(null);
-                          }}
-                        >
-                          {t("shops.admin.cancel")}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className={styles.actions}>
-                      <LinkButton to={`/admin/shops/${shop.id}/edit`}>{t("shops.admin.edit")}</LinkButton>
-                      {/* 承認・却下を出すかは、ショップごとに backend が返す(canApprove・canReject)。状態からは決めない */}
-                      {shop.canApprove && (
-                        <Button type="button" onClick={() => void handleApprove(shop.id)} isLoading={busyId === shop.id}>
-                          {t("shops.admin.approve")}
-                        </Button>
-                      )}
-                      {shop.canReject && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => {
-                            setRejectingId(shop.id);
-                            setNote("");
-                            setRejectError(null);
-                          }}
-                        >
-                          {t("shops.admin.reject")}
-                        </Button>
-                      )}
-                    </div>
+                  {shop.canReject && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setRejectingId(shop.id);
+                        setNote("");
+                        setRejectError(null);
+                      }}
+                    >
+                      {t("shops.admin.reject")}
+                    </Button>
                   )}
                 </div>
-              </Card>
-            </li>
+              )}
+            </article>
           ))}
-        </ul>
+        </div>
       </div>
     </Layout>
   );
