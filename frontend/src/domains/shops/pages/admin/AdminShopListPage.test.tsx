@@ -94,6 +94,20 @@ describe("AdminShopListPage(ショップの管理の一覧)", () => {
     expect(state.statusAsked[state.statusAsked.length - 1]).toBe("pending");
   });
 
+  it("絞り込みを変えると、開いていた却下の理由の欄と、却下の失敗の表示を閉じる(対象のショップが一覧から消えることがあるため)", async () => {
+    state.shops = [shop({ id: "a" })];
+    reject.mockRejectedValue(new ApiError(["Moderation note is too long"], 422));
+    const page = await show();
+    await click(need(byText(page, "button", "Reject"), "Reject"));
+    await click(need(byText(page, "button", "Confirm reject"), "Confirm reject"));
+    await eventually(() => expect(page.querySelector('[role="alert"]')).not.toBeNull());
+
+    await click(need(byText(page, "button", "Pending"), "Pending"));
+
+    expect(page.querySelector("textarea")).toBeNull();
+    expect(page.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("「Reject」を押すと理由の欄が出て(その行の操作は隠れる)、「Confirm reject」で、理由つきで却下を送る", async () => {
     state.shops = [shop({ id: "a" })];
     reject.mockResolvedValue(undefined);

@@ -29,6 +29,13 @@ export default function AdminShopListPage() {
   // 却下の失敗(例: note が長すぎる 422)は、サーバーのメッセージをそのまま表示する
   const [rejectError, setRejectError] = useState<string | string[] | null>(null);
 
+  // 絞り込みを変えると、開いていた却下の理由の欄(とその失敗の表示)は、対象のショップが一覧から消えることがあるので閉じる。
+  const changeFilter = (s: ShopStatus | "all") => {
+    setFilter(s);
+    setRejectingId(null);
+    setRejectError(null);
+  };
+
   const handleApprove = async (id: string) => {
     setBusyId(id);
     try {
@@ -66,7 +73,7 @@ export default function AdminShopListPage() {
               type="button"
               variant={filter === s ? "dark" : "secondary"}
               aria-pressed={filter === s}
-              onClick={() => setFilter(s)}
+              onClick={() => changeFilter(s)}
             >
               {t(`shops.admin.filter.${s}`)}
             </Button>
