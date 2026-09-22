@@ -83,11 +83,25 @@ const en = {
         loading: "Signing you in with Google\u2026",
         failedTitle: "Could not sign in with Google",
         linkFailedTitle: "Could not connect Google",
-        backToSignin: "Back to sign in",
+        // \u30c7\u30b6\u30a4\u30f3(design/redesign/google-complete.html)\u306e\u6587\u8a00(\u30c7\u30fc\u30bf\u306e exists/taken/default \u306e linkbtn \u3068\u3001
+        // failed/expired \u306e textlink \u3067\u3001\u540c\u3058\u6587\u8a00)\u3002
+        backToSignin: "Sign in with your password",
         backToProfile: "Back to your profile",
         retry: "Try again",
         temporary: "Something went wrong on our side. Please try again.",
         expired: "This sign-in link is no longer available. Please start again.",
+        // \u30c7\u30b6\u30a4\u30f3(design/redesign/google-complete.html \u306e .notice\u3002exists-oauth: \u8a31\u53ef\u306e\u753b\u9762\u304b\u3089\u59cb\u3081\u305f Google \u306e
+        // \u30b5\u30a4\u30f3\u30a4\u30f3\u304c\u5931\u6557\u3057\u305f\u3068\u304d\u306e\u6848\u5185)\u3002
+        continueNoticeTitle: "After you sign in, you will go back to where you were",
+        continueNoticeBody: "This is the screen you were on before you started with Google.",
+        // \u5931\u6557\u306e\u7406\u7531\u3054\u3068\u306e\u5c0f\u898b\u51fa\u3057(design/redesign/google-complete.html \u306e <b class="alert-title"> \u306e data-en)\u3002
+        reasons: {
+          exists: { title: "An account already exists" },
+          taken: { title: "Already connected to another account" },
+          alreadyLinked: { title: "Already connected to a Google account" },
+          signInFailed: { title: "Google sign-in failed" },
+          linkInvalid: { title: "The link is no longer valid" },
+        },
       },
       profile: {
         heading: "Google",

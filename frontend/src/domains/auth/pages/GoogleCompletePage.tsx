@@ -8,7 +8,9 @@ import { appPathOrNull } from "../../../app/router/returnTo";
 import { Layout } from "../../../components/Layout";
 import { Alert } from "../../../components/ui/Alert";
 import { Button } from "../../../components/ui/Button";
-import { isGoogleSignIn } from "../googleFlow";
+import buttonStyles from "../../../components/ui/button.module.css";
+import { GoogleSignInLink } from "../components/GoogleSignIn";
+import { googleStartUrl, isGoogleSignIn } from "../googleFlow";
 import { getToken } from "../storage";
 import { AuthLoading } from "./AuthLoading";
 import styles from "./auth.module.css";
@@ -24,6 +26,23 @@ interface Failure {
 // 5xx(サーバーの障害)か。先頭の桁で判定する(noDuplicatedLimits の検査は、ソースの中の、backend の上限と同じ数字を探すため、
 // HTTP ステータスの数字は、直書きしない)。
 const isServerError = (status: number) => String(status).startsWith("5");
+
+// デザイン(design/redesign/google-complete.html)は、失敗の理由ごとに、小見出し・導線を出し分ける。API は理由を
+// 示す機械可読な値を返さない(文言だけ)ので、ここでは、API の英語の文言(と、この画面が自分で組み立てる「コードが
+// ない」の文言)を照合する。
+// ponytail: 文言の完全一致による判定(backend/internal/adapter/handler/messages.go の英語の文言と合わせている)。
+// backend が文言を変えると、ここも直す必要がある。将来、API が機械可読な理由の値を返すようになれば、その値で
+// 判定する形に置き換える。
+type GoogleFailureReason = "exists" | "taken" | "alreadyLinked" | "signInFailed" | "linkInvalid";
+const GOOGLE_FAILURE_REASON: Record<string, GoogleFailureReason> = {
+  "An account with this email address already exists. Sign in with your password, then connect Google from your profile.": "exists",
+  "This Google account is already connected to another account.": "taken",
+  "Your account is already connected to a Google account. Disconnect it first.": "alreadyLinked",
+  "Google sign-in failed. Please try again.": "signInFailed",
+  "The Google sign-in link is invalid or has expired. Please try again.": "linkInvalid",
+  "This sign-in link is no longer available. Please start again.": "linkInvalid",
+};
+const googleFailureReason = (messages: string[]): GoogleFailureReason | undefined => GOOGLE_FAILURE_REASON[messages[0]];
 
 // Google でのサインインの手続きの結果の受け皿(/auth/google/complete?code=…)。backend が、成功も失敗も、
 // 1 回限りのコードに入れて、この画面へ戻す。ここでは、そのコードを API と交換して、結果を受け取るだけで、
@@ -98,15 +117,35 @@ export default function GoogleCompletePage() {
   const isLinkAttempt = getToken() !== null;
   // 失敗の画面の導線(戻り先のリンク)は、ログインの状態の復元(GET /me)が済んでから決める(復元の前は、ログイン中でも、user がまだない)。
 
+  const reason = shown ? googleFailureReason(shown.messages) : undefined;
+  // デザインは、サインインの試み(連携ではない)で、理由が「Google のサインインに失敗した」「リンクが無効」の
+  // ときだけ、Google のボタンをもう一度出す(連携の失敗は、常にプロフィールへ戻るだけ。google-complete.html の
+  // actions-col の出し分け)。isLinkAttempt(トークンの有無)で判定し、GET /me の復元を待たない(h1 の見出しと同じ理由)。
+  const showGoogleRestart = !isLinkAttempt && (reason === "signInFailed" || reason === "linkInvalid");
+  // 導線がこれ 1 つだけのときは、デザインどおり目立つボタン(.btn.primary.linkbtn)にする。Google のボタンや、
+  // 同じコードでの再試行(デザインに対応する状態がない、既存の挙動)と並ぶときは、控えめなテキストリンクのままにする。
+  const soleAction = shown !== null && !shown.retryable && !showGoogleRestart;
+  const primaryLinkClassName = `${buttonStyles.btn} ${buttonStyles.primary} ${buttonStyles.block}`;
+  // exists-oauth: 許可の画面から始めた Google のサインインが「同じメールのアカウントがある」で失敗したとき、
+  // パスワードでサインインすれば、元の画面に戻れることを案内する(google-complete.html の .notice)。
+  const showContinueNotice = !isLinkAttempt && reason === "exists" && shown !== null && shown.returnTo !== "";
+
   return (
     <Layout>
       {shown ? (
         <div className={styles.status}>
           <h1 className={styles.title}>{t(isLinkAttempt ? "auth.google.complete.linkFailedTitle" : "auth.google.complete.failedTitle")}</h1>
+          {showContinueNotice && (
+            <div className={styles.notice}>
+              <b>{t("auth.google.complete.continueNoticeTitle")}</b>
+              <span>{t("auth.google.complete.continueNoticeBody")}</span>
+            </div>
+          )}
           <div className={styles.alertBox}>
-            <Alert message={shown.messages} />
+            <Alert title={reason && t(`auth.google.complete.reasons.${reason}.title`)} message={shown.messages} />
           </div>
           <div className={styles.actions}>
+            {showGoogleRestart && <GoogleSignInLink href={googleStartUrl({ returnTo: shown.returnTo })} label={t("auth.google.continue")} />}
             {shown.retryable && (
               <Button type="button" variant="secondary" block onClick={retry}>
                 {t("auth.google.complete.retry")}
@@ -114,11 +153,15 @@ export default function GoogleCompletePage() {
             )}
             {!restoringAuth &&
               (user ? (
-                <Link to={`/users/${user.id}`} className={styles.textlink}>
+                <Link to={`/users/${user.id}`} className={soleAction ? primaryLinkClassName : styles.textlink}>
                   {t("auth.google.complete.backToProfile")}
                 </Link>
               ) : (
-                <Link to="/signin" state={shown.returnTo ? { from: shown.returnTo } : undefined} className={styles.textlink}>
+                <Link
+                  to="/signin"
+                  state={shown.returnTo ? { from: shown.returnTo } : undefined}
+                  className={soleAction ? primaryLinkClassName : styles.textlink}
+                >
                   {t("auth.google.complete.backToSignin")}
                 </Link>
               ))}
