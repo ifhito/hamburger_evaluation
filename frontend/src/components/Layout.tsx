@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../domains/auth/AuthProvider'
 import { Logo } from './Logo'
+import { LanguageSwitcher } from './LanguageSwitcher'
 import styles from './layout.module.css'
 
 interface LayoutProps {
@@ -35,6 +36,7 @@ export function Layout({ children, title }: LayoutProps) {
             </>
           )}
         </nav>
+        <LanguageSwitcher className={styles.langSlot} />
       </header>
       <main className={styles.main}>
         {title && <h1 className={styles.heading}>{title}</h1>}
