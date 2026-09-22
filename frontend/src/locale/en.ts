@@ -193,7 +193,6 @@ const en = {
     // 書き込みを伴う範囲(API の writes)の横に出す、目立たせる印。許可の画面と、接続済みのアプリの一覧の、どちらでも使う。
     writeAccess: "Writes",
     consent: {
-      title: "Connect an app",
       eyebrow: "Connect an app",
       heading: "This app wants to connect to your account",
       loadingTitle: "Checking the request\u2026",
