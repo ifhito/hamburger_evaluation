@@ -1,0 +1,80 @@
+/* 枠・角丸・背景・overflow:hidden は、S45 の Card(components/ui/card.module.css)の .card から借りる。 */
+.card {
+  composes: card from '../../../components/ui/card.module.css';
+}
+
+.photo,
+.noPhoto {
+  display: block;
+  width: 100%;
+  height: 240px;
+}
+
+.photo {
+  object-fit: cover;
+}
+
+.noPhoto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ui-surface-2);
+  font-size: 14px;
+  color: var(--ui-text-muted);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 24px 12px;
+  font-family: var(--ui-font);
+  color: var(--ui-text);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.name {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.date {
+  flex: none;
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--ui-text-muted);
+}
+
+.ratingOnly {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.comment {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: var(--ui-text-muted);
+}
+
+@media (max-width: 720px) {
+  .photo,
+  .noPhoto {
+    height: 200px;
+  }
+}

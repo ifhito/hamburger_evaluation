@@ -6,3 +6,18 @@
 .linkButton:hover {
   text-decoration: none;
 }
+
+/* variant="secondary"(既定)は .linkButton と同じ見た目(class 名は .linkButton を使う。呼び出し側の見分けのための別名)。 */
+.secondary {
+  composes: linkButton;
+}
+
+/* 「ショップを追加」「レビューを書く」など、リンクで別画面へ移る、主の操作(黄の面)。 */
+.primary {
+  composes: btn primary from './button.module.css';
+  text-decoration: none;
+}
+
+.primary:hover {
+  text-decoration: none;
+}

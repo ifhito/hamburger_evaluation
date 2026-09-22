@@ -1,59 +1,132 @@
 .container {
+  font-family: var(--ui-font);
+  color: var(--ui-text);
+}
+
+.hero {
   display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+  justify-content: center;
+  align-items: center;
+  height: 360px;
+  margin-top: 16px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--ui-surface-2);
 }
 
-.statusNotice {
-  padding: 0.75rem 1rem;
-  background: #fff7ed;
-  border: 1px solid #fdba74;
-  border-radius: 6px;
-  color: #9a3412;
-  font-size: 0.9rem;
+.heroPhoto {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.reviewsHeading {
-  font-size: 1.1rem;
-  margin-bottom: 0.75rem;
+.heroNoPhoto {
+  font-size: 14px;
+  color: var(--ui-text-muted);
 }
 
-.reviewList {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.titleSection {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 28px 0 8px;
 }
 
-.reviewCard {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: 0.75rem 1rem;
+.name {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
-.reviewCardHeader {
+.notice {
+  margin-top: 24px;
+  padding: 16px 20px;
+  border: 1px solid var(--ui-text);
+  border-radius: 8px;
+  background: var(--ui-surface-2);
+  line-height: 1.7;
+}
+
+.notice b {
+  display: block;
+  font-weight: 700;
+}
+
+.summary {
   display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.25rem;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 0 32px;
 }
 
-.reviewComment {
-  margin: 0.25rem 0;
-  color: var(--color-text);
+.summary > :last-child {
+  margin-left: auto;
 }
 
-.reviewAuthor {
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
+.avg {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.muted {
-  color: var(--color-text-muted);
+.count {
+  font-size: 14px;
+  color: var(--ui-text-muted);
 }
 
-.backLink {
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.heading {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+}
+
+.backBelow {
+  margin-top: 32px;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    height: 220px;
+    border-radius: 12px;
+  }
+
+  .titleSection {
+    padding-top: 20px;
+  }
+
+  .name {
+    font-size: 28px;
+  }
+
+  .summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 24px;
+  }
+
+  .summary > :last-child {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }

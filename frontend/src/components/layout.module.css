@@ -42,12 +42,14 @@
   text-decoration: underline;
 }
 
+/* デザイン(design/redesign/mock.css の .wrap)と同じ幅の式: 1120px(70rem)を上限に、狭い画面では左右 16px(1rem)を
+   残す。横の余白はこの式だけで作り、縦の余白だけ padding で付ける(横に padding を足すと、その分だけ 70rem より
+   狭くなってしまうため)。 */
 .main {
   flex: 1;
-  padding: 1.5rem;
-  max-width: 50rem;
+  width: min(70rem, 100% - 2rem);
   margin: 0 auto;
-  width: 100%;
+  padding: 1.5rem 0;
 }
 
 .heading {
