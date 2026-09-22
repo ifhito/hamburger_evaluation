@@ -1,0 +1,24 @@
+/* デザイン(design/redesign/mock.css の .lang / .lang-btn)と同じ値。部品のトークン(--ui-*)を使う
+   (uiTokens.test.ts が、--ui-* の値そのものは design/redesign/mock.css と一致することを確かめる)。 */
+.lang {
+  display: flex;
+  gap: 2px;
+}
+
+.langBtn {
+  min-width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ui-text-muted);
+  cursor: pointer;
+}
+
+.on {
+  background: var(--ui-text);
+  color: var(--ui-bg);
+}

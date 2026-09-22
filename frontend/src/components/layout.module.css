@@ -42,6 +42,12 @@
   text-decoration: underline;
 }
 
+/* JA / EN の切り替え(LanguageSwitcher)。デザイン(design/redesign/mock.css)は、ヘッダーの右端に置く。
+   .nav に margin-left: auto があるので、その次の兄弟であるここは、詰めて右端に並ぶ。 */
+.langSlot {
+  flex: none;
+}
+
 /* デザイン(design/redesign/mock.css の .wrap)と同じ幅の式: 1120px(70rem)を上限に、狭い画面では左右 16px(1rem)を
    残す。横の余白はこの式だけで作り、縦の余白だけ padding で付ける(横に padding を足すと、その分だけ 70rem より
    狭くなってしまうため)。 */
@@ -72,8 +78,15 @@
   }
 
   .nav {
+    order: 3;
+    width: 100%;
     margin-left: 0;
     flex-wrap: wrap;
     gap: 0.25rem 1rem;
+  }
+
+  /* デザイン(design/redesign/mock.css)と同じく、狭い画面ではロゴの行に並べ、ナビは次の行に全幅で折り返す。 */
+  .langSlot {
+    order: 2;
   }
 }

@@ -1,6 +1,7 @@
 import axios from "axios";
 import camelcaseKeys from "camelcase-keys";
 import snakecaseKeys from "snakecase-keys";
+import i18n from "../../lib/i18n";
 
 export class ApiError extends Error {
   readonly messages: string[];
@@ -25,6 +26,8 @@ export function buildApiClient(getToken?: () => string | null) {
   const client = axios.create({ baseURL: API_BASE_URL });
 
   client.interceptors.request.use((config) => {
+    // 選んだ言語(lib/i18n.ts)を、すべての要求に送る(R6・AC7)。S51 で、backend がこの言語でエラー文言を返す。
+    config.headers["Accept-Language"] = i18n.language;
     const token = getToken?.();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
