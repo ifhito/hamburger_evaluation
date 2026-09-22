@@ -14,7 +14,7 @@ it.runIf(inCi)("CI では、デザインの見本のファイルが見つかる"
 type DesignShape = { part: string; d: string; fill: null; stroke: string; sw: number; dash: string | null };
 type Design = {
   SIZE: typeof parts.size;
-  PARTS: { id: string; unit: number; y: number; color: string; d: string }[];
+  PARTS: { id: string; unit: number; rank: number; color: string; d: string }[];
   resolve: (o: { variant?: "A" | "B"; value: number; max: number; size: BurgerSize }) => { width: number; height: number; shapes: DesignShape[] };
 };
 const load = (): Design => {
@@ -32,7 +32,7 @@ describe.skipIf(!source)("評価のバーガーは、デザインの見本と同
 
   it("図形の元データ(部品・大きさ・線の太さ)は、デザインの見本と同じである", () => {
     expect(parts.size).toEqual(design.SIZE);
-    const strip = (list: Design["PARTS"]) => list.map(({ id, unit, y, color, d }) => ({ id, unit, y, color, d }));
+    const strip = (list: Design["PARTS"]) => list.map(({ id, unit, rank, color, d }) => ({ id, unit, rank, color, d }));
     expect(strip(parts.parts as Design["PARTS"])).toEqual(strip(design.PARTS));
   });
 
@@ -111,6 +111,12 @@ describe("点灯・消灯", () => {
 
   it("'level'(案B・水位)は、既定(variant を渡さない)の見た目である", () => {
     expect(resolveBurger(0.5, "lg")).toEqual(resolveBurger(0.5, "lg", "level"));
+  });
+
+  it("'level'(案B・水位)は、評価の最大値でしか満タンにならない(高めの評価でも消灯が残る)", () => {
+    const lit = (ratio: number) => resolveBurger(ratio, "lg", "level").shapes.filter((s) => s.dash === null).length;
+    expect(lit(0.8)).toBeLessThan(6);
+    expect(lit(1)).toBe(6);
   });
 });
 

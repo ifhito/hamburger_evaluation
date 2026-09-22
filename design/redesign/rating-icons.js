@@ -2,15 +2,15 @@
 //   線そのものが色を持ち、黒い輪郭線は無い。食材どうしの間には、はっきりした隙間を空ける。
 //   点灯(その食材の色の実線)/消灯(灯っていない管のように、薄いグレーの点線。塗りは無し・線だけ)の 2 値。
 //   色だけでなく線の形(実線/点線)でも、点灯・消灯の違いが伝わるようにする。
-//   案 B(水位。評価 ÷ 最大値の高さより下が点灯)と 案 A(部品ごと。unit(下から何点目で灯るか)より下が点灯)の 2 通りがあり、
-//   どちらも実際に使う: 1 件の評価(必ず整数)・評価の入力は、段階がはっきり分かる案 A。複数のレビューから出す平均評価
-//   (小数になる)は、小数の違いが見た目に出る案 B。
+//   案 B(水位。6 本を、下から何番目かで均等な間隔に割り、評価 ÷ 最大値がその割合を超えたら点灯)と
+//   案 A(部品ごと。unit(下から何点目で灯るか)より下が点灯)の 2 通りがあり、どちらも実際に使う:
+//   1 件の評価(必ず整数)・評価の入力は、段階がはっきり分かる案 A。複数のレビューから出す平均評価
+//   (小数になる)は、小数の違いが見た目に出て、かつ評価の最大値でしか満タンにならない案 B。
 // 図形は SVG のパス(M・C の絶対座標だけ)で、capture_mock.js が、この一覧(shapes)を、そのまま Penpot のパスにする。
 // 見た目の値(色・大きさ・線の太さ)は、ここが 1 か所の元。数字は、必ずアイコンのそばに書く(形や色だけで伝えない)。
 (() => {
   const VB = { w: 120, h: 100 };
-  const TOP = 2, BOTTOM = 98; // バーガー全体の上端と下端(水位の 0% と 100%)
-  const EMPTY = '#8e8e89'; // 灯っていない(水位より上)の線の色
+  const EMPTY = '#b0b0ab'; // 灯っていない(水位より上)の線の色(白背景との比 2.18:1。指示により、3:1 の基準よりも薄さを優先)
   const COLOR = { bun: '#d8a45b', patty: '#6b4432', cheese: '#e9b824', lettuce: '#86b25a', tomato: '#d1533d' };
   // 大きさ(アイコンの幅 px)と、線の太さ(px)
   const SIZE = { lg: { w: 160, stroke: 3 }, md: { w: 64, stroke: 2 }, sm: { w: 40, stroke: 1.5 }, xs: { w: 24, stroke: 1.25 } };
@@ -34,15 +34,18 @@
     return out;
   };
 
-  // 下から重ねる順。unit は案 A で「何点目で灯るか」(1〜5)。y は、水位・案 A と比べる代表の Y 座標(パスの始点。下ほど大きい)
+  // 下から重ねる順。unit は案 A で「何点目で灯るか」(1〜5)。rank は案 B(水位)の均等な間隔での段(1〜PARTS.length。
+  // 下から何番目かで決まり、下ほど小さい)。極小の間引きで表示から外れても、rank は 6 本のうちの元の位置のままにする
+  // (表示する本数によって、同じ評価の「満たされ具合」が変わらないように)。
   const PARTS = [
-    { id: '下のバンズ', unit: 1, y: 82, color: COLOR.bun, d: 'M 12 82 C 12 94 30 98 60 98 C 90 98 108 94 108 82' },
-    { id: 'パティ', unit: 2, y: 76, color: COLOR.patty, d: quadToCubic('M 9 76 Q 28 70 47 76 T 85 76 T 111 76') },
-    { id: 'チーズ', unit: 3, y: 63, color: COLOR.cheese, d: quadToCubic('M 10 63 Q 26 58 42 63 T 74 63 T 110 63') },
-    { id: 'トマト', unit: 4, y: 50, color: COLOR.tomato, d: quadToCubic('M 11 50 Q 27 45 43 50 T 77 50 T 109 50') },
-    { id: 'レタス', unit: 4, y: 37, color: COLOR.lettuce, d: quadToCubic('M 6 37 Q 16 28 26 37 Q 36 28 46 37 Q 56 28 66 37 Q 76 28 86 37 Q 96 28 106 37 Q 112 33 114 37') },
-    { id: '上のバンズ', unit: 5, y: 34, color: COLOR.bun, d: 'M 14 34 C 14 12 30 2 60 2 C 90 2 106 12 106 34' },
+    { id: '下のバンズ', unit: 1, color: COLOR.bun, d: 'M 12 82 C 12 94 30 98 60 98 C 90 98 108 94 108 82' },
+    { id: 'パティ', unit: 2, color: COLOR.patty, d: quadToCubic('M 9 76 Q 28 70 47 76 T 85 76 T 111 76') },
+    { id: 'チーズ', unit: 3, color: COLOR.cheese, d: quadToCubic('M 10 63 Q 26 58 42 63 T 74 63 T 110 63') },
+    { id: 'トマト', unit: 4, color: COLOR.tomato, d: quadToCubic('M 11 50 Q 27 45 43 50 T 77 50 T 109 50') },
+    { id: 'レタス', unit: 4, color: COLOR.lettuce, d: quadToCubic('M 6 37 Q 16 28 26 37 Q 36 28 46 37 Q 56 28 66 37 Q 76 28 86 37 Q 96 28 106 37 Q 112 33 114 37') },
+    { id: '上のバンズ', unit: 5, color: COLOR.bun, d: 'M 14 34 C 14 12 30 2 60 2 C 90 2 106 12 106 34' },
   ];
+  PARTS.forEach((p, i) => { p.rank = i + 1; });
 
   // パスの外接の四角(曲線を刻んで測る)。Penpot の図形のジオメトリに使う
   const bboxOf = (d) => {
@@ -71,14 +74,15 @@
 
   // 評価と大きさから、描く線の一覧を作る。食材ごとに、点灯(その食材の色・実線)/ 消灯(EMPTY・点線)のどちらかを選ぶだけ(塗りは無し)。
   // 色だけでなく線の形でも点灯/消灯が分かるように、消灯は点線にする(色の区別がつきにくくても伝わるように)。
-  // variant: 'B' 水位(連続値) / 'A' 部品ごと(unit の段階)。value は、数字に出す値(1 桁に丸めた値)。max は評価の最大値
+  // variant: 'B' 水位(連続値。6 本を均等な間隔で、下から順に灯す) / 'A' 部品ごと(unit の段階)。
+  // value は、数字に出す値(1 桁に丸めた値)。max は評価の最大値
   const resolve = ({ variant = 'B', value = 0, max = 5, size = 'md', gray = false }) => {
     const sz = SIZE[size], scale = sz.w / VB.w, sw = n2(sz.stroke / scale);
     const tone = (c) => (gray ? grayOf(c) : c);
-    const level = BOTTOM - (BOTTOM - TOP) * (Math.max(0, Math.min(value, max)) / max); // 水位の y(これ以上(下)の食材が点灯)
-    const unitValue = (value / max) * 5; // 案 A は 5 段。最大値が違っても 5 段の割合にする
+    const ratio = Math.max(0, Math.min(value, max)) / max;
+    const unitValue = ratio * 5; // 案 A は 5 段。最大値が違っても 5 段の割合にする
     const shapes = (size === 'xs' ? PARTS_XS : PARTS).map((p) => {
-      const lit = variant === 'A' ? unitValue >= p.unit : p.y >= level;
+      const lit = variant === 'A' ? unitValue >= p.unit : ratio >= p.rank / PARTS.length;
       // 点線の間隔(線の太さの何倍か)は、大きさが違っても同じ比になる(sw は大きさに応じて既にスケールしている)
       const dash = lit ? null : `${n2(sw * 1.6)} ${n2(sw * 1.6)}`;
       return { part: p.id, d: p.d, fill: null, stroke: tone(lit ? p.color : EMPTY), sw, dash, bbox: p.bbox, round: true };
