@@ -64,11 +64,16 @@ export function TextField({ id, label, optional, hint, counter, ...props }: Comm
   )
 }
 
-// 複数行の入力欄。
-export function TextArea({ id, label, optional, hint, counter, ...props }: Common & TextareaHTMLAttributes<HTMLTextAreaElement>) {
+// 複数行の入力欄。short は、高さを低くする(却下の理由など、短い文を書く欄)。
+export function TextArea({ id, label, optional, hint, counter, short, ...props }: Common & TextareaHTMLAttributes<HTMLTextAreaElement> & { short?: boolean }) {
   return (
     <Frame id={id} label={label} optional={optional} hint={hint} counter={counter}>
-      <textarea id={id} aria-describedby={describedBy(id, hint, counter)} {...props} className={`${styles.input} ${styles.area}`} />
+      <textarea
+        id={id}
+        aria-describedby={describedBy(id, hint, counter)}
+        {...props}
+        className={[styles.input, styles.area, short ? styles.short : ''].filter(Boolean).join(' ')}
+      />
     </Frame>
   )
 }
