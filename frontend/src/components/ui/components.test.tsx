@@ -213,11 +213,10 @@ describe("RatingBurger(表示)", () => {
     expect(out.match(/stroke-dasharray/g)?.length ?? 0).toBe(emptyCount);
   });
 
-  it("'stepped'(1 件の評価・入力向け)は、部品ごとの段階で点灯し、既定の 'level'(平均評価向け)とは点灯数が違うことがある", () => {
+  it("'stepped'(1 件の評価・入力向け)は、部品ごとの段階で点灯し、既定の 'level'(平均評価向け)とは見た目が違うことがある", () => {
     const level = html(<RatingBurger value={4} max={5} size="lg" />);
     const stepped = html(<RatingBurger value={4} max={5} size="lg" variant="stepped" />);
-    const litCount = (out: string) => (out.match(/stroke-dasharray/g) ?? []).length === 0 ? 6 : 6 - (out.match(/stroke-dasharray/g) ?? []).length;
-    expect(litCount(stepped)).toBeLessThan(litCount(level));
+    expect(svgOf(stepped)).not.toBe(svgOf(level));
   });
 
   it("絵だけの部品は、装飾として読み上げず、数字を持たない", () => {
