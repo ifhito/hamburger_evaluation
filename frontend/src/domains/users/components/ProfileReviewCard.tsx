@@ -25,7 +25,7 @@ export function ProfileReviewCard({ review, ratingMax }: { review: Review; ratin
             {formatDate(review.createdAt)}
           </time>
         </div>
-        {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} />}
+        {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} variant="stepped" />}
         <p className={styles.comment}>{review.comment}</p>
         <div className={styles.foot}>
           <TextLink to={`/reviews/${review.id}`}>{t("users.detail.viewLink")}</TextLink>

@@ -1,10 +1,15 @@
 import parts from './burgerParts.json'
 
-// 評価のバーガー(1 食材 = 1 本の波打つ線。水位より下は食材の色、上は消灯のグレー)の図形の組み立て。
-// 元は design/redesign/rating-icons.js の resolve(案 B)。形・色・大きさ・線の太さは burgerParts.json
+// 評価のバーガー(1 食材 = 1 本の波打つ線。点灯は食材の色の実線、消灯は薄いグレーの点線)の図形の組み立て。
+// 元は design/redesign/rating-icons.js の resolve()。形・色・大きさ・線の太さは burgerParts.json
 // (デザインの PARTS・SIZE の写し)にあり、burgerShapes.test.ts が、デザインの実行結果との一致を確かめる。
 // 座標などの数字を .ts に書かない。
 export type BurgerSize = 'lg' | 'md' | 'sm' | 'xs'
+
+// 案B(水位。評価 ÷ 最大値の高さより下が点灯): 小数の違いが見た目に出る。平均評価(小数になる)に使う。
+// 案A(部品ごとの段階。下から何点目で灯るか、より下が点灯): 段階がはっきり分かる。1 件の評価・評価の入力
+// (必ず整数)に使う(小数は区別できない)。
+export type BurgerVariant = 'level' | 'stepped'
 
 interface Part {
   id: string
@@ -19,6 +24,8 @@ export interface BurgerShape {
   d: string
   stroke: string
   sw: number
+  // 点線の間隔(dash gap)。null は実線(点灯)。
+  dash: string | null
 }
 export interface BurgerIcon {
   vb: [number, number]
@@ -35,20 +42,20 @@ const round2 = (v: number) => Math.round(v * 1e2) / 1e2
 const XS_IDS = ['下のバンズ', 'チーズ', '上のバンズ']
 
 // 評価の割合 ratio(0〜1。範囲外は、0 以下は空・1 以上は満タンと同じ結果になる)と大きさから、描く線の一覧を作る。
-export function resolveBurger(ratio: number, size: BurgerSize): BurgerIcon {
+export function resolveBurger(ratio: number, size: BurgerSize, variant: BurgerVariant = 'level'): BurgerIcon {
   const sz = parts.size[size]
   const scale = sz.w / parts.vb[0]
   const sw = round2(sz.stroke / scale)
-  const level = parts.bottom - (parts.bottom - parts.top) * Math.max(0, Math.min(ratio, 1))
+  const r = Math.max(0, Math.min(ratio, 1))
+  const level = parts.bottom - (parts.bottom - parts.top) * r
+  const unitValue = r * 5
   const list = (parts.parts as Part[]).filter((p) => size !== 'xs' || XS_IDS.includes(p.id))
-  const shapes: BurgerShape[] = list.map((p) => ({
-    part: p.id,
-    d: p.d,
-    stroke: p.y >= level ? p.color : parts.empty,
-    sw,
-  }))
+  const shapes: BurgerShape[] = list.map((p) => {
+    const lit = variant === 'stepped' ? unitValue >= p.unit : p.y >= level
+    return { part: p.id, d: p.d, stroke: lit ? p.color : parts.empty, sw, dash: lit ? null : `${round2(sw * 1.6)} ${round2(sw * 1.6)}` }
+  })
   return { vb: [parts.vb[0], parts.vb[1]], width: sz.w, height: round2((sz.w * parts.vb[1]) / parts.vb[0]), shapes }
 }
 
-// 数字に出す値(小数 1 桁)。水位も、この値で決める(数字と水位がずれないように)。
+// 数字に出す値(小数 1 桁)。水位・段階も、この値で決める(数字とずれないように)。
 export const roundRating = (v: number) => Math.round(v * 10) / 10

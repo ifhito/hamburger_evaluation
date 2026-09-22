@@ -23,7 +23,7 @@ export function ShopReviewCard({ review, ratingMax }: { review: Review; ratingMa
             {formatDate(review.createdAt)}
           </time>
         </div>
-        {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} />}
+        {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} variant="stepped" />}
         <p className={styles.comment}>{review.comment}</p>
         <div className={styles.foot}>
           <span>{review.user?.username ?? t("shops.detail.unknown")}</span>
