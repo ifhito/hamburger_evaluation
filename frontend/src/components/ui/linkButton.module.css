@@ -7,7 +7,9 @@
   text-decoration: none;
 }
 
-/* variant="secondary"(既定)は .linkButton と同じ見た目(class 名は .linkButton を使う。呼び出し側の見分けのための別名)。 */
+/* variant="secondary"(既定)は、実際には .linkButton をそのまま使う(LinkButton.tsx)。この .secondary は、
+   部品の CSS の検査(uiStyles.test.ts。Props の variant の型に並ぶ名前ごとに、対応する class が CSS にあるかを見る)
+   のためだけにある、参照されない別名。 */
 .secondary {
   composes: linkButton;
 }

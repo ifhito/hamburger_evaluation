@@ -36,11 +36,6 @@
   margin-top: 32px;
 }
 
-.muted {
-  font-family: var(--ui-font);
-  color: var(--ui-text-muted);
-}
-
 @media (max-width: 720px) {
   .heading {
     font-size: 28px;
