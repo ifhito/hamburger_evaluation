@@ -91,6 +91,58 @@ Vercel だけは正規表現で除外する書き方になった。
 { "source": "/((?!assets/).*)", "destination": "/index.html" }
 ```
 
+## Cloudflare の落とし穴: 計測では見えなかった 2 つ
+
+Phase 6 の計測(`/api/meta` や `/api/shops`)はすべて通ったが、**Google ログインを
+実際に通したところ 2 段構えで壊れていた**。どちらもコードを書く方式に固有の問題である。
+
+### 1. アセット配信が Worker より先に働く
+
+`not_found_handling = "single-page-application"` を設定していると、**ブラウザの
+ナビゲーション(`Sec-Fetch-Mode: navigate`)に対してはアセット配信が Worker より
+先に走り、`index.html` を返す**。転送のコードに到達しない。
+
+| リクエストの種類 | ヘッダ | 結果 |
+|---|---|---|
+| `fetch` による API 呼び出し | `Sec-Fetch-Mode: cors` | Worker に届く(計測はこちら) |
+| ページ遷移 | `Sec-Fetch-Mode: navigate` | **アセットが横取りして `index.html`** |
+
+`/api/meta` や `/api/shops` は SPA が `fetch` で叩くため正常に見える。
+**ページ遷移を伴う認証フローだけが壊れる。**
+
+```toml
+# 直し方: /api/* は必ず Worker を先に走らせる
+run_worker_first = ["/api/*"]
+```
+
+### 2. `fetch` が既定でリダイレクトを追いかける
+
+Worker に到達したあとも、`fetch` は既定で 3xx を**Worker の中で追いかける**。
+API が返した 302 の行き先(Google の認可画面)を取得して 200 で返すため、
+ブラウザの URL が変わらない。
+
+```js
+// 誤り
+return fetch(new Request(target, request));
+// 正
+return fetch(new Request(target, request), { redirect: "manual" });
+```
+
+### 症状は同じ「404」
+
+どちらの場合も、ブラウザは `/api/auth/google/start` のまま SPA を描画し、
+そのパスを知らない React Router が `Unexpected Application Error! 404 Not Found`
+を出す。**原因が 2 つあるため、片方を直しても症状が変わらない。**
+
+### 宣言的なリライトとの差
+
+Netlify・Render・Vercel は宣言的なリライトで、**リダイレクトはそのままブラウザに
+渡り、ナビゲーションかどうかで挙動が変わることもない**。
+
+[ADR-0001](../adr/0001-frontend-deploy-target.md) では「Cloudflare はコードを書く
+手間があるが行数の差は 4 行」と評価したが、**行数では測れない責任の差があった**。
+転送が最速という利点は変わらないが、正しさを自分で担保する必要がある。
+
 ## ハマった点
 
 ### Render: Rewrite と Redirect を間違えると壊れる
