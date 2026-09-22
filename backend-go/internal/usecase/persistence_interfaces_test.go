@@ -1027,7 +1027,7 @@ func checkForbiddenSelectors(src string, forbidden []string) ([]string, error) {
 //   - 再計算に関わる usecase(unit_of_work.go・reviews.go・users.go)は、現在時刻を time.Now で直接
 //     取得せず、Clock から受け取る。時刻を固定したテストで、保存される統計を再現できるようにするため
 func TestRecalculationLivesInUsecase(t *testing.T) {
-	calcs := []string{"domain.CalculateBurgerScore", "domain.CalculateBurgerStat", "domain.AverageRating", "domain.ReviewerTrustScore"}
+	calcs := []string{"domain.CalculateBurgerScore", "domain.CalculateBurgerStat", "domain.CalculateShopStat", "domain.AverageRating", "domain.ReviewerTrustScore"}
 	t.Run("本番の adapter(repository・query・uow・handler)は、domain の統計の計算関数を呼んでいない", func(t *testing.T) {
 		checked := 0
 		for _, dir := range []string{"../adapter/repository", "../adapter/query", "../adapter/uow", "../adapter/handler"} {
@@ -1051,7 +1051,7 @@ func TestRecalculationLivesInUsecase(t *testing.T) {
 	// 対象は、統計の再計算の手順と、それを呼ぶレビュー・ユーザーの usecase に限る。サインアップの
 	// 確認メールの再送間隔を測る時計(signup.go の SignupConfig.Now)は、別の目的の時計なので対象外。
 	t.Run("統計の再計算に関わる usecase は、現在時刻を time.Now で直接取得せず、Clock から受け取っている", func(t *testing.T) {
-		recalcFiles := map[string]bool{"unit_of_work.go": true, "reviews.go": true, "users.go": true}
+		recalcFiles := map[string]bool{"unit_of_work.go": true, "reviews.go": true, "users.go": true, "shop_stats.go": true, "shop_stats_worker.go": true}
 		checked := 0
 		for name, src := range productionSources(t, ".") {
 			if !recalcFiles[filepath.Base(name)] {
@@ -1075,6 +1075,7 @@ func TestRecalculationLivesInUsecase(t *testing.T) {
 		name, src, want string // want は、期待する違反の説明の一部(空なら、違反なしを期待する)
 	}{
 		{"domain の統計の計算関数(CalculateBurgerScore)を呼ぶコードは、違反として検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.CalculateBurgerScore(nil, t) }", "domain.CalculateBurgerScore"},
+		{"domain のショップの集計の計算関数(CalculateShopStat)を呼ぶコードは、違反として検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.CalculateShopStat(\"s\", nil, t) }", "domain.CalculateShopStat"},
 		{"domain の平均評価の計算関数(AverageRating)を呼ぶコードは、違反として検出する", "package p\nimport \"x/domain\"\nfunc f() { _ = domain.AverageRating(nil) }", "domain.AverageRating"},
 		{"データベースの行の値(row.AverageRating)の参照は、関数の呼び出しではないので、違反として検出しない", "package p\nfunc f(row R) float64 { return row.AverageRating }", ""},
 		{"domain の型(ReviewFact)を使うだけのコードは、違反として検出しない", "package p\nimport \"x/domain\"\nfunc f() domain.ReviewFact { return domain.ReviewFact{} }", ""},

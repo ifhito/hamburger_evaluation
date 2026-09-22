@@ -115,8 +115,8 @@ func TestNewShopSubmission(t *testing.T) {
 				t.Fatalf("error = %v, want *domain.ValidationError", err)
 			}
 			want := []string{"Name can't be blank"}
-			if !reflect.DeepEqual(vErr.Messages, want) {
-				t.Errorf("messages = %v, want %v", vErr.Messages, want)
+			if !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
+				t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
 			}
 		})
 	}

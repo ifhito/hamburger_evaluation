@@ -8,6 +8,7 @@ import { Button } from "../../../components/Button";
 import { ErrorMessage } from "../../../components/ErrorMessage";
 import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
+import { GoogleSignIn } from "../components/GoogleSignIn";
 import styles from "./auth.module.css";
 
 export default function SignupPage() {
@@ -88,6 +89,7 @@ export default function SignupPage() {
           <a href="/signin">{t("auth.signup.signInLink")}</a>
         </p>
       </form>
+      <GoogleSignIn mode="signup" />
     </Layout>
   );
 }

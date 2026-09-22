@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -44,8 +45,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+	logConfigWarnings(cfg)
 	if err := run(ctx, cfg, nil); err != nil {
 		log.Fatalf("server: %v", err)
+	}
+}
+
+// logConfigWarnings は、設定は有効でも、実際には失敗しやすい組み合わせ(Google の戻り先が、画面のオリジンを通らない
+// など)を、起動時のログに警告として出す(起動は止めない)。手順書は、このメッセージ(と detail の項目)で、原因を探させる。
+func logConfigWarnings(cfg infra.Config) {
+	for _, w := range cfg.GoogleWarnings() {
+		slog.Warn("suspicious google login setting", "detail", w)
 	}
 }
 
@@ -128,9 +138,14 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	// あとから行う。起動した直後に、前回の停止までに溜まっていた依頼を処理する。停止では、サーバーを
 	// 止めたあとに、処理中のバッチを終えてから止める(順序は、defer が後ろから実行されることを使い、
 	// サーバー停止 → ワーカー停止 → メール送信の停止 → プールを閉じる、になる)。
-	statsWorker := usecase.NewStatsWorker(query.NewBurgerStatsQuery(pool), unitOfWork, recalc, infra.SystemClock{},
-		usecase.StatsWorkerConfig{Batch: cfg.StatsWorkerBatch, MaxAttempts: cfg.StatsWorkerMaxAttempts})
-	statsLoop := infra.StartStatsWorker(statsWorker, cfg.StatsWorkerInterval)
+	// ショップの集計(件数・平均・写真)も、同じ仕組みで、あとから計算する。バーガーの統計のワーカーが、統計を計算し
+	// 直したバーガーが紐づくショップの再計算を依頼し、ショップの集計のワーカーが、その依頼を、同じサイクルの中で
+	// 続けて処理する。
+	workerCfg := usecase.StatsWorkerConfig{Batch: cfg.StatsWorkerBatch, MaxAttempts: cfg.StatsWorkerMaxAttempts}
+	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
+	statsWorker := usecase.NewStatsWorker(query.NewBurgerStatsQuery(pool), unitOfWork, recalc, shopRecalc, infra.SystemClock{}, workerCfg)
+	shopStatsWorker := usecase.NewShopStatsWorker(query.NewShopStatsQuery(pool), unitOfWork, shopRecalc, infra.SystemClock{}, workerCfg)
+	statsLoop := infra.StartStatsWorker(infra.NewStatsCycle(statsWorker, shopStatsWorker), cfg.StatsWorkerInterval)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()

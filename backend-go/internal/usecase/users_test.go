@@ -154,7 +154,7 @@ func TestUsersUpdateValidation(t *testing.T) {
 			wantMsgs: []string{"Password is too long (maximum is 72 characters)"},
 		},
 		{
-			// 強度ルール（domain.ValidatePassword）が PUT /users/{id} に適用されていることを示す代表例。
+			// 強度ルール（domain.PasswordIssues）が PUT /users/{id} に適用されていることを示す代表例。
 			// 全パターンと境界の網羅は domain のテストが担う。
 			name:     "弱い password は短さと文字種の 2 件の検証エラーになる",
 			input:    usecase.UpdateUserInput{Password: strPtr("abc123")},
@@ -268,8 +268,8 @@ func TestPasswordRuleParity(t *testing.T) {
 				t.Errorf("signup messages = %q, update messages = %q, want identical", signupMsgs, updateMsgs)
 			}
 			// どちらも domain の規則そのものに従っていること。
-			if want := domain.ValidatePassword(tt.password); !slices.Equal(signupMsgs, want) {
-				t.Errorf("messages = %q, want domain.ValidatePassword result %q", signupMsgs, want)
+			if want := domain.Texts(domain.LangEN, domain.PasswordIssues(tt.password)); !slices.Equal(signupMsgs, want) {
+				t.Errorf("messages = %q, want domain.PasswordIssues result %q", signupMsgs, want)
 			}
 		})
 	}
@@ -286,7 +286,7 @@ func passwordMessages(t *testing.T, err error) []string {
 	if !errors.As(err, &vErr) {
 		t.Fatalf("error = %v (%T), want nil or *domain.ValidationError", err, err)
 	}
-	return vErr.Messages
+	return vErr.Texts(domain.LangEN)
 }
 
 // TestUsersUpdateChanges は、repository に届くものを固定する。存在しない
@@ -418,7 +418,7 @@ func TestUsersUpdateEmailRule(t *testing.T) {
 				return
 			}
 			var vErr *domain.ValidationError
-			if !errors.As(err, &vErr) || !slices.Equal(vErr.Messages, tt.wantMsgs) {
+			if !errors.As(err, &vErr) || !slices.Equal(vErr.Texts(domain.LangEN), tt.wantMsgs) {
 				t.Errorf("error = %v, want validation messages %q", err, tt.wantMsgs)
 			}
 		})

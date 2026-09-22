@@ -33,22 +33,8 @@ type shopStoreFake struct {
 	err                   error
 	listCalls             int
 	lastLimit, lastOffset int32
-	// summaries は shop の id ごとの集計。ない shop は「レビューなし」(空の集計)になる。
+	// summaries は shop の id ごとの、保存された集計(query が返す)。ない shop は「まだ集計されていない」(空の集計)になる。
 	summaries map[string]domain.ShopSummary
-}
-
-// ListShopSummaries は、指定した shop の集計を返す(summaries にない shop は空の集計)。
-func (f *shopStoreFake) ListShopSummaries(_ context.Context, shopIDs []string) (map[string]domain.ShopSummary, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	out := make(map[string]domain.ShopSummary, len(shopIDs))
-	for _, id := range shopIDs {
-		if summary, ok := f.summaries[id]; ok {
-			out[id] = summary
-		}
-	}
-	return out, nil
 }
 
 var (
@@ -56,7 +42,7 @@ var (
 	_ domain.ShopRepository = (*shopStoreFake)(nil)
 )
 
-func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
+func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error) {
 	f.listCalls++
 	f.lastLimit, f.lastOffset = limit, offset
 	if f.err != nil {
@@ -80,7 +66,11 @@ func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, 
 	})
 	lo := min(int(offset), len(out))
 	hi := min(lo+int(limit), len(out))
-	return out[lo:hi], hi < len(out), nil
+	listings := make([]domain.ShopListing, 0, hi-lo)
+	for _, shop := range out[lo:hi] {
+		listings = append(listings, domain.ShopListing{Shop: shop, Summary: f.summaries[shop.ID]})
+	}
+	return listings, hi < len(out), nil
 }
 
 func (f *shopStoreFake) GetShopWithCreator(_ context.Context, id string) (domain.ShopDetail, error) {
@@ -89,6 +79,7 @@ func (f *shopStoreFake) GetShopWithCreator(_ context.Context, id string) (domain
 	}
 	for _, d := range f.shops {
 		if d.ID == id {
+			d.Summary = f.summaries[id]
 			return d, nil
 		}
 	}

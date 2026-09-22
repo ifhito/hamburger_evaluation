@@ -15,6 +15,14 @@ const en = {
       overAnnounce: "Over the limit (maximum {{max}} characters)",
       withinAnnounce: "Within the limit",
     },
+    ratingAria: "Rating {{value}} out of {{max}}",
+    ratingOutOf: "out of {{max}}",
+    // 空・読み込み中・見つからないときの画面の文言(デザインの英語版のとおり)。
+    states: {
+      empty: { title: "Nobody's eaten here yet", description: "Why not write the first review?" },
+      loading: { title: "Grilling…", description: "Just a moment" },
+      notFound: { code: "404", title: "Sold out", description: "Page not found" },
+    },
   },
   auth: {
     // パスワードの規則の判定は backend(domain.ValidatePassword)だけが持つ。これは規則を利用者に伝える説明文で、
@@ -55,6 +63,37 @@ const en = {
     signout: {
       title: "Signing out\u2026",
       message: "You are being signed out\u2026",
+    },
+    // Google でのサインイン。手続きの結果の文言(重複・失敗など)は API が返すので、ここには、API から文言を
+    // 受け取れなかったときの予備の文言だけを置く。
+    google: {
+      or: "or",
+      signIn: "Sign in with Google",
+      signUp: "Sign up with Google",
+      error: "Google sign-in failed. Please try again.",
+      complete: {
+        title: "Signing in with Google",
+        loading: "Signing you in\u2026",
+        backToSignin: "Back to sign in",
+        backToProfile: "Back to your profile",
+        retry: "Try again",
+        temporary: "Something went wrong on our side. Please try again.",
+        expired: "This sign-in link is no longer available. Please start again.",
+      },
+      profile: {
+        heading: "Google",
+        connectedAs: "Connected as {{email}}",
+        notConnected: "Not connected.",
+        connect: "Connect Google",
+        disconnect: "Disconnect",
+        disconnectConfirm: "Disconnect Google? You won't be able to sign in with it anymore.",
+        cannotUnlink: "Google is your only way to sign in. Add a password to be able to disconnect it.",
+        loadError: "Failed to load your Google connection.",
+        retry: "Retry",
+        disconnected: "Google disconnected.",
+        connectError: "Failed to start connecting Google.",
+        disconnectError: "Failed to disconnect Google.",
+      },
     },
   },
   reviews: {

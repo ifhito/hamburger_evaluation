@@ -29,11 +29,12 @@ func NewShopQuery(db sqlcgen.DBTX) *ShopQuery {
 
 var _ usecase.ShopQuery = (*ShopQuery)(nil)
 
-// ListShops は、keyword に一致する可視の shop を name、id の順に並べて返す。
+// ListShops は、keyword に一致する可視の shop を name、id の順に並べて、集計(shop_stats の保存された値。
+// まだ集計されていないショップは空の集計)つきで返す。集計は LEFT JOIN で添えるので、クエリは 1 回である。
 // keyword はエスケープ済みの ILIKE パラメータとして渡され、SQL に連結される
 // ことはない。次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて
 // 返す。2 つ目の戻り値は、offset+limit 件より後ろにも見える shop があるか（has_more）である。
-func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
+func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error) {
 	params := sqlcgen.ListShopsParams{
 		ViewAll:    vis.ViewAll,
 		PageLimit:  limit + 1,
@@ -48,18 +49,18 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 		return nil, false, fmt.Errorf("list shops: %w", err)
 	}
 	rows, hasMore := trimPage(rows, limit)
-	shops := make([]domain.Shop, 0, len(rows))
+	listings := make([]domain.ShopListing, 0, len(rows))
 	for _, row := range rows {
 		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
 		if err != nil {
 			return nil, false, fmt.Errorf("list shops: %w", err)
 		}
-		shops = append(shops, shop)
+		listings = append(listings, domain.ShopListing{Shop: shop, Summary: rowmap.ShopSummary(row.ReviewCount, row.AverageRating, row.PhotoKey)})
 	}
-	return shops, hasMore, nil
+	return listings, hasMore, nil
 }
 
-// GetShopWithCreator は shop とその creator を返す（Reviews は空のまま）。
+// GetShopWithCreator は shop とその creator を、集計(shop_stats の保存された値)つきで返す（Reviews は空のまま）。
 // または domain.ErrShopNotFound を返す。
 func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error) {
 	row, err := r.q.GetShopWithCreator(ctx, id)
@@ -73,7 +74,7 @@ func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.S
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("get shop with creator: %w", err)
 	}
-	detail := domain.ShopDetail{Shop: shop}
+	detail := domain.ShopDetail{Shop: shop, Summary: rowmap.ShopSummary(row.ReviewCount, row.AverageRating, row.PhotoKey)}
 	if row.CreatorID != nil {
 		// users.id は外部キーなので、LEFT JOIN で creator が見つかっている。
 		detail.Creator = &domain.UserRef{ID: *row.CreatorID, Username: row.CreatorUsername.String}
@@ -107,30 +108,6 @@ func (r *ShopQuery) ListShopReviews(ctx context.Context, shopID string) ([]domai
 		reviews = append(reviews, review)
 	}
 	return reviews, nil
-}
-
-// ListShopSummaries は、指定した shop それぞれの集計(レビューの件数・評価の平均・ショップの写真のキー)を、
-// shop の id をキーにして返す。1 回の集約クエリで求める(shop の件数に比例してクエリを増やさない)。
-// レビューのない shop は、結果に含まれない(呼び出し側が、空の集計(件数 0・平均と写真は nil)として扱う)。
-// 集計の意味は domain.ShopSummary が定義し、範囲の絞り込みと写真の選び方は、この SQL が実装している。
-func (r *ShopQuery) ListShopSummaries(ctx context.Context, shopIDs []string) (map[string]domain.ShopSummary, error) {
-	summaries := make(map[string]domain.ShopSummary, len(shopIDs))
-	if len(shopIDs) == 0 {
-		return summaries, nil
-	}
-	rows, err := r.q.ListShopSummaries(ctx, shopIDs)
-	if err != nil {
-		return nil, fmt.Errorf("list shop summaries: %w", err)
-	}
-	for _, row := range rows {
-		var photoKey *string
-		if row.PhotoKey.Valid {
-			key := row.PhotoKey.String
-			photoKey = &key
-		}
-		summaries[row.ShopID] = domain.NewShopSummary(row.ReviewCount, row.AverageRating, photoKey)
-	}
-	return summaries, nil
 }
 
 // ListShopsForModeration は、すべての shop をその creator とともに新しい順

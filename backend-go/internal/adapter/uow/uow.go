@@ -61,6 +61,9 @@ func (u *UnitOfWork) Do(ctx context.Context, fn func(ctx context.Context, tx use
 		Users:       domain.NewUsers(repository.NewUserRepository(pgxTx)),
 		BurgerStats: domain.NewBurgerStats(repository.NewBurgerStatRepository(pgxTx)),
 		Stats:       query.NewBurgerStatsQuery(pgxTx),
+		// ショップの集計: 書き込み(再計算の依頼の登録・削除、集計の保存)と、元データ・依頼の読み取りが、同じトランザクションに結び付く。
+		ShopStats:      domain.NewShopStats(repository.NewShopStatRepository(pgxTx)),
+		ShopStatsReads: query.NewShopStatsQuery(pgxTx),
 		// 確認待ちの signup: 書き込みと読み取りの両方が、同じトランザクションに結び付く。
 		SignupVerifications: domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pgxTx)),
 		PendingSignups:      query.NewSignupVerificationQuery(pgxTx),

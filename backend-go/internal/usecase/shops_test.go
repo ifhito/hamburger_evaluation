@@ -17,22 +17,13 @@ import (
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeShopQuery struct {
-	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error)
+	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error)
 	getShopWithCreator     func(ctx context.Context, id string) (domain.ShopDetail, error)
 	listShopReviews        func(ctx context.Context, shopID string) ([]domain.ShopReview, error)
 	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
-	// listShopSummaries は、未設定なら、すべての shop を「レビューなし」(空の集計)として返す。
-	listShopSummaries func(ctx context.Context, shopIDs []string) (map[string]domain.ShopSummary, error)
 }
 
-func (f *fakeShopQuery) ListShopSummaries(ctx context.Context, shopIDs []string) (map[string]domain.ShopSummary, error) {
-	if f.listShopSummaries == nil {
-		return map[string]domain.ShopSummary{}, nil
-	}
-	return f.listShopSummaries(ctx, shopIDs)
-}
-
-func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error) {
+func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error) {
 	if f.listShops == nil {
 		panic("unexpected ListShops call")
 	}
@@ -112,9 +103,9 @@ func TestShopsListPagination(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotLimit, gotOffset int32
 			query := &fakeShopQuery{
-				listShops: func(_ context.Context, _ domain.ShopVisibility, _ string, limit, offset int32) ([]domain.Shop, bool, error) {
+				listShops: func(_ context.Context, _ domain.ShopVisibility, _ string, limit, offset int32) ([]domain.ShopListing, bool, error) {
 					gotLimit, gotOffset = limit, offset
-					return []domain.Shop{}, false, nil
+					return []domain.ShopListing{}, false, nil
 				},
 			}
 			if _, _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", tt.page, tt.perPage); err != nil {
@@ -133,7 +124,7 @@ func TestShopsListVisibilityDescriptor(t *testing.T) {
 	admin := domain.User{ID: uid.N(5), Admin: true}
 	var got domain.ShopVisibility
 	query := &fakeShopQuery{
-		listShops: func(_ context.Context, vis domain.ShopVisibility, _ string, _, _ int32) ([]domain.Shop, bool, error) {
+		listShops: func(_ context.Context, vis domain.ShopVisibility, _ string, _, _ int32) ([]domain.ShopListing, bool, error) {
 			got = vis
 			return nil, false, nil
 		},
@@ -509,8 +500,8 @@ func TestShopsGetCanReview(t *testing.T) {
 func TestShopsListHasMore(t *testing.T) {
 	for _, want := range []bool{true, false} {
 		query := &fakeShopQuery{
-			listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.Shop, bool, error) {
-				return []domain.Shop{{ID: uid.N(1)}}, want, nil
+			listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.ShopListing, bool, error) {
+				return []domain.ShopListing{{Shop: domain.Shop{ID: uid.N(1)}}}, want, nil
 			},
 		}
 		_, got, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", 1, 20)
@@ -523,7 +514,7 @@ func TestShopsListHasMore(t *testing.T) {
 	}
 
 	failing := &fakeShopQuery{
-		listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.Shop, bool, error) {
+		listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.ShopListing, bool, error) {
 			return nil, true, io.ErrUnexpectedEOF
 		},
 	}

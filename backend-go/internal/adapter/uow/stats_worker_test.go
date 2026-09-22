@@ -84,7 +84,7 @@ func (s hookedStats) ListBurgerReviewFacts(ctx context.Context, burgerID string)
 
 // hookedWorker は、world の接続で動き、hook を挟んだ統計のワーカーを返す。
 func (w *world) hookedWorker(clock usecase.Clock, maxAttempts int, hook func(ctx context.Context, burgerID string) error) *usecase.StatsWorker {
-	return usecase.NewStatsWorker(query.NewBurgerStatsQuery(w.conn), hookedUnit{UnitOfWork: w.unit, hook: hook}, w.recalc, clock,
+	return usecase.NewStatsWorker(query.NewBurgerStatsQuery(w.conn), hookedUnit{UnitOfWork: w.unit, hook: hook}, w.recalc, usecase.NewShopStatsRecalculator(clock), clock,
 		usecase.StatsWorkerConfig{Batch: 100, MaxAttempts: maxAttempts})
 }
 

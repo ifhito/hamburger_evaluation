@@ -1,0 +1,74 @@
+import { useId } from 'react'
+import { useTranslation } from 'react-i18next'
+import { resolveBurger, roundRating, WHITE, type BurgerSize } from './burgerShapes'
+import styles from './ratingBurger.module.css'
+
+interface IconProps {
+  // 塗る高さの割合(0〜1。範囲外は、0 以下は空・1 以上は満タンと同じ)。評価の値と最大値の比。
+  ratio: number
+  size?: BurgerSize
+}
+
+// バーガーの絵だけ(装飾。読み上げの対象にしない)。数字を伴う表示は RatingBurger を使う。数字を大きく見せるなど、
+// 数字の見せ方を変える画面は、この絵と、自分の数字を組み合わせる。
+export function RatingBurgerIcon({ ratio, size = 'md' }: IconProps) {
+  const uid = useId().replace(/:/g, '')
+  const icon = resolveBurger(ratio, size)
+  return (
+    <svg
+      className={styles.burger}
+      viewBox={`0 0 ${icon.vb[0]} ${icon.vb[1]}`}
+      width={icon.width}
+      height={icon.height}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        {icon.shapes.map((s, i) =>
+          s.fill?.t === undefined ? null : (
+            <linearGradient key={i} id={`${uid}-${i}`} x1="0" y1="1" x2="0" y2="0">
+              <stop offset="0" stopColor={s.fill.color} />
+              <stop offset={s.fill.t} stopColor={s.fill.color} />
+              <stop offset={s.fill.t} stopColor={WHITE} />
+              <stop offset="1" stopColor={WHITE} />
+            </linearGradient>
+          ),
+        )}
+      </defs>
+      {icon.shapes.map((s, i) => (
+        <path
+          key={i}
+          d={s.d}
+          fill={s.fill ? (s.fill.t === undefined ? s.fill.color : `url(#${uid}-${i})`) : 'none'}
+          stroke={s.stroke}
+          strokeWidth={s.sw}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  )
+}
+
+interface Props {
+  value: number
+  // 評価の最大値。GET /meta の rating.max(frontend に定数を持たない)。
+  max: number
+  size?: BurgerSize
+  // 数字の小数の桁数(平均を「4.0」と見せるときなど)。指定しなければ、小数 1 桁に丸めた値をそのまま(4 → 「4」、4.5 → 「4.5」)。
+  fractionDigits?: number
+}
+
+// 水位のバーガー + 数字。数字を必ずそばに書く(形や色だけで伝えない)。水位も数字と同じ、小数 1 桁に丸めた値で決める。
+// 読み上げは「Rating 4.5 out of 5」の 1 つの画像として伝え、絵と数字を二重に読み上げない。
+export function RatingBurger({ value, max, size = 'md', fractionDigits }: Props) {
+  const { t } = useTranslation()
+  const shown = roundRating(value)
+  const text = fractionDigits === undefined ? String(shown) : shown.toFixed(fractionDigits)
+  return (
+    <span role="img" aria-label={t('common.ratingAria', { value: text, max })} className={styles.rate}>
+      <RatingBurgerIcon ratio={max > 0 ? shown / max : 0} size={size} />
+      <b aria-hidden="true">{text}</b>
+    </span>
+  )
+}

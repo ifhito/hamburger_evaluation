@@ -167,3 +167,78 @@ func TestStatsWorkerLoop(t *testing.T) {
 		waitFor(t, "goroutine が元の数に戻る", func() bool { return runtime.NumGoroutine() <= before })
 	})
 }
+
+// orderedRunner は、呼ばれた順番を共有の記録に残し、決まった件数とエラーを返す statsRunner である。
+type orderedRunner struct {
+	name  string
+	order *[]string
+	n     int
+	err   error
+	after func()
+}
+
+func (r orderedRunner) RunOnce(context.Context) (int, error) {
+	*r.order = append(*r.order, r.name)
+	if r.after != nil {
+		r.after()
+	}
+	return r.n, r.err
+}
+
+func TestStatsCycle(t *testing.T) {
+	t.Run("ワーカーを渡した順に 1 回ずつ実行し、処理した件数の合計を返す", func(t *testing.T) {
+		var order []string
+		cycle := NewStatsCycle(orderedRunner{name: "burgers", order: &order, n: 3}, orderedRunner{name: "shops", order: &order, n: 2})
+		n, err := cycle.RunOnce(context.Background())
+		if err != nil || n != 5 {
+			t.Fatalf("RunOnce = (%d, %v), want (5, nil)", n, err)
+		}
+		if len(order) != 2 || order[0] != "burgers" || order[1] != "shops" {
+			t.Errorf("実行の順 = %v, want [burgers shops]", order)
+		}
+	})
+
+	t.Run("1 つのワーカーが失敗しても、続くワーカーは実行し、失敗をまとめて返す", func(t *testing.T) {
+		var order []string
+		boom := errors.New("boom")
+		cycle := NewStatsCycle(orderedRunner{name: "burgers", order: &order, err: boom}, orderedRunner{name: "shops", order: &order, n: 1})
+		n, err := cycle.RunOnce(context.Background())
+		if !errors.Is(err, boom) || n != 1 {
+			t.Fatalf("RunOnce = (%d, %v), want (1, boom を含むエラー)", n, err)
+		}
+		if len(order) != 2 {
+			t.Errorf("実行の順 = %v, want 2 つとも実行する", order)
+		}
+	})
+
+	t.Run("ctx が取り消されたら、続くワーカーは実行しない", func(t *testing.T) {
+		var order []string
+		ctx, cancel := context.WithCancel(context.Background())
+		cycle := NewStatsCycle(
+			orderedRunner{name: "burgers", order: &order, err: context.Canceled, after: cancel},
+			orderedRunner{name: "shops", order: &order},
+		)
+		if _, err := cycle.RunOnce(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v, want context.Canceled", err)
+		}
+		if len(order) != 1 {
+			t.Errorf("実行の順 = %v, want 取り消し後は実行しない", order)
+		}
+	})
+
+	t.Run("周期の実行(StatsWorkerLoop)に渡すと、サイクルのたびに、すべてのワーカーが実行される", func(t *testing.T) {
+		first, second := newFakeStatsRunner(), newFakeStatsRunner()
+		loop := StartStatsWorker(NewStatsCycle(first, second), time.Millisecond)
+		deadline := time.After(5 * time.Second)
+		for first.callCount() < 2 || second.callCount() < 2 {
+			select {
+			case <-deadline:
+				t.Fatalf("2 サイクル分が実行されない(first %d, second %d)", first.callCount(), second.callCount())
+			case <-time.After(time.Millisecond):
+			}
+		}
+		if err := loop.Stop(context.Background()); err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+	})
+}

@@ -76,9 +76,13 @@ func (q *Queries) GetShop(ctx context.Context, id string) (Shop, error) {
 
 const getShopWithCreator = `-- name: GetShopWithCreator :one
 SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
-       u.username AS creator_username
+       u.username AS creator_username,
+       COALESCE(ss.review_count, 0)::bigint AS review_count,
+       ss.average_rating,
+       ss.photo_key
 FROM shops s
 LEFT JOIN users u ON u.id = s.creator_id
+LEFT JOIN shop_stats ss ON ss.shop_id = s.id
 WHERE s.id = $1
 `
 
@@ -89,8 +93,12 @@ type GetShopWithCreatorRow struct {
 	ModerationNote  pgtype.Text
 	CreatorID       *string
 	CreatorUsername pgtype.Text
+	ReviewCount     int64
+	AverageRating   pgtype.Float8
+	PhotoKey        pgtype.Text
 }
 
+// 集計(件数・平均・写真)は、shop_stats の保存された値を添える(未集計のショップは、件数 0・平均と写真なし)。
 func (q *Queries) GetShopWithCreator(ctx context.Context, id string) (GetShopWithCreatorRow, error) {
 	row := q.db.QueryRow(ctx, getShopWithCreator, id)
 	var i GetShopWithCreatorRow
@@ -101,6 +109,9 @@ func (q *Queries) GetShopWithCreator(ctx context.Context, id string) (GetShopWit
 		&i.ModerationNote,
 		&i.CreatorID,
 		&i.CreatorUsername,
+		&i.ReviewCount,
+		&i.AverageRating,
+		&i.PhotoKey,
 	)
 	return i, err
 }
@@ -170,73 +181,18 @@ func (q *Queries) ListShopReviews(ctx context.Context, shopID string) ([]ListSho
 	return items, nil
 }
 
-const listShopSummaries = `-- name: ListShopSummaries :many
-WITH kept AS (
-    SELECT sb.shop_id, r.id, r.rating, r.photo_key, r.created_at
-    FROM reviews r
-    JOIN shops_burgers sb ON sb.burger_id = r.burger_id
-    JOIN users u ON u.id = r.user_id
-    WHERE sb.shop_id = ANY($1::uuid[])
-      AND r.discarded_at IS NULL AND u.discarded_at IS NULL
-), latest_photo AS (
-    SELECT DISTINCT ON (shop_id) shop_id, photo_key
-    FROM kept
-    WHERE photo_key IS NOT NULL
-    ORDER BY shop_id, created_at DESC, id DESC
-)
-SELECT k.shop_id,
-       COUNT(*)::bigint AS review_count,
-       AVG(k.rating)::float8 AS average_rating,
-       lp.photo_key
-FROM kept k
-LEFT JOIN latest_photo lp ON lp.shop_id = k.shop_id
-GROUP BY k.shop_id, lp.photo_key
-`
-
-type ListShopSummariesRow struct {
-	ShopID        string
-	ReviewCount   int64
-	AverageRating float64
-	PhotoKey      pgtype.Text
-}
-
-// 指定した shop それぞれの、レビューの件数・評価の平均・ショップの写真のキー(写真つきで
-// 最も新しいレビューの写真)。集計の対象は、ListShopReviews(shop 詳細に出るレビュー)と同じ範囲:
-// discard されていない user の、discard されていない review。集計の意味と丸めは
-// domain.ShopSummary が持つ。1 回の集約で、shop の件数に比例してクエリを増やさない。
-// レビューのない shop は行を返さない(呼び出し側が、空の集計にする)。
-func (q *Queries) ListShopSummaries(ctx context.Context, shopIds []string) ([]ListShopSummariesRow, error) {
-	rows, err := q.db.Query(ctx, listShopSummaries, shopIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListShopSummariesRow
-	for rows.Next() {
-		var i ListShopSummariesRow
-		if err := rows.Scan(
-			&i.ShopID,
-			&i.ReviewCount,
-			&i.AverageRating,
-			&i.PhotoKey,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listShops = `-- name: ListShops :many
-SELECT id, name, status, moderation_note, creator_id FROM shops
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+       COALESCE(ss.review_count, 0)::bigint AS review_count,
+       ss.average_rating,
+       ss.photo_key
+FROM shops s
+LEFT JOIN shop_stats ss ON ss.shop_id = s.id
 WHERE ($1::boolean
-       OR status = 1
-       OR creator_id = $2::uuid)
-  AND ($3::text IS NULL OR name ILIKE $3::text)
-ORDER BY name, id
+       OR s.status = 1
+       OR s.creator_id = $2::uuid)
+  AND ($3::text IS NULL OR s.name ILIKE $3::text)
+ORDER BY s.name, s.id
 LIMIT $5 OFFSET $4
 `
 
@@ -254,6 +210,9 @@ type ListShopsRow struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	CreatorID      *string
+	ReviewCount    int64
+	AverageRating  pgtype.Float8
+	PhotoKey       pgtype.Text
 }
 
 // 以下の WHERE 句は domain.ShopVisibility
@@ -262,6 +221,8 @@ type ListShopsRow struct {
 // あらかじめエスケープ済みの ILIKE パターン（キーワードフィルタなしなら
 // NULL）である。creator_id を NULL の viewer_id と比較しても決して真に
 // ならず、これがまさに匿名の場合である。
+// 集計(件数・平均・写真)は、shop_stats の保存された値を LEFT JOIN で添える(1 回のクエリ)。集計は非同期に
+// 計算されるので、行がないショップ(未集計)は、件数 0・平均と写真なしになる。
 func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListShopsRow, error) {
 	rows, err := q.db.Query(ctx, listShops,
 		arg.ViewAll,
@@ -283,6 +244,9 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 			&i.Status,
 			&i.ModerationNote,
 			&i.CreatorID,
+			&i.ReviewCount,
+			&i.AverageRating,
+			&i.PhotoKey,
 		); err != nil {
 			return nil, err
 		}

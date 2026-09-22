@@ -75,14 +75,14 @@ func NewAuth(query UserQuery, hasher PasswordHasher, issuer TokenIssuer, verifie
 const dummyPasswordDigest = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
 // Login は email とパスワードで active なユーザーを認証し、新しいトークンと
-// ともにそのユーザーを返す。認証情報が signup と同じ規則（domain.ValidateCredentials）
+// ともにそのユーザーを返す。認証情報が signup と同じ規則（domain.CredentialsIssues）
 // を満たさないときは、DB の検索も hash の比較も行わず *domain.ValidationError を返す。
 // 規則はアカウントの有無に関係なく同じ条件で判定するので、応答から、どの email に
 // アカウントがあるかは分からない。規則を満たしたうえで、未知の email と誤った
 // パスワードは、どちらも domain.ErrInvalidCredentials を返す。
 func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, string, error) {
-	if msgs := domain.ValidateCredentials(email, password); len(msgs) > 0 {
-		return domain.User{}, "", &domain.ValidationError{Messages: msgs}
+	if issues := domain.CredentialsIssues(email, password); len(issues) > 0 {
+		return domain.User{}, "", domain.NewValidationError(issues...)
 	}
 	creds, err := a.query.GetActiveUserByEmail(ctx, email)
 	if err != nil {

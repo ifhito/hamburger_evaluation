@@ -472,19 +472,32 @@ func withCookie(fn func(*http.Cookie) *http.Cookie) func(*runOpts) {
 // exchange は、コードを、そのコードの手続きを終えたブラウザ(コールバックの応答が「結び付けの値」の cookie を
 // 設定したブラウザ)が交換する要求である。
 func (k *googleKit) exchange(code string) *httptest.ResponseRecorder {
+	return k.exchangeIn(code, "")
+}
+
+// exchangeIn は、exchange と同じだが、Accept-Language ヘッダーを付ける(空なら付けない)。
+func (k *googleKit) exchangeIn(code, acceptLanguage string) *httptest.ResponseRecorder {
 	k.mu.Lock()
 	cookies := k.handoffs[code]
 	k.mu.Unlock()
-	return k.exchangeWith(code, cookies...)
+	return k.exchangeAs(code, acceptLanguage, cookies...)
 }
 
 // exchangeWith は、コードを、指定した cookie を持つブラウザが交換する要求である(cookie を渡さなければ、別のブラウザ)。
 // cookie は、ブラウザと同じく、Path が合うものだけが送られる。
 func (k *googleKit) exchangeWith(code string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	return k.exchangeAs(code, "", cookies...)
+}
+
+// exchangeAs は、exchangeWith に、Accept-Language(空なら付けない)を足したものである。
+func (k *googleKit) exchangeAs(code, acceptLanguage string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(map[string]string{"code": code})
 	req := httptest.NewRequest(http.MethodPost, "/auth/google/exchange", strings.NewReader(string(body)))
 	for _, c := range sendable(cookies, "/auth/google/exchange") {
 		req.AddCookie(c)
+	}
+	if acceptLanguage != "" {
+		req.Header.Set("Accept-Language", acceptLanguage)
 	}
 	rec := httptest.NewRecorder()
 	k.router.ServeHTTP(rec, req)

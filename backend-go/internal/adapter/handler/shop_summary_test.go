@@ -8,13 +8,16 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/statsworkertest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uowtest"
 )
 
 func jsonKeys(t *testing.T, raw []byte) []string {
@@ -36,7 +39,7 @@ func jsonKeys(t *testing.T, raw []byte) []string {
 func TestShopSummaryFields(t *testing.T) {
 	repo := seedShops(uid.N(1))
 	repo.summaries = map[string]domain.ShopSummary{
-		uid.N(1): domain.NewShopSummary(3, 4.25, shopPtr("reviews/latest.jpg")),
+		uid.N(1): domain.ShopSummary{ReviewCount: 3, AverageRating: shopPtr(4.3), PhotoKey: shopPtr("reviews/latest.jpg")},
 	}
 	router, aliceAuth, _, _ := newShopsRouter(t, repo)
 
@@ -103,7 +106,7 @@ func TestShopSummaryFields(t *testing.T) {
 func TestMCPListShopsCarriesSummary(t *testing.T) {
 	k := newMCPKit(t)
 	k.shops.summaries = map[string]domain.ShopSummary{
-		uid.N(1): domain.NewShopSummary(3, 4.25, nil),
+		uid.N(1): domain.ShopSummary{ReviewCount: 3, AverageRating: shopPtr(4.3)},
 	}
 	alice := k.connect(t, k.token(k.alice, readScope))
 
@@ -164,11 +167,24 @@ func TestShopSummaryThroughRealQuery(t *testing.T) {
 	router := handler.NewRouter(okPinger, auth, unusedSignups(), shops,
 		reviewsUsecase(newReviewStoreFake(), storage.NewDisk(t.TempDir(), "/photos")), usersUsecase(users, hasherFake{}), nil, nil, nil)
 
+	// 集計は、あとからワーカーが計算する(結果整合)。レビューを入れただけの時点では、まだ集計されていない。
 	rec := do(router, http.MethodGet, "/shops", "", "")
+	unstated := `[{"id":"` + quiet + `","name":"Quiet Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},` +
+		`{"id":"` + shop + `","name":"Real Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`
+	if rec.Code != http.StatusOK || rec.Body.String() != unstated {
+		t.Errorf("集計の前の一覧 = %d %s, want %s(まだ集計されていないショップは、0・null・null)", rec.Code, rec.Body, unstated)
+	}
+
+	if _, err := conn.Exec(ctx, `INSERT INTO shop_stats_recalc_requests (shop_id) VALUES ($1)`, shop); err != nil {
+		t.Fatal(err)
+	}
+	statsworkertest.SettleShops(ctx, t, statsworkertest.NewShopWorker(conn, uowtest.Clock{T: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)}))
+
+	rec = do(router, http.MethodGet, "/shops", "", "")
 	want := `[{"id":"` + quiet + `","name":"Quiet Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},` +
 		`{"id":"` + shop + `","name":"Real Diner","status":"active","photo_url":"/photos/reviews/latest.jpg","average_rating":4.5,"review_count":2}]`
 	if rec.Code != http.StatusOK || rec.Body.String() != want {
-		t.Errorf("一覧 = %d %s, want %s", rec.Code, rec.Body, want)
+		t.Errorf("集計のあとの一覧 = %d %s, want %s", rec.Code, rec.Body, want)
 	}
 
 	rec = do(router, http.MethodGet, "/shops/"+shop, "", "")

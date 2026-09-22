@@ -323,8 +323,8 @@ func TestReviewsCreate(t *testing.T) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
 		}
 		want := []string{"Rating must be in 1..5", "Comment can't be blank"}
-		if !reflect.DeepEqual(vErr.Messages, want) {
-			t.Errorf("messages = %v, want %v", vErr.Messages, want)
+		if !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
+			t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
 		}
 	})
 
@@ -393,8 +393,8 @@ func TestReviewsCreate(t *testing.T) {
 				if !errors.As(err, &vErr) {
 					t.Fatalf("error = %v, want *domain.ValidationError", err)
 				}
-				if want := []string{"Burger name can't be blank"}; !reflect.DeepEqual(vErr.Messages, want) {
-					t.Errorf("messages = %v, want %v", vErr.Messages, want)
+				if want := []string{"Burger name can't be blank"}; !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
+					t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
 				}
 			})
 		}
@@ -409,8 +409,8 @@ func TestReviewsCreate(t *testing.T) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
 		}
 		want := []string{"Rating must be in 1..5", "Comment can't be blank"}
-		if !reflect.DeepEqual(vErr.Messages, want) {
-			t.Errorf("messages = %v, want %v", vErr.Messages, want)
+		if !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
+			t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
 		}
 	})
 }
@@ -491,8 +491,8 @@ func TestReviewsUpdate(t *testing.T) {
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
 		}
-		if want := []string{"Rating must be in 1..5"}; !reflect.DeepEqual(vErr.Messages, want) {
-			t.Errorf("messages = %v, want %v", vErr.Messages, want)
+		if want := []string{"Rating must be in 1..5"}; !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
+			t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
 		}
 	})
 
