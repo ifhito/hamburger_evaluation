@@ -38,6 +38,13 @@ const signedIn = (returnTo: string): GoogleExchangeResponse => ({
 const passwordLogin = { id: "7", username: "carol", email: "carol@gmail.example", canModerate: false, token: "jwt-from-password" };
 const CONFLICT = "An account with this email address already exists. Sign in with your password, then connect Google from your profile.";
 
+// backend の実際の失敗の応答(reason つき。文言は Accept-Language で日本語にもなるが、reason は言語によらない)を、
+// テストの代役で再現する(本物の GoogleExchangeError を使う。authApiClient.exchangeGoogleCode の実装は、
+// authApi ごとモックしているので通らない)。
+function googleFailure(messages: string[], status: number, opts: { returnTo?: string; reason?: string } = {}) {
+  return new GoogleExchangeError(new ApiError(messages, status, { returnTo: opts.returnTo, reason: opts.reason }));
+}
+
 // いまの場所と、ログイン中の利用者を、文字として出す(遷移と認証の状態を確かめるため)。
 function Probe() {
   const { pathname, search } = useLocation();
@@ -187,7 +194,7 @@ describe("Google の手続きが失敗したあとの、元の画面への戻り
 
   // backend は、失敗の応答(409・400)に、検証済みの戻り先(return_to)を含める。画面は、それをサインインの画面へ渡すだけ。
   async function failWith(returnTo: string | undefined) {
-    exchangeGoogleCode.mockRejectedValue(new GoogleExchangeError(new ApiError([CONFLICT], 409, { returnTo })));
+    exchangeGoogleCode.mockRejectedValue(googleFailure([CONFLICT], 409, { returnTo, reason: "google.account_exists" }));
     return showAt("/auth/google/complete?code=one-time-code");
   }
 
@@ -451,7 +458,7 @@ describe("Google の結果の画面の見出し・読み上げ", () => {
   });
 
   it("サインインの手続きの失敗は、見出し「Could not sign in with Google」と、理由の小見出し(デザインの alert-title)+ API の文言の赤いエラーで出す", async () => {
-    exchangeGoogleCode.mockRejectedValue(new ApiError([CONFLICT], 409));
+    exchangeGoogleCode.mockRejectedValue(googleFailure([CONFLICT], 409, { reason: "google.account_exists" }));
     const page = await showAt("/auth/google/complete?code=one-time-code");
 
     await eventually(() => expect(page.querySelector("[role=alert]")).not.toBeNull());
@@ -474,21 +481,26 @@ describe("Google の結果の画面の見出し・読み上げ", () => {
 // ボタンをもう一度 or パスワードでサインイン)を出し分ける。
 describe("失敗の理由ごとの小見出し・案内・導線(design/redesign/google-complete.html)", () => {
   it("「ほかのアカウントに連携済み」の理由は、小見出し「Already connected to another account」を出す", async () => {
-    exchangeGoogleCode.mockRejectedValue(new ApiError(["This Google account is already connected to another account."], 409));
+    exchangeGoogleCode.mockRejectedValue(
+      googleFailure(["This Google account is already connected to another account."], 409, { reason: "google.identity_taken" }),
+    );
     const page = await showAt("/auth/google/complete?code=one-time-code");
 
     await eventually(() => expect(page.querySelector("[role=alert] b")?.textContent).toBe("Already connected to another account"));
   });
 
   it("戻り先(許可の画面)つきで「同じメールのアカウントがある」失敗のときは、元の画面に戻れる案内(.notice 相当)を出す", async () => {
-    exchangeGoogleCode.mockRejectedValue(new GoogleExchangeError(new ApiError([CONFLICT], 409, { returnTo: "/oauth/authorize?client_id=app-1" })));
+    exchangeGoogleCode.mockRejectedValue(
+      googleFailure([CONFLICT], 409, { returnTo: "/oauth/authorize?client_id=app-1", reason: "google.account_exists" }),
+    );
     const page = await showAt("/auth/google/complete?code=one-time-code");
 
     await eventually(() => expect(page.textContent).toContain("After you sign in, you will go back to where you were"));
+    expect(page.querySelector("[role=status]")?.textContent).toContain("After you sign in, you will go back to where you were");
   });
 
   it("戻り先がない「同じメールのアカウントがある」失敗のときは、元の画面に戻れる案内を出さない", async () => {
-    exchangeGoogleCode.mockRejectedValue(new ApiError([CONFLICT], 409));
+    exchangeGoogleCode.mockRejectedValue(googleFailure([CONFLICT], 409, { reason: "google.account_exists" }));
     const page = await showAt("/auth/google/complete?code=one-time-code");
 
     await eventually(() => expect(page.querySelector("[role=alert]")).not.toBeNull());
@@ -496,7 +508,7 @@ describe("失敗の理由ごとの小見出し・案内・導線(design/redesign
   });
 
   it("「Google sign-in failed」の理由(サインインの試み)は、Google のボタンをもう一度出し、パスワードでサインインは、それと並ぶ控えめなリンクのままにする", async () => {
-    exchangeGoogleCode.mockRejectedValue(new ApiError(["Google sign-in failed. Please try again."], 400));
+    exchangeGoogleCode.mockRejectedValue(googleFailure(["Google sign-in failed. Please try again."], 400, { reason: "google.sign_in_failed" }));
     const page = await showAt("/auth/google/complete?code=one-time-code");
 
     await eventually(() => expect(byText(page, "a", "Continue with Google")).toBeDefined());
@@ -505,13 +517,13 @@ describe("失敗の理由ごとの小見出し・案内・導線(design/redesign
   });
 
   it("導線が 1 つだけの理由(exists など)は、目立つボタンの見た目(.btn.primary 相当)にする。Google のボタンと並ぶとき(控えめなリンク)とは、見た目の class が違う", async () => {
-    exchangeGoogleCode.mockRejectedValue(new ApiError([CONFLICT], 409));
+    exchangeGoogleCode.mockRejectedValue(googleFailure([CONFLICT], 409, { reason: "google.account_exists" }));
     const solo = await showAt("/auth/google/complete?code=one-time-code");
     await eventually(() => expect(byText(solo, "a", "Sign in with your password")).toBeDefined());
     const soloClassName = need(byText<HTMLAnchorElement>(solo, "a", "Sign in with your password"), "solo link").className;
     await cleanup();
 
-    exchangeGoogleCode.mockRejectedValue(new ApiError(["Google sign-in failed. Please try again."], 400));
+    exchangeGoogleCode.mockRejectedValue(googleFailure(["Google sign-in failed. Please try again."], 400, { reason: "google.sign_in_failed" }));
     const paired = await showAt("/auth/google/complete?code=one-time-code");
     await eventually(() => expect(byText(paired, "a", "Sign in with your password")).toBeDefined());
     const pairedClassName = need(byText<HTMLAnchorElement>(paired, "a", "Sign in with your password"), "paired link").className;
@@ -522,10 +534,22 @@ describe("失敗の理由ごとの小見出し・案内・導線(design/redesign
   it("ログイン中の利用者の連携の失敗は、理由にかかわらず、Google のボタンをもう一度出さない(プロフィールに戻るだけ)", async () => {
     localStorage.setItem("token", "jwt-existing");
     me.mockResolvedValue({ id: "7", username: "carol", email: "carol@gmail.example", canModerate: false });
-    exchangeGoogleCode.mockRejectedValue(new ApiError(["Google sign-in failed. Please try again."], 400));
+    exchangeGoogleCode.mockRejectedValue(googleFailure(["Google sign-in failed. Please try again."], 400, { reason: "google.sign_in_failed" }));
     const page = await showAt("/auth/google/complete?code=one-time-code");
 
     await eventually(() => expect(byText(page, "a", "Back to your profile")).toBeDefined());
     expect(byText(page, "a", "Continue with Google")).toBeUndefined();
+  });
+
+  it("日本語の文言(Accept-Language が日本語のブラウザ)でも、reason が同じなら、同じ小見出し・導線になる(文言では判定しない)", async () => {
+    exchangeGoogleCode.mockRejectedValue(
+      googleFailure(["このメールアドレスのアカウントが、すでにあります。パスワードでサインインして、プロフィールから Google を連携してください。"], 409, {
+        reason: "google.account_exists",
+      }),
+    );
+    const page = await showAt("/auth/google/complete?code=one-time-code");
+
+    await eventually(() => expect(page.querySelector("[role=alert] b")?.textContent).toBe("An account already exists"));
+    expect(byText(page, "a", "Sign in with your password")).toBeDefined();
   });
 });

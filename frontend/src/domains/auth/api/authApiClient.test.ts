@@ -117,6 +117,18 @@ describe("authApi の Google でのサインイン", () => {
     expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as GoogleExchangeError).returnTo).toBe("");
   });
 
+  it("失敗の応答が reason(言語によらない理由の識別子)を含むときは、GoogleExchangeError の reason に入る(ないとき・文字列でないときは空。文言は Accept-Language で変わるので、判定には使わない)", async () => {
+    respondWith(409, { errors: ["このメールアドレスのアカウントが、すでにあります。"], reason: "google.account_exists" });
+    const withReason = await authApi.exchangeGoogleCode("c").catch((e: unknown) => e);
+    expect((withReason as GoogleExchangeError).reason).toBe("google.account_exists");
+
+    respondWith(400, { errors: ["failed"] });
+    expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as GoogleExchangeError).reason).toBe("");
+
+    respondWith(400, { errors: ["failed"], reason: 42 });
+    expect(((await authApi.exchangeGoogleCode("c").catch((e: unknown) => e)) as GoogleExchangeError).reason).toBe("");
+  });
+
   it("Google の交換以外の API の失敗は、ふつうの ApiError のまま(Google 専用の項目を持たない)", async () => {
     respondWith(401, { error: "Invalid email or password", return_to: "/somewhere" });
     const failed = await authApi.login({ email: "a@example.com", password: "x" }).catch((e: unknown) => e);

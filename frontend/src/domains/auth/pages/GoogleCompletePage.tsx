@@ -19,6 +19,10 @@ interface Failure {
   messages: string[];
   // backend が失敗の応答に含めた、手続きを始めた画面(なければ空)。
   returnTo: string;
+  // デザイン(design/redesign/google-complete.html)が対応する理由か(exists/taken/alreadyLinked/signInFailed/
+  // linkInvalid)。backend の応答の reason(言語によらない識別子)から決める。対応する理由がない(サーバーの
+  // 障害・通信の失敗など、デザインに状態がない)ときは undefined。
+  reason: GoogleFailureReason | undefined;
   // 同じコードでやり直せる失敗か(サーバーの障害・通信の失敗。backend は、そのとき、コードを消費しない)。
   retryable: boolean;
 }
@@ -27,22 +31,18 @@ interface Failure {
 // HTTP ステータスの数字は、直書きしない)。
 const isServerError = (status: number) => String(status).startsWith("5");
 
-// デザイン(design/redesign/google-complete.html)は、失敗の理由ごとに、小見出し・導線を出し分ける。API は理由を
-// 示す機械可読な値を返さない(文言だけ)ので、ここでは、API の英語の文言(と、この画面が自分で組み立てる「コードが
-// ない」の文言)を照合する。
-// ponytail: 文言の完全一致による判定(backend/internal/adapter/handler/messages.go の英語の文言と合わせている)。
-// backend が文言を変えると、ここも直す必要がある。将来、API が機械可読な理由の値を返すようになれば、その値で
-// 判定する形に置き換える。
+// デザイン(design/redesign/google-complete.html)は、失敗の理由ごとに、小見出し・導線を出し分ける。backend の
+// 応答の reason(messages.go の key* 定数と同じ、言語によらない識別子。例: "google.account_exists")を、この
+// 画面の理由の名前に変換する(この変換だけが、この画面の言葉と backend の識別子を結び付ける)。API の文言
+// (messages)は Accept-Language で日本語にもなるので、文言では判定しない。
 type GoogleFailureReason = "exists" | "taken" | "alreadyLinked" | "signInFailed" | "linkInvalid";
 const GOOGLE_FAILURE_REASON: Record<string, GoogleFailureReason> = {
-  "An account with this email address already exists. Sign in with your password, then connect Google from your profile.": "exists",
-  "This Google account is already connected to another account.": "taken",
-  "Your account is already connected to a Google account. Disconnect it first.": "alreadyLinked",
-  "Google sign-in failed. Please try again.": "signInFailed",
-  "The Google sign-in link is invalid or has expired. Please try again.": "linkInvalid",
-  "This sign-in link is no longer available. Please start again.": "linkInvalid",
+  "google.account_exists": "exists",
+  "google.identity_taken": "taken",
+  "google.already_linked": "alreadyLinked",
+  "google.sign_in_failed": "signInFailed",
+  "google.code_invalid": "linkInvalid",
 };
-const googleFailureReason = (messages: string[]): GoogleFailureReason | undefined => GOOGLE_FAILURE_REASON[messages[0]];
 
 // Google でのサインインの手続きの結果の受け皿(/auth/google/complete?code=…)。backend が、成功も失敗も、
 // 1 回限りのコードに入れて、この画面へ戻す。ここでは、そのコードを API と交換して、結果を受け取るだけで、
@@ -88,9 +88,11 @@ export default function GoogleCompletePage() {
             ? {
                 messages: retryable ? [t("auth.google.complete.temporary")] : e.messages,
                 returnTo: e instanceof GoogleExchangeError ? e.returnTo : "",
+                // retryable(サーバーの障害・通信の失敗)は、デザインに対応する状態がない。
+                reason: retryable ? undefined : GOOGLE_FAILURE_REASON[e instanceof GoogleExchangeError ? e.reason : ""],
                 retryable,
               }
-            : { messages: [t("auth.google.complete.temporary")], returnTo: "", retryable },
+            : { messages: [t("auth.google.complete.temporary")], returnTo: "", reason: undefined, retryable },
         );
         return;
       }
@@ -100,8 +102,9 @@ export default function GoogleCompletePage() {
         // サインインも結び付けも、手続きを始めた画面(なければ既定の画面)へ戻す。
         if (mounted.current) void navigate(appPathOrNull(res.returnTo) ?? "/reviews", { replace: true });
       } catch {
-        // 成功したあとの処理の失敗(ログインの状態を保存できない・想定外の本文など)。コードは使い切られているので、やり直せない。
-        setFailure({ messages: [t("auth.google.error")], returnTo: "", retryable: false });
+        // 成功したあとの処理の失敗(ログインの状態を保存できない・想定外の本文など)。コードは使い切られているので、
+        // やり直せない。同じ状況(Google でのサインインに失敗した)として案内し、Google のボタンをもう一度出す。
+        setFailure({ messages: [t("auth.google.error")], returnTo: "", reason: "signInFailed", retryable: false });
       }
     };
     void run();
@@ -111,13 +114,15 @@ export default function GoogleCompletePage() {
     setFailure(null);
     setAttempt((n) => n + 1);
   };
-  const shown: Failure | null = code ? failure : { messages: [t("auth.google.complete.expired")], returnTo: "", retryable: false };
+  const shown: Failure | null = code
+    ? failure
+    : { messages: [t("auth.google.complete.expired")], returnTo: "", reason: "linkInvalid", retryable: false };
   // 見出し(サインインの失敗 / 連携の失敗)は、保存済みのトークンの有無だけで決める(GET /me の応答を待たない)。
   // user は GET /me が終わるまで null のままなので、待つと、ログイン中の利用者にも一瞬「サインインできませんでした」が出てしまう。
   const isLinkAttempt = getToken() !== null;
   // 失敗の画面の導線(戻り先のリンク)は、ログインの状態の復元(GET /me)が済んでから決める(復元の前は、ログイン中でも、user がまだない)。
 
-  const reason = shown ? googleFailureReason(shown.messages) : undefined;
+  const reason = shown?.reason;
   // デザインは、サインインの試み(連携ではない)で、理由が「Google のサインインに失敗した」「リンクが無効」の
   // ときだけ、Google のボタンをもう一度出す(連携の失敗は、常にプロフィールへ戻るだけ。google-complete.html の
   // actions-col の出し分け)。isLinkAttempt(トークンの有無)で判定し、GET /me の復元を待たない(h1 の見出しと同じ理由)。
@@ -125,7 +130,9 @@ export default function GoogleCompletePage() {
   // 導線がこれ 1 つだけのときは、デザインどおり目立つボタン(.btn.primary.linkbtn)にする。Google のボタンや、
   // 同じコードでの再試行(デザインに対応する状態がない、既存の挙動)と並ぶときは、控えめなテキストリンクのままにする。
   const soleAction = shown !== null && !shown.retryable && !showGoogleRestart;
-  const primaryLinkClassName = `${buttonStyles.btn} ${buttonStyles.primary} ${buttonStyles.block}`;
+  const linkClassName = (soleAction ? [buttonStyles.btn, buttonStyles.primary, buttonStyles.block] : [styles.textlink])
+    .filter(Boolean)
+    .join(" ");
   // exists-oauth: 許可の画面から始めた Google のサインインが「同じメールのアカウントがある」で失敗したとき、
   // パスワードでサインインすれば、元の画面に戻れることを案内する(google-complete.html の .notice)。
   const showContinueNotice = !isLinkAttempt && reason === "exists" && shown !== null && shown.returnTo !== "";
@@ -136,7 +143,9 @@ export default function GoogleCompletePage() {
         <div className={styles.status}>
           <h1 className={styles.title}>{t(isLinkAttempt ? "auth.google.complete.linkFailedTitle" : "auth.google.complete.failedTitle")}</h1>
           {showContinueNotice && (
-            <div className={styles.notice}>
+            // Alert(role="alert")ほど割り込まない、案内としての扱い(role="status")。挿入されたときに、
+            // スクリーンリーダーが読み上げる。
+            <div className={styles.notice} role="status">
               <b>{t("auth.google.complete.continueNoticeTitle")}</b>
               <span>{t("auth.google.complete.continueNoticeBody")}</span>
             </div>
@@ -153,15 +162,11 @@ export default function GoogleCompletePage() {
             )}
             {!restoringAuth &&
               (user ? (
-                <Link to={`/users/${user.id}`} className={soleAction ? primaryLinkClassName : styles.textlink}>
+                <Link to={`/users/${user.id}`} className={linkClassName}>
                   {t("auth.google.complete.backToProfile")}
                 </Link>
               ) : (
-                <Link
-                  to="/signin"
-                  state={shown.returnTo ? { from: shown.returnTo } : undefined}
-                  className={soleAction ? primaryLinkClassName : styles.textlink}
-                >
+                <Link to="/signin" state={shown.returnTo ? { from: shown.returnTo } : undefined} className={linkClassName}>
                   {t("auth.google.complete.backToSignin")}
                 </Link>
               ))}
