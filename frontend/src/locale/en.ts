@@ -83,11 +83,25 @@ const en = {
         loading: "Signing you in with Google\u2026",
         failedTitle: "Could not sign in with Google",
         linkFailedTitle: "Could not connect Google",
-        backToSignin: "Back to sign in",
+        // デザイン(design/redesign/google-complete.html)の文言(データの exists/taken/default の linkbtn と、
+        // failed/expired の textlink で、同じ文言)。
+        backToSignin: "Sign in with your password",
         backToProfile: "Back to your profile",
         retry: "Try again",
         temporary: "Something went wrong on our side. Please try again.",
         expired: "This sign-in link is no longer available. Please start again.",
+        // デザイン(design/redesign/google-complete.html の .notice。exists-oauth: 許可の画面から始めた Google の
+        // サインインが失敗したときの案内)。
+        continueNoticeTitle: "After you sign in, you will go back to where you were",
+        continueNoticeBody: "This is the screen you were on before you started with Google.",
+        // 失敗の理由ごとの小見出し(design/redesign/google-complete.html の <b class="alert-title"> の data-en)。
+        reasons: {
+          exists: { title: "An account already exists" },
+          taken: { title: "Already connected to another account" },
+          alreadyLinked: { title: "Already connected to a Google account" },
+          signInFailed: { title: "Google sign-in failed" },
+          linkInvalid: { title: "The link is no longer valid" },
+        },
       },
       profile: {
         heading: "Google",
