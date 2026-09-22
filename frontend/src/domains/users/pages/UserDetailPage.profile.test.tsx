@@ -88,7 +88,7 @@ describe("UserDetailPage のプロフィール本体", () => {
     const page = await show();
 
     expect(page.textContent).toContain("Newest first");
-    expect(page.querySelectorAll("article")).toHaveLength(1);
+    expect(page.querySelectorAll("time")).toHaveLength(1);
     expect(page.textContent).toContain("Nice");
   });
 

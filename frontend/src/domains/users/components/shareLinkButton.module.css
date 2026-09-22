@@ -14,18 +14,5 @@
 }
 
 .linkInput {
-  width: 100%;
-  height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--ui-control-border);
-  border-radius: 8px;
-  background: var(--ui-bg);
-  font-family: inherit;
-  font-size: 16px;
-  color: var(--ui-text);
-}
-
-.linkInput:focus-visible {
-  outline: 2px solid var(--ui-text);
-  outline-offset: 2px;
+  composes: input from '../../../components/ui/field.module.css';
 }

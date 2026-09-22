@@ -20,6 +20,11 @@ type ConnectionState = { kind: "loading" } | { kind: "failed" } | { kind: "loade
 // 操作の失敗。見出しは、どの操作かに応じた画面の言葉、messages は、API が返した文言(なければ画面側の文言)。
 type ActionError = { title: string; messages: string[] };
 
+// API のエラーから ActionError を組み立てる(API の文言があればそれを、なければ画面側の既定の文言を使う)。
+function errorFrom(title: string, e: unknown, fallback: string): ActionError {
+  return { title, messages: e instanceof ApiError ? e.messages : [fallback] };
+}
+
 interface ViewProps {
   state: ConnectionState;
   actionError: ActionError | null;
@@ -138,10 +143,7 @@ export function GoogleConnection({
       if (!isNavigable(redirectUrl)) throw new Error("unexpected redirect URL");
       navigateTo(redirectUrl);
     } catch (e) {
-      setActionError({
-        title: t("auth.google.profile.connectErrorTitle"),
-        messages: e instanceof ApiError ? e.messages : [t("auth.google.profile.connectError")],
-      });
+      setActionError(errorFrom(t("auth.google.profile.connectErrorTitle"), e, t("auth.google.profile.connectError")));
       setBusy(null);
     }
   };
@@ -155,10 +157,7 @@ export function GoogleConnection({
       await authApi.unlinkGoogle();
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 404)) {
-        setActionError({
-          title: t("auth.google.profile.disconnectErrorTitle"),
-          messages: e instanceof ApiError ? e.messages : [t("auth.google.profile.disconnectError")],
-        });
+        setActionError(errorFrom(t("auth.google.profile.disconnectErrorTitle"), e, t("auth.google.profile.disconnectError")));
         setBusy(null);
         return;
       }
@@ -166,7 +165,7 @@ export function GoogleConnection({
       // 取り直した一覧で確かめ、Google の連携が(取り直せなかったときも)残っていれば、解除できたとは言わない。
       const fresh = await refresh();
       if (!fresh || fresh.identities.some((i) => i.provider === GOOGLE_PROVIDER)) {
-        setActionError({ title: t("auth.google.profile.disconnectErrorTitle"), messages: [t("auth.google.profile.disconnectError")] });
+        setActionError(errorFrom(t("auth.google.profile.disconnectErrorTitle"), null, t("auth.google.profile.disconnectError")));
       } else {
         setDisconnected(true);
       }
