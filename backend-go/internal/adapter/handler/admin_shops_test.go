@@ -147,7 +147,7 @@ func TestCreateShop(t *testing.T) {
 			t.Errorf("anonymous list = %s, want []", anon)
 		}
 		own := do(router, http.MethodGet, "/shops?keyword=New+Shack", "", aliceAuth).Body.String()
-		if want := `[{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending"}]`; own != want {
+		if want := `[{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","photo_url":null,"average_rating":null,"review_count":0}]`; own != want {
 			t.Errorf("creator list = %s, want %s", own, want)
 		}
 	})
@@ -323,7 +323,7 @@ func TestAdminApproveShop(t *testing.T) {
 
 	t.Run("approve された shop は匿名の一覧に出る", func(t *testing.T) {
 		got := do(router, http.MethodGet, "/shops?keyword=Rejected+Grill", "", "").Body.String()
-		if want := `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active"}]`; got != want {
+		if want := `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`; got != want {
 			t.Errorf("anonymous list = %s, want %s", got, want)
 		}
 	})

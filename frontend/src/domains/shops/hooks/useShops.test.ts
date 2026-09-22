@@ -5,7 +5,14 @@ import type { Shop } from "../api/types";
 
 function page(hasMore: boolean, count = 1): Page<Shop> {
   return {
-    items: Array.from({ length: count }, (_, i) => ({ id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`, name: `Shop ${i + 1}`, status: "active" as const })),
+    items: Array.from({ length: count }, (_, i) => ({
+      id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+      name: `Shop ${i + 1}`,
+      status: "active" as const,
+      photoUrl: null,
+      averageRating: null,
+      reviewCount: 0,
+    })),
     hasMore,
   };
 }

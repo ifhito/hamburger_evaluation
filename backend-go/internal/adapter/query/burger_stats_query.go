@@ -38,31 +38,20 @@ func (r *BurgerStatsQuery) ListBurgerReviewFacts(ctx context.Context, burgerID s
 	if err != nil {
 		return nil, fmt.Errorf("list burger review facts: %w", err)
 	}
-	// 同じ投稿者のレビューが複数あっても、履歴の読み取りは投稿者ごとに 1 回で済ませる。まず投稿者の
-	// 一覧(重複なし)を作り、まとめて読んだ評価を投稿者ごとに振り分ける。
-	historyByUser := make(map[string][]float64, len(rows))
 	userIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
-		if _, seen := historyByUser[row.UserID]; !seen {
-			historyByUser[row.UserID] = nil
-			userIDs = append(userIDs, row.UserID)
-		}
+		userIDs = append(userIDs, row.UserID)
 	}
-	if len(userIDs) > 0 {
-		ratings, err := r.q.ListReviewerRatings(ctx, userIDs)
-		if err != nil {
-			return nil, fmt.Errorf("list burger review facts: list reviewer ratings: %w", err)
-		}
-		for _, rating := range ratings {
-			historyByUser[rating.UserID] = append(historyByUser[rating.UserID], float64(rating.Rating))
-		}
+	historyByUser, err := loadReviewerHistories(ctx, r.q, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list burger review facts: %w", err)
 	}
 	facts := make([]domain.ReviewFact, 0, len(rows))
 	for _, row := range rows {
 		facts = append(facts, domain.ReviewFact{
 			Rating:          float64(row.Rating),
 			CreatedAt:       row.CreatedAt.Time,
-			ReviewerHistory: domain.ReviewerHistory{Ratings: historyByUser[row.UserID]},
+			ReviewerHistory: historyByUser[row.UserID],
 		})
 	}
 	return facts, nil
@@ -96,4 +85,31 @@ func (r *BurgerStatsQuery) ListDueRecalcRequests(ctx context.Context, now time.T
 		requests = append(requests, domain.RecalcRequest{BurgerID: row.BurgerID, Version: row.Version, Attempts: int(row.Attempts)})
 	}
 	return requests, nil
+}
+
+// loadReviewerHistories は、投稿者ごとの、すべてのバーガーに付けた有効な評価(投稿者の信頼度の計算に使う履歴)を、
+// 投稿者の id をキーにして返す。同じ投稿者が複数のレビューを書いていても、読み取りは投稿者ごとに 1 回で済ませ
+// (重複を除いて、まとめて 1 回のクエリで読む)、投稿者ごとに振り分ける。バーガーの統計とショップの集計が共有する。
+func loadReviewerHistories(ctx context.Context, q *sqlcgen.Queries, userIDs []string) (map[string]domain.ReviewerHistory, error) {
+	histories := make(map[string]domain.ReviewerHistory, len(userIDs))
+	distinct := make([]string, 0, len(userIDs))
+	for _, id := range userIDs {
+		if _, seen := histories[id]; !seen {
+			histories[id] = domain.ReviewerHistory{}
+			distinct = append(distinct, id)
+		}
+	}
+	if len(distinct) == 0 {
+		return histories, nil
+	}
+	ratings, err := q.ListReviewerRatings(ctx, distinct)
+	if err != nil {
+		return nil, fmt.Errorf("list reviewer ratings: %w", err)
+	}
+	for _, rating := range ratings {
+		history := histories[rating.UserID]
+		history.Ratings = append(history.Ratings, float64(rating.Rating))
+		histories[rating.UserID] = history
+	}
+	return histories, nil
 }

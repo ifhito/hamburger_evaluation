@@ -94,8 +94,8 @@ function RatingInputDemo() {
   const [value, setValue] = useState<number | null>(null)
   return (
     <div style={{ display: 'grid', gap: 32 }}>
-      <RatingInput name="rating" label="Rating" value={value} onChange={setValue} min={1} max={5} />
-      <RatingInput name="rating-other" label="A range from GET /meta" value={value} onChange={setValue} min={1} max={7} />
+      <RatingInput label="Rating" value={value} onChange={setValue} min={1} max={5} />
+      <RatingInput label="A range from GET /meta" value={value} onChange={setValue} min={1} max={7} />
     </div>
   )
 }

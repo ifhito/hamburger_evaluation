@@ -37,16 +37,10 @@ describe("部品の CSS", () => {
     for (const [file, selector] of [
       ["button.module.css", ".btn:focus-visible"],
       ["field.module.css", ".input:focus-visible"],
-      ["ratingInput.module.css", ".step:has(.radio:focus-visible)"],
+      ["ratingInput.module.css", ".step:focus-visible"],
     ]) {
       expect(block(file, selector), `${file} ${selector}`).toMatch(/outline:\s*2px solid var\(--ui-text\)/);
     }
-  });
-
-  it("数字のボタンの本物のラジオは、透明にするだけで、display: none や visibility: hidden にしない(キーボード操作が壊れる)", () => {
-    const radio = block("ratingInput.module.css", ".radio");
-    expect(radio).toMatch(/opacity:\s*0/);
-    expect(radio).not.toMatch(/display:\s*none|visibility:\s*hidden/);
   });
 
   it("ハイコントラスト表示でも、選んだ数字を、システムの色で見分けられる", () => {

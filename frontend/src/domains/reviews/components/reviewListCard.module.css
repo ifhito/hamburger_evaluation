@@ -1,0 +1,44 @@
+/* 枠・角丸・背景・overflow:hidden は S45 の Card(components/ui/card.module.css)の .card、写真・本文の余白・
+   日付・コメント・投稿者の行は components/reviewCard.module.css(ショップ詳細の ShopReviewCard と共有)から借りる。
+   この画面だけの見た目は、コメントの下に置く対象のバーガー名(.target)だけ。 */
+.card {
+  composes: card from '../../../components/ui/card.module.css';
+}
+
+.photo {
+  composes: photo from '../../../components/reviewCard.module.css';
+}
+
+.noPhoto {
+  composes: noPhoto from '../../../components/reviewCard.module.css';
+}
+
+.body {
+  composes: body from '../../../components/reviewCard.module.css';
+}
+
+.row {
+  composes: row from '../../../components/reviewCard.module.css';
+}
+
+.ratingOnly {
+  composes: ratingOnly from '../../../components/reviewCard.module.css';
+}
+
+.date {
+  composes: date from '../../../components/reviewCard.module.css';
+}
+
+.comment {
+  composes: comment from '../../../components/reviewCard.module.css';
+}
+
+.target {
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.foot {
+  composes: foot from '../../../components/reviewCard.module.css';
+}

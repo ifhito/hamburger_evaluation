@@ -491,7 +491,7 @@ func TestUsersDelete(t *testing.T) {
 func TestUsersDeleteRevokesOAuthGrants(t *testing.T) {
 	newUsersWith := func(repo domain.UserRepository, unit *uowtest.UoW) *usecase.Users {
 		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
-		return usecase.NewUsers(query, domain.NewUsers(repo), unit, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), fakeHasher{})
+		return usecase.NewUsers(query, domain.NewUsers(repo), unit, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), fakeHasher{})
 	}
 	discardOK := &fakeUserRepo{discard: func(context.Context, string) error { return nil }}
 
@@ -535,7 +535,7 @@ func TestUsersDeleteRevokesOAuthGrants(t *testing.T) {
 func TestUsersDeleteDiscardsIdentities(t *testing.T) {
 	newUsersWith := func(repo domain.UserRepository, unit *uowtest.UoW) *usecase.Users {
 		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
-		return usecase.NewUsers(query, domain.NewUsers(repo), unit, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), fakeHasher{})
+		return usecase.NewUsers(query, domain.NewUsers(repo), unit, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), fakeHasher{})
 	}
 	discardOK := &fakeUserRepo{discard: func(context.Context, string) error { return nil }}
 

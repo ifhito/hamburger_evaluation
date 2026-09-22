@@ -96,11 +96,12 @@ backend-go/
 バーガーの統計(件数・平均・加重スコア)は、書き込みの応答のあとに、バックグラウンドのワーカーが計算し直す。書き込み(レビューの投稿・編集・削除、退会)は、統計を計算せず、**再計算の依頼**(`burger_stats_recalc_requests`。バーガーごとに 1 行。`000010_create_burger_stats_recalc_requests`)を、書き込みと同じトランザクションで登録するだけである。応答は統計の計算を待たず、同じバーガーへの書き込みが続いても、依頼は 1 行にまとまって、再計算は 1 回で済む。
 
 - **結果整合**: 統計は、書き込みの数秒あと(ワーカーの間隔 1 秒 + 計算)に表示へ反映される。書き込み直後の応答や一覧では、古い値のことがある。frontend は、この遅れを許して表示する(値を推測して書き換えない)。
-- **ワーカー**: 1 つの goroutine(`infra.StatsWorkerLoop`)が、起動の直後と、以降 `STATS_WORKER_INTERVAL` ごとに、`usecase.StatsWorker` の `RunOnce`(1 サイクル。テストはこれを直接呼ぶ)を実行する。`RunOnce` は、時期の来た依頼を最大 `STATS_WORKER_BATCH` 件取り出し、バーガーごとに別の `UnitOfWork` で「バーガーの行をロック → 統計を計算して保存 → 依頼を消す」を行う。プロセスが止まっていた間に溜まった依頼も、起動直後の 1 サイクルで処理される(依頼は DB にある)。
+- **ワーカー**: 1 つの goroutine(`infra.StatsWorkerLoop`)が、起動の直後と、以降 `STATS_WORKER_INTERVAL` ごとに、1 サイクル(`infra.StatsCycle`。テストはこれを直接呼ぶ)を実行する。1 サイクルは、`usecase.StatsWorker`(バーガーの統計)の `RunOnce` → `usecase.ShopStatsWorker`(ショップの集計。下の「ショップの集計」)の `RunOnce` の順に実行し、失敗しても続くワーカーは実行する(失敗はまとめて返す)。`StatsWorker.RunOnce` は、時期の来た依頼を最大 `STATS_WORKER_BATCH` 件取り出し、バーガーごとに別の `UnitOfWork` で「バーガーの行をロック → 統計を計算して保存 → **そのバーガーが紐づくショップの集計の再計算を依頼(同じトランザクション)** → 依頼を消す」を行う。プロセスが止まっていた間に溜まった依頼も、起動直後の 1 サイクルで処理される(依頼は DB にある)。
 - **比較つき削除**: 依頼には `version`(専用の sequence `burger_stats_recalc_requests_version_seq` から取る番号)があり、登録のたびに進む。再計算を終えた依頼を消すのは、取り出したときの `version` と一致するときだけで、再計算の最中に入った新しい書き込みの依頼を消さない(残った依頼は、次のサイクルで最新の状態になる)。`version` は、行を消して作り直しても戻らない(戻ると、古い再計算が、新しい依頼を同じ番号だと思って消す)。
 - **失敗**: 1 つのバーガーの失敗は、ほかのバーガーを止めない。失敗は、依頼に記録し(`attempts`・`next_attempt_at`・`last_error`(500 文字まで))、待ち時間を 2 秒から倍にして(上限 5 分)再試行する。`STATS_WORKER_MAX_ATTEMPTS` 回で打ち切り(error のログ `burger stats recalculation gave up`)、行は残るが取り出されない。そのバーガーに新しい書き込みがあれば、最初からやり直す。
 - **複数のインスタンス**: 同じバーガーの再計算は、バーガーの行のロックで直列になる。複数のインスタンスのワーカーが同じ依頼を取り出しても、片方が待つだけで、統計は壊れない。
-- **停止の順**: HTTP サーバー → 統計のワーカー(処理中のバッチを終えるまで待ち、`shutdownTimeout` を超えたら取り消す。取り消された依頼は残る) → メール送信 → DB プール。
+- **停止の順**: HTTP サーバー → 統計のワーカー(バーガーとショップ、両方のサイクル。処理中のバッチを終えるまで待ち、`shutdownTimeout` を超えたら取り消す。取り消された依頼は残る) → メール送信 → DB プール。
+- **設定はバーガーとショップで共通**: `STATS_WORKER_INTERVAL`・`STATS_WORKER_BATCH`・`STATS_WORKER_MAX_ATTEMPTS` は、どちらの worker にも同じ値を使う(依頼の表・依頼の単位は別)。
 
 **環境変数**(不正な値(数値でない・0 以下)は、起動を失敗させず、警告のログを出して既定の値になる)
 
@@ -109,6 +110,20 @@ backend-go/
 | `STATS_WORKER_INTERVAL` | `1s` | ワーカーが依頼を取りに行く間隔(Go の duration) |
 | `STATS_WORKER_BATCH` | `20` | 1 サイクルで取り出す依頼の上限の件数 |
 | `STATS_WORKER_MAX_ATTEMPTS` | `8` | 1 つの依頼を、失敗しながら再試行する上限の回数 |
+
+### ショップの集計(写真・平均評価・レビュー件数)
+
+`GET /shops`・`GET /shops/:id`(と MCP の `list_shops`・`get_shop`)は、ショップごとに `photo_url`(写真がなければ `null`)・`average_rating`(レビューがなければ `null`)・`review_count` を返す。値は **`shop_stats` に保存された集計を返すだけ**(読み取りのたびには計算しない)で、**バーガーの統計(S18)と同じ仕組み**(依頼の待ち行列+バックグラウンドの worker)で、あとから計算し直す(結果整合。書き込みの数秒あとに反映される)。集計の意味の定義(範囲・重み付けの式・丸め・写真の選び方)は domain の `CalculateShopStat`。
+
+- **数える範囲**: 消されていないレビューで、書いた人が退会していないもの(レビュー一覧 `ListShopReviews` の見え方と同じ)。レビューはバーガーに付くので、ショップのレビューは、そのショップの**すべてのバーガー**のレビューをまとめたもの(`shops_burgers` を通す)。
+- **平均(利用者の決定 2026-09-22。案 B)**: 単純平均ではなく、**そのショップの対象レビュー全体を 1 つの集合として、バーガーのスコア(S18)と同じ重み付け**(投稿者の信頼度 `ReviewerTrustScore` × 半減期 180 日の新しさの減衰 `recencyFactor`)で加重平均し、小数 1 桁に丸める(`RoundAverageRating`)。バーガーごとの平均の平均ではない。投稿者の信頼度は、**このショップに限らず、その投稿者がすべてのバーガーに付けた有効な評価**(バーガーの統計と同じ意味)から求める。
+- **件数**: 対象レビューの**単純な件数**(重みはかけない)。
+- **写真**: そのショップで、**写真つきのレビューのうち最も新しいもの**(`created_at` の新しい順、同時刻は `id` の大きい順)の写真。ショップ専用の写真はない。消されたレビュー・退会した人のレビューの写真は使わない。写真の URL は、レビューの写真と同じく usecase が `PhotoStorage.URL` で組み立てる。
+- **保存と再計算**: 表 `shop_stats`(ショップごとに 1 行。集計されていないショップは行がなく、読み取りは `LEFT JOIN` で件数 0・平均と写真 `null` として返す)。再計算の依頼は `shop_stats_recalc_requests`(バーガーの依頼と同じ形。version の比較つき削除・失敗の記録・指数バックオフの再試行)。**バーガーの統計の worker(`StatsWorker`)が、バーガーの統計を計算し直したのと同じトランザクションで、そのバーガーが紐づくすべてのショップの再計算を依頼する**(`ShopStatsRecalculator.RequestRecalculationForBurger`)。同じショップの複数のバーガーからの依頼は 1 件にまとまる(ショップの集計は、そのショップの全レビューを読む重い計算なので、バーガーごとに繰り返さない)。ショップの集計の worker(`ShopStatsWorker`)が、その依頼を取り出して計算する。`cmd/api` は、バーガーの worker → ショップの worker の順に 1 サイクルにまとめて回す(`infra.StatsCycle`)ので、同じ周期で両方に反映される。
+- **既存データの初期化**: `shop_stats`・`shop_stats_recalc_requests` を足す migration(000015・000016)は、既存のショップの再計算の依頼を積むだけ(集計の規則は migration に複製しない)。`migrate up` のあと、worker が動けば、既存データの集計が埋まる(開発用 DB の作り直しは不要)。
+- **取り方**: 一覧は `ListShops` の 1 回のクエリで、集計を `LEFT JOIN` で添える(件数に比例しない)。
+- **詳細の `average_rating` は 2 つある**: 詳細の先頭の `average_rating`(ショップの集計)と、`reviews[].burger.average_rating`(バーガーの統計。小数 2 桁・なければ 0)は、別の値である。どちらも結果整合で、反映のタイミングが独立にずれうる。取り違えて表示しないこと。
+- **写真のキーは、レビュー 1 件ごとには載せていない**: 詳細の `reviews[].photo_url` は、いまも常に `null`(集計の写真とは別。既存の挙動で、この story では変えない)。
 
 ### signup の確認メール
 
@@ -328,13 +343,13 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**
-- `GET /shops` — ショップ一覧 (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される。次のページがあるかを、レスポンスヘッダー `X-Has-More: true|false` で返す。本文は従来どおりの配列で、1 ページの件数は backend が決め、frontend は件数から最終ページを推測しない)
-- `GET /shops/:id` — ショップ 1 件の取得 (`can_review`: 閲覧者がこのショップにレビューを書けるか。domain の `CanBeReviewedBy` の結果で、匿名は `false`。frontend は「レビューを書く」ボタンをこの値で出し分ける)
+- `GET /shops` — ショップ一覧 (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される。次のページがあるかを、レスポンスヘッダー `X-Has-More: true|false` で返す。本文は従来どおりの配列で、1 ページの件数は backend が決め、frontend は件数から最終ページを推測しない)。各ショップに集計の `photo_url`・`average_rating`・`review_count` を含む(上の「ショップの集計」)
+- `GET /shops/:id` — ショップ 1 件の取得 (`can_review`: 閲覧者がこのショップにレビューを書けるか。domain の `CanBeReviewedBy` の結果で、匿名は `false`。frontend は「レビューを書く」ボタンをこの値で出し分ける。一覧と同じ集計 `photo_url`・`average_rating`・`review_count` も含む)
 - `POST /shops` — ショップの申請 (要認証)
 
 **レビュー**
 - `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリ(ユーザーの UUID。正規形でなければ 422 `User id must be a valid UUID`)で、そのユーザーの公開レビューだけに絞り込める。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。各レビューに `can_edit` を含む)
-- `GET /reviews/:id` — レビュー 1 件の取得 (`can_edit`: 閲覧者がそのレビューを編集・削除できるか。domain の `CanBeModifiedBy` の結果で、作者だけ `true`(admin も他人は `false`)、匿名は `false`。`POST` / `PUT` の応答にも含み、shop 詳細に埋め込まれるレビューには含まない。frontend は所有者を比較せず、この値で編集・削除ボタンを出し分ける)
+- `GET /reviews/:id` — レビュー 1 件の取得 (`can_edit`: 閲覧者がそのレビューを編集・削除できるか。domain の `CanBeModifiedBy` の結果で、作者だけ `true`(admin も他人は `false`)、匿名は `false`。`POST` / `PUT` の応答にも含み、shop 詳細に埋め込まれるレビューには含まない。frontend は所有者を比較せず、この値で編集・削除ボタンを出し分ける。詳細だけ、そのレビューのショップ `shop`(`{id, name}`。閲覧者に見えるショップがないときは `null`。見えないショップの id・名前は出さない)と、`can_review`(閲覧者が、そのショップにレビューを書けるか。ショップ詳細の `can_review` と同じ規則(`Shop.CanBeReviewedByViewer`)で、匿名は `false`)を含み、一覧・`POST` / `PUT` の応答には含まない。バーガーが複数のショップにあるときは、閲覧者が書けるショップの先頭(作成の古い順)、なければ見えるショップの先頭を、domain の `ReviewShopFor` が選ぶ。ショップに紐づかないバーガーのレビューでも、詳細は成功し、`shop` は `null`・`can_review` は `false`。MCP の `get_review` も同じ)
 - `POST /reviews` — レビューの投稿 (要認証)
 - `PUT /reviews/:id` — レビューの更新 (要認証)
 - `DELETE /reviews/:id` — レビューの削除 (要認証)
@@ -425,6 +440,12 @@ frontend/src/
 └── components/   # 共通 UI コンポーネント
 ```
 
+### フォント
+
+- Noto Sans JP は、外部の Google Fonts に頼らず、`@fontsource-variable/noto-sans-jp`(可変フォント。バージョンは完全固定)で自前配信する。分割済みの `wght.css` を `globals.css` の先頭で `@import` する(アプリの `main.tsx` と Storybook の `.storybook/preview.ts` は、どちらも `globals.css` を import しているので、この 1 か所で両方に届く)。画面に出る文字を含む分だけが読まれる。
+- 可変版の family 名は `Noto Sans JP Variable`(静的版の `Noto Sans JP` とは別の名前)。`--ui-font` は、この名前だけを持つ(`uiTokens.test.ts` が確かめる)。
+- 本番のアプリは、`components/ui` を使う画面が増えるまで(S46〜S48)、`--ui-font` を使う要素がなく、この CSS の読み込み分だけを、使わずに払う。Storybook は、部品の見比べに、今も使っている。
+
 ### API の接続先
 
 - ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる(別のオリジンの絶対 URL にすると、API は CORS に対応していないので、Google でのサインインは使えず、ボタンは出ない)。
@@ -447,7 +468,7 @@ frontend/src/
 
 backend の「Google のアカウントでのサインイン」(上の Backend の節)の、画面側。**判断は backend だけが持ち、frontend は、返された値と文言を出すだけ**。
 
-- サインインと新規登録の画面に、「Sign in with Google」「Sign up with Google」のリンク(`GoogleSignIn`。ボタンの見た目)を出す。**`GET /meta` の `loginProviders` に `google` が含まれるときだけ**で、取得できていない間・空のときは何も出さない(`googleEnabled`)。リンクは、ブラウザが API の `${API_BASE_URL}/auth/google/start` へ移動する(`googleStartUrl`。fetch ではない)。ログインが必要な画面から送られてきたときは、その画面(ルーターの state の `from`)を `return_to` として渡す。
+- サインインと新規登録の画面に、「Continue with Google」のリンク(`GoogleSignIn`。ボタンの見た目。文言はサインイン・登録で同じ。置き場所は、サインインはフォームの下、登録は上)を出す。**`GET /meta` の `loginProviders` に `google` が含まれるときだけ**で、取得できていない間・空のときは何も出さない(`googleEnabled`)。リンクは、ブラウザが API の `${API_BASE_URL}/auth/google/start` へ移動する(`googleStartUrl`。fetch ではない)。押すと「Going to Google…」に変わり押せなくなる(二重に開始しない。戻る操作で復元されたときは戻す)。ログインが必要な画面から送られてきたときは、その画面(ルーターの state の `from`)を `return_to` として渡す。
 - `/auth/google/complete`(`GoogleCompletePage`。**ゲスト専用ではなく公開の route**。成功するとログイン状態になるため): backend が、成功も失敗も、1 回限りのコードに入れて、この画面へ戻す。画面は、`code` を**最初に 1 回だけ**読み、URL からはすぐに消し(履歴に残さない)、`POST /auth/google/exchange` で交換する(StrictMode の二重実行でも 1 回)。サインインの成功は `signInWithResponse` でログイン状態にして、戻り先(backend が確かめたアプリの中のパス。空は `/reviews`)へ。重複・失敗・無効なコードは、API の文言(`ApiError.messages`)をそのまま出し、「サインインへ戻る」は、失敗の応答が含める戻り先(`GoogleExchangeError.returnTo`。共有の `ApiError` ではなく、`exchangeGoogleCode` が本文から読む。backend が確かめたもの。許可の画面から来た利用者が、パスワードでサインインしたあと、そこへ戻れる)を、サインイン画面の state の `from` として渡す(画面は、戻り先を保存しない)。交換の要求は、同一オリジンなので、手続きを終えたブラウザの cookie(結び付けの値)が、そのまま付く(`withCredentials` は、明示のため。同一オリジンでは、なくても同じ)。失敗の本文の `return_to` は、interceptor が camelCase にして `ApiError.body` に持ち、`GoogleExchangeError` が読む。**交換が、サーバーの障害・通信の失敗で失敗したときは、backend がコードを消費しないので、コードをこの画面の state に持ったまま、「Try again」で、同じコードでもう一度交換する**(409・400 など、決まった失敗には出さない)。コードがない(URL から消したあとに、戻る操作でこの画面へ戻った)ときは、要求を送らない。画面を離れたあとに結果が返っても、勝手に移動させない。失敗の画面の導線(プロフィールへ / サインインへ)は、ログインの状態の復元(GET /me)が済んでから出す。**ログインの証(JWT)は URL に載らない。**
 - 本人のプロフィールに、Google の連携(`GoogleConnection`。`canEdit` のときだけ、`loginProviders` に含まれるときだけ): `GET /me/identities` の内容を出す。「結び付ける」は、**認証つきの `POST /me/identities/google/link`**(`authApi.startGoogleLink`)で、**このブラウザ**に手続きの cookie を設定して始め、返された Google の認可の URL(`redirectUrl`。http・https だけ移動する)へ移動する(戻り先はこのプロフィール)。**持ち運べる開始のコード(`link_code`)や開始の URL は使わない**(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに結び付ける攻撃を防ぐため)。この POST は、画面と同一オリジン(`/api` の転送)で出すので、応答の cookie が、そのまま保存され、Google からの戻りで送られる。「解除」は **API が返す `canUnlink` が true のときだけ**出す(解除してよいかの判断は backend の domain。false のときは理由の文言だけを出す)。
 - **Google の手続きの cookie は、同一オリジンの `/api` の道筋(`API_BASE_URL` が `/api` のような path)でだけ往復する**。`VITE_API_BASE_URL` を別のオリジンの絶対 URL にすると、cookie が保存・送信されず、Google でのサインインと結び付けは、毎回失敗する(API が CORS(資格情報つき)に対応していないので、その構成は対応しない。**画面は、API の根が別のオリジンの絶対 URL のとき、Google のボタンを出さない**(`googleEnabled`)。Google を使うときは、変えない)。backend は、`GOOGLE_REDIRECT_URL` が `APP_BASE_URL` と別のオリジンのとき・同じオリジンでも接頭辞(`/api`)がないときは、起動時に警告する(`Config.GoogleWarnings`。英語の `slog.Warn`。オリジンだけを出す。手元の設定は、`http://localhost:5173/api/auth/google/callback`)。

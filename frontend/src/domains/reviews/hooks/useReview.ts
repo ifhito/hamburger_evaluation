@@ -1,6 +1,6 @@
 import useSWR from "swr";
 import { reviewApiClient } from "../api/reviewApiClient";
-import type { ReviewView } from "../api/types";
+import type { ReviewDetailView } from "../api/types";
 
 // viewerId は、API の返す内容(can_edit)が閲覧者ごとに違うため、キーに含める。
 // ログアウトや別ユーザーでのログイン後に、前の閲覧者向けのキャッシュを再利用しない。
@@ -13,8 +13,8 @@ export function reviewKey(id: string | undefined, viewerId: string | null, enabl
 }
 
 export function useReview(id: string | undefined, viewerId: string | null, options?: { enabled?: boolean }) {
-  return useSWR<ReviewView>(reviewKey(id, viewerId, options?.enabled ?? true), async ([, reviewId]) => {
-    const res = await reviewApiClient.get<ReviewView>(`/reviews/${reviewId}`);
+  return useSWR<ReviewDetailView>(reviewKey(id, viewerId, options?.enabled ?? true), async ([, reviewId]) => {
+    const res = await reviewApiClient.get<ReviewDetailView>(`/reviews/${reviewId}`);
     return res.data;
   });
 }

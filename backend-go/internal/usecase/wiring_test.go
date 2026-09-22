@@ -15,15 +15,15 @@ import (
 // トランザクションの代わりをする。
 
 func newShops(query usecase.ShopQuery, repo domain.ShopRepository) *usecase.Shops {
-	return usecase.NewShops(query, domain.NewShops(repo))
+	return usecase.NewShops(query, domain.NewShops(repo), stubPhotoURLs{})
 }
 
 func newReviews(query usecase.ReviewQuery, repo domain.ReviewRepository, photos usecase.PhotoStorage) *usecase.Reviews {
-	return usecase.NewReviews(query, &uowtest.UoW{Reviews: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), photos)
+	return usecase.NewReviews(query, &uowtest.UoW{Reviews: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), photos)
 }
 
 func newUsers(query usecase.UserQuery, repo domain.UserRepository, hasher usecase.PasswordHasher) *usecase.Users {
-	return usecase.NewUsers(query, domain.NewUsers(repo), &uowtest.UoW{Users: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), hasher)
+	return usecase.NewUsers(query, domain.NewUsers(repo), &uowtest.UoW{Users: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), hasher)
 }
 
 func newAuth(query usecase.UserQuery, hasher usecase.PasswordHasher, issuer usecase.TokenIssuer, verifier usecase.TokenVerifier) *usecase.Auth {

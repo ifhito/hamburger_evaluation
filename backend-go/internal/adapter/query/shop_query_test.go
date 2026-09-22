@@ -81,9 +81,13 @@ func TestShopQuery(t *testing.T) {
 
 	list := func(t *testing.T, vis domain.ShopVisibility, keyword string, limit, offset int32) []domain.Shop {
 		t.Helper()
-		shops, _, err := shopQuery.ListShops(ctx, vis, keyword, limit, offset)
+		listings, _, err := shopQuery.ListShops(ctx, vis, keyword, limit, offset)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
+		}
+		shops := make([]domain.Shop, 0, len(listings))
+		for _, listing := range listings {
+			shops = append(shops, listing.Shop)
 		}
 		return shops
 	}

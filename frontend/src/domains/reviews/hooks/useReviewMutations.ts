@@ -1,13 +1,6 @@
 import { useSWRConfig } from "swr";
-import { shrinkPhoto, type PhotoLimits } from "../../../lib/photoResize";
 import { reviewApiClient } from "../api/reviewApiClient";
 import type { ReviewCreateInput, ReviewUpdateInput, ReviewView } from "../api/types";
-import { usePhotoLimits } from "./usePhotoLimits";
-
-// 送る前に、上限を超える写真だけを縮小する。写真がない、または上限がまだ取得できていないときは、そのまま返す。
-async function prepare(photo: File | null | undefined, limits: PhotoLimits | undefined) {
-  return photo && limits ? shrinkPhoto(photo, limits) : photo;
-}
 
 // multipart のフィールド名は API に合わせた snake_case。JSON と違い自動変換は掛からない。
 function toFormData(fields: Record<string, string | number>, photo: File): FormData {
@@ -43,13 +36,14 @@ export function isReviewKey(key: unknown): boolean {
   );
 }
 
+// photo は、渡された時点ですでに送ってよい大きさになっている前提(呼び出し側の PhotoField が、選んだ時点で
+// lib/photoResize の shrinkPhoto を通す)。ここでもう一度縮小すると、同じ写真を二重にデコードすることになるため、
+// 縮小はしない(PhotoField を経由しない呼び出しが増えたら、そのときに再検討する)。
 export function useCreateReview() {
   const { mutate } = useSWRConfig();
-  const limits = usePhotoLimits();
   return {
     create: async (data: ReviewCreateInput, photo?: File | null): Promise<ReviewView> => {
-      const sending = await prepare(photo, limits);
-      const body = sending ? toCreateFormData(data, sending) : { review: data };
+      const body = photo ? toCreateFormData(data, photo) : { review: data };
       const res = await reviewApiClient.post<ReviewView>("/reviews", body);
       await mutate(isReviewKey);
       return res.data;
@@ -59,11 +53,9 @@ export function useCreateReview() {
 
 export function useUpdateReview(id: string) {
   const { mutate } = useSWRConfig();
-  const limits = usePhotoLimits();
   return {
     update: async (data: ReviewUpdateInput, photo?: File | null): Promise<ReviewView> => {
-      const sending = await prepare(photo, limits);
-      const body = sending ? toUpdateFormData(data, sending) : { review: data };
+      const body = photo ? toUpdateFormData(data, photo) : { review: data };
       const res = await reviewApiClient.put<ReviewView>(`/reviews/${id}`, body);
       await mutate(isReviewKey);
       return res.data;

@@ -20,10 +20,11 @@ import (
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeReviewQuery struct {
-	listReviews   func(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error)
-	getReview     func(ctx context.Context, id string) (domain.ReviewDetail, error)
-	getShop       func(ctx context.Context, id string) (domain.Shop, error)
-	getShopBurger func(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error)
+	listReviews     func(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error)
+	getReview       func(ctx context.Context, id string) (domain.ReviewDetail, error)
+	getShop         func(ctx context.Context, id string) (domain.Shop, error)
+	getShopBurger   func(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error)
+	listReviewShops func(ctx context.Context, reviewID string) ([]domain.Shop, error)
 }
 
 func (f *fakeReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error) {
@@ -45,6 +46,14 @@ func (f *fakeReviewQuery) GetShop(ctx context.Context, id string) (domain.Shop, 
 		panic("unexpected GetShop call")
 	}
 	return f.getShop(ctx, id)
+}
+
+// ListReviewShops は、未設定なら、ショップなし(空の一覧)を返す。
+func (f *fakeReviewQuery) ListReviewShops(ctx context.Context, reviewID string) ([]domain.Shop, error) {
+	if f.listReviewShops == nil {
+		return nil, nil
+	}
+	return f.listReviewShops(ctx, reviewID)
 }
 
 func (f *fakeReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error) {

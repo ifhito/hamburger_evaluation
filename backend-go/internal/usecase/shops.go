@@ -14,13 +14,16 @@ import (
 // domain.ErrShopNotFound を返す。読み取り専用で、書き込みのメソッドは
 // 置かない（書き込みは domain.Shops を通す）。
 type ShopQuery interface {
-	// ListShops は、keyword に一致する見える shop を、name、次に id の順で
-	// 返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別
-	// しない。空ならすべてに一致する）。2 つ目の戻り値は、offset+limit 件より
-	// 後ろにも見える shop があるか（has_more）で、実装は limit+1 件を取得して判定する。
-	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.Shop, bool, error)
-	// GetShopWithCreator は shop とその creator を返す。Reviews は空の
-	// ままである。
+	// ListShops は、keyword に一致する見える shop を、name、次に id の順で、集計(件数・評価の平均・ショップの
+	// 写真のキー)つきで返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別しない。空ならすべてに
+	// 一致する）。集計は、保存された値(shop_stats)を、同じクエリで添える(shop の件数に比例してクエリを増やさない。
+	// まだ集計されていない shop は、空の集計(件数 0・平均と写真は nil))。集計の意味は domain.CalculateShopStat が
+	// 定義し、レビューの書き込みのあとに、バックグラウンドのワーカーが計算し直す(結果整合)。
+	// 2 つ目の戻り値は、offset+limit 件より後ろにも見える shop があるか（has_more）で、実装は limit+1 件を
+	// 取得して判定する。
+	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error)
+	// GetShopWithCreator は shop とその creator を、集計(保存された値。ListShops と同じ)つきで返す。
+	// Reviews は空のままである。
 	GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error)
 	// ListShopReviews は、shop の burger に対する discard されていない review
 	// （author が discard 済みの user である review は除く）を、新しい順に
@@ -36,25 +39,44 @@ type ShopQuery interface {
 // 投稿、そして admin による moderation である。読み取りは query、書き込みは
 // domain の書き込みオブジェクト（domain.Shops）だけを通し、repository には依存しない。
 type Shops struct {
-	query ShopQuery
-	shops *domain.Shops
+	query  ShopQuery
+	shops  *domain.Shops
+	photos PhotoURLs
 }
 
-func NewShops(query ShopQuery, shops *domain.Shops) *Shops {
-	return &Shops{query: query, shops: shops}
+// NewShops は shop の use case を配線する。photos(ショップの写真のキーを公開 URL に直す写真の保存先)は
+// non-nil でなければならない(本番では disk か S3、テストでは fake)。渡し忘れて、写真の URL が黙って
+// null になることのないよう、nil の photos は、ここで fail-loud する(NewReviews と同じ)。
+func NewShops(query ShopQuery, shops *domain.Shops, photos PhotoURLs) *Shops {
+	if photos == nil {
+		panic("usecase.NewShops: nil PhotoURLs")
+	}
+	return &Shops{query: query, shops: shops, photos: photos}
+}
+
+// withPhotoURL は、集計の写真のキーを公開 URL に直す(写真がないときは nil)。
+func (s *Shops) withPhotoURL(summary domain.ShopSummary) domain.ShopSummary {
+	if summary.PhotoKey != nil {
+		url := s.photos.URL(*summary.PhotoKey)
+		summary.PhotoURL = &url
+	}
+	return summary
 }
 
 // List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
 // ものを、ページネーションして返す。範囲外の page/perPage は、エラーにせず
 // clampPage の規則で補正される（page < 1 は 1、perPage < 1 は 20、perPage の
 // 上限は 100）。2 つ目の戻り値は、次のページがあるか（has_more）である。
-func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.Shop, bool, error) {
+func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, page, perPage int) ([]domain.ShopListing, bool, error) {
 	limit, offset := clampPage(page, perPage)
-	shops, hasMore, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
+	listings, hasMore, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, limit, offset)
 	if err != nil {
 		return nil, false, fmt.Errorf("list shops: %w", err)
 	}
-	return shops, hasMore, nil
+	for i := range listings {
+		listings[i].Summary = s.withPhotoURL(listings[i].Summary)
+	}
+	return listings, hasMore, nil
 }
 
 // Get は、viewer が見てよいときに shop の詳細（creator と review を含む）を
@@ -75,6 +97,7 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id string) (domain
 	}
 	detail.Reviews = reviews
 	detail.CanReview = detail.CanBeReviewedByViewer(viewer)
+	detail.Summary = s.withPhotoURL(detail.Summary)
 	return detail, nil
 }
 

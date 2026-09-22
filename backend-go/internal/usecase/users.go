@@ -16,15 +16,16 @@ import (
 // トランザクションにする範囲を、usecase が指定する仕組み)の中で行う。途中でエラーになれば
 // 全体を取り消すので、退会だけ、または統計だけが反映されることがない。
 type Users struct {
-	query  UserQuery
-	users  *domain.Users
-	uow    UnitOfWork
-	recalc *BurgerStatsRecalculator
-	hasher PasswordHasher
+	query     UserQuery
+	users     *domain.Users
+	uow       UnitOfWork
+	recalc    *BurgerStatsRecalculator
+	shopStats *ShopStatsRecalculator
+	hasher    PasswordHasher
 }
 
-func NewUsers(query UserQuery, users *domain.Users, uow UnitOfWork, recalc *BurgerStatsRecalculator, hasher PasswordHasher) *Users {
-	return &Users{query: query, users: users, uow: uow, recalc: recalc, hasher: hasher}
+func NewUsers(query UserQuery, users *domain.Users, uow UnitOfWork, recalc *BurgerStatsRecalculator, shopStats *ShopStatsRecalculator, hasher PasswordHasher) *Users {
+	return &Users{query: query, users: users, uow: uow, recalc: recalc, shopStats: shopStats, hasher: hasher}
 }
 
 // Get は、discard されていないユーザー 1 人を、viewer（nil = 匿名）から見える
@@ -152,7 +153,10 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 		if err := tx.UserIdentities.DiscardAll(ctx, targetID); err != nil {
 			return err
 		}
-		return s.recalc.RequestRecalculationReviewedBy(ctx, tx, targetID)
+		if err := s.recalc.RequestRecalculationReviewedBy(ctx, tx, targetID); err != nil {
+			return err
+		}
+		return s.shopStats.RequestRecalculationForBurgersReviewedBy(ctx, tx, targetID)
 	})
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)

@@ -85,7 +85,7 @@ func (m *MCPServer) newToolServer(viewer domain.User, scopes []string, lang doma
 	mcp.AddTool(s, tool("list_shops", "ショップの一覧を返す(承認済みのショップと、自分が申請した審査待ちのショップ)。店名の一部で絞り込める。"+untrustedNote, readOnly), guarded(t, "list_shops", t.listShops))
 	mcp.AddTool(s, tool("get_shop", "ショップ 1 件の詳細(バーガーの平均評価つきのレビュー、レビューを書けるか)を返す。"+untrustedNote, readOnly), guarded(t, "get_shop", t.getShop))
 	mcp.AddTool(s, tool("list_reviews", "レビューの一覧を新しい順に返す。ショップ・投稿者・評価・本文の語で絞り込める。"+untrustedNote, readOnly), guarded(t, "list_reviews", t.listReviews))
-	mcp.AddTool(s, tool("get_review", "レビュー 1 件の詳細を返す。can_edit が true なら、自分のレビューで、編集・削除できる。"+untrustedNote, readOnly), guarded(t, "get_review", t.getReview))
+	mcp.AddTool(s, tool("get_review", "レビュー 1 件の詳細を返す。can_edit が true なら、自分のレビューで、編集・削除できる。shop は、そのレビューのショップ(id・name。見えないショップは null)で、can_review が true なら、そのショップに、自分がレビューを書ける。"+untrustedNote, readOnly), guarded(t, "get_review", t.getReview))
 	mcp.AddTool(s, tool("get_user", "利用者 1 人のプロフィール(名前・自己紹介)を返す。メールアドレスが含まれるのは、自分のプロフィールを見るときだけ。"+untrustedNote, readOnly), guarded(t, "get_user", t.getUser))
 	mcp.AddTool(s, tool("create_review", "ショップのバーガーに、レビュー(評価と本文)を投稿する。バーガーは burger_id で指定し、なければ burger_name で指定する(なければ作る)。"+writesNote, additive), guarded(t, "create_review", t.createReview))
 	mcp.AddTool(s, tool("update_review", "自分のレビューの、評価と本文を書き換える。他人のレビューは編集できない。"+writesNote, destructive), guarded(t, "update_review", t.updateReview))
@@ -185,7 +185,7 @@ func (t *mcpTools) listShops(ctx context.Context, _ *mcp.CallToolRequest, in lis
 	}
 	items := make([]shopResponse, 0, len(list))
 	for _, shop := range list {
-		items = append(items, shopResponse{ID: shop.ID, Name: shop.Name, Status: string(shop.Status)})
+		items = append(items, newShopResponse(shop))
 	}
 	return success(mcpList[shopResponse]{HasMore: hasMore, Items: items})
 }
@@ -251,7 +251,7 @@ func (t *mcpTools) getReview(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if err != nil {
 		return t.toolError("get_review", err)
 	}
-	return success(newReviewResponse(detail))
+	return success(newReviewDetailResponse(detail))
 }
 
 type getUserInput struct {

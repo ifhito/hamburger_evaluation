@@ -330,9 +330,13 @@ type googleLinkedResponse struct {
 
 // googleFailureResponse は、手続きの失敗(409・400)の応答である。検証済みの戻り先(return_to)を含める(AI アプリの
 // 許可の画面から来た利用者が、失敗のあと、元の要求へ戻れるように。画面は、これをサインインの画面へ渡すだけである)。
+// reason は、失敗の理由を示す、言語によらない安定した識別子(catalog のキーと同じ。例: "google.account_exists")
+// である。errors の文言は Accept-Language で日本語にもなるため、frontend が理由ごとに画面を出し分けるには、
+// 文言ではなく、この reason を使う(frontend は判定を持たず、ここで決めた reason をそのまま使うだけ)。
 type googleFailureResponse struct {
 	Errors   []string `json:"errors"`
 	ReturnTo string   `json:"return_to"`
+	Reason   string   `json:"reason"`
 }
 
 // HandleExchange は POST /auth/google/exchange を処理する: 「画面へ渡すコード」を 1 回だけ使って、手続きの結果を返す。
@@ -352,7 +356,9 @@ func (g *GoogleLogin) HandleExchange(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, domain.ErrLoginHandoffInvalid) {
 			g.cookie.clearBinder(w, req.Code)
-			writeErrorList(w, r, http.StatusBadRequest, msgGoogleCodeInvalid)
+			writeErrorListWith(w, r, http.StatusBadRequest, func(texts []string) any {
+				return googleFailureResponse{Errors: texts, Reason: keyGoogleCodeInvalid}
+			}, msgGoogleCodeInvalid)
 			return
 		}
 		log.Printf("google login: exchange: %v", err)
@@ -361,10 +367,11 @@ func (g *GoogleLogin) HandleExchange(w http.ResponseWriter, r *http.Request) {
 	}
 	g.cookie.clearBinder(w, req.Code) // コードは使い切った
 	// 文言は API が決め、frontend は、返されたものをそのまま出す(利用者の言語で)。原因の詳細(検証のどこで
-	// 失敗したか)は、どれにも含めない。
+	// 失敗したか)は、どれにも含めない。reason は m.key(catalog のキー)をそのまま使う: 呼び出し側ごとに
+	// 別の値を渡すと、文言と reason が食い違いうるため、渡した apiMessage から機械的に決める。
 	fail := func(status int, m apiMessage) {
 		writeErrorListWith(w, r, status, func(texts []string) any {
-			return googleFailureResponse{Errors: texts, ReturnTo: res.ReturnTo}
+			return googleFailureResponse{Errors: texts, ReturnTo: res.ReturnTo, Reason: m.key}
 		}, m)
 	}
 	switch res.Outcome {

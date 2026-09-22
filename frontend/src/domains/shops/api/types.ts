@@ -6,6 +6,11 @@ export interface Shop {
   id: string;
   name: string;
   status: ShopStatus;
+  // ショップの写真(そのショップで、写真つきで最も新しいレビューの写真)。写真つきのレビューがなければ null。
+  photoUrl: string | null;
+  // 評価の平均(小数 1 桁)。レビューがなければ null。バーガーの平均(reviews[].burger.averageRating)とは別の値。
+  averageRating: number | null;
+  reviewCount: number;
 }
 
 export interface ShopCreator {

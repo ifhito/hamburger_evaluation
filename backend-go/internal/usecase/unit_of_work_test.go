@@ -18,7 +18,7 @@ import (
 // 使った usecase.Reviews と、その UnitOfWork を返す。
 func uowReviews(query usecase.ReviewQuery, repo domain.ReviewRepository, uow *uowtest.UoW) *usecase.Reviews {
 	uow.Reviews = repo
-	return usecase.NewReviews(query, uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), &fakePhotoStorage{})
+	return usecase.NewReviews(query, uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), &fakePhotoStorage{})
 }
 
 // processedIf は、写真つきの経路を試すための処理済みの upload（upload が false なら nil）を返す。
@@ -208,7 +208,7 @@ func TestUsersDeleteRegistersRecalcRequestsInAscendingOrder(t *testing.T) {
 	query := &fakeUserQuery{getByID: activeUsersByID(target)}
 	newUsersWithUoW := func(uow *uowtest.UoW, repo *fakeUserRepo) *usecase.Users {
 		uow.Users = repo
-		return usecase.NewUsers(query, domain.NewUsers(repo), uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), fakeHasher{})
+		return usecase.NewUsers(query, domain.NewUsers(repo), uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), fakeHasher{})
 	}
 
 	t.Run("バーガーの id の昇順に依頼を登録して commit する(読み取りが昇順でなくても)", func(t *testing.T) {
@@ -221,6 +221,9 @@ func TestUsersDeleteRegistersRecalcRequestsInAscendingOrder(t *testing.T) {
 		want := []string{
 			"discard", "reviewed-by:" + target.ID,
 			"request:" + uid.N(3), "request:" + uid.N(5), "request:" + uid.N(9),
+			// ShopStatsRecalculator.RequestRecalculationForBurgersReviewedBy も、同じ tx.Stats から
+			// レビューしたバーガーの一覧を読む(書き込みと同じトランザクションで、ショップの依頼も登録するため)。
+			"reviewed-by:" + target.ID,
 		}
 		if !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
@@ -275,6 +278,112 @@ func TestUsersDeleteRegistersRecalcRequestsInAscendingOrder(t *testing.T) {
 		}
 		if uow.Commits != 0 || uow.Rollbacks != 1 {
 			t.Errorf("commit/rollback = %d/%d, want 0/1", uow.Commits, uow.Rollbacks)
+		}
+	})
+}
+
+// TestReviewsAndUsersRegisterShopRecalcRequestInSameTransaction は、レビューの書き込み(投稿・編集・削除)と
+// 退会が、バーガーの統計の再計算の依頼と同じトランザクションで、ショップの集計の再計算の依頼も直接登録する
+// ことを固定する(依頼のレビュー指摘への対応: バーガーの統計のワーカーから連鎖させると、ショップ側の登録の
+// 失敗が、健全なバーガーの統計の再計算まで失敗として記録してしまうため、書き込みの経路が直接登録する形にした)。
+func TestReviewsAndUsersRegisterShopRecalcRequestInSameTransaction(t *testing.T) {
+	ctx := context.Background()
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	stored := reviewDetailFor(alice.ID) // burger 5 の review 9
+	getReview := func(_ context.Context, id string) (domain.ReviewDetail, error) {
+		if id == stored.ID {
+			return stored, nil
+		}
+		return domain.ReviewDetail{}, domain.ErrReviewNotFound
+	}
+	activeShop := domain.Shop{ID: uid.N(1), Name: "Active Diner", Status: domain.ShopStatusActive}
+	cheese := domain.ShopReviewBurger{ID: uid.N(5), Name: "Cheese"}
+	createQuery := &fakeReviewQuery{
+		getShop:       func(context.Context, string) (domain.Shop, error) { return activeShop, nil },
+		getShopBurger: func(context.Context, string, string) (domain.ShopReviewBurger, error) { return cheese, nil },
+	}
+
+	t.Run("投稿は、バーガーの依頼のあとに、そのバーガーが紐づくショップの依頼も登録する", func(t *testing.T) {
+		stats := &uowtest.Stats{}
+		shopStats := &uowtest.ShopStats{BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(1)}, nil }}
+		uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
+		repo := &fakeReviewRepo{createReview: func(_ context.Context, review domain.Review) (domain.Review, error) {
+			review.ID = uid.N(44)
+			return review, nil
+		}}
+		if _, err := uowReviews(createQuery, repo, uow).Create(ctx, alice, activeShop.ID, cheese.ID, "", 4, "ok", nil); err != nil {
+			t.Fatalf("Create returned error: %v", err)
+		}
+		if want := []string{"request:" + uid.N(5)}; !reflect.DeepEqual(stats.Ops, want) {
+			t.Errorf("バーガーの操作 = %v, want %v", stats.Ops, want)
+		}
+		if want := []string{"burger-shops:" + uid.N(5), "request:" + uid.N(1)}; !reflect.DeepEqual(shopStats.Ops, want) {
+			t.Errorf("ショップの操作 = %v, want %v", shopStats.Ops, want)
+		}
+		if uow.Commits != 1 || uow.Rollbacks != 0 {
+			t.Errorf("commit/rollback = %d/%d, want 1/0", uow.Commits, uow.Rollbacks)
+		}
+	})
+
+	t.Run("編集・削除も、同じ形でショップの依頼を登録する", func(t *testing.T) {
+		shopStats := &uowtest.ShopStats{BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(2)}, nil }}
+		uow := &uowtest.UoW{Stats: &uowtest.Stats{}, ShopStats: shopStats}
+		repo := &fakeReviewRepo{updateReviewContent: func(context.Context, string, int, string) (domain.Review, error) { return stored.Review, nil }}
+		if _, err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Update(ctx, alice, stored.ID, 5, "changed", nil); err != nil {
+			t.Fatalf("Update returned error: %v", err)
+		}
+		if want := []string{"burger-shops:" + uid.N(5), "request:" + uid.N(2)}; !reflect.DeepEqual(shopStats.Ops, want) {
+			t.Errorf("編集: ショップの操作 = %v, want %v", shopStats.Ops, want)
+		}
+
+		shopStats = &uowtest.ShopStats{BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(2)}, nil }}
+		uow = &uowtest.UoW{Stats: &uowtest.Stats{}, ShopStats: shopStats}
+		repo = &fakeReviewRepo{discardReview: func(context.Context, string) error { return nil }}
+		if err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID); err != nil {
+			t.Fatalf("Delete returned error: %v", err)
+		}
+		if want := []string{"burger-shops:" + uid.N(5), "request:" + uid.N(2)}; !reflect.DeepEqual(shopStats.Ops, want) {
+			t.Errorf("削除: ショップの操作 = %v, want %v", shopStats.Ops, want)
+		}
+	})
+
+	t.Run("ショップの依頼の登録が失敗すると、バーガーの依頼も含めて全体が rollback する(書き込みが 500 として表面化する)", func(t *testing.T) {
+		boom := errors.New("shop 側が壊れている")
+		stats := &uowtest.Stats{}
+		shopStats := &uowtest.ShopStats{BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(1)}, nil }, RequestErr: boom}
+		uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error { return nil }}
+		err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID)
+		if !errors.Is(err, boom) {
+			t.Fatalf("Delete error = %v, want wrapped %v", err, boom)
+		}
+		if uow.Commits != 0 || uow.Rollbacks != 1 {
+			t.Errorf("commit/rollback = %d/%d, want 0/1(ショップ側が失敗しても、バーガーの依頼だけ commit されて残ることはない)", uow.Commits, uow.Rollbacks)
+		}
+		if len(stats.Ops) == 0 {
+			t.Error("バーガーの依頼の登録が、そもそも行われていない(先に登録してから、ショップの依頼を登録するはず)")
+		}
+	})
+
+	t.Run("退会は、レビューしたバーガーが紐づくショップの依頼も、バーガーの依頼と同じトランザクションで登録する", func(t *testing.T) {
+		stats := &uowtest.Stats{ReviewedBy: func(context.Context, string) ([]string, error) { return []string{uid.N(3), uid.N(5)}, nil }}
+		shopStats := &uowtest.ShopStats{BurgerShops: func(_ context.Context, burgerID string) ([]string, error) {
+			return []string{"shop-for-" + burgerID}, nil
+		}}
+		uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
+		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer)}
+		repo := &fakeUserRepo{discard: func(context.Context, string) error { return nil }}
+		uow.Users = repo
+		users := usecase.NewUsers(query, domain.NewUsers(repo), uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), fakeHasher{})
+		if err := users.Delete(ctx, usersViewer, usersViewer.ID); err != nil {
+			t.Fatalf("Delete returned error: %v", err)
+		}
+		want := []string{"burger-shops:" + uid.N(3), "burger-shops:" + uid.N(5), "request:shop-for-" + uid.N(3), "request:shop-for-" + uid.N(5)}
+		if !reflect.DeepEqual(shopStats.Ops, want) {
+			t.Errorf("ショップの操作 = %v, want %v", shopStats.Ops, want)
+		}
+		if uow.Commits != 1 || uow.Rollbacks != 0 {
+			t.Errorf("commit/rollback = %d/%d, want 1/0", uow.Commits, uow.Rollbacks)
 		}
 	})
 }

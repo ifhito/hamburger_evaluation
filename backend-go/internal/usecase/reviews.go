@@ -39,6 +39,9 @@ type ReviewQuery interface {
 	// いるときに限り、stats つき（まだ計算されていなければゼロ）の burger を
 	// 返し、そうでなければ（wrap された）domain.ErrBurgerNotFound を返す。
 	GetShopBurger(ctx context.Context, shopID, burgerID string) (domain.ShopReviewBurger, error)
+	// ListReviewShops は、review が属する shop(review の burger を持つ shop すべて)を、作成の古い順に返す。
+	// 存在しない review・削除済みの review・shop に紐づかない burger の review は、空の一覧を返す(エラーではない)。
+	ListReviewShops(ctx context.Context, reviewID string) ([]domain.Shop, error)
 }
 
 // ReviewListFilter は、GET /reviews の省略可能なクエリフィルタを保持する。
@@ -77,21 +80,25 @@ type ReviewListFilter struct {
 // エラーになれば全体を取り消すので、レビューだけ、または依頼だけが反映されることがない。統計そのものは、
 // あとからバックグラウンドのワーカーが計算する(書き込みは統計の計算を待たない)。
 type Reviews struct {
-	query  ReviewQuery
-	uow    UnitOfWork
-	recalc *BurgerStatsRecalculator
-	photos PhotoStorage
+	query     ReviewQuery
+	uow       UnitOfWork
+	recalc    *BurgerStatsRecalculator
+	shopStats *ShopStatsRecalculator
+	photos    PhotoStorage
 }
 
 // NewReviews は review の use case を配線する。photos は non-nil でなければ
 // ならない（本番では disk か S3、テストでは fake）。どのリクエスト経路も
 // それを dereference しうる（photoURL、deletePhotoBestEffort）ので、nil の
 // storage は、リクエストの途中で panic するのではなく、ここで fail-loud する。
-func NewReviews(query ReviewQuery, uow UnitOfWork, recalc *BurgerStatsRecalculator, photos PhotoStorage) *Reviews {
+func NewReviews(query ReviewQuery, uow UnitOfWork, recalc *BurgerStatsRecalculator, shopStats *ShopStatsRecalculator, photos PhotoStorage) *Reviews {
 	if photos == nil {
 		panic("usecase.NewReviews: nil PhotoStorage")
 	}
-	return &Reviews{query: query, uow: uow, recalc: recalc, photos: photos}
+	if shopStats == nil {
+		panic("usecase.NewReviews: nil ShopStatsRecalculator")
+	}
+	return &Reviews{query: query, uow: uow, recalc: recalc, shopStats: shopStats, photos: photos}
 }
 
 // List は、filter で絞り込んだ公開 review フィードを返す。ページネーションは
@@ -113,8 +120,10 @@ func (s *Reviews) List(ctx context.Context, viewer *domain.User, filter ReviewLi
 
 // Get は author、burger、stats つきの review を 1 件返す。存在しない review、
 // discard 済みの review、author が discard 済みの user である review は、
-// いずれも domain.ErrReviewNotFound を返す。viewer（nil = 匿名）は CanEdit の
-// 設定だけに使う。
+// いずれも domain.ErrReviewNotFound を返す。viewer（nil = 匿名）は CanEdit・Shop・CanReview の
+// 設定に使う。Shop と CanReview は、review の burger を持つショップ（複数ありうる）から、domain の
+// ReviewShopFor が viewer ごとに決める（viewer に見えるショップがなければ、Shop は nil で CanReview は false。
+// エラーにはしない）。CanReview の規則は、ショップ詳細の can_review と同じ Shop.CanBeReviewedByViewer である。
 func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (domain.ReviewDetail, error) {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
@@ -122,6 +131,11 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (doma
 	}
 	detail.PhotoURL = s.photoURL(detail.PhotoKey)
 	detail.CanEdit = detail.CanBeModifiedByViewer(viewer)
+	shops, err := s.query.ListReviewShops(ctx, id)
+	if err != nil {
+		return domain.ReviewDetail{}, fmt.Errorf("list review shops: %w", err)
+	}
+	detail.Shop, detail.CanReview = domain.ReviewShopFor(shops, viewer)
 	return detail, nil
 }
 
@@ -181,9 +195,12 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 		if created, err = tx.Reviews.Create(ctx, review); err != nil {
 			return err
 		}
-		// 統計は、ここでは計算せず、再計算の依頼を同じトランザクションで登録する。burger の
-		// 行をロックしないので、同じ burger への他の書き込みを待たない。
-		return s.recalc.RequestRecalculation(ctx, tx, created.BurgerID)
+		// 統計は、ここでは計算せず、再計算の依頼(バーガーの統計とショップの集計の両方)を同じトランザクションで
+		// 登録する。burger の行をロックしないので、同じ burger への他の書き込みを待たない。
+		if err := s.recalc.RequestRecalculation(ctx, tx, created.BurgerID); err != nil {
+			return err
+		}
+		return s.shopStats.RequestRecalculationForBurger(ctx, tx, created.BurgerID)
 	})
 	if err != nil {
 		s.deletePhotoBestEffort(ctx, review.PhotoKey)
@@ -237,7 +254,10 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rat
 		if err != nil {
 			return err
 		}
-		return s.recalc.RequestRecalculation(ctx, tx, updated.BurgerID)
+		if err := s.recalc.RequestRecalculation(ctx, tx, updated.BurgerID); err != nil {
+			return err
+		}
+		return s.shopStats.RequestRecalculationForBurger(ctx, tx, updated.BurgerID)
 	})
 	if err != nil {
 		if newKey != nil {
@@ -273,7 +293,10 @@ func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id string) err
 		if err := tx.Reviews.Discard(ctx, id); err != nil {
 			return err
 		}
-		return s.recalc.RequestRecalculation(ctx, tx, detail.BurgerID)
+		if err := s.recalc.RequestRecalculation(ctx, tx, detail.BurgerID); err != nil {
+			return err
+		}
+		return s.shopStats.RequestRecalculationForBurger(ctx, tx, detail.BurgerID)
 	})
 	if err != nil {
 		return fmt.Errorf("delete review: %w", err)

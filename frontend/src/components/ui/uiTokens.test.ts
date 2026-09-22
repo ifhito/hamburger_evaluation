@@ -14,6 +14,10 @@ const rootBlock = (css: string) => /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
 const variables = (css: string) => Object.fromEntries([...rootBlock(css).matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map(([, name, value]) => [name, value.trim()]));
 const own = variables(globalsCss);
 
+it("--ui-font の先頭は、可変フォント(Noto Sans JP Variable)である", () => {
+  expect(own["ui-font"].startsWith('"Noto Sans JP Variable"')).toBe(true);
+});
+
 describe.skipIf(!design)("デザインのトークンとの一致", () => {
   const dv = variables(design);
 

@@ -23,6 +23,32 @@ type shopResponse struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
+	shopSummaryResponse
+}
+
+// shopSummaryResponse は、ショップの集計である(一覧と詳細で共通。項目は末尾に並ぶ)。
+// PhotoURL は、ショップの写真(そのショップで、写真つきで最も新しいレビューの写真)の公開 URL で、
+// 写真つきのレビューがないときは null。AverageRating は評価の平均(小数 1 桁)で、レビューがないときは
+// null。ReviewCount はレビューの件数。集計の意味は domain.ShopSummary が持ち、ここは写すだけである。
+// 詳細の reviews[].burger.average_rating(バーガーの統計。小数 2 桁・非同期で遅れうる)とは別の値である。
+type shopSummaryResponse struct {
+	PhotoURL      *string  `json:"photo_url"`
+	AverageRating *float64 `json:"average_rating"`
+	ReviewCount   int64    `json:"review_count"`
+}
+
+func newShopSummaryResponse(summary domain.ShopSummary) shopSummaryResponse {
+	return shopSummaryResponse{PhotoURL: summary.PhotoURL, AverageRating: summary.AverageRating, ReviewCount: summary.ReviewCount}
+}
+
+// newShopResponse は、一覧に出るショップを、集計つきで wire の形にする(GET /shops と MCP の list_shops が共有する)。
+func newShopResponse(listing domain.ShopListing) shopResponse {
+	return shopResponse{
+		ID:                  listing.ID,
+		Name:                listing.Name,
+		Status:              string(listing.Status),
+		shopSummaryResponse: newShopSummaryResponse(listing.Summary),
+	}
 }
 
 // shopDetailResponse は GET /shops/{id} の body である
@@ -30,13 +56,14 @@ type shopResponse struct {
 // （domain の reviewable ルール）で、匿名は false。frontend は、この値で「レビューを書く」
 // ボタンを出し分ける。
 type shopDetailResponse struct {
-	ID             string               `json:"id"`
-	Name           string               `json:"name"`
-	Status         string               `json:"status"`
-	ModerationNote *string              `json:"moderation_note"`
-	Creator        *userRefResponse     `json:"creator"`
-	Reviews        []shopReviewResponse `json:"reviews"`
-	CanReview      bool                 `json:"can_review"`
+	ID                  string               `json:"id"`
+	Name                string               `json:"name"`
+	Status              string               `json:"status"`
+	ModerationNote      *string              `json:"moderation_note"`
+	Creator             *userRefResponse     `json:"creator"`
+	Reviews             []shopReviewResponse `json:"reviews"`
+	CanReview           bool                 `json:"can_review"`
+	shopSummaryResponse                      // 一覧と同じ集計
 }
 
 type userRefResponse struct {
@@ -51,8 +78,8 @@ type shopReviewResponse struct {
 	CreatedAt string  `json:"created_at"`
 	// PhotoURL は review の写真の公開 URL で、添付がない場合は null である。
 	// GET /shops/{id} に埋め込まれる review では、現状は常に
-	// null である。Shops usecase は意図的に写真の storage へ配線
-	// されていない。
+	// null である(shop 詳細のレビューの問い合わせと domain.ShopReview に、
+	// 写真のキーを載せていない)。ショップの写真は、別に photo_url として返す。
 	PhotoURL *string               `json:"photo_url"`
 	User     *userRefResponse      `json:"user"`
 	Burger   *reviewBurgerResponse `json:"burger"`
@@ -129,7 +156,7 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 		}
 		resp := make([]shopResponse, 0, len(list)) // nil ではない：[] として marshal される
 		for _, shop := range list {
-			resp = append(resp, shopResponse{ID: shop.ID, Name: shop.Name, Status: string(shop.Status)})
+			resp = append(resp, newShopResponse(shop))
 		}
 		setHasMore(w, hasMore)
 		writeJSON(w, http.StatusOK, resp)
@@ -160,13 +187,14 @@ func handleGetShop(shops *usecase.Shops) http.HandlerFunc {
 
 func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 	resp := shopDetailResponse{
-		ID:             detail.ID,
-		Name:           detail.Name,
-		Status:         string(detail.Status),
-		ModerationNote: detail.ModerationNote,
-		Creator:        newUserRefResponse(detail.Creator),
-		Reviews:        make([]shopReviewResponse, 0, len(detail.Reviews)),
-		CanReview:      detail.CanReview,
+		ID:                  detail.ID,
+		Name:                detail.Name,
+		Status:              string(detail.Status),
+		ModerationNote:      detail.ModerationNote,
+		Creator:             newUserRefResponse(detail.Creator),
+		Reviews:             make([]shopReviewResponse, 0, len(detail.Reviews)),
+		CanReview:           detail.CanReview,
+		shopSummaryResponse: newShopSummaryResponse(detail.Summary),
 	}
 	for _, review := range detail.Reviews {
 		item := shopReviewResponse{
