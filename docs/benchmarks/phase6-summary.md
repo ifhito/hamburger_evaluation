@@ -12,7 +12,7 @@
 | **Cloudflare Workers** | 54ms | **285ms** | ○ | JS 11 行 | 転送が最速 |
 | **Render Static** | **40ms** | 505ms | ○ | YAML 7 行 | HTML が最速 |
 | Netlify | 287ms | 827ms | ○ | TOML 9 行 | 転送が最も遅い |
-| Vercel | 44ms | **計測不能** | ○ | JSON 10 行 | **Bot 対策でブロックされた** |
+| **Vercel** | 44ms | **148ms** | ○ | JSON 10 行 | 最速。ただし制約が 3 つ |
 
 参考: API 直叩き(Cloud Run)は p50 **288ms**。
 
@@ -23,7 +23,7 @@
 | Cloudflare | 84ms / 92ms | 394ms / 556ms |
 | Render | **49ms / 49ms** | 776ms / 1,031ms |
 | Netlify | 963ms / 1,519ms | 1,318ms / 1,389ms |
-| Vercel | 88ms / 224ms | — |
+| Vercel | 293ms / 293ms | 227ms / 227ms |
 
 **Render の HTML 配信が最も安定している**(p50 40ms、最大 49ms)。
 Netlify は p50 が 287ms なのに最大 1,519ms と大きく揺れる。
@@ -221,6 +221,6 @@ RFC 9207 により認可コードを返すときに `iss` が付き、クライ�
 
 ## 未計測
 
-- Vercel の転送レイテンシ(Root Directory の設定と Bot 対策の解除後)
+- Vercel の HTML 配信のばらつき(n=20 で p95 が 293ms と大きい。回数を増やして再確認する価値がある)
 - 接続を再利用した条件での再計測(上の注記を参照)
 - OAuth の完全な疎通。**同意画面がフロントに未実装**のため、認可コードの取得まで進めない

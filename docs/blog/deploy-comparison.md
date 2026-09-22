@@ -277,11 +277,11 @@ Cloudflare Workers・Render Static・Netlify・Vercel の 4 社に、同じビ�
 | **Cloudflare Workers** | 54ms | **285ms** | JS 11 行 |
 | Render Static | **40ms** | 505ms | YAML 7 行 |
 | Netlify | 287ms | 827ms | TOML 9 行 |
-| Vercel | 44ms | **計測不能** | JSON 10 行 |
+| Vercel | 44ms | **148ms** | JSON 10 行 |
 
 参考として API 直叩きは 288ms です。
 
-Render は HTML が最速なのに転送は 3 位、Cloudflare はその逆です。**静的配信の速さだけで選ぶと API 経由で損をします**。
+Render は HTML が最速なのに転送は 3 位、**Vercel と Cloudflare は転送が API 直叩きより速い**という結果でした。静的配信の速さだけで選ぶと API 経由で損をします。
 
 ### 「コードを書く手間」は減点にならなかった
 
@@ -307,6 +307,10 @@ Render の設定で Action を Redirect にすると、`/api/meta` が `301 Move
 
 ブラウザが直接 API に飛ばされるので**オリジンが変わり、CORS で失敗**します。Rewrite はサーバー側で裏に取りに行き URL が変わりません。同一オリジンを保つには Rewrite が必須です。
 
+### Vercel の転送は最速だった
+
+計測し直すと **148ms** で、4 社で最速でした。API 直叩きの 288ms より速く、Cloudflare と同じく Vercel のエッジと API の間で接続が再利用されているためと考えられます。
+
 ### ハマった点:Vercel は制約が 3 つ
 
 1. **Hobby プランは非商用限定**
@@ -317,7 +321,7 @@ Render の設定で Action を Redirect にすると、`/api/meta` が `301 Move
 x-vercel-mitigated: challenge
 ```
 
-User-Agent をブラウザ相当に変えても解除されず、IP 単位で遮断されているようです。他の 3 社では同じ計測が通りました。
+User-Agent をブラウザ相当に変えても解除されず、IP 単位で遮断されているようです。他の 3 社では同じ計測が通りました。**時間を置くと解除され**、20 回に抑えれば測れました。
 
 SPA は 1 画面で複数の API を叩くので、**共有 IP(オフィスや学校)からの利用で誤検知される**懸念もあります。
 
