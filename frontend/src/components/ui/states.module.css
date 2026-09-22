@@ -39,7 +39,7 @@
   height: 16px;
   border-radius: 8px;
   background: var(--ui-surface-2);
-  animation: skelPulse 1.4s ease-in-out infinite;
+  animation: skelPulse 0.7s ease-in-out infinite;
 }
 
 @keyframes skelPulse {
