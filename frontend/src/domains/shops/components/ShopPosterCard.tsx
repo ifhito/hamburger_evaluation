@@ -7,8 +7,8 @@ import styles from "./shopPosterCard.module.css";
 
 // ショップ一覧の、ポスター風のカード(design/redesign/shops.html の .poster)。写真を大きく見せ、店名と評価は
 // 写真の下に置く。card.module.css の枠・背景は使わない(デザインに、そのふちがないため)。
-// 写真は、リンクを 2 つ(写真・店名)にして押せる場所を広げるが、同じ行き先を読み上げで二重に伝えないよう、
-// 写真側は aria-hidden + tabIndex=-1 にする(店名側だけを、実際に読み上げられるリンクにする)。
+// カード全体を押せるようにする(stretched link)。実際のリンクは店名の 1 つだけにして(読み上げの二重を避ける)、
+// CSS(nameLink::after)で、そのリンクの当たり判定を、カード全体(.poster、position: relative)まで広げる。
 export function ShopPosterCard({ shop, ratingMax }: { shop: Shop; ratingMax: number | undefined }) {
   const { t } = useTranslation();
   const to = `/shops/${shop.id}`;
@@ -20,13 +20,11 @@ export function ShopPosterCard({ shop, ratingMax }: { shop: Shop; ratingMax: num
             <Badge>{t(`shops.statusBadge.${shop.status}`)}</Badge>
           </div>
         )}
-        <Link to={to} aria-hidden="true" tabIndex={-1} className={styles.photoLink}>
-          {shop.photoUrl ? (
-            <img src={shop.photoUrl} alt="" loading="lazy" className={styles.photo} />
-          ) : (
-            <div className={styles.noPhoto}>{t("shops.list.noPhoto")}</div>
-          )}
-        </Link>
+        {shop.photoUrl ? (
+          <img src={shop.photoUrl} alt="" loading="lazy" className={styles.photo} />
+        ) : (
+          <div className={styles.noPhoto}>{t("shops.list.noPhoto")}</div>
+        )}
       </div>
       <div className={styles.info}>
         <h2 className={styles.name}>
@@ -37,7 +35,7 @@ export function ShopPosterCard({ shop, ratingMax }: { shop: Shop; ratingMax: num
         <p className={styles.meta}>
           {shop.reviewCount > 0 && shop.averageRating !== null ? (
             ratingMax === undefined ? (
-              <b>{shop.averageRating}</b>
+              <b>{shop.averageRating.toFixed(1)}</b>
             ) : (
               <RatingBurger value={shop.averageRating} max={ratingMax} fractionDigits={1} />
             )
