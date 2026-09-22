@@ -223,12 +223,9 @@ describe("RatingBurger(表示)", () => {
 
 type ElProps = {
   children?: ReactNode;
-  type?: string;
-  value?: number;
-  onChange?: () => void;
-  role?: string;
   onClick?: () => void;
   onKeyDown?: (e: { key: string; preventDefault: () => void }) => void;
+  role?: string;
   "aria-checked"?: boolean;
 };
 const walk = (node: ReactNode, out: ReactElement<ElProps>[] = []) => {
@@ -242,7 +239,7 @@ const walk = (node: ReactNode, out: ReactElement<ElProps>[] = []) => {
 
 describe("RatingInput(入力)", () => {
   const input = (props: Partial<React.ComponentProps<typeof RatingInput>> = {}) =>
-    html(<RatingInput name="rating" label="Rating" value={3} onChange={() => {}} min={1} max={5} {...props} />);
+    html(<RatingInput label="Rating" value={3} onChange={() => {}} min={1} max={5} {...props} />);
   const values = (markup: string) => [...markup.matchAll(/<button[^>]*>(\d+)<\/button>/g)].map((m) => m[1]);
   const buttonFor = (markup: string, n: number) => new RegExp(`<button[^>]*>${n}</button>`).exec(markup)?.[0] ?? "";
 
@@ -266,6 +263,7 @@ describe("RatingInput(入力)", () => {
   it("ARIA のカスタム radiogroup として、ラベルを aria-labelledby で結び付けて読み上げる(fieldset/legend もネイティブ radio も使わない)", () => {
     const out = input();
     expect(out).toContain('role="radiogroup"');
+    expect(out).toContain('aria-orientation="horizontal"');
     const labelId = /aria-labelledby="([^"]+)"/.exec(out)?.[1];
     expect(labelId).toBeTruthy();
     expect(out).toMatch(new RegExp(`<span id="${labelId}"[^>]*>Rating</span>`));
@@ -274,10 +272,28 @@ describe("RatingInput(入力)", () => {
     expect(out).not.toContain('type="radio"');
   });
 
+  it("同じ画面に複数置いても、ラベルの id が重ならない(name ではなく useId で作る)", () => {
+    const out = html(
+      <>
+        <RatingInput label="Rating" value={3} onChange={() => {}} min={1} max={5} />
+        <RatingInput label="Rating" value={3} onChange={() => {}} min={1} max={5} />
+      </>,
+    );
+    const ids = [...out.matchAll(/aria-labelledby="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids.length).toBe(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+
   it("roving tabindex: 選んでいる値の札だけ tabIndex=0、残りは -1", () => {
     const out = input({ value: 4 });
     expect(buttonFor(out, 4)).toContain('tabindex="0"');
     for (const n of [1, 2, 3, 5]) expect(buttonFor(out, n)).toContain('tabindex="-1"');
+  });
+
+  it("渡された値が、この入力の最小・最大の範囲の外にあるときも、先頭(min)の札が roving tabindex の対象になる(範囲外のままだと、どの札も tabIndex=0 を持てず、キーボードで群に入れなくなる)", () => {
+    const out = input({ value: 7, min: 1, max: 5 });
+    expect(buttonFor(out, 1)).toContain('tabindex="0"');
+    for (const n of [2, 3, 4, 5]) expect(buttonFor(out, n)).toContain('tabindex="-1"');
   });
 
   it("選んだ値を大きな数字と「out of 5」でも見せる", () => {
@@ -304,7 +320,7 @@ describe("RatingInput(入力)", () => {
   const rendered = (value: number | null, onChange: (v: number) => void) => {
     let tree: ReactNode = null;
     const Probe = () => {
-      tree = RatingInput({ name: "rating", label: "Rating", value, onChange, min: 1, max: 5 });
+      tree = RatingInput({ label: "Rating", value, onChange, min: 1, max: 5 });
       return null;
     };
     html(<Probe />);
@@ -318,6 +334,13 @@ describe("RatingInput(入力)", () => {
     radios[3].props.onClick?.();
     radios[0].props.onClick?.();
     expect(calls).toEqual([4, 1]);
+  });
+
+  it("すでに選んでいる値のボタンを押しても、onChange は呼ばれない(ネイティブの radio が、選択済みのものを押しても change を発火しないのと同じ)", () => {
+    const calls: number[] = [];
+    const radios = rendered(3, (v) => calls.push(v));
+    radios[2].props.onClick?.(); // 3(選んでいる値)を押す
+    expect(calls).toEqual([]);
   });
 
   it("矢印キー(→/↓ で次、←/↑ で前)で選ぶ値が変わり、端では反対側へ回る。Home/End で先頭・末尾へ", () => {
