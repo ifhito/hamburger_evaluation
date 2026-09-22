@@ -134,10 +134,12 @@ const SIZES = [{ key: 'pc', w: 1280, h: 800 }, { key: 'mobile', w: 375, h: 812 }
   const idata = await ipage.evaluate(extract);
   fs.writeFileSync(`${OUT}/rating-icons.json`, JSON.stringify({ key: 'rating-icons', title: '評価のバーガーの比較', size: 'pc', viewport: 1520, url: 'rating-icons.html', ...idata }));
   await ipage.screenshot({ path: `${OUT}/rating-icons.png`, fullPage: true });
-  // 評価のバーガーの自己確認: 評価 0 は全部白抜き、5 は水位の境目なし、2.5 は途中の部品に水位の境目がある。壊れたら、ここで止める
+  // 評価のバーガーの自己確認: 評価 0 は全部消灯、5 は全部点灯、2.5 は一部だけ点灯(食材ごとに、水位より下かどうかの 2 択)。壊れたら、ここで止める
   const chk = await ipage.evaluate(() => {
     const r = (v, size = 'md') => window.Burger.resolve({ variant: 'B', value: v, size }).shapes;
-    return { empty0: r(0).every((s) => s.fill && s.fill.color === '#ffffff'), full5: r(5).every((s) => !(s.fill && s.fill.axis)), mid: r(2.5).some((s) => s.fill && s.fill.axis === 'y'), simple: [r(3, 'sm').length, r(3, 'xs').length] };
+    const lit = (s) => s.stroke !== window.Burger.EMPTY;
+    const at25 = r(2.5);
+    return { empty0: r(0).every((s) => !lit(s)), full5: r(5).every(lit), mid: at25.some(lit) && at25.some((s) => !lit(s)), simple: [r(3, 'sm').length, r(3, 'xs').length] };
   });
   if (!chk.empty0 || !chk.full5 || !chk.mid) throw new Error('評価のバーガーの自己確認に失敗: ' + JSON.stringify(chk));
   await browser.close();

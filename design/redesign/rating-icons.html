@@ -28,19 +28,19 @@
 </head>
 <body data-no-header>
 <h1>評価のバーガーの比較(リデザインのラフ)</h1>
-<p class="lead">線画のバーガーを、評価の分だけ下から塗ります。<b>案 B(水位)を採用</b>しました。1 つのバーガー全体を、下から「評価 ÷ 最大値」の高さまで、水位のように塗ります。案 A(部品ごと)は、比べるための参考として残しています(下から 1 点 = 1 部品。半分は、その部品の左半分)。どちらも、数字を必ずそばに書きます(形や色だけで伝えません)。塗りの色は、このアイコンの中だけ、控えめな本物の色です。「白黒」の行は、色が見えなくても、塗った所と塗っていない所が見分けられるかの確認です。案 B の小(40px)と極小(24px)は、ちぢれたレタスやトマトの輪切りなどの細部をやめて、部品を太くした<b>簡略版の線画</b>にしています(細部は、大と中だけ)。案 A は、参考なので、どの大きさでも同じ線画です。</p>
+<p class="lead">塗りつぶしの閉じた形はやめ、<b>1 食材 = 1 本の、波打つ線</b>にしました。線そのものが色を持ち、黒い輪郭線はありません。食材どうしの間には、はっきりした隙間を空けています。<b>案 B(水位)を採用</b>しました。評価 ÷ 最大値の水位より下の食材は、その食材の色の線、水位より上の食材は、灯っていない管のように、薄いグレーの線(塗りは無し)になります。案 A(部品ごと)は、比べるための参考として残しています(下から 1 点 = 1 食材が灯る)。どちらも、数字を必ずそばに書きます(形や色だけで伝えません)。「白黒」の行は、色が見えなくても、点灯と消灯が見分けられるかの確認です。</p>
 
 <div id="sections"></div>
 
 <h2>色と、白い背景との比(実測)</h2>
-<p class="lead">部品の境目は、黒い輪郭(白に対して 18.88:1)で伝えます。塗りの色は、白に対して 3:1 に届かないものが多いので、色だけには頼りません。輪郭の外側(水位より上)は、灰色の輪郭と白い面です。</p>
+<p class="lead">黒い輪郭線はないので、点灯(食材の色の線)と消灯(薄いグレーの線)は、色そのものの違いで伝えます。塗りの色は、白に対して 3:1 に届かないものが多いので、白背景との比だけでなく、消灯のグレーとの比も確かめます。</p>
 <div id="colors" style="margin-top:16px"></div>
 <p class="note muted" id="summary"></p>
 
 <script src="rating-icons.js"></script>
 <script>
 const SCORES = [0, 1, 2, 3, 4, 4.5, 5];
-const SIZES = [['lg', '大(幅 160px)', 'レビュー詳細の平均・空と読み込み中の画面'], ['md', '中(幅 64px)', 'ショップ一覧・レビュー一覧のカード'], ['sm', '小(幅 40px)', 'レビュー詳細の 1 件ごと(案 B は簡略版の線画)'], ['xs', '極小(幅 24px)', 'いまの画面では使っていない、いちばん小さい大きさ(案 B は 3 部品の簡略版)']];
+const SIZES = [['lg', '大(幅 160px)', 'レビュー詳細の平均・空と読み込み中の画面'], ['md', '中(幅 64px)', 'ショップ一覧・レビュー一覧のカード'], ['sm', '小(幅 40px)', 'レビュー詳細の 1 件ごと(6 本のまま)'], ['xs', '極小(幅 24px)', 'いまの画面では使っていない、いちばん小さい大きさ(案 B は、隙間が潰れるため 3 本(下のバンズ・チーズ・上のバンズ)に間引く)']];
 const ROWS = [['B', false, '案 B(採用)', '色'], ['B', true, '案 B(採用)', '白黒'], ['A', false, '案 A(参考)', '色'], ['A', true, '案 A(参考)', '白黒']];
 document.getElementById('sections').innerHTML = SIZES.map(([size, title, use]) => `
   <h2>${title} <span class="muted" style="font-size:14px;font-weight:400">${use}</span></h2>
@@ -54,16 +54,15 @@ const ratioOf = (a, b) => { const chan = (c) => { c /= 255; return c <= 0.03928 
 const B = window.Burger, WHITE = '#ffffff';
 const FILLS = [['下・上のバンズ', B.COLOR.bun], ['パティ', B.COLOR.patty], ['チーズ(差し色のマスタード黄)', B.COLOR.cheese], ['レタス', B.COLOR.lettuce], ['トマト', B.COLOR.tomato]];
 const pairs = [
-  { label: '輪郭(黒) / 白い背景(図形は 3:1 以上)', fg: B.INK, bg: WHITE, need: 3 },
-  { label: '水位より上の輪郭(灰色) / 白い背景(図形は 3:1 以上)', fg: B.EMPTY, bg: WHITE, need: 3 },
+  { label: '消灯の線(薄いグレー) / 白い背景(図形は 3:1 以上)', fg: B.EMPTY, bg: WHITE, need: 3 },
 ];
-const fillRows = FILLS.map(([name, c]) => ({ name, color: c, vsWhite: ratioOf(c, WHITE), vsInk: ratioOf(c, B.INK), gray: B.grayOf(c), grayVsWhite: ratioOf(B.grayOf(c), WHITE) }));
+const fillRows = FILLS.map(([name, c]) => ({ name, color: c, vsWhite: ratioOf(c, WHITE), vsEmpty: ratioOf(c, B.EMPTY), gray: B.grayOf(c), grayVsWhite: ratioOf(B.grayOf(c), WHITE) }));
 const rd = (v) => (Math.round(v * 100) / 100).toFixed(2);
-window.__iconContrast = { pairs: pairs.map((p) => ({ ...p, ratio: rd(ratioOf(p.fg, p.bg)), pass: ratioOf(p.fg, p.bg) >= p.need })), fills: fillRows.map((f) => ({ ...f, vsWhite: rd(f.vsWhite), vsInk: rd(f.vsInk), grayVsWhite: rd(f.grayVsWhite) })) };
+window.__iconContrast = { pairs: pairs.map((p) => ({ ...p, ratio: rd(ratioOf(p.fg, p.bg)), pass: ratioOf(p.fg, p.bg) >= p.need })), fills: fillRows.map((f) => ({ ...f, vsWhite: rd(f.vsWhite), vsEmpty: rd(f.vsEmpty), grayVsWhite: rd(f.grayVsWhite) })) };
 document.getElementById('colors').innerHTML =
   window.__iconContrast.pairs.map((p) => `<div class="row"><span class="label"><i class="sw" style="background:${p.fg}"></i>${p.label}</span><span class="num">${p.ratio}:1</span><span>${p.need}:1 以上 ${p.pass ? '○' : '×'}</span></div>`).join('') +
-  window.__iconContrast.fills.map((f) => `<div class="row"><span class="label"><i class="sw" style="background:${f.color}"></i>${f.name} ${f.color}</span><span class="num">白 ${f.vsWhite}:1</span><span>黒の輪郭との比 ${f.vsInk}:1 ・ 白黒にすると ${f.gray}(白との比 ${f.grayVsWhite}:1)</span></div>`).join('');
-document.getElementById('summary').textContent = '塗りの色は、白との比が 3:1 に届くものが少ないので、輪郭(黒)と、塗ってある / ない(灰色の輪郭と白い面)の違いで、見分けます。数字は必ず、アイコンのそばに書きます。';
+  window.__iconContrast.fills.map((f) => `<div class="row"><span class="label"><i class="sw" style="background:${f.color}"></i>${f.name} ${f.color}(点灯)</span><span class="num">白 ${f.vsWhite}:1</span><span>消灯のグレーとの比 ${f.vsEmpty}:1 ・ 白黒にすると ${f.gray}(白との比 ${f.grayVsWhite}:1)</span></div>`).join('');
+document.getElementById('summary').textContent = '点灯(食材の色の線)と消灯(薄いグレーの線)は、色そのものの違いで見分けます。黒い輪郭線はありません。数字は必ず、アイコンのそばに書きます。';
 </script>
 <script src="mock.js"></script>
 </body>
