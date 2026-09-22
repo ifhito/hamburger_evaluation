@@ -257,7 +257,6 @@ const en = {
     },
     admin: {
       title: "Shop moderation",
-      loading: "Loading\u2026",
       empty: "No shops.",
       emptyPendingTitle: "Nothing is waiting for review",
       emptyPendingDescription: "New submissions will show up here.",
