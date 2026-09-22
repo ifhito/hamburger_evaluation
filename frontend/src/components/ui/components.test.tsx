@@ -6,6 +6,7 @@ import { Alert } from "./Alert";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { Card } from "./Card";
+import parts from "./burgerParts.json";
 import { RatingBurger, RatingBurgerIcon } from "./RatingBurger";
 import { RatingInput } from "./RatingInput";
 import { EmptyState, Loading, NotFound } from "./states";
@@ -193,22 +194,23 @@ describe("RatingBurger(表示)", () => {
   it("評価が 0 のときは、すべての食材が消灯の灰色の点線で、塗り(fill)は使わない", () => {
     const out = html(<RatingBurger value={0} max={5} size="lg" />);
     expect(out).not.toContain('fill="#');
-    expect(out.match(/stroke="#8e8e89"/g)?.length).toBe(6);
+    expect(out.match(new RegExp(`stroke="${parts.empty}"`, "g"))?.length).toBe(6);
     expect(out.match(/stroke-dasharray="[^"]+"/g)?.length).toBe(6);
   });
 
   it("評価が最大のときは、すべての食材が自分の色の実線で点灯し、消灯の灰色・点線がない", () => {
     const out = html(<RatingBurger value={5} max={5} size="lg" />);
-    expect(out).not.toContain('stroke="#8e8e89"');
+    expect(out).not.toContain(`stroke="${parts.empty}"`);
     expect(out).not.toContain("stroke-dasharray");
   });
 
   it("水位の途中では、水位より下の食材が自分の色の実線、上が消灯の灰色・点線になる(塗りは使わない)", () => {
     const out = html(<RatingBurgerIcon ratio={0.55} size="lg" />);
     expect(out).not.toContain('fill="#');
-    expect((out.match(/stroke="#8e8e89"/g)?.length ?? 0)).toBeGreaterThan(0);
-    expect(out).toMatch(/stroke="#(?!8e8e89)[0-9a-f]{6}"/);
-    expect((out.match(/stroke-dasharray/g)?.length ?? 0)).toBe((out.match(/stroke="#8e8e89"/g)?.length ?? 0));
+    const emptyCount = out.match(new RegExp(`stroke="${parts.empty}"`, "g"))?.length ?? 0;
+    expect(emptyCount).toBeGreaterThan(0);
+    expect(out).toMatch(new RegExp(`stroke="#(?!${parts.empty.slice(1)})[0-9a-f]{6}"`));
+    expect(out.match(/stroke-dasharray/g)?.length ?? 0).toBe(emptyCount);
   });
 
   it("'stepped'(1 件の評価・入力向け)は、部品ごとの段階で点灯し、既定の 'level'(平均評価向け)とは点灯数が違うことがある", () => {
