@@ -40,35 +40,35 @@ export default function SigninPage() {
       <div className={styles.auth}>
         <h1 className={styles.title}>{t("auth.signin.title")}</h1>
         <p className={styles.lead}>{t("auth.signin.lead")}</p>
-        <div className={styles.stack}>
-          <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
-            {serverError && <Alert title={t("auth.signin.errorTitle")} message={serverError} />}
-            <TextField
-              id="email"
-              label={t("auth.signin.email")}
-              type="email"
-              autoComplete="email"
-              placeholder={t("auth.emailPlaceholder")}
-              {...register("email")}
-            />
-            <TextField
-              id="password"
-              label={t("auth.signin.password")}
-              type="password"
-              autoComplete="current-password"
-              {...register("password")}
-            />
-            <Button type="submit" block isLoading={isLoading}>
-              {t("auth.signin.submit")}
-            </Button>
-          </form>
+        {/* デザイン(design/redesign/signin.html)は、Google のボタンと「新規登録」の導線を、<form> の中(送信ボタンの
+            あと)に置く。<form> の外に出さない。 */}
+        <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
+          {serverError && <Alert title={t("auth.signin.errorTitle")} message={serverError} />}
+          <TextField
+            id="email"
+            label={t("auth.signin.email")}
+            type="email"
+            autoComplete="email"
+            placeholder={t("auth.emailPlaceholder")}
+            {...register("email")}
+          />
+          <TextField
+            id="password"
+            label={t("auth.signin.password")}
+            type="password"
+            autoComplete="current-password"
+            {...register("password")}
+          />
+          <Button type="submit" block isLoading={isLoading}>
+            {t("auth.signin.submit")}
+          </Button>
           {/* ログインが必要な画面から送られてきたときは、Google でのサインインのあとも、その画面へ戻す */}
           <GoogleSignIn mode="signin" returnTo={returnPathFrom(location.state)} />
           <p className={styles.linkline}>
             {t("auth.signin.noAccount")}{" "}
             <a href="/signup">{t("auth.signin.signUpLink")}</a>
           </p>
-        </div>
+        </form>
       </div>
     </Layout>
   );

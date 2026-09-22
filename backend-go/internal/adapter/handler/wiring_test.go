@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uowtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
@@ -17,10 +18,16 @@ import (
 // 統計の元データが空のまま、データベースなしで最後まで走る。統計の値そのものは、本物の
 // データベースを使うテスト(adapter/uow など)で確かめている。
 
+// shopsUsecase は、ショップの use case を組み立てる。写真の保存先(キーを公開 URL に直すだけ)は、
+// ファイルに触れない代役(ルートなしの disk)である。
+func shopsUsecase(query usecase.ShopQuery, repo domain.ShopRepository) *usecase.Shops {
+	return usecase.NewShops(query, domain.NewShops(repo), storage.NewDisk("", "/photos"))
+}
+
 func reviewsUsecase(repo *reviewStoreFake, photos usecase.PhotoStorage) *usecase.Reviews {
-	return usecase.NewReviews(repo, &uowtest.UoW{Reviews: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), photos)
+	return usecase.NewReviews(repo, &uowtest.UoW{Reviews: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), photos)
 }
 
 func usersUsecase(store *userStoreFake, hasher usecase.PasswordHasher) *usecase.Users {
-	return usecase.NewUsers(store, domain.NewUsers(store), &uowtest.UoW{Users: store}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), hasher)
+	return usecase.NewUsers(store, domain.NewUsers(store), &uowtest.UoW{Users: store}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), hasher)
 }

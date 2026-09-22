@@ -165,3 +165,43 @@ func RequireConsistentStats(ctx context.Context, t *testing.T, conn *pgx.Conn, b
 	}
 	return got
 }
+
+// StoredShopStats は、テストで読み戻した shop_stats の 1 行である。AverageRating と PhotoKey は、NULL なら nil。
+type StoredShopStats struct {
+	ReviewCount   int64
+	AverageRating *float64
+	PhotoKey      *string
+	CalculatedAt  time.Time
+}
+
+// FetchShopStats は、shop_stats の行を SQL で直接読み取る。行がなければ、2 つ目の戻り値が false になる。
+func FetchShopStats(ctx context.Context, t *testing.T, conn *pgx.Conn, shopID string) (StoredShopStats, bool) {
+	t.Helper()
+	var s StoredShopStats
+	err := conn.QueryRow(ctx,
+		`SELECT review_count, average_rating, photo_key, calculated_at FROM shop_stats WHERE shop_id = $1`, shopID,
+	).Scan(&s.ReviewCount, &s.AverageRating, &s.PhotoKey, &s.CalculatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StoredShopStats{}, false
+	}
+	if err != nil {
+		t.Fatalf("fetch shop stats: %v", err)
+	}
+	return s, true
+}
+
+// FetchShopRecalcRequest は、shop の再計算の依頼(shop_stats_recalc_requests の行)を直接読み取る。依頼がなければ ok は false になる。
+func FetchShopRecalcRequest(ctx context.Context, t *testing.T, conn *pgx.Conn, shopID string) (StoredRecalcRequest, bool) {
+	t.Helper()
+	var r StoredRecalcRequest
+	err := conn.QueryRow(ctx,
+		`SELECT version, attempts, next_attempt_at, last_error FROM shop_stats_recalc_requests WHERE shop_id = $1`, shopID,
+	).Scan(&r.Version, &r.Attempts, &r.NextAttemptAt, &r.LastError)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StoredRecalcRequest{}, false
+	}
+	if err != nil {
+		t.Fatalf("fetch shop recalc request: %v", err)
+	}
+	return r, true
+}

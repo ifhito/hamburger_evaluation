@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -10,6 +11,32 @@ import (
 // statsRunner は、統計の再計算の 1 サイクルを実行する。usecase.StatsWorker がこれを満たす。
 type statsRunner interface {
 	RunOnce(ctx context.Context) (int, error)
+}
+
+// StatsCycle は、統計の再計算のワーカーを、渡した順に実行して、1 サイクルにまとめる(バーガーの統計のワーカー →
+// ショップの集計のワーカーの順。ショップの依頼は、バーガーの統計のワーカーが登録するので、同じサイクルの中で、
+// 続けてショップの集計まで反映される)。1 つのワーカーが失敗しても、続くワーカーは実行する(失敗は、まとめて返す)。
+type StatsCycle []statsRunner
+
+// NewStatsCycle は、runners を渡した順に実行する StatsCycle を返す。
+func NewStatsCycle(runners ...statsRunner) StatsCycle { return runners }
+
+// RunOnce は、ワーカーを順に 1 サイクルずつ実行し、処理した件数の合計を返す。ctx が取り消されたときは、
+// そこで止める。
+func (c StatsCycle) RunOnce(ctx context.Context) (int, error) {
+	total := 0
+	var errs []error
+	for _, runner := range c {
+		n, err := runner.RunOnce(ctx)
+		total += n
+		if err != nil {
+			errs = append(errs, err)
+			if ctx.Err() != nil {
+				break
+			}
+		}
+	}
+	return total, errors.Join(errs...)
 }
 
 // StatsWorkerLoop は、統計の再計算のワーカーを、一定の間隔で回し続ける goroutine である(1 本だけ)。

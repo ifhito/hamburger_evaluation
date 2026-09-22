@@ -92,11 +92,11 @@ func TestGoogleLoginMessagesFollowAcceptLanguage(t *testing.T) {
 		})
 	}
 
-	t.Run("存在しないコードを交換すると、400 で、言語に合わせた案内を返す", func(t *testing.T) {
+	t.Run("存在しないコードを交換すると、400 で、言語に合わせた案内と、言語によらない reason を返す", func(t *testing.T) {
 		k := newGoogleKit(t)
 		for header, want := range map[string]string{
-			"":   `{"errors":["The Google sign-in link is invalid or has expired. Please try again."]}`,
-			"ja": `{"errors":["Google のサインインのリンクが、無効か期限切れです。もう一度お試しください。"]}`,
+			"":   `{"errors":["The Google sign-in link is invalid or has expired. Please try again."],"return_to":"","reason":"google.code_invalid"}`,
+			"ja": `{"errors":["Google のサインインのリンクが、無効か期限切れです。もう一度お試しください。"],"return_to":"","reason":"google.code_invalid"}`,
 		} {
 			rec := k.exchangeIn("no-such-code", header)
 			if rec.Code != http.StatusBadRequest || rec.Body.String() != want {

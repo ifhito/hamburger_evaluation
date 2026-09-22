@@ -168,7 +168,7 @@ func newTestRouterWith(t *testing.T, p handler.Pinger, auth *usecase.Auth) http.
 	reviewRepo := newReviewStoreFake()
 	users := newUserStoreFake()
 	shopRepo := &shopStoreFake{}
-	return handler.NewRouter(p, auth, unusedSignups(), usecase.NewShops(shopRepo, domain.NewShops(shopRepo)),
+	return handler.NewRouter(p, auth, unusedSignups(), shopsUsecase(shopRepo, shopRepo),
 		reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
 		usersUsecase(users, hasherFake{}), nil, nil, nil)
 }

@@ -13,16 +13,20 @@ import type {
 
 export const authApiClient = buildApiClient(getToken);
 
-// Google の交換の失敗(409・400 など)。backend は、失敗の応答にも、検証済みの戻り先(return_to。手続きを始めた画面)を
-// 含める。この項目は、この失敗にだけあるので、共有の ApiError には持たせず、ここで、本文から読む。なければ空。
+// Google の交換の失敗(409・400 など)。backend は、失敗の応答にも、検証済みの戻り先(return_to。手続きを始めた画面)と、
+// 失敗の理由を示す、言語によらない識別子(reason。例: "google.account_exists")を含める。文言(messages)は
+// Accept-Language で日本語にもなるため、画面が理由ごとに案内を出し分けるには、文言ではなく reason を使う。
+// この 2 項目は、この失敗にだけあるので、共有の ApiError には持たせず、ここで、本文から読む。なければ空。
 export class GoogleExchangeError extends ApiError {
   readonly returnTo: string;
+  readonly reason: string;
 
   constructor(cause: ApiError) {
     super(cause.messages, cause.status, cause.body);
     this.name = "GoogleExchangeError";
-    const returnTo = (cause.body as { returnTo?: unknown } | null | undefined)?.returnTo;
-    this.returnTo = typeof returnTo === "string" ? returnTo : "";
+    const body = cause.body as { returnTo?: unknown; reason?: unknown } | null | undefined;
+    this.returnTo = typeof body?.returnTo === "string" ? body.returnTo : "";
+    this.reason = typeof body?.reason === "string" ? body.reason : "";
   }
 }
 

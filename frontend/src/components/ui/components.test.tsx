@@ -221,7 +221,13 @@ describe("RatingBurger(表示)", () => {
   });
 });
 
-type ElProps = { children?: ReactNode; type?: string; value?: number; onChange?: () => void };
+type ElProps = {
+  children?: ReactNode;
+  onClick?: () => void;
+  onKeyDown?: (e: { key: string; preventDefault: () => void }) => void;
+  role?: string;
+  "aria-checked"?: boolean;
+};
 const walk = (node: ReactNode, out: ReactElement<ElProps>[] = []) => {
   if (Array.isArray(node)) node.forEach((n) => walk(n, out));
   else if (isValidElement<ElProps>(node)) {
@@ -233,17 +239,18 @@ const walk = (node: ReactNode, out: ReactElement<ElProps>[] = []) => {
 
 describe("RatingInput(入力)", () => {
   const input = (props: Partial<React.ComponentProps<typeof RatingInput>> = {}) =>
-    html(<RatingInput name="rating" label="Rating" value={3} onChange={() => {}} min={1} max={5} {...props} />);
-  const values = (markup: string) => [...markup.matchAll(/value="(\d+)"/g)].map((m) => m[1]);
+    html(<RatingInput label="Rating" value={3} onChange={() => {}} min={1} max={5} {...props} />);
+  const values = (markup: string) => [...markup.matchAll(/<button[^>]*>(\d+)<\/button>/g)].map((m) => m[1]);
+  const buttonFor = (markup: string, n: number) => new RegExp(`<button[^>]*>${n}</button>`).exec(markup)?.[0] ?? "";
 
-  it("最小〜最大の数字のラジオボタンを並べ、選んでいる値だけが checked になり、その札だけが選択中の見た目(on)になる", () => {
+  it("最小〜最大の数字のボタン(role=radio)を並べ、選んでいる値だけが aria-checked になり、その札だけが選択中の見た目(on)になる", () => {
     const out = input();
-    expect(out.match(/type="radio"/g)?.length).toBe(5);
-    expect(out.match(/checked=""/g)?.length).toBe(1);
-    for (const label of out.split("<label").slice(1)) {
-      const isOn = classNames(`<label${label}`).includes("on");
-      expect(isOn, label).toBe(/value="3"/.test(label));
-      expect(/checked=""/.test(label), label).toBe(/value="3"/.test(label));
+    expect(out.match(/role="radio"/g)?.length).toBe(5);
+    expect(out.match(/aria-checked="true"/g)?.length).toBe(1);
+    for (let n = 1; n <= 5; n++) {
+      const btn = buttonFor(out, n);
+      expect(btn, btn).toContain(`aria-checked="${n === 3}"`);
+      expect(classNames(btn).includes("on"), btn).toBe(n === 3);
     }
   });
 
@@ -253,11 +260,40 @@ describe("RatingInput(入力)", () => {
     expect(values(input({ min: 1, max: 3 }))).toEqual(["1", "2", "3"]);
   });
 
-  it("同じ name のラジオボタンの集まりで、ラベルを凡例(legend)として読み上げる", () => {
+  it("ARIA のカスタム radiogroup として、ラベルを aria-labelledby で結び付けて読み上げる(fieldset/legend もネイティブ radio も使わない)", () => {
     const out = input();
-    expect(out).toContain("<fieldset");
-    expect(out).toMatch(/<legend[^>]*>Rating<\/legend>/);
-    expect(out.match(/name="rating"/g)?.length).toBe(5);
+    expect(out).toContain('role="radiogroup"');
+    expect(out).toContain('aria-orientation="horizontal"');
+    const labelId = /aria-labelledby="([^"]+)"/.exec(out)?.[1];
+    expect(labelId).toBeTruthy();
+    expect(out).toMatch(new RegExp(`<span id="${labelId}"[^>]*>Rating</span>`));
+    expect(out).not.toContain("<fieldset");
+    expect(out).not.toContain("<legend");
+    expect(out).not.toContain('type="radio"');
+  });
+
+  it("同じ画面に複数置いても、ラベルの id が重ならない(name ではなく useId で作る)", () => {
+    const out = html(
+      <>
+        <RatingInput label="Rating" value={3} onChange={() => {}} min={1} max={5} />
+        <RatingInput label="Rating" value={3} onChange={() => {}} min={1} max={5} />
+      </>,
+    );
+    const ids = [...out.matchAll(/aria-labelledby="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids.length).toBe(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it("roving tabindex: 選んでいる値の札だけ tabIndex=0、残りは -1", () => {
+    const out = input({ value: 4 });
+    expect(buttonFor(out, 4)).toContain('tabindex="0"');
+    for (const n of [1, 2, 3, 5]) expect(buttonFor(out, n)).toContain('tabindex="-1"');
+  });
+
+  it("渡された値が、この入力の最小・最大の範囲の外にあるときも、先頭(min)の札が roving tabindex の対象になる(範囲外のままだと、どの札も tabIndex=0 を持てず、キーボードで群に入れなくなる)", () => {
+    const out = input({ value: 7, min: 1, max: 5 });
+    expect(buttonFor(out, 1)).toContain('tabindex="0"');
+    for (const n of [2, 3, 4, 5]) expect(buttonFor(out, n)).toContain('tabindex="-1"');
   });
 
   it("選んだ値を大きな数字と「out of 5」でも見せる", () => {
@@ -273,25 +309,58 @@ describe("RatingInput(入力)", () => {
     expect(svgOf(input({ value: null }))).toBe(iconOf(0));
   });
 
-  it("まだ選んでいない(null)ときは、どのボタンも checked でなく、数字の場所は「–」", () => {
+  it("まだ選んでいない(null)ときは、どのボタンも aria-checked=true でなく、数字の場所は「–」。roving tabindex は先頭(min)に置かれる", () => {
     const out = input({ value: null });
-    expect(out).not.toContain("checked");
+    expect(out).not.toContain('aria-checked="true"');
     expect(out).toContain("<b>\u2013</b>");
+    expect(buttonFor(out, 1)).toContain('tabindex="0"');
+    for (let n = 2; n <= 5; n++) expect(buttonFor(out, n)).toContain('tabindex="-1"');
   });
 
-  it("数字のボタンを選ぶと、その数字で onChange が呼ばれる", () => {
-    const calls: number[] = [];
+  const rendered = (value: number | null, onChange: (v: number) => void) => {
     let tree: ReactNode = null;
     const Probe = () => {
-      tree = RatingInput({ name: "rating", label: "Rating", value: 3, onChange: (v) => calls.push(v), min: 1, max: 5 });
+      tree = RatingInput({ label: "Rating", value, onChange, min: 1, max: 5 });
       return null;
     };
     html(<Probe />);
-    const radios = walk(tree).filter((e) => e.props.type === "radio");
-    expect(radios.map((r) => r.props.value)).toEqual([1, 2, 3, 4, 5]);
-    radios[3].props.onChange?.();
-    radios[0].props.onChange?.();
+    return walk(tree).filter((e) => e.props.role === "radio");
+  };
+
+  it("ボタンを押す(クリック)と、その数字で onChange が呼ばれる", () => {
+    const calls: number[] = [];
+    const radios = rendered(3, (v) => calls.push(v));
+    expect(radios.map((r) => r.props.children)).toEqual([1, 2, 3, 4, 5]);
+    radios[3].props.onClick?.();
+    radios[0].props.onClick?.();
     expect(calls).toEqual([4, 1]);
+  });
+
+  it("すでに選んでいる値のボタンを押しても、onChange は呼ばれない(ネイティブの radio が、選択済みのものを押しても change を発火しないのと同じ)", () => {
+    const calls: number[] = [];
+    const radios = rendered(3, (v) => calls.push(v));
+    radios[2].props.onClick?.(); // 3(選んでいる値)を押す
+    expect(calls).toEqual([]);
+  });
+
+  it("矢印キー(→/↓ で次、←/↑ で前)で選ぶ値が変わり、端では反対側へ回る。Home/End で先頭・末尾へ", () => {
+    const press = (key: string, current: number) => {
+      const calls: number[] = [];
+      const radios = rendered(current, (v) => calls.push(v));
+      const active = radios.find((r) => r.props["aria-checked"] === true) ?? radios[0];
+      active.props.onKeyDown?.({ key, preventDefault: () => {} });
+      return calls;
+    };
+
+    expect(press("ArrowRight", 3)).toEqual([4]);
+    expect(press("ArrowDown", 3)).toEqual([4]);
+    expect(press("ArrowLeft", 3)).toEqual([2]);
+    expect(press("ArrowUp", 3)).toEqual([2]);
+    expect(press("ArrowRight", 5)).toEqual([1]); // 末尾から先頭へ回る
+    expect(press("ArrowLeft", 1)).toEqual([5]); // 先頭から末尾へ回る
+    expect(press("Home", 3)).toEqual([1]);
+    expect(press("End", 3)).toEqual([5]);
+    expect(press("Tab", 3)).toEqual([]); // 対応しないキーは onChange を呼ばない
   });
 
   it("範囲(GET /meta)が取得できていない間は、何も出さない(値を推測しない)", () => {

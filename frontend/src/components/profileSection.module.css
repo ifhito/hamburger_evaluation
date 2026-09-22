@@ -1,9 +1,43 @@
 /* プロフィールに並べる、連携の欄(Google の連携・許可した AI アプリ)に共通の、欄と見出しの見た目 */
 .section {
-  margin-bottom: 2rem;
+  margin-bottom: 56px;
+  font-family: var(--ui-font);
+  color: var(--ui-text);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .heading {
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+/* Google の連携の行・許可したアプリの行に共通の箱(design/redesign/mock.css の .appitem)。
+   繰り返す項目なので article(Google の行は 1 件だけだが、見た目・意味を接続済みアプリの行とそろえる)。 */
+.appitem {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 20px 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+}
+
+@media (max-width: 720px) {
+  .appitem {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .appitem > button {
+    width: 100%;
+  }
 }

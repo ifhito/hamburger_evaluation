@@ -65,13 +65,21 @@ describe("SigninPage(サインインの画面)", () => {
     await eventually(() => expect(page.querySelector("[role=alert]")?.textContent).toContain("Invalid email or password"));
   });
 
-  it("GET /meta が Google を返しているときは、フォームの下に、「または」の区切りつきで、Google のボタンを出す", async () => {
+  it("GET /meta が Google を返しているときは、フォームの下に、「または」の区切りつきで、Google のボタンを出す(デザインどおり <form> の中)", async () => {
     const page = await show();
 
     const google = need(byText(page, "a", "Continue with Google"), "Continue with Google");
     const submitButton = need(byText(page, "button", "Sign in"), "Sign in");
     expect(submitButton.compareDocumentPosition(google) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(byText(page, "p", "or")).toBeDefined();
+    expect(byText(page, "div", "or")).toBeDefined();
+    expect(google.closest("form")).not.toBeNull();
+  });
+
+  it("「新規登録」の導線は、<form> の中(送信ボタンのあと)にある(design/redesign/signin.html。ヘッダーにも同じ文言のリンクがあるので、<form> の中だけを探す)", async () => {
+    const page = await show();
+
+    const form = need(page.querySelector("form"), "form");
+    expect(byText<HTMLAnchorElement>(form, "a", "Sign up")).toBeDefined();
   });
 
   it("GET /meta に Google がないときは、Google のボタンも「または」の区切りも出さない", async () => {
@@ -79,6 +87,6 @@ describe("SigninPage(サインインの画面)", () => {
     const page = await show();
 
     expect(byText(page, "a", "Continue with Google")).toBeUndefined();
-    expect(byText(page, "p", "or")).toBeUndefined();
+    expect(byText(page, "div", "or")).toBeUndefined();
   });
 });

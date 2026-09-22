@@ -59,49 +59,49 @@ export default function SignupPage() {
       <div className={styles.auth}>
         <h1 className={styles.title}>{t("auth.signup.title")}</h1>
         <p className={styles.lead}>{t("auth.signup.lead")}</p>
-        <div className={styles.stack}>
+        {/* デザイン(design/redesign/signup.html)は、Google のボタンを <form> の先頭、「サインイン」の導線を
+            末尾に置く(どちらも <form> の中。<form> の外に出さない)。 */}
+        <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
           <GoogleSignIn mode="signup" />
-          <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
-            {serverError && <Alert title={t("auth.signup.errorTitle")} message={serverError} />}
-            <TextField
-              id="username"
-              label={t("auth.signup.username")}
-              autoComplete="username"
-              counter={{ value: watch("username"), max: meta?.text.usernameMaxChars }}
-              {...register("username")}
-            />
-            <TextField
-              id="email"
-              label={t("auth.signup.email")}
-              type="email"
-              autoComplete="email"
-              placeholder={t("auth.emailPlaceholder")}
-              {...register("email")}
-            />
-            <TextField
-              id="password"
-              label={t("auth.signup.password")}
-              type="password"
-              autoComplete="new-password"
-              hint={meta && t("auth.passwordHint", { min: meta.password.minBytes, max: meta.password.maxBytes })}
-              {...register("password")}
-            />
-            <TextField
-              id="passwordConfirmation"
-              label={t("auth.signup.confirmPassword")}
-              type="password"
-              autoComplete="new-password"
-              {...register("passwordConfirmation")}
-            />
-            <Button type="submit" block isLoading={isLoading}>
-              {t("auth.signup.submit")}
-            </Button>
-          </form>
+          {serverError && <Alert title={t("auth.signup.errorTitle")} message={serverError} />}
+          <TextField
+            id="username"
+            label={t("auth.signup.username")}
+            autoComplete="username"
+            counter={{ value: watch("username"), max: meta?.text.usernameMaxChars }}
+            {...register("username")}
+          />
+          <TextField
+            id="email"
+            label={t("auth.signup.email")}
+            type="email"
+            autoComplete="email"
+            placeholder={t("auth.emailPlaceholder")}
+            {...register("email")}
+          />
+          <TextField
+            id="password"
+            label={t("auth.signup.password")}
+            type="password"
+            autoComplete="new-password"
+            hint={meta && t("auth.passwordHint", { min: meta.password.minBytes, max: meta.password.maxBytes })}
+            {...register("password")}
+          />
+          <TextField
+            id="passwordConfirmation"
+            label={t("auth.signup.confirmPassword")}
+            type="password"
+            autoComplete="new-password"
+            {...register("passwordConfirmation")}
+          />
+          <Button type="submit" block isLoading={isLoading}>
+            {t("auth.signup.submit")}
+          </Button>
           <p className={styles.linkline}>
             {t("auth.signup.hasAccount")}{" "}
             <a href="/signin">{t("auth.signup.signInLink")}</a>
           </p>
-        </div>
+        </form>
       </div>
     </Layout>
   );

@@ -22,6 +22,14 @@ export interface ReviewView extends Review {
   canEdit: boolean;
 }
 
+// GET /reviews/{id}(詳細)の応答。shop は、閲覧者に見える、そのレビューのショップ(見えないときは null)で、
+// canReview は、閲覧者がそのショップにレビューを書けるか(匿名は false)。どちらも backend が決めて返す
+// (frontend は、ショップの状態や作成者を比べない)。一覧・作成・更新の応答にはない。
+export interface ReviewDetailView extends ReviewView {
+  canReview: boolean;
+  shop: { id: string; name: string } | null;
+}
+
 export interface ReviewCreateInput {
   rating: number;
   comment: string;

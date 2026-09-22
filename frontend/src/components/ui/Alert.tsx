@@ -8,10 +8,11 @@ interface Props {
 }
 
 // エラーの表示: 赤の枠 + 左の赤い帯 + 「!」のアイコン + 文言。色だけに頼らない。読み上げには role="alert" で伝わる。
+// デザイン(design/redesign/states.html ほか)は、この箱を <section> にしている(<div> ではない)。
 export function Alert({ title, message }: Props) {
   const messages = Array.isArray(message) ? message : [message]
   return (
-    <div role="alert" className={styles.alert}>
+    <section role="alert" className={styles.alert}>
       <i className={styles.band} aria-hidden="true" />
       <span className={styles.mark} aria-hidden="true">
         !
@@ -28,6 +29,6 @@ export function Alert({ title, message }: Props) {
           </ul>
         )}
       </div>
-    </div>
+    </section>
   )
 }
