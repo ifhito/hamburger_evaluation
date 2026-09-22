@@ -15,32 +15,21 @@
   // ---- パスの部品(M・L・C・Z だけを使う) ----
   const K = 0.5523;
   const rrect = (x, y, w, h, r) => { const k = r * K; return `M ${x + r} ${y} L ${x + w - r} ${y} C ${x + w - r + k} ${y} ${x + w} ${y + r - k} ${x + w} ${y + r} L ${x + w} ${y + h - r} C ${x + w} ${y + h - r + k} ${x + w - r + k} ${y + h} ${x + w - r} ${y + h} L ${x + r} ${y + h} C ${x + r - k} ${y + h} ${x} ${y + h - r + k} ${x} ${y + h - r} L ${x} ${y + r} C ${x} ${y + r - k} ${x + r - k} ${y} ${x + r} ${y} Z`; };
-  const ellipse = (cx, cy, rx, ry, deg) => {
-    const t = (deg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
-    const p = (x, y) => `${n2(cx + x * c - y * s)} ${n2(cy + x * s + y * c)}`;
-    const kx = rx * K, ky = ry * K;
-    return `M ${p(rx, 0)} C ${p(rx, ky)} ${p(kx, ry)} ${p(0, ry)} C ${p(-kx, ry)} ${p(-rx, ky)} ${p(-rx, 0)} C ${p(-rx, -ky)} ${p(-kx, -ry)} ${p(0, -ry)} C ${p(kx, -ry)} ${p(rx, -ky)} ${p(rx, 0)} Z`;
-  };
   const scallops = (x0, x1, y, count, depth) => { // 左から右へ、下に膨らむ縁(ちぢれたレタス)
     const dx = (x1 - x0) / count, c = depth / 0.75;
     let d = '';
     for (let i = 0; i < count; i++) { const x = x0 + dx * i; d += ` C ${n2(x + dx * 0.15)} ${n2(y + c)} ${n2(x + dx * 0.85)} ${n2(y + c)} ${n2(x + dx)} ${y}`; }
     return d;
   };
-  const seeds = [[34, 17, -30], [52, 11, -10], [70, 10, 10], [88, 16, 30], [24, 27, -40], [43, 23, -15], [61, 19, 0], [79, 22, 15], [97, 27, 40], [52, 32, -5], [70, 32, 5], [34, 34, -20], [88, 34, 20]];
 
   // 下から重ねる順(上に重なる部品が後)。unit は案 A で「何点目で塗るか」(1〜5)
   const PARTS = [
     { id: '下のバンズ', unit: 1, color: COLOR.bun, d: 'M 8 82 L 112 82 C 112 91 108 98 98 98 L 22 98 C 12 98 8 91 8 82 Z', details: [] },
-    { id: 'パティ', unit: 2, color: COLOR.patty, d: 'M 5 71.5 C 5 64 9 62 17 62 L 103 62 C 111 62 115 64 115 71.5 C 115 79 111 81 103 81 L 17 81 C 9 81 5 79 5 71.5 Z',
-      details: [[22, 69, 32, 76], [40, 68, 48, 75], [58, 69, 66, 76], [76, 68, 84, 75], [92, 69, 100, 76]].map(([x1, y1, x2, y2]) => ({ d: `M ${x1} ${y1} C ${x1 + 3} ${y1 + 1} ${x2 - 3} ${y2 - 1} ${x2} ${y2}`, stroke: COLOR.mark, w: 1.6, at: [x2, y2] })) },
+    { id: 'パティ', unit: 2, color: COLOR.patty, d: 'M 5 71.5 C 5 64 9 62 17 62 L 103 62 C 111 62 115 64 115 71.5 C 115 79 111 81 103 81 L 17 81 C 9 81 5 79 5 71.5 Z', details: [] },
     { id: 'チーズ', unit: 3, color: COLOR.cheese, d: 'M 8 54 L 112 54 L 112 61 L 98 61 C 98 81 88 81 88 61 L 60 61 C 60 69 54 69 54 61 L 32 61 C 32 75.7 22 75.7 22 61 L 8 61 Z', details: [] },
-    { id: 'トマト', unit: 4, color: COLOR.tomato, d: [rrect(10, 46, 32, 10, 5), rrect(44, 46, 32, 10, 5), rrect(78, 46, 32, 10, 5)].join(' '),
-      details: [26, 60, 94].map((cx) => ({ d: ellipse(cx, 52, 7, 1.6, 0), fill: COLOR.pocket, at: [cx, 52] })) },
-    { id: 'レタス', unit: 4, color: COLOR.lettuce, d: `M 2 38 L 2 44${scallops(2, 118, 44, 9, 5.25)} L 118 38 Z`,
-      details: [[20, 44], [46, 44], [72, 44], [98, 44]].map(([x, y]) => ({ d: `M ${x} ${y - 3} C ${x + 2} ${y - 1} ${x + 3} ${y + 1} ${x + 2} ${y + 3}`, stroke: COLOR.vein, w: 1.3, at: [x, y] })) },
-    { id: '上のバンズ', unit: 5, color: COLOR.bun, d: 'M 6 36 C 6 15 30 2 60 2 C 90 2 114 15 114 36 C 114 38 113 39 111 39 L 9 39 C 7 39 6 38 6 36 Z',
-      details: seeds.map(([cx, cy, a]) => ({ d: ellipse(cx, cy, 3.4, 1.8, a), fill: COLOR.seed, stroke: COLOR.mark, w: 0.9, at: [cx, cy] })) },
+    { id: 'トマト', unit: 4, color: COLOR.tomato, d: [rrect(10, 46, 32, 10, 5), rrect(44, 46, 32, 10, 5), rrect(78, 46, 32, 10, 5)].join(' '), details: [] },
+    { id: 'レタス', unit: 4, color: COLOR.lettuce, d: `M 2 38 L 2 44${scallops(2, 118, 44, 9, 5.25)} L 118 38 Z`, details: [] },
+    { id: '上のバンズ', unit: 5, color: COLOR.bun, d: 'M 6 36 C 6 15 30 2 60 2 C 90 2 114 15 114 36 C 114 38 113 39 111 39 L 9 39 C 7 39 6 38 6 36 Z', details: [] },
   ];
 
   // 小さいサイズ(案 B だけ)の簡略版: 細部と細かい縁(ちぢれ・トマトの輪切り・しずく)をやめて、部品を太くし、水位の高さが読めるようにする。
