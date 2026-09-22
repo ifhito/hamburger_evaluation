@@ -2,6 +2,8 @@
 export interface OAuthScope {
   name: string;
   description: string;
+  // 書き込みを伴う範囲か(backend が domain の定義から返す。frontend は範囲の名前を比べない)。
+  writes: boolean;
 }
 
 // 許可を尋ねる画面に出す内容。consentRequired が false なら、求められた範囲は許可済みの範囲に収まるので、
