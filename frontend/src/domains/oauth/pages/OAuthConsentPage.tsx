@@ -1,17 +1,21 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { Alert } from "../../../components/ui/Alert";
-import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { RatingBurgerIcon } from "../../../components/ui/RatingBurger";
 import { Layout } from "../../../components/Layout";
 import { oauthApi } from "../api/oauthApiClient";
 import { phaseFor, redirectPhase, searchToDecide, startConsent, NotNavigableError, type ConsentState } from "../consentFlow";
 import { hostOf } from "../navigation";
+import { ScopeList } from "../components/ScopeList";
 import styles from "./oauthConsent.module.css";
+
+// 水位の絵は装飾(見た目だけの進み具合。評価ではない)。確認中より、接続中(移動の直前)を多めに塗る。
+const CHECKING_LEVEL = 0.6;
+const CONNECTING_LEVEL = 0.9;
 
 // アプリへ戻る(ブラウザを、backend が返した戻り先へ移す)。開けない戻り先(http(s) 以外)は開かず、失敗にする。
 function moveToApp(setState: Dispatch<SetStateAction<ConsentState | null>>, search: string, target: string) {
@@ -53,17 +57,27 @@ export default function OAuthConsentPage() {
   // (要求の検証は backend が行う。ここでは判断に使わない)。
   const returnHost = hostOf(new URLSearchParams(search).get("redirect_uri"));
 
+  // 画面を離れたあとに、許可・拒否の応答が返っても、勝手に移動させない・表示を更新しない。
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const decide = async (approve: boolean) => {
     // 送るのは、いま画面に内容を見せている要求だけ(確認中や、前の要求の画面では何も送らない)。
     const target = searchToDecide(state, search);
     if (target === null) return;
     setDecidingSearch(target);
     try {
-      moveToApp(setState, target, (await oauthApi.decide(target, approve)).redirectTo);
+      const { redirectTo } = await oauthApi.decide(target, approve);
+      if (mounted.current) moveToApp(setState, target, redirectTo);
     } catch (e) {
-      setState({ search: target, phase: { status: "failed", error: e } });
+      if (mounted.current) setState({ search: target, phase: { status: "failed", error: e } });
     } finally {
-      setDecidingSearch(null);
+      if (mounted.current) setDecidingSearch(null);
     }
   };
 
@@ -85,9 +99,11 @@ export default function OAuthConsentPage() {
   return (
     <Layout>
       <div className={styles.consent}>
-        {phase.status === "loading" && <StatusView ratio={0.6} title={t("oauth.consent.loadingTitle")} description={t("oauth.consent.loading")} />}
+        {phase.status === "loading" && (
+          <StatusView ratio={CHECKING_LEVEL} title={t("oauth.consent.loadingTitle")} description={t("oauth.consent.loading")} />
+        )}
         {phase.status === "redirecting" && (
-          <StatusView ratio={0.9} title={t("oauth.consent.connectingTitle")} description={t("oauth.consent.connecting")} />
+          <StatusView ratio={CONNECTING_LEVEL} title={t("oauth.consent.connectingTitle")} description={t("oauth.consent.connecting")} />
         )}
         {phase.status === "failed" && (
           <>
@@ -115,20 +131,20 @@ export default function OAuthConsentPage() {
 
             <section className={styles.perm}>
               <h2 className={styles.permHeading}>{t("oauth.consent.permissionsHeading")}</h2>
-              <ul className={styles.scopes}>
-                {phase.view.scopes.map((scope) => (
-                  <li key={scope.name} className={styles.scopeItem}>
-                    <span>{scope.description}</span>
-                    {/* 書き込みの範囲かは、API の印(writes)だけで決める(範囲の名前を比べない) */}
-                    {scope.writes && <Badge tone="accent">{t("oauth.writeAccess")}</Badge>}
-                  </li>
-                ))}
-              </ul>
+              <ScopeList scopes={phase.view.scopes} className={styles.scopes} />
             </section>
 
             <div className={styles.facts}>
-              {returnHost && <p>{t("oauth.consent.returnsTo", { host: returnHost })}</p>}
-              {user && <p>{t("oauth.consent.signedInAs", { name: user.username })}</p>}
+              {returnHost && (
+                <span>
+                  <b>{t("oauth.consent.returnsToLabel")}</b> {returnHost}
+                </span>
+              )}
+              {user && (
+                <span>
+                  {t("oauth.consent.signedInAsLabel")} <b>{user.username}</b>
+                </span>
+              )}
             </div>
 
             <div className={styles.actions}>
@@ -139,6 +155,7 @@ export default function OAuthConsentPage() {
                 {t("oauth.consent.deny")}
               </Button>
             </div>
+            <p className={styles.hint}>{t("oauth.consent.disconnectHint")}</p>
           </>
         )}
       </div>

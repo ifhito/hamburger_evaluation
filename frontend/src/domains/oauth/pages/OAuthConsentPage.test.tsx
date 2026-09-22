@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "../../../lib/i18n";
 import { ApiError } from "../../../api/client/buildApiClient";
-import { byText, cleanup, click, eventually, mount, need } from "../../../test/dom";
+import { byText, cleanup, click, eventually, mount, need, unmount } from "../../../test/dom";
 import { oauthApi } from "../api/oauthApiClient";
 import type { AuthorizeRequestView } from "../api/types";
 import OAuthConsentPage from "./OAuthConsentPage";
@@ -56,7 +56,8 @@ describe("OAuthConsentPage(アプリの接続の許可)", () => {
     const page = await show();
 
     await eventually(() => expect(page.textContent).toContain("localhost:53412"));
-    expect(page.textContent).toContain("Signed in as alice");
+    expect(page.textContent).toContain("Signed in as:");
+    expect(page.textContent).toContain("alice");
   });
 
   it("アプリの名前に HTML があっても、文字として出す(解釈しない)", async () => {
@@ -105,5 +106,25 @@ describe("OAuthConsentPage(アプリの接続の許可)", () => {
     await show();
 
     await eventually(() => expect(decide).toHaveBeenCalledWith(expect.any(String), true, expect.anything()));
+  });
+
+  it("「Allow」を押したあとに画面を離れたら、応答が返っても、そのブラウザを勝手に移動させない", async () => {
+    describe_.mockResolvedValue(view);
+    let resolveDecide!: (v: { redirectTo: string }) => void;
+    decide.mockReturnValue(new Promise((resolve) => (resolveDecide = resolve)));
+    // jsdom の window.location.assign は個別に差し替えられないので、location ごと差し替える。
+    const originalLocation = window.location;
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", { value: { ...originalLocation, assign }, writable: true, configurable: true });
+    const page = await show();
+    await eventually(() => expect(byText(page, "button", "Allow")).toBeDefined());
+    await click(need(byText(page, "button", "Allow"), "Allow"));
+
+    await unmount(page);
+    resolveDecide({ redirectTo: "http://localhost:53412/callback?code=abc" });
+    await eventually(() => expect(decide).toHaveBeenCalled());
+
+    expect(assign).not.toHaveBeenCalled();
+    Object.defineProperty(window, "location", { value: originalLocation, writable: true, configurable: true });
   });
 });

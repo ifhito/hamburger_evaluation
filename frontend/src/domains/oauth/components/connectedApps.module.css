@@ -1,17 +1,11 @@
 .list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
+.appitem {
+  composes: appitem from '../../../components/profileSection.module.css';
 }
 
 .info {
@@ -23,27 +17,13 @@
   font-size: 18px;
   font-weight: 700;
   line-height: 1.5;
-}
-
-.scopes {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.scopeItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  line-height: 1.7;
   overflow-wrap: anywhere;
 }
 
-.scopeItem::before {
-  content: "・";
+/* 並び(list-style・flex-column)は ScopeList が持つ。ここでは、この置き場所だけの余白・行の間隔を足す */
+.scopes {
+  margin-top: 8px;
+  gap: 4px;
 }
 
 .meta {
@@ -61,15 +41,4 @@
   display: flex;
   justify-content: center;
   margin-top: 24px;
-}
-
-@media (max-width: 720px) {
-  .row {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .row > button {
-    width: 100%;
-  }
 }

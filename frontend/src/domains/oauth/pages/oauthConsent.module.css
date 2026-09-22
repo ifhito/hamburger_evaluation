@@ -69,23 +69,13 @@
   line-height: 1.4;
 }
 
+/* 並び(list-style・flex-column)は ScopeList が持つ。ここでは、この置き場所だけの余白・枠を足す */
 .scopes {
   margin: 0;
   padding: 16px 20px;
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius);
-  list-style: none;
-  display: flex;
-  flex-direction: column;
   gap: 8px;
-}
-
-.scopeItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  line-height: 1.7;
 }
 
 .facts {
@@ -97,10 +87,22 @@
   color: var(--ui-text-muted);
 }
 
+.facts b {
+  font-weight: 700;
+  color: var(--ui-text);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.hint {
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ui-text-muted);
 }
 
 .below {
