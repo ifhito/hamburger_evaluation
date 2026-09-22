@@ -27,9 +27,13 @@ export default function AdminShopEditPage() {
   const { register, handleSubmit, reset, watch } = useShopForm();
   const textLimits = useMeta().data?.text;
 
+  // shop は一覧(SWR)から find した「オブジェクト」なので、バックグラウンドの再取得のたびに、値が同じでも
+  // 参照が変わる。依存を shop?.id(変わらない識別子)にして、同じショップの再取得では reset せず、入力中の
+  // 内容(打ちかけの新しい名前)を、無言で消さないようにする。
   useEffect(() => {
     if (shop) reset({ name: shop.name });
-  }, [shop, reset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shop?.id, reset]);
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);

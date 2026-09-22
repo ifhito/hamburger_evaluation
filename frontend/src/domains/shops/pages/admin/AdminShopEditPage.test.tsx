@@ -7,11 +7,12 @@ import { ApiError } from "../../../../api/client/buildApiClient";
 import { byText, cleanup, click, eventually, mount, need, type } from "../../../../test/dom";
 import AdminShopEditPage from "./AdminShopEditPage";
 
-// 取得の結果は、毎回同じ配列を返す(毎回違う値だと、画面が「ショップが変わった」と見て、入力欄を初期化し続ける)
-const state = vi.hoisted(() => ({ isLoading: false, shops: [{ id: "s1", name: "Old name", status: "active" }] }));
+// SWR は、バックグラウンドの再取得のたびに、値が同じでも新しい配列・新しいオブジェクトを返す(参照は変わる)。
+// この mock も、呼ばれるたびに新しい配列・オブジェクトを作って、その挙動を再現する(同じ参照を使い回さない)。
+const state = vi.hoisted(() => ({ isLoading: false, shop: { id: "s1", name: "Old name", status: "active" } }));
 const update = vi.hoisted(() => vi.fn());
 vi.mock("../../hooks/useShopMutations", () => ({
-  useAdminShops: () => ({ data: state.isLoading ? undefined : state.shops, isLoading: state.isLoading }),
+  useAdminShops: () => ({ data: state.isLoading ? undefined : [{ ...state.shop }], isLoading: state.isLoading }),
   useUpdateShop: () => ({ update }),
 }));
 vi.mock("../../../../api/meta", () => ({ useMeta: () => ({ data: { text: { shopNameMaxChars: 100 } } }) }));
@@ -59,6 +60,17 @@ describe("AdminShopEditPage(ショップの名前の編集)", () => {
     await eventually(() => expect(page.querySelector('[role="alert"]')?.textContent).toContain("Name is too long (maximum is 100 characters)"));
     expect(page.querySelector('[role="alert"]')?.textContent).toContain("Could not save your changes");
     expect(page.querySelector("form")).not.toBeNull();
+  });
+
+  it("同じショップを SWR が裏で取り直して、shop オブジェクトの参照だけが変わっても、入力中の値を無言で消さない", async () => {
+    const page = await show();
+    const input = need(page.querySelector<HTMLInputElement>("#name"), "name");
+    await eventually(() => expect(input.value).toBe("Old name"));
+
+    await type(input, "New name in progress");
+
+    // 打った直後(useAdminShops はレンダーのたびに新しい配列・オブジェクトを返す)でも、消えていない
+    expect(input.value).toBe("New name in progress");
   });
 
   it("戻るリンクと、キャンセルは、どちらも管理の一覧へ移るリンク", async () => {
