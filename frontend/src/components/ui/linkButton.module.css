@@ -6,3 +6,20 @@
 .linkButton:hover {
   text-decoration: none;
 }
+
+/* variant="secondary"(既定)は、実際には .linkButton をそのまま使う(LinkButton.tsx)。この .secondary は、
+   部品の CSS の検査(uiStyles.test.ts。Props の variant の型に並ぶ名前ごとに、対応する class が CSS にあるかを見る)
+   のためだけにある、参照されない別名。 */
+.secondary {
+  composes: linkButton;
+}
+
+/* 「ショップを追加」「レビューを書く」など、リンクで別画面へ移る、主の操作(黄の面)。 */
+.primary {
+  composes: btn primary from './button.module.css';
+  text-decoration: none;
+}
+
+.primary:hover {
+  text-decoration: none;
+}
