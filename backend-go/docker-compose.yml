@@ -50,6 +50,15 @@ services:
       # カンマ区切りの `scheme://host[:port]`。空なら OAUTH_ISSUER の Origin だけ。Origin のない要求
       # (Claude Code などブラウザ以外)は、この設定に関係なく通る。例: MCP_ALLOWED_ORIGINS=http://localhost:5173
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      # Google のアカウントでのサインイン。GOOGLE_CLIENT_ID を設定したときだけ有効になる(手順は
+      # docs/google-login-setup.md)。GOOGLE_CLIENT_SECRET は秘密の鍵で、有効にするなら必須(環境変数だけで渡し、
+      # ファイル・リポジトリには書かない)。GOOGLE_REDIRECT_URL は、Google Cloud Console に登録した「承認済みの
+      # リダイレクト URI」と同じ値(例: `export GOOGLE_REDIRECT_URL=http://localhost:5173/api/auth/google/callback`。画面の `/api` を通る形にする)。
+      # GOOGLE_OIDC_ISSUER は、テストや隔離した確認で、代役の提供元に向けるときだけ設定する(本番では設定しない)。
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-}
+      GOOGLE_OIDC_ISSUER: ${GOOGLE_OIDC_ISSUER:-}
     mem_limit: 1g
 
   # 開発用のメール受信。api-go の確認メールを SMTP :1025(compose のネットワーク内だけ)で

@@ -58,33 +58,33 @@ func (in UpdateUserInput) passwordPresent() bool {
 	return in.Password != nil && *in.Password != ""
 }
 
-// validate は Rails parity の full message を返す。valid なら空である。
-// メッセージは username、自己紹介文（domain.ValidateBio。送られたときだけ判定する）、email（domain.ValidateEmail）、password
-// （domain.ValidatePassword）、confirmation の順に並ぶ。email を送らない入力（nil）、
+// validate は検証の失敗の文言(キー + 引数。英語は Rails parity の full message)を返す。valid なら空である。
+// メッセージは username、自己紹介文（domain.BioIssues。送られたときだけ判定する）、email（domain.EmailIssues）、password
+// （domain.PasswordIssues）、confirmation の順に並ぶ。email を送らない入力（nil）、
 // 現在の値と同じ email を送る入力、パスワードを変更しない入力（nil と ""）には、
 // それぞれの規則を適用しない。email の形式の規則は、新しく設定するときだけ判定する
 // （規則ができる前の、形式が合わない email を持つ既存ユーザーが、同じ値を含めた
 // 更新で 422 になって締め出されないため）。
-func (in UpdateUserInput) validate(currentEmail string) []string {
-	var msgs []string
+func (in UpdateUserInput) validate(currentEmail string) []domain.Message {
+	var issues []domain.Message
 	if in.Username != nil {
-		msgs = append(msgs, domain.ValidateUsername(*in.Username)...)
+		issues = append(issues, domain.UsernameIssues(*in.Username)...)
 	}
 	if in.Bio != nil {
-		msgs = append(msgs, domain.ValidateBio(*in.Bio)...)
+		issues = append(issues, domain.BioIssues(*in.Bio)...)
 	}
 	if in.Email != nil && *in.Email != currentEmail {
-		msgs = append(msgs, domain.ValidateEmail(*in.Email)...)
+		issues = append(issues, domain.EmailIssues(*in.Email)...)
 	}
 	if in.passwordPresent() {
-		msgs = append(msgs, domain.ValidatePassword(*in.Password)...)
+		issues = append(issues, domain.PasswordIssues(*in.Password)...)
 	}
 	password := ""
 	if in.Password != nil {
 		password = *in.Password
 	}
-	msgs = append(msgs, passwordConfirmationErrors(password, in.PasswordConfirmation)...)
-	return msgs
+	issues = append(issues, passwordConfirmationIssues(password, in.PasswordConfirmation)...)
+	return issues
 }
 
 // Update は、後述のチェック順序で、対象ユーザーのプロフィールを
@@ -103,8 +103,8 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 	if !viewer.Manages(target.ID) {
 		return domain.User{}, domain.ErrForbidden
 	}
-	if msgs := input.validate(target.Email); len(msgs) > 0 {
-		return domain.User{}, &domain.ValidationError{Messages: msgs}
+	if issues := input.validate(target.Email); len(issues) > 0 {
+		return domain.User{}, domain.NewValidationError(issues...)
 	}
 	changes := domain.ProfileChanges{Username: input.Username, Bio: input.Bio, Email: input.Email}
 	if input.passwordPresent() {
@@ -117,7 +117,7 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 	updated, err := s.users.UpdateProfile(ctx, targetID, changes)
 	if err != nil {
 		if errors.Is(err, domain.ErrEmailTaken) {
-			return domain.User{}, &domain.ValidationError{Messages: []string{"Email has already been taken"}}
+			return domain.User{}, domain.NewValidationError(domain.MsgEmailTaken)
 		}
 		return domain.User{}, fmt.Errorf("update user: %w", err)
 	}
@@ -128,7 +128,8 @@ func (s *Users) Update(ctx context.Context, viewer domain.User, targetID string,
 // 順序は、対象の取得(存在しなければ 404。本人でなくても同じ)、domain の本人管理ルール
 // (本人でなければ 403)、そして論理削除である。論理削除と、そのユーザーのレビューが付いている
 // すべてのバーガーの統計の再計算の依頼(バーガー ID の昇順に登録)と、そのユーザーが AI アプリに許可した
-// すべての許可の取り消し(発行済みのトークンも、使えなくなる)は、1 つのトランザクションで行う。
+// すべての許可の取り消し(発行済みのトークンも、使えなくなる)と、外部のアカウント(Google など)との結び付きの削除は、
+// 1 つのトランザクションで行う(結び付きが残ると、その外部のアカウントを、ほかのアカウントに結び付けられない)。
 //
 // ユーザーのレビュー自体は削除しない(レビューの削除日時は書き込まない)。画面から隠すのは、
 // 読み取りの側で、削除済みのユーザーのレビューを除いて行う。あとから行われる統計の再計算も、削除済みの
@@ -146,6 +147,9 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 			return err
 		}
 		if err := tx.OAuthGrants.RevokeAll(ctx, targetID); err != nil {
+			return err
+		}
+		if err := tx.UserIdentities.DiscardAll(ctx, targetID); err != nil {
 			return err
 		}
 		return s.recalc.RequestRecalculationReviewedBy(ctx, tx, targetID)

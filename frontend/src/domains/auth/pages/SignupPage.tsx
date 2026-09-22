@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { useSignupForm } from "../hooks/useAuthForm";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { useMeta } from "../../../api/meta";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
-import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
+import { Alert } from "../../../components/ui/Alert";
+import { Button } from "../../../components/ui/Button";
+import { TextField } from "../../../components/ui/TextField";
+import { GoogleSignIn } from "../components/GoogleSignIn";
 import styles from "./auth.module.css";
 
 export default function SignupPage() {
@@ -35,59 +36,73 @@ export default function SignupPage() {
 
   if (sentTo !== null) {
     return (
-      <Layout title={t("auth.signup.sent.title")}>
-        <div className={styles.form}>
-          <p>{t("auth.signup.sent.message", { email: sentTo })}</p>
-          <p className={styles.hint}>{t("auth.signup.sent.hint")}</p>
-          <Button type="button" variant="secondary" onClick={() => setSentTo(null)}>
-            {t("auth.signup.sent.back")}
-          </Button>
+      <Layout>
+        <div className={styles.auth}>
+          <h1 className={styles.title}>{t("auth.signup.sent.title")}</h1>
+          <div className={styles.form}>
+            <p>
+              {/* メールアドレスは values(再び文言として解釈される)ではなく、components の中身として渡す(利用者の入力を、文言の組み立てに混ぜない) */}
+              <Trans i18nKey="auth.signup.sent.message" components={{ email: <b>{sentTo}</b> }} />
+            </p>
+            <p className={styles.hint}>{t("auth.signup.sent.hint")}</p>
+            <Button type="button" variant="secondary" onClick={() => setSentTo(null)}>
+              {t("auth.signup.sent.back")}
+            </Button>
+          </div>
         </div>
       </Layout>
     );
   }
 
   return (
-    <Layout title={t("auth.signup.title")}>
-      <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
-        {serverError && <ErrorMessage message={serverError} />}
-        <Input
-          id="username"
-          label={t("auth.signup.username")}
-          autoComplete="username"
-          counter={{ value: watch("username"), max: meta?.text.usernameMaxChars }}
-          {...register("username")}
-        />
-        <Input
-          id="email"
-          label={t("auth.signup.email")}
-          type="email"
-          autoComplete="email"
-          {...register("email")}
-        />
-        <Input
-          id="password"
-          label={t("auth.signup.password")}
-          type="password"
-          autoComplete="new-password"
-          hint={meta && t("auth.passwordHint", { min: meta.password.minBytes, max: meta.password.maxBytes })}
-          {...register("password")}
-        />
-        <Input
-          id="passwordConfirmation"
-          label={t("auth.signup.confirmPassword")}
-          type="password"
-          autoComplete="new-password"
-          {...register("passwordConfirmation")}
-        />
-        <Button type="submit" isLoading={isLoading}>
-          {t("auth.signup.submit")}
-        </Button>
-        <p className={styles.hint}>
-          {t("auth.signup.hasAccount")}{" "}
-          <a href="/signin">{t("auth.signup.signInLink")}</a>
-        </p>
-      </form>
+    <Layout>
+      <div className={styles.auth}>
+        <h1 className={styles.title}>{t("auth.signup.title")}</h1>
+        <p className={styles.lead}>{t("auth.signup.lead")}</p>
+        <div className={styles.stack}>
+          <GoogleSignIn mode="signup" />
+          <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
+            {serverError && <Alert title={t("auth.signup.errorTitle")} message={serverError} />}
+            <TextField
+              id="username"
+              label={t("auth.signup.username")}
+              autoComplete="username"
+              counter={{ value: watch("username"), max: meta?.text.usernameMaxChars }}
+              {...register("username")}
+            />
+            <TextField
+              id="email"
+              label={t("auth.signup.email")}
+              type="email"
+              autoComplete="email"
+              placeholder={t("auth.emailPlaceholder")}
+              {...register("email")}
+            />
+            <TextField
+              id="password"
+              label={t("auth.signup.password")}
+              type="password"
+              autoComplete="new-password"
+              hint={meta && t("auth.passwordHint", { min: meta.password.minBytes, max: meta.password.maxBytes })}
+              {...register("password")}
+            />
+            <TextField
+              id="passwordConfirmation"
+              label={t("auth.signup.confirmPassword")}
+              type="password"
+              autoComplete="new-password"
+              {...register("passwordConfirmation")}
+            />
+            <Button type="submit" block isLoading={isLoading}>
+              {t("auth.signup.submit")}
+            </Button>
+          </form>
+          <p className={styles.linkline}>
+            {t("auth.signup.hasAccount")}{" "}
+            <a href="/signin">{t("auth.signup.signInLink")}</a>
+          </p>
+        </div>
+      </div>
     </Layout>
   );
 }

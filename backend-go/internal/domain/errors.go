@@ -18,6 +18,11 @@ var (
 	ErrUnauthenticated = errors.New("unauthenticated")
 	// ErrEmailTaken は、ユーザーの email に対する unique violation を表す。
 	ErrEmailTaken = errors.New("email has already been taken")
+	// ErrInvalidPasswordDigest は、ユーザーの作成で、パスワードの扱いが明示と合わないことを表す
+	// (パスワードなしを明示せずに digest が空、または、パスワードなしを明示したのに digest がある)。
+	// 呼び出し側の不具合で digest が空になったとき、黙って「パスワードでサインインできないアカウント」を
+	// 作らないためのエラーである。
+	ErrInvalidPasswordDigest = errors.New("password digest must be set unless the account is created without a password")
 	// ErrUserNotFound は、lookup に一致する active なユーザーがいないことを
 	// 表す。
 	ErrUserNotFound = errors.New("user not found")
@@ -43,12 +48,24 @@ var (
 	ErrForbidden = errors.New("forbidden")
 )
 
-// ValidationError は、API parity のために Rails 形式の full validation
-// message（例："Username can't be blank"）を保持する。
+// ValidationError は、検証の失敗を保持する。文言は、言語に依らない形(Message)で持ち、handler が、
+// 利用者の言語(Texts)で文字列にする。
 type ValidationError struct {
-	Messages []string
+	Items []Message
 }
 
+// NewValidationError は、items を持つ *ValidationError を作る。
+func NewValidationError(items ...Message) *ValidationError {
+	return &ValidationError{Items: items}
+}
+
+// Texts は、失敗の文言を l の言語の文字列で返す。英語(LangEN)は、API の文言の契約(Rails 形式の
+// full message。例:"Username can't be blank")である。
+func (e *ValidationError) Texts(l Lang) []string {
+	return Texts(l, e.Items)
+}
+
+// Error は、ログや、言語を選ばない呼び出し向けに、英語の文言で返す。
 func (e *ValidationError) Error() string {
-	return "validation failed: " + strings.Join(e.Messages, ", ")
+	return "validation failed: " + strings.Join(e.Texts(LangEN), ", ")
 }

@@ -80,25 +80,25 @@ type SignupInput struct {
 	PasswordConfirmation *string
 }
 
-// validate は Rails parity の full message を返す。valid なら空である。
-// メッセージは username、認証情報（domain.ValidateCredentials。email、password の順）、
-// confirmation の順に並ぶ。登録の有無には依存しない検証だけを行う（「登録済み」を
+// validate は検証の失敗の文言(言語に依らない Message)を返す。valid なら空である。
+// 並びは username、認証情報（domain.CredentialsIssues。email、password の順）、
+// confirmation の順である。登録の有無には依存しない検証だけを行う（「登録済み」を
 // 示すエラーは返さない）。
-func (in SignupInput) validate() []string {
-	msgs := domain.ValidateUsername(in.Username)
-	msgs = append(msgs, domain.ValidateCredentials(in.Email, in.Password)...)
-	msgs = append(msgs, passwordConfirmationErrors(in.Password, in.PasswordConfirmation)...)
-	return msgs
+func (in SignupInput) validate() []domain.Message {
+	issues := domain.UsernameIssues(in.Username)
+	issues = append(issues, domain.CredentialsIssues(in.Email, in.Password)...)
+	issues = append(issues, passwordConfirmationIssues(in.Password, in.PasswordConfirmation)...)
+	return issues
 }
 
-// passwordConfirmationErrors は、確認欄に入力された値（confirmation。入力がなければ nil）が
-// パスワード（password）と一致することを確かめ、一致しなければそのメッセージを返す。確認欄が nil の
+// passwordConfirmationIssues は、確認欄に入力された値（confirmation。入力がなければ nil）が
+// パスワード（password）と一致することを確かめ、一致しなければそのメッセージ(Message)を返す。確認欄が nil の
 // ときは、確認を求めていないので、常に問題なしである（登録・プロフィールの更新のどちらも、確認欄は
 // 任意）。確認欄は入力欄同士の整合の確認（フォームの都合）で、サービスの規則ではないので、domain には
 // 置かず、登録とプロフィールの更新の use case が共有する。
-func passwordConfirmationErrors(password string, confirmation *string) []string {
+func passwordConfirmationIssues(password string, confirmation *string) []domain.Message {
 	if confirmation != nil && *confirmation != password {
-		return []string{"Password confirmation doesn't match Password"}
+		return []domain.Message{domain.MsgPasswordConfirmationMismatch}
 	}
 	return nil
 }
@@ -133,8 +133,8 @@ func NewSignups(query UserQuery, verifications *domain.SignupVerifications, uow 
 // 置き換えて確認メールを送る。前回の送信から domain.SignupResendInterval 以内なら、
 // 確認待ちを変えず、メールも送らない。
 func (s *Signups) Request(ctx context.Context, input SignupInput) error {
-	if msgs := input.validate(); len(msgs) > 0 {
-		return &domain.ValidationError{Messages: msgs}
+	if issues := input.validate(); len(issues) > 0 {
+		return domain.NewValidationError(issues...)
 	}
 	digest, err := s.hasher.Hash(input.Password)
 	if err != nil {
@@ -142,7 +142,9 @@ func (s *Signups) Request(ctx context.Context, input SignupInput) error {
 	}
 	s.discardExpired(ctx)
 
-	_, err = s.query.GetActiveUserByEmail(ctx, input.Email)
+	// 「登録済みか」は、メールの一意性(lower(email))と同じく、大文字小文字を区別せずに調べる。完全一致で調べると、
+	// 大文字小文字だけが違うメールで確認メールが送られ、確認のときに一意の索引に違反して失敗する。
+	_, err = s.query.GetActiveUserByEmailIgnoreCase(ctx, input.Email)
 	switch {
 	case err == nil:
 		s.mailer.SendAlreadyRegistered(AlreadyRegisteredNotice{

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google の結果の画面(リデザインの見本)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+<link rel="stylesheet" href="google-login.css">
+</head>
+<body data-auth="out" data-active="signin">
+<!-- /auth/google/complete: Google の手続きの結果の受け皿。state:
+     loading = コードを交換している / exists = 同じメールのアカウントがある(409)/ exists-oauth = 同じ + 元の画面に戻れる /
+     taken = その Google はほかのアカウントに結び付いている(409)/ failed = 失敗(400)/ expired = リンクが無効・期限切れ(400)/
+     linkfail = 連携の失敗: すでに別の Google に連携している(409。サインイン済み。?auth=in)/ linktaken = その Google はほかのアカウントに結び付いている(連携の途中。サインイン済み。?auth=in) -->
+<main class="wrap status">
+  <div data-only="loading" class="status-in"><span class="burger" data-size="lg" data-score="3" data-decor></span></div>
+  <h1 data-only="loading" data-en="Signing you in with Google…">Google でサインインしています…</h1>
+  <p class="muted" role="status" data-only="loading" data-en="Just a moment">少しだけお待ちください</p>
+
+  <h1 data-only="exists exists-oauth taken failed expired default" data-en="Could not sign in with Google">Google でサインインできませんでした</h1>
+  <h1 data-only="linkfail linktaken linkerror linkexpired" data-en="Could not connect Google">Google を連携できませんでした</h1>
+
+  <div data-only="exists-oauth" style="width:100%;text-align:left"><div class="notice"><b data-en="After you sign in, you will go back to where you were">サインインすると、元の画面に戻ります</b><span data-en="This is the screen you were on before you started with Google.">Google で始める前に開いていた画面です。</span></div></div>
+
+  <div data-only="exists exists-oauth default" style="width:100%;text-align:left"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="An account already exists">同じメールのアカウントがあります</b><p class="msg">An account with this email address already exists. Sign in with your password, then connect Google from your profile.</p></div></section></div>
+  <div data-only="taken linktaken" style="width:100%;text-align:left"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Already connected to another account">ほかのアカウントに連携済みです</b><p class="msg">This Google account is already connected to another account.</p></div></section></div>
+  <div data-only="failed" style="width:100%;text-align:left"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Google sign-in failed">Google でのサインインに失敗しました</b><p class="msg">Google sign-in failed. Please try again.</p></div></section></div>
+  <div data-only="expired" style="width:100%;text-align:left"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="The link is no longer valid">リンクが使えなくなりました</b><p class="msg">The Google sign-in link is invalid or has expired. Please try again.</p></div></section></div>
+  <div data-only="linkfail" style="width:100%;text-align:left"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Already connected to a Google account">すでに Google に連携しています</b><p class="msg">Your account is already connected to a Google account. Disconnect it first.</p></div></section></div>
+
+  <div data-only="linkerror" style="width:100%;text-align:left"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="Google sign-in failed">Google の連携に失敗しました</b><p class="msg">Google sign-in failed. Please try again.</p></div></section></div>
+  <div data-only="linkexpired" style="width:100%;text-align:left"><section class="alert" role="alert"><i class="band"></i><span class="mark">!</span><div class="body"><b class="alert-title" data-en="The link is no longer valid">リンクが使えなくなりました</b><p class="msg">The Google sign-in link is invalid or has expired. Please try again.</p></div></section></div>
+  <div class="actions-col" data-only="exists exists-oauth taken default">
+    <a class="btn primary linkbtn" href="#" data-en="Sign in with your password">パスワードでサインインする</a>
+  </div>
+  <div class="actions-col" data-only="failed expired">
+    <div data-gbtn="signin"></div>
+    <a class="textlink" href="#" data-en="Sign in with your password">パスワードでサインインする</a>
+  </div>
+  <div class="actions-col" data-only="linkfail linktaken linkerror linkexpired">
+    <a class="btn primary linkbtn" href="#" data-en="Back to your profile">プロフィールに戻る</a>
+  </div>
+
+  <aside class="memo"><b>実装メモ</b><ul>
+    <li>・この画面(<code>/auth/google/complete?code=…</code>)は、Google の手続きの結果の受け皿。backend が、成功も失敗も、60 秒だけ有効な 1 回限りのコードに入れて、この画面へ戻す。ここでは、コードを API と交換して結果を受け取るだけで、成功か失敗か・理由の判断は持たない。コードは 1 回しか使えないので、最初に 1 回だけ読み、URL からはすぐに消す(履歴に残さない)。ログインの証(JWT)は URL に載らない。</li>
+    <li>・赤い枠の文言(<code>An account with this email address already exists…</code> など)は、<strong>API が返したものをそのまま出す</strong>(API は、リクエストの <code>Accept-Language</code> で、日本語・英語の文言を切り替える。どの言語を求めるかは、画面の実装の story で決める)。見出し(「Google でサインインできませんでした」)と、太字の小見出し(「同じメールのアカウントがあります」など)だけが、画面側の言葉。小見出しは、API が返した結果の種類(409 の理由)ごとに、画面が付ける案で、API が種類を返さないなら、小見出しを付けずに、API の文言だけを出す案もある。</li>
+    <li>・「リンクが使えなくなりました」(expired)は、リンクが無効なのか期限切れなのかを、API は区別しない(同じ文言。有効期間は 60 秒)。見出しも、区別しない言い方にしている。</li>
+    <li>・<strong>元の画面へ戻れる</strong>: 「exists-oauth」の枠(「サインインすると、元の画面に戻ります」)は、backend が失敗の応答(409・400)にも、確かめた戻り先(<code>return_to</code>)を含めたときに出す(<strong>PR #124 で実装済み</strong>)。戻り先があるかどうかだけで出し分け、戻り先が何の画面かの判断は持たない。サインインしたあと、その戻り先へ移す。</li>
+    <li>・失敗のあとの操作は、案: 同じメールのアカウントがある・すでに連携済み → 「パスワードでサインインする」(1 つだけ)、失敗・期限切れ → Google のボタン(もう一度。ボタンは決定した G2、文言は決定した T2 の「Google で続ける」)と、「パスワードでサインインする」。いまの実装は、「サインイン画面へ戻る」のリンク 1 つだけ。</li>
+    <li>・連携(プロフィールから始めた手続き。サインイン済み)の失敗は、409(すでに連携している・ほかのアカウントに連携済み)も、400(キャンセル・失敗・期限切れ)も、見出しを「Google を連携できませんでした」にして、「プロフィールに戻る」だけを出す(いまの実装は、サインインしていれば、状態にかかわらず「プロフィールに戻る」を出す)。</li>
+    <li>・読み込み中の絵は飾りなので、読み上げない。「サインインしています…」は、読み上げる(見本は <code>role="status"</code>。<strong>いまの実装(#126)には、まだ読み上げの通知がなく、足す必要がある</strong>)。</li>
+  </ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+<script src="google-login.js"></script>
+</body>
+</html>

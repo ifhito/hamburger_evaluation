@@ -53,6 +53,7 @@ src/
 ├── states/
 │   └── authAtom.ts       # Jotai atoms: authUserAtom, authTokenAtom
 └── components/           # 共有 UI: Button, Input, Textarea, RatingSelect, Layout
+    └── ui/               # リデザインの部品: Button, Badge, Card, Alert, TextField, RatingBurger, RatingInput, states(既存の画面はまだ使わない)
 ```
 
 ## Run Locally
@@ -91,6 +92,7 @@ pnpm run build         # プロダクションビルド (型チェック込み)
 | `/reviews/:id/edit` | 要認証 | ReviewEditPage |
 | `/signup` | ゲストのみ | SignupPage(確認メールを送る) |
 | `/signup/confirm` | public | SignupConfirmPage(確認メールのリンクの受け皿。成功するとログイン状態になる) |
+| `/auth/google/complete` | public | GoogleCompletePage(Google でのサインインの結果の受け皿。1 回限りのコードを交換する。成功するとログイン状態になる) |
 | `/signin` | ゲストのみ | SigninPage |
 | `/signout` | 要認証 | SignoutPage |
 | `/users/:id` | public | UserDetailPage |
@@ -107,6 +109,6 @@ pnpm run build         # プロダクションビルド (型チェック込み)
 ## Notes
 
 - Storybook 用の stories は `src/components/` に置いています（`*.stories.tsx`）。
-- API のベースパスは既定で `/api` です。環境変数 `VITE_API_BASE_URL` で変更できます。
+- API のベースパスは既定で `/api` です。環境変数 `VITE_API_BASE_URL` で変更できます(別のオリジンの絶対 URL にすると、API が CORS に対応していないので、Google でのサインインは使えず、ボタンは出ません)。
 - 開発時は Vite proxy が `/api` を Go API(既定 `http://host.docker.internal:8080`)へ転送します。転送先は `VITE_API_PROXY_TARGET` で変更できます。
 - React コンポーネント内ではすべてのフィールド名が camelCase になります（変換は HTTP 境界で完結）。

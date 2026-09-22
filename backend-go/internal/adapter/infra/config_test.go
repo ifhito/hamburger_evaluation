@@ -523,3 +523,189 @@ func TestLoadConfigMCPAllowedOrigins(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigGoogle(t *testing.T) {
+	// テスト用の使い捨ての値である(本物の秘密ではない)。
+	const secret = "test-only-google-client-secret"
+	base := func(extra map[string]string) func(string) string {
+		env := map[string]string{"DATABASE_URL": "postgres://localhost/app", "JWT_SECRET": "test-only-secret"}
+		for k, v := range extra {
+			env[k] = v
+		}
+		return withMailEnv(env)
+	}
+	valid := func(extra map[string]string) map[string]string {
+		env := map[string]string{
+			"GOOGLE_CLIENT_ID": "client-id.apps.example", "GOOGLE_CLIENT_SECRET": secret,
+			"GOOGLE_REDIRECT_URL": "http://localhost:8080/auth/google/callback",
+		}
+		for k, v := range extra {
+			env[k] = v
+		}
+		return env
+	}
+
+	t.Run("GOOGLE_CLIENT_ID を設定しなければ、Google でのサインインは無効で、ほかの GOOGLE_* は読まない", func(t *testing.T) {
+		cfg, err := LoadConfig(base(map[string]string{"GOOGLE_CLIENT_SECRET": "", "GOOGLE_OIDC_ISSUER": "http://evil.example.com"}))
+		if err != nil || cfg.Google.Enabled {
+			t.Fatalf("cfg.Google = %+v, err = %v, want disabled without error", cfg.Google, err)
+		}
+	})
+
+	t.Run("クライアントの ID・秘密・戻り先を設定すると、有効になり、提供元は Google の既定になる", func(t *testing.T) {
+		cfg, err := LoadConfig(base(valid(nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := GoogleConfig{
+			Enabled: true, ClientID: "client-id.apps.example", ClientSecret: secret,
+			RedirectURL: "http://localhost:8080/auth/google/callback", Issuer: "https://accounts.google.com",
+		}
+		if cfg.Google != want {
+			t.Errorf("Google = %+v, want %+v", cfg.Google, want)
+		}
+	})
+
+	t.Run("戻り先とアプリの URL は、https か、ループバック(localhost・127.0.0.1・[::1])の http なら受け付ける", func(t *testing.T) {
+		for _, u := range []string{"https://api.example.com", "http://localhost:8080", "http://127.0.0.1:8080", "http://[::1]:8080"} {
+			env := valid(map[string]string{"GOOGLE_REDIRECT_URL": u + "/auth/google/callback", "APP_BASE_URL": u})
+			if _, err := LoadConfig(base(env)); err != nil {
+				t.Errorf("%s: err = %v, want accepted", u, err)
+			}
+		}
+	})
+
+	t.Run("戻り先の path は、/auth/google/callback で終わっていれば(前に、公開の接頭辞があってもよい)、受け付ける", func(t *testing.T) {
+		for _, path := range []string{"/auth/google/callback", "/api/auth/google/callback", "/a/b/auth/google/callback"} {
+			env := valid(map[string]string{"GOOGLE_REDIRECT_URL": "https://api.example.com" + path, "APP_BASE_URL": "https://app.example.com"})
+			if _, err := LoadConfig(base(env)); err != nil {
+				t.Errorf("%s: err = %v, want accepted", path, err)
+			}
+		}
+	})
+
+	t.Run("Google でのサインインが無効なときは、アプリの URL の外部 http は、これまでどおり受け付ける(この制約は有効なときだけ)", func(t *testing.T) {
+		if _, err := LoadConfig(base(map[string]string{"APP_BASE_URL": "http://app.example.com"})); err != nil {
+			t.Fatalf("err = %v", err)
+		}
+	})
+
+	t.Run("提供元は、https か、ループバックの http なら、差し替えられる(末尾の / は取り除く)", func(t *testing.T) {
+		for _, issuer := range []string{"https://idp.example.com/", "http://127.0.0.1:9000", "http://localhost:9000", "http://[::1]:9000"} {
+			cfg, err := LoadConfig(base(valid(map[string]string{"GOOGLE_OIDC_ISSUER": issuer})))
+			if err != nil || cfg.Google.Issuer != strings.TrimRight(issuer, "/") {
+				t.Errorf("issuer %q: Google.Issuer = %q, err = %v", issuer, cfg.Google.Issuer, err)
+			}
+		}
+	})
+
+	failures := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"秘密の鍵がないと、起動に失敗する", valid(map[string]string{"GOOGLE_CLIENT_SECRET": ""}), "GOOGLE_CLIENT_SECRET"},
+		{"戻り先がないと、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": ""}), "GOOGLE_REDIRECT_URL"},
+		{"戻り先が URL でないと、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "localhost:8080/cb"}), "GOOGLE_REDIRECT_URL"},
+		{"戻り先に断片があると、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "http://localhost:8080/cb#x"}), "GOOGLE_REDIRECT_URL"},
+		{"提供元が外部の http だと(認可コードが平文で送られるので)、起動に失敗する", valid(map[string]string{"GOOGLE_OIDC_ISSUER": "http://idp.example.com"}), "GOOGLE_OIDC_ISSUER"},
+		{"提供元が URL でないと、起動に失敗する", valid(map[string]string{"GOOGLE_OIDC_ISSUER": "idp"}), "GOOGLE_OIDC_ISSUER"},
+		// 認可コード・state・手続きの cookie が、平文で外部を流れるのを防ぐ(cookie の Secure も、戻り先が https のときだけ付く)。
+		{"戻り先が外部ホストの http だと、認可コードが平文で流れるので、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "http://api.example.com/auth/google/callback"}), "GOOGLE_REDIRECT_URL"},
+		// 手続きの cookie の Path は、戻り先の path から決まり、結果との交換の path も、戻り先の path から導く。
+		// 末尾が違うと、cookie が届かず、手続きが失敗するので、起動のときに気づけるようにする。
+		{"戻り先の path の末尾に / があると、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "http://localhost:8080/auth/google/callback/"}), "GOOGLE_REDIRECT_URL"},
+		{"戻り先の path が /auth/google/callback で終わらないと、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "http://localhost:8080/api/auth/google/cb"}), "GOOGLE_REDIRECT_URL"},
+		{"戻り先の path が空(根)だと、起動に失敗する", valid(map[string]string{"GOOGLE_REDIRECT_URL": "https://api.example.com"}), "GOOGLE_REDIRECT_URL"},
+		{"アプリの URL が外部ホストの http だと、1 回限りのコードが平文で流れるので、起動に失敗する", valid(map[string]string{"APP_BASE_URL": "http://app.example.com"}), "APP_BASE_URL"},
+	}
+	for _, tt := range failures {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := LoadConfig(base(tt.env))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want it to mention %s", err, tt.want)
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Fatalf("エラーの文言に、クライアントの秘密が含まれている: %v", err)
+			}
+		})
+	}
+}
+
+// TestGoogleWarnings は、設定は有効でも、実際には手続きが失敗する組み合わせを、起動時に気づけるように、警告を返すことを
+// 固定する。画面は、交換と結び付けの開始を、画面と同じオリジンの /api/… へ送る。戻り先が、(1)画面と別のオリジン
+// (たとえば API に直接)、または、(2)同じオリジンでも、画面が API を呼ぶ接頭辞(/api)を持たない、と、戻りで設定する
+// 交換の cookie が、その要求に届かず、サインインと結び付けが、毎回失敗する。警告は、ログの文言なので、英語である。
+func TestGoogleWarnings(t *testing.T) {
+	cfg := func(redirect, appBase string) Config {
+		return Config{AppBaseURL: appBase, Google: GoogleConfig{Enabled: true, RedirectURL: redirect}}
+	}
+
+	t.Run("戻り先が、画面と同じオリジンで、前に接頭辞(/api など)が付いていれば、警告なし(既定のポート・大文字小文字の違いは、同じオリジン)", func(t *testing.T) {
+		for _, c := range []Config{
+			cfg("http://localhost:5173/api/auth/google/callback", "http://localhost:5173"),
+			cfg("https://app.example.com/api/auth/google/callback", "https://app.example.com"),
+			cfg("https://app.example.com/api/auth/google/callback", "https://app.example.com/"),
+			cfg("HTTPS://APP.EXAMPLE.COM/api/auth/google/callback", "https://app.example.com"),
+			cfg("https://app.example.com:443/api/auth/google/callback", "https://app.example.com"),
+			cfg("http://app.example.com/api/auth/google/callback", "http://app.example.com:80"),
+			cfg("https://app.example.com/v1/api/auth/google/callback", "https://app.example.com"),
+		} {
+			if w := c.GoogleWarnings(); len(w) != 0 {
+				t.Errorf("%s / %s: warnings = %v, want なし", c.Google.RedirectURL, c.AppBaseURL, w)
+			}
+		}
+	})
+
+	t.Run("戻り先が、画面と別のオリジン(API に直接・別のホスト・別のスキーム・別のポート)なら、警告する", func(t *testing.T) {
+		for _, c := range []Config{
+			cfg("http://localhost:8080/auth/google/callback", "http://localhost:5173"),
+			cfg("http://localhost:8080/api/auth/google/callback", "http://localhost:5173"),
+			cfg("https://api.example.com/auth/google/callback", "https://app.example.com"),
+			cfg("http://localhost:5173/api/auth/google/callback", "https://localhost:5173"),
+			cfg("http://127.0.0.1:5173/api/auth/google/callback", "http://localhost:5173"),
+		} {
+			w := c.GoogleWarnings()
+			if len(w) != 1 || !strings.Contains(w[0], "GOOGLE_REDIRECT_URL") || !strings.Contains(w[0], "APP_BASE_URL") || !strings.Contains(w[0], "different origin") || !strings.Contains(w[0], "/api/auth/google/callback") {
+				t.Errorf("%s / %s: warnings = %v, want 1 件で、両方の変数の名前・different origin・例(/api/auth/google/callback)を含む", c.Google.RedirectURL, c.AppBaseURL, w)
+			}
+		}
+	})
+
+	t.Run("同じオリジンでも、戻り先に接頭辞がない(/auth/google/callback だけ)と、警告する(画面は /api を通って API を呼ぶ)", func(t *testing.T) {
+		for _, c := range []Config{
+			cfg("http://localhost:5173/auth/google/callback", "http://localhost:5173"),
+			cfg("https://app.example.com/auth/google/callback", "https://app.example.com"),
+		} {
+			w := c.GoogleWarnings()
+			if len(w) != 1 || !strings.Contains(w[0], "prefix") || !strings.Contains(w[0], "/api/auth/google/callback") {
+				t.Errorf("%s / %s: warnings = %v, want 1 件で、接頭辞と例(/api/auth/google/callback)を含む", c.Google.RedirectURL, c.AppBaseURL, w)
+			}
+		}
+	})
+
+	t.Run("Google でのサインインが無効なときは、警告しない", func(t *testing.T) {
+		c := cfg("http://localhost:8080/auth/google/callback", "http://localhost:5173")
+		c.Google.Enabled = false
+		if w := c.GoogleWarnings(); len(w) != 0 {
+			t.Errorf("warnings = %v, want なし", w)
+		}
+	})
+
+	t.Run("警告には、オリジンだけを出し、URL の利用者情報・path・クライアントの秘密は含めない", func(t *testing.T) {
+		c := cfg("http://user:pass-in-url@localhost:8080/auth/google/callback", "http://localhost:5173")
+		c.Google.ClientSecret = "test-only-google-client-secret"
+		w := c.GoogleWarnings()
+		if len(w) != 1 {
+			t.Fatalf("warnings = %v, want 1 件", w)
+		}
+		for _, secret := range []string{"pass-in-url", "user:", c.Google.ClientSecret} {
+			if strings.Contains(w[0], secret) {
+				t.Fatalf("警告に %q が含まれている: %s", secret, w[0])
+			}
+		}
+		if !strings.Contains(w[0], "http://localhost:8080") || !strings.Contains(w[0], "http://localhost:5173") {
+			t.Fatalf("警告に、両方のオリジンが含まれていない: %s", w[0])
+		}
+	})
+}

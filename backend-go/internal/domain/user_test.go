@@ -1,6 +1,8 @@
 package domain_test
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -56,5 +58,57 @@ func TestUserCanModerate(t *testing.T) {
 	}
 	if (domain.User{ID: uid.N(2), Admin: false}).CanModerate() {
 		t.Error("一般のユーザーの CanModerate() = true, want false")
+	}
+}
+
+// createRecordingRepo は、Create が渡した内容を記録する domain.UserRepository の代役である。
+type createRecordingRepo struct {
+	created []domain.CreateUserParams
+}
+
+func (r *createRecordingRepo) CreateUser(_ context.Context, p domain.CreateUserParams) (domain.User, error) {
+	r.created = append(r.created, p)
+	return domain.User{ID: "u1", Username: p.Username, Email: p.Email}, nil
+}
+
+func (*createRecordingRepo) UpdateUserProfile(context.Context, string, domain.ProfileChanges) (domain.User, error) {
+	panic("unexpected UpdateUserProfile call")
+}
+
+func (*createRecordingRepo) DiscardUser(context.Context, string) error {
+	panic("unexpected DiscardUser call")
+}
+
+// TestUsersCreatePasswordChoice は、ユーザーの作成で、パスワードの扱いが明示(Passwordless)と合わないものを、
+// repository に渡さずに拒否することを固定する。空の digest が、黙って「パスワードなし」のアカウントになると、
+// 呼び出し側の不具合に気づけない。
+func TestUsersCreatePasswordChoice(t *testing.T) {
+	cases := []struct {
+		name    string
+		params  domain.CreateUserParams
+		wantErr bool
+	}{
+		{"digest があり、パスワードなしを明示していなければ、作れる", domain.CreateUserParams{Email: "a@example.com", Username: "a", PasswordDigest: "digest"}, false},
+		{"digest が空で、パスワードなしを明示していれば、作れる(パスワードなしのアカウント)", domain.CreateUserParams{Email: "a@example.com", Username: "a", Passwordless: true}, false},
+		{"digest が空で、パスワードなしを明示していなければ、誤りとして拒否する", domain.CreateUserParams{Email: "a@example.com", Username: "a"}, true},
+		{"パスワードなしを明示したのに digest があれば、誤りとして拒否する", domain.CreateUserParams{Email: "a@example.com", Username: "a", PasswordDigest: "digest", Passwordless: true}, true},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &createRecordingRepo{}
+			_, err := domain.NewUsers(repo).Create(context.Background(), tt.params)
+			if tt.wantErr {
+				if !errors.Is(err, domain.ErrInvalidPasswordDigest) {
+					t.Fatalf("err = %v, want ErrInvalidPasswordDigest", err)
+				}
+				if len(repo.created) != 0 {
+					t.Fatalf("拒否したのに、repository に渡された: %+v", repo.created)
+				}
+				return
+			}
+			if err != nil || len(repo.created) != 1 {
+				t.Fatalf("err = %v, repository への呼び出し = %d 回, want エラーなしで 1 回", err, len(repo.created))
+			}
+		})
 	}
 }

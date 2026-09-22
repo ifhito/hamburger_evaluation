@@ -41,6 +41,17 @@ type Tx struct {
 	SignupVerifications *domain.SignupVerifications
 	PendingSignups      SignupVerificationQuery
 	OAuthGrants         *domain.OAuthGrants
+	// UserIdentities は、外部のサービス(Google など)のアカウントとの結び付きである。外部のサービスでの
+	// 新規登録で、ユーザーの作成と同じトランザクションで記録する。
+	UserIdentities *domain.UserIdentities
+	// LoginHandoffs と PendingHandoff は、外部のサービスでのサインインの結果を画面へ渡すコードの、書き込みと読み取りである。
+	// コードを使う手順(ロック → 読み取り → 後続の処理 → 削除)を、1 つのトランザクションにするために使う。
+	LoginHandoffs  *domain.LoginHandoffs
+	PendingHandoff LoginHandoffQuery
+	// UserReads は、トランザクションの接続で、ユーザーを読む窓口である。トランザクションの中で、プールから
+	// もう 1 つ接続を取ると、同じ行を待つ処理が接続を使い切ったときに、先頭の処理が接続を取れず、全体が止まる
+	// (デッドロック)。トランザクションの中の読み取りは、この窓口を使う。
+	UserReads UserQuery
 }
 
 // UnitOfWork(作業のひとまとまり)は、「ここからここまでの書き込みと読み取りを、まとめて 1 つの

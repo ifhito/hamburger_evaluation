@@ -11,8 +11,8 @@ import (
 // （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxEmailChars = 254
 
-// ValidateEmail は email の形式を検証し、違反の Rails 形式 full message を返す。
-// 有効なら nil を返す。メッセージは API の外部契約なので英語のままである。
+// EmailIssues は email の形式を検証し、違反の文言(Message。言語に依らない形)を返す。
+// 有効なら nil を返す。英語の文言は API の外部契約なので変えない。
 //
 // 空文字列は "Email can't be blank" だけを返し、MaxEmailChars 文字を超えるときは
 // "Email is too long ..." だけを返す（形式の判定より先に上限を見る）。それ以外は、net/mail の解析が成功し、
@@ -27,20 +27,20 @@ const MaxEmailChars = 254
 //
 // この規則の判定は domain だけが持ち、frontend は判定を持たない（サーバーの 422
 // メッセージの表示だけを行う）。
-func ValidateEmail(email string) []string {
+func EmailIssues(email string) []Message {
 	if email == "" {
-		return []string{"Email can't be blank"}
+		return []Message{Msg(keyEmailBlank)}
 	}
 	if exceedsChars(email, MaxEmailChars) {
-		return []string{tooLongMessage("Email", MaxEmailChars)}
+		return []Message{Msg(keyEmailTooLong, MaxEmailChars)}
 	}
 	for _, r := range email {
 		if !unicode.IsPrint(r) {
-			return []string{"Email is invalid"}
+			return []Message{Msg(keyEmailInvalid)}
 		}
 	}
 	if addr, err := mail.ParseAddress(email); err != nil || addr.Address != email {
-		return []string{"Email is invalid"}
+		return []Message{Msg(keyEmailInvalid)}
 	}
 	return nil
 }

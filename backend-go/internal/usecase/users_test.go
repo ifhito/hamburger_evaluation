@@ -154,7 +154,7 @@ func TestUsersUpdateValidation(t *testing.T) {
 			wantMsgs: []string{"Password is too long (maximum is 72 characters)"},
 		},
 		{
-			// 強度ルール（domain.ValidatePassword）が PUT /users/{id} に適用されていることを示す代表例。
+			// 強度ルール（domain.PasswordIssues）が PUT /users/{id} に適用されていることを示す代表例。
 			// 全パターンと境界の網羅は domain のテストが担う。
 			name:     "弱い password は短さと文字種の 2 件の検証エラーになる",
 			input:    usecase.UpdateUserInput{Password: strPtr("abc123")},
@@ -268,8 +268,8 @@ func TestPasswordRuleParity(t *testing.T) {
 				t.Errorf("signup messages = %q, update messages = %q, want identical", signupMsgs, updateMsgs)
 			}
 			// どちらも domain の規則そのものに従っていること。
-			if want := domain.ValidatePassword(tt.password); !slices.Equal(signupMsgs, want) {
-				t.Errorf("messages = %q, want domain.ValidatePassword result %q", signupMsgs, want)
+			if want := domain.Texts(domain.LangEN, domain.PasswordIssues(tt.password)); !slices.Equal(signupMsgs, want) {
+				t.Errorf("messages = %q, want domain.PasswordIssues result %q", signupMsgs, want)
 			}
 		})
 	}
@@ -286,7 +286,7 @@ func passwordMessages(t *testing.T, err error) []string {
 	if !errors.As(err, &vErr) {
 		t.Fatalf("error = %v (%T), want nil or *domain.ValidationError", err, err)
 	}
-	return vErr.Messages
+	return vErr.Texts(domain.LangEN)
 }
 
 // TestUsersUpdateChanges は、repository に届くものを固定する。存在しない
@@ -418,7 +418,7 @@ func TestUsersUpdateEmailRule(t *testing.T) {
 				return
 			}
 			var vErr *domain.ValidationError
-			if !errors.As(err, &vErr) || !slices.Equal(vErr.Messages, tt.wantMsgs) {
+			if !errors.As(err, &vErr) || !slices.Equal(vErr.Texts(domain.LangEN), tt.wantMsgs) {
 				t.Errorf("error = %v, want validation messages %q", err, tt.wantMsgs)
 			}
 		})
@@ -525,6 +525,50 @@ func TestUsersDeleteRevokesOAuthGrants(t *testing.T) {
 		}
 		if len(grants.UserIDs) != 0 {
 			t.Errorf("取り消した利用者 = %v, want なし", grants.UserIDs)
+		}
+	})
+}
+
+// TestUsersDeleteDiscardsIdentities は、退会が、その利用者の外部のアカウント(Google など)との結び付きを、
+// 論理削除と同じトランザクションで削除することを固定する。結び付きが残ると、その外部のアカウントは、ほかの
+// アカウントに結び付けられず、サインインにも使えなくなる。
+func TestUsersDeleteDiscardsIdentities(t *testing.T) {
+	newUsersWith := func(repo domain.UserRepository, unit *uowtest.UoW) *usecase.Users {
+		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
+		return usecase.NewUsers(query, domain.NewUsers(repo), unit, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), fakeHasher{})
+	}
+	discardOK := &fakeUserRepo{discard: func(context.Context, string) error { return nil }}
+
+	t.Run("本人が退会すると、論理削除と同じトランザクションで、自分の結び付きをすべて削除する", func(t *testing.T) {
+		identities := &uowtest.IdentityDiscards{}
+		unit := &uowtest.UoW{Users: discardOK, Identities: identities}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersViewer.ID); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(identities.UserIDs, []string{usersViewer.ID}) || unit.Commits != 1 {
+			t.Errorf("削除した利用者 = %v, commits = %d, want [%s] と 1", identities.UserIDs, unit.Commits, usersViewer.ID)
+		}
+	})
+
+	t.Run("結び付きの削除に失敗したときは、退会も確定せず、トランザクションを取り消してエラーを返す", func(t *testing.T) {
+		identities := &uowtest.IdentityDiscards{Err: errors.New("database is down")}
+		unit := &uowtest.UoW{Users: discardOK, Identities: identities}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersViewer.ID); err == nil {
+			t.Fatal("エラーにならなかった")
+		}
+		if unit.Commits != 0 || unit.Rollbacks != 1 {
+			t.Errorf("commits = %d, rollbacks = %d, want 0 と 1", unit.Commits, unit.Rollbacks)
+		}
+	})
+
+	t.Run("他人の退会(拒否される)では、結び付きを削除しない", func(t *testing.T) {
+		identities := &uowtest.IdentityDiscards{}
+		unit := &uowtest.UoW{Users: discardOK, Identities: identities}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersOther.ID); !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("error = %v, want ErrForbidden", err)
+		}
+		if len(identities.UserIDs) != 0 {
+			t.Errorf("削除した利用者 = %v, want なし", identities.UserIDs)
 		}
 	})
 }

@@ -7,6 +7,8 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
@@ -18,7 +20,7 @@ RETURNING id, email, username, bio, password_digest, admin, discarded_at, create
 type CreateUserParams struct {
 	Email          string
 	Username       string
-	PasswordDigest string
+	PasswordDigest pgtype.Text
 	Admin          bool
 }
 
@@ -68,6 +70,32 @@ WHERE email = $1 AND discarded_at IS NULL
 
 func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, getActiveUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.Bio,
+		&i.PasswordDigest,
+		&i.Admin,
+		&i.DiscardedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getActiveUserByEmailIgnoreCase = `-- name: GetActiveUserByEmailIgnoreCase :one
+SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
+WHERE lower(email) = lower($1) AND discarded_at IS NULL
+ORDER BY created_at
+LIMIT 1
+`
+
+// メールの一意性は lower(email) で守られているので、「登録済みか」の確認(signup・外部のサービスでの新規登録)は、
+// 大文字小文字を区別せずに調べる(「Alice@」と「alice@」を別のアカウントとして扱わないため)。退会済みは含めない。
+func (q *Queries) GetActiveUserByEmailIgnoreCase(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getActiveUserByEmailIgnoreCase, lower)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -201,7 +229,7 @@ RETURNING id, email, username, bio, password_digest, admin, discarded_at, create
 
 type UpdateUserPasswordDigestParams struct {
 	ID             string
-	PasswordDigest string
+	PasswordDigest pgtype.Text
 }
 
 // 列を限定したプロフィール更新：password_digest だけを更新する（理由は

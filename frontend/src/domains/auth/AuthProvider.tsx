@@ -28,6 +28,8 @@ interface AuthContextValue {
   signup(data: SignupRequest): Promise<void>;
   /** 確認メールのリンクのトークンでアカウントを作成し、そのままログイン状態にする。 */
   confirmSignup(token: string): Promise<void>;
+  /** すでに受け取ったログインの結果(Google でのサインインなど)で、ログイン状態にする。 */
+  signInWithResponse(res: AuthUserResponse): void;
   logout(): Promise<void>;
   // プロフィールの更新後に、表示する名前・メールを差し替える(権限 canModerate は変わらない)。
   refreshUser(updated: Pick<AuthUser, "username" | "email">): void;
@@ -117,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, signup, confirmSignup, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, signup, confirmSignup, signInWithResponse: applyAuthResponse, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

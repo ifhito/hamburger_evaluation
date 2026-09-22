@@ -50,9 +50,20 @@ type metaResponse struct {
 // handleMeta は GET /meta を処理する：frontend が描画・送信前の処理に使う、backend のルールの値
 // （rating の範囲、写真の保存の上限、文字数の上限、パスワードの長さ）を返す（200。認証不要）。
 // ルールを持つのは domain だけで、frontend は定数を複製しない。
-func handleMeta(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", metaCacheControl)
-	writeJSON(w, http.StatusOK, newMetaResponse())
+func handleMeta(loginProviders []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", metaCacheControl)
+		writeJSON(w, http.StatusOK, httpMetaResponse{metaResponse: newMetaResponse(), LoginProviders: loginProviders})
+	}
+}
+
+// httpMetaResponse は、GET /meta の応答である。規則の値(metaResponse)に、この環境で使えるサインイン方法を
+// 足したもの。サインイン方法は、規則ではなく設定(環境変数)で決まるので、MCP の get_meta とは共有しない。
+type httpMetaResponse struct {
+	metaResponse
+	// LoginProviders は、パスワードのほかに使えるサインイン方法の名前である(例: ["google"])。なければ空の配列。
+	// frontend は、これに含まれるものだけ、サインインの画面にボタンを出す。
+	LoginProviders []string `json:"login_providers"`
 }
 
 // newMetaResponse は、GET /meta と MCP の get_meta が共有する、規則の値の JSON 形式である。

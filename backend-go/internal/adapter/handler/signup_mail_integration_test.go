@@ -265,6 +265,29 @@ func TestSignupMailDeliveryIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("登録済みの email と、大文字小文字だけが違う email への signup は、登録済みと同じ通知になり、確認待ちは作られない", func(t *testing.T) {
+		srv := smtptest.Start(t, &smtptest.Server{})
+		host, port := splitHostPort(t, srv.Addr())
+		kit := newMailKit(t, host, port)
+		if _, err := kit.pool.Exec(context.Background(),
+			"INSERT INTO users (email, username, password_digest) VALUES ('alice@example.com', 'alice', 'digest:x')"); err != nil {
+			t.Fatalf("insert user: %v", err)
+		}
+
+		rec := do(kit.router, http.MethodPost, "/signup", signupBody("impostor", "Alice@Example.com", password), "")
+
+		if rec.Code != okResponse.Code || rec.Body.String() != okResponse.Body.String() {
+			t.Fatalf("応答 = %d %s, want 未登録と同一の %d %s", rec.Code, rec.Body, okResponse.Code, okResponse.Body)
+		}
+		rows := kit.waitDeliveries(t, "Alice@Example.com", 1)
+		if r := rows[0]; r.kind != "already_registered" {
+			t.Errorf("記録 = %+v, want already_registered(確認メールではない)", r)
+		}
+		if n := countRows(t, kit.pool, "signup_verifications"); n != 0 {
+			t.Errorf("確認待ちが %d 件作られた(確認すると、メールの一意の索引に違反して 400 になる), want 0", n)
+		}
+	})
+
 	t.Run("SMTP に接続できなくても、応答は同じで、記録が failed・試行 1・一時的な失敗・切り詰めた理由になる", func(t *testing.T) {
 		host, port := closedPort(t)
 		kit := newMailKit(t, host, port)

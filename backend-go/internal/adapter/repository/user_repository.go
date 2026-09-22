@@ -7,15 +7,20 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// usersEmailUniqueConstraint は、db/migrations/000001_create_users.up.sql の
-// users.email の UNIQUE 制約の名前である。
-const usersEmailUniqueConstraint = "users_email_key"
+// db/migrations/000001_create_users.up.sql の、メールの一意性を守る 2 つの名前である。users_email_key は
+// users.email の UNIQUE 制約(まったく同じ文字列)、users_email_lower_key は lower(email) の一意の索引
+// (大文字小文字だけが違うもの)。どちらの違反も、同じ ErrEmailTaken に対応づける。
+const (
+	usersEmailUniqueConstraint      = "users_email_key"
+	usersEmailLowerUniqueConstraint = "users_email_lower_key"
+)
 
 // pgUniqueViolation は SQLSTATE 23505 である。
 const pgUniqueViolation = "23505"
@@ -42,9 +47,11 @@ var _ domain.UserRepository = (*UserRepository)(nil)
 // violation は domain.ErrEmailTaken に対応づけられる。
 func (r *UserRepository) CreateUser(ctx context.Context, params domain.CreateUserParams) (domain.User, error) {
 	row, err := r.q.CreateUser(ctx, sqlcgen.CreateUserParams{
-		Email:          params.Email,
-		Username:       params.Username,
-		PasswordDigest: params.PasswordDigest,
+		Email:    params.Email,
+		Username: params.Username,
+		// パスワードなしは、明示された(Passwordless)ときだけ NULL で保存する。空の digest を、黙って NULL にはしない
+		// (そのまま保存しようとして、DB の CHECK(password_digest <> '')に拒否される)。
+		PasswordDigest: pgtype.Text{String: params.PasswordDigest, Valid: !params.Passwordless},
 		Admin:          params.Admin,
 	})
 	if err != nil {
@@ -87,7 +94,7 @@ func (r *UserRepository) UpdateUserProfile(ctx context.Context, id string, chang
 			}
 		}
 		if changes.PasswordDigest != nil {
-			row, err = q.UpdateUserPasswordDigest(ctx, sqlcgen.UpdateUserPasswordDigestParams{ID: id, PasswordDigest: *changes.PasswordDigest})
+			row, err = q.UpdateUserPasswordDigest(ctx, sqlcgen.UpdateUserPasswordDigestParams{ID: id, PasswordDigest: pgtype.Text{String: *changes.PasswordDigest, Valid: true}})
 			if err != nil {
 				return fmt.Errorf("update user profile: password digest: %w", mapUserWriteError(err))
 			}
@@ -125,7 +132,8 @@ func mapUserWriteError(err error) error {
 		return domain.ErrUserNotFound
 	}
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == usersEmailUniqueConstraint {
+	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation &&
+		(pgErr.ConstraintName == usersEmailUniqueConstraint || pgErr.ConstraintName == usersEmailLowerUniqueConstraint) {
 		return domain.ErrEmailTaken
 	}
 	return err

@@ -12,7 +12,9 @@ import (
 // そのパスワードの digest を組にしたものである。digest は意図的に
 // domain.User 上には決して置かれない。
 type UserCredentials struct {
-	User           domain.User
+	User domain.User
+	// PasswordDigest は、パスワードの digest である。パスワードでサインインする方法を持たない
+	// アカウント(外部のサービスだけで作ったもの)は、空文字列である。
 	PasswordDigest string
 }
 
@@ -25,9 +27,16 @@ type UserQuery interface {
 	// GetActiveUserByEmail は、指定された email の、discard されていない
 	// ユーザーを、そのパスワードの digest とともに返す。
 	GetActiveUserByEmail(ctx context.Context, email string) (UserCredentials, error)
+	// GetActiveUserByEmailIgnoreCase は、メールが(大文字小文字を区別せずに)一致する、discard されていない
+	// ユーザーを返す。メールの一意性は lower(email) で守られているので、「登録済みか」の確認(signup・
+	// 外部のサービスでの新規登録)は、こちらを使う。
+	GetActiveUserByEmailIgnoreCase(ctx context.Context, email string) (domain.User, error)
 	// GetActiveUserByID は、指定された id の、discard されていないユーザーを
 	// 返す。
 	GetActiveUserByID(ctx context.Context, id string) (domain.User, error)
+	// GetActiveUserHasPassword は、discard されていないユーザーが、パスワードでサインインできるか(digest が
+	// あるか)を返す。ユーザーがいなければ(wrap された)domain.ErrUserNotFound を返す。
+	GetActiveUserHasPassword(ctx context.Context, id string) (bool, error)
 }
 
 // PasswordHasher はパスワードのハッシュ化と検証を行う。
@@ -66,14 +75,14 @@ func NewAuth(query UserQuery, hasher PasswordHasher, issuer TokenIssuer, verifie
 const dummyPasswordDigest = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
 // Login は email とパスワードで active なユーザーを認証し、新しいトークンと
-// ともにそのユーザーを返す。認証情報が signup と同じ規則（domain.ValidateCredentials）
+// ともにそのユーザーを返す。認証情報が signup と同じ規則（domain.CredentialsIssues）
 // を満たさないときは、DB の検索も hash の比較も行わず *domain.ValidationError を返す。
 // 規則はアカウントの有無に関係なく同じ条件で判定するので、応答から、どの email に
 // アカウントがあるかは分からない。規則を満たしたうえで、未知の email と誤った
 // パスワードは、どちらも domain.ErrInvalidCredentials を返す。
 func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, string, error) {
-	if msgs := domain.ValidateCredentials(email, password); len(msgs) > 0 {
-		return domain.User{}, "", &domain.ValidationError{Messages: msgs}
+	if issues := domain.CredentialsIssues(email, password); len(issues) > 0 {
+		return domain.User{}, "", domain.NewValidationError(issues...)
 	}
 	creds, err := a.query.GetActiveUserByEmail(ctx, email)
 	if err != nil {
@@ -87,7 +96,14 @@ func (a *Auth) Login(ctx context.Context, email, password string) (domain.User, 
 		}
 		return domain.User{}, "", fmt.Errorf("get user by email: %w", err)
 	}
-	if err := a.hasher.Compare(creds.PasswordDigest, password); err != nil {
+	digest := creds.PasswordDigest
+	if digest == "" {
+		// パスワードでサインインする方法を持たないアカウント(外部のサービスだけで作ったもの)。
+		// 未知の email と同じく、hash の比較を 1 回分消費して、同じ失敗を返す。応答の文言も時間も、
+		// 「そのアカウントにパスワードがない」ことを、外から推測させない。
+		digest = dummyPasswordDigest
+	}
+	if err := a.hasher.Compare(digest, password); err != nil || creds.PasswordDigest == "" {
 		return domain.User{}, "", domain.ErrInvalidCredentials
 	}
 	token, err := a.issuer.Issue(creds.User.ID)

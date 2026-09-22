@@ -88,6 +88,7 @@ backend-go/
 - 専用の Postgres を使う (ホストのポートは 5433)。
 - すべてのテーブルの ID(users・shops・burgers・reviews)は **UUID**(小文字・ハイフン区切りの正規形。DB の `gen_random_uuid()` が v4 で生成する)。URL・API・JWT(`user_id` claim)・frontend では、この文字列をそのまま扱う。正規形でない ID(大文字・ハイフンなし・整数)は、パスの `{id}`(`/users/{id}`・`/shops/{id}`・`/admin/shops/{id}`・`/reviews/{id}`)では存在しないものと同じ 404、クエリ(`user_id`・`shop_id`)と `POST /reviews` の本文(`shop_id`・`burger_id`。空は「指定なし」で、`shop_id` がなければ 404、`burger_id` がなければ `burger_name` の経路)では 422(`User id must be a valid UUID` など)にする(形式の判定は `domain.IsUUID` だけが持ち、frontend は判定しない)。一覧の並びは、id ではなく `created_at` や `name` と、同値の決着のための `id` で決める(UUID の id は作成順ではない)。レビューの一覧は `created_at` の降順、同時刻は `id` の降順で、同時刻のレビューが多数あっても、ページをまたいで重複・欠落がない。統計の再計算に使うレビューの順序も、`created_at` の昇順、同時刻は `id` の昇順である。
 - 認証は **JWT**。ログイン時にトークンを返し、以降は `Authorization: Bearer <token>` で送る。`user_id` が数値の旧形式のトークンは無効(401)。`JWT_SECRET` が未設定だと起動時にエラーで落ちる(fail-loud)ため、`docker compose up` の前に export する。
+- **エラーの文言の言語**: リクエストの `Accept-Language` で、日本語(`ja`)か英語(`en`)を選ぶ(q 値・`ja-JP`・`*` に従う。どちらでもない・ヘッダーなしは英語 = いままでの文言の契約)。言語を選ぶのは handler(`langOf`)だけで、文言は「キー + 引数」で表し、言語ごとの書式のカタログ(業務の規則の文言は `domain/messages.go` の `domain.Message`、handler が返す文言は `adapter/handler/messages.go` の `apiMessage`。型を分けている。英語・日本語の両方が必須で、値の並びも同じ。構造テスト(`internal/testutil/msgcheck`)が強制する)で文字列にする。本文の作り方は、`writeError`・`writeErrorList`・`writeErrorListWith`・`writeValidation`(言語に従う。`Vary: Accept-Language` も付く)と、`writeInternalError`(5xx。英語の固定)だけで、文字列を直接書いて本文を作ることは、構造テストが禁じる(言語の切り替えをすり抜けるため。MCP のツールの失敗も `t.failMessage`)。**日本語になるのは、この API のコードが返す、利用者に見える 4xx すべて**: 検証の失敗の 422、見つからない・権限・認証・リクエストの形・写真・クエリの誤り、Google のサインインの案内(交換の応答)、OAuth の許可の画面の 422(要求が不正な理由の診断の文は英語のまま、日本語の説明に添える)、`/mcp` の 401・403 と、MCP のツールの失敗(結果が大きすぎるときの案内だけは、ツールの説明と同じく日本語で固定)。**対応が済んでも英語のまま**: OAuth の RFC のプロトコルの識別子(`error` の値・`error_description`・`WWW-Authenticate`)、5xx の `internal server error`・`database unavailable`、成功の応答(`Confirmation email sent`)、標準ライブラリと SDK が自分で返す応答(写真の配信 `GET /photos/…` の 403・404・416、MCP の SDK が返すツールの入力の型の検証と、`/mcp` のヘッダー・プロトコルの版の誤り。本文が text/plain など、API のエラーの形ではない)。
 - signup は**メール確認つき**で、確認メールの送信設定(`SMTP_HOST`・`SMTP_PORT`・`MAIL_FROM`・`APP_BASE_URL`)が欠けていると起動時に落ちる。開発では compose の Mailpit が受け取る(`docker compose up` で足りる。Web UI は http://localhost:8025)。詳細は「signup の確認メール」。
 
 ### 統計の再計算(非同期)
@@ -212,8 +213,8 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 - `GET /oauth/authorize` — 認可の入口(上記 1)。
 - `POST /oauth/token` — トークンの発行(認可コードの交換・更新)。
 - `POST /oauth/revoke` — 取り消し(RFC 7009)。更新トークンを取り消すと、その認可から発行されたトークンがすべて使えなくなる。
-- `GET /oauth/authorize/request`・`POST /oauth/authorize/decision` — 許可の画面が使う API(要ログイン。上記 2)。要求がアプリへ結果を戻せない形で不正なときは 422 `{"error":"…"}`。
-- `GET /oauth/grants`・`DELETE /oauth/grants/{id}` — 利用者本人が許可したアプリの一覧(`id`・`client_id`・`client_name`・範囲と説明・`created_at`・`updated_at`。最近使ったものから順)と、取り消し(204)。**一覧は、既存の一覧(`GET /shops`・`GET /reviews`)と同じ契約でページ送りする**: `page` / `per_page`(整数でなければ 422、範囲外は補正。1 ページの件数は backend が決める。既定 20 件・上限 100 件。既定値・上限・範囲外の丸めは、業務の規則として `domain/page.go`(`DefaultPerPage`・`MaxPerPage`・`NormalizePage`)にあり、ショップ・レビュー・接続済みアプリの一覧が、すべて同じ規則に従う。`page` / `per_page` の文字列を整数に読む処理は handler の `pageParams`、DB の limit/offset への変換は usecase の `clampPage`、続きを知るために 1 件多く取り出して切り詰める処理は adapter の `trimPage` が持つ)、続きがあるかはレスポンスヘッダー `X-Has-More`(`true` / `false`)で返す。取り消すと、そのアプリのトークンはすぐ使えなくなる。別の利用者の許可・存在しない許可・正規の形でない id は、区別できない同一の 404。プロフィール画面の「接続済みのアプリ」が使う。
+- `GET /oauth/authorize/request`・`POST /oauth/authorize/decision` — 許可の画面が使う API(要ログイン。上記 2)。要求がアプリへ結果を戻せない形で不正なときは 422 `{"error":"…"}`。`GET /oauth/authorize/request` の応答の `scopes` は、範囲ごとに、書き込みを伴うか(`writes`。値の元は domain の `OAuthScope.Writes` で、`hamburger:write` だけ `true`。定義にない範囲の名前は `false`)を含む(`POST /oauth/authorize/decision` の応答には範囲がない)。frontend は、範囲の名前を比べず、この値で書き込みの範囲を強調すること。
+- `GET /oauth/grants`・`DELETE /oauth/grants/{id}` — 利用者本人が許可したアプリの一覧(`id`・`client_id`・`client_name`・範囲と説明と `writes`・`created_at`・`updated_at`。最近使ったものから順)と、取り消し(204)。**一覧は、既存の一覧(`GET /shops`・`GET /reviews`)と同じ契約でページ送りする**: `page` / `per_page`(整数でなければ 422、範囲外は補正。1 ページの件数は backend が決める。既定 20 件・上限 100 件。既定値・上限・範囲外の丸めは、業務の規則として `domain/page.go`(`DefaultPerPage`・`MaxPerPage`・`NormalizePage`)にあり、ショップ・レビュー・接続済みアプリの一覧が、すべて同じ規則に従う。`page` / `per_page` の文字列を整数に読む処理は handler の `pageParams`、DB の limit/offset への変換は usecase の `clampPage`、続きを知るために 1 件多く取り出して切り詰める処理は adapter の `trimPage` が持つ)、続きがあるかはレスポンスヘッダー `X-Has-More`(`true` / `false`)で返す。取り消すと、そのアプリのトークンはすぐ使えなくなる。別の利用者の許可・存在しない許可・正規の形でない id は、区別できない同一の 404。プロフィール画面の「接続済みのアプリ」が使う。
 
 **ルール**(判断は `internal/domain/oauth*.go` だけが持つ)
 
@@ -248,6 +249,31 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 
 **制限**: アプリの説明を取りに行く回数の制限(レート制限)は、まだない(SSRF の対策と、取得結果のキャッシュだけ)。
 
+### Google のアカウントでのサインイン
+
+メール + パスワードのほかに、Google のアカウントで、サインイン・新規登録・結び付けができる(`internal/adapter/googleauth`。認可コード + PKCE(S256)。ライブラリは `github.com/coreos/go-oidc/v3` と `golang.org/x/oauth2`)。`GOOGLE_CLIENT_ID` を設定したときだけ有効で、設定しなければ、`/auth/google/*` と `/me/identities*` は登録されず(404)、`GET /meta` の `login_providers` は空になる。Google Cloud での準備と手元での確かめ方は `docs/google-login-setup.md`。
+
+- 流れ: ① 画面の「Google でサインイン」が `GET /auth/google/start`(query の `return_to`)へ移動 → ② API が、手続きの秘密(state・nonce・PKCE の検証値・戻り先)を、暗号化した短命の cookie に封じて、Google の認可の画面へ 302 → ③ Google が `GET /auth/google/callback` へ戻す。API が、**state に対応する手続きの cookie を取り出して消し**、認可コードを交換し、ID トークン(署名・発行者・宛先・有効期限・nonce・`email_verified`)を検証する → ④ **結果(成功も失敗も)は、短命(60 秒)・1 回限りの「画面へ渡すコード」に入れて**、frontend の `/auth/google/complete?code=…` へ 303。**同時に、コードを使える相手を確かめる「結び付けの値」を、このブラウザの cookie に設定する** → ⑤ 画面が `POST /auth/google/exchange`(`{"code": "…"}`。cookie は同じオリジンなので、自動で付く)で交換して、結果を受け取る。**ログインの証(JWT)は URL に載せず、交換の応答でだけ返す。**
+- **cookie は 2 種類で、どちらも手続き(コード)ごとに別の名前**: ① 手続きの cookie `google_login_flow_<state のハッシュ>`(値は AES-256-GCM で封じ、**cookie の名前も認証に含める**ので、別の名前へ移し替えても開けない。**Path は戻り先の path そのもの**(例: `/api/auth/google/callback`)で、戻りの要求にだけ送られる。開始の要求には送られない)、② 結び付けの値の cookie `google_login_handoff_<コードのハッシュ>`(**Path は `…/auth/google/exchange`**。有効期間はコードと同じ 60 秒。交換で消す)。どちらも HttpOnly・SameSite=Lax(戻り先が https なら Secure)。手続きごとに別の cookie なので、同じブラウザの複数のタブで並行しても、互いを上書きせず、使った手続きの cookie だけを(同じ名前・Path で)消せる。件数・大きさの上限や、Path の導出・同名 cookie の統合は要らない。**`GOOGLE_REDIRECT_URL` の path は `/auth/google/callback` で終わらなければならない**(交換の cookie の Path を、ここから導く。起動時に断る)。
+- **交換は、手続きを終えたブラウザの cookie にある「結び付けの値」と一緒でなければできない**(ログイン CSRF の防止): コードは URL に載って渡るので、コードだけを別のブラウザへ持ち込んでも(攻撃者が自分の Google で進めた `/auth/google/complete?code=C` を、被害者に踏ませても)、交換できず、被害者が攻撃者のアカウントでログインした状態にはならない。結び付けの値は、保存の形(SHA-256。`login_handoffs.binder_hash`)で照合する(`domain.LoginHandoff.BoundTo`)。合わない・ない交換は、無効なコードと同じ 400 で、**コードを消費しない**(別のブラウザの試みで、本来のブラウザのコードが使えなくならない)。
+- **手続きの cookie がない(または合わない)コールバックでは、DB に何も書かず**、コードなしで結果の画面へ 303(手続きを始めていない要求で、`login_handoffs` に行を増やさせない。`usecase.ErrGoogleFlowMissing`)。**失敗の応答(409・400)にも、検証済みの `return_to` を含める**(AI アプリの許可の画面から来た利用者が、失敗のあと、元の要求へ戻れる。画面は、これをサインインの画面へ渡すだけ)。
+- **交換(`Redeem`)は、後続の処理が成功してから、コードを消す**: 1 つのトランザクションの中で「コードをロック(`FOR UPDATE`)→ 内容を読む → 利用者の取得・トークンの発行 → コードを削除」。途中で失敗したら取り消すので、DB の一時的なエラーやトークンの発行の失敗で 500 になっても、コードは期限まで有効で、画面が同じコードで再試行できる。同じコードの並行する交換は、ロックで直列になり、成功するのは 1 回だけ。**トランザクションの中の読み取りは、プールからもう 1 つ接続を取らず、トランザクションの接続(`Tx.UserReads`)を使う**(取ると、同じコードを待つ処理が接続を使い切り、全体が止まる)。
+- 識別は、メールでなく、Google の `sub`(`user_identities.provider_user_id`)。結び付いていればサインイン。結び付いておらず、同じメール(大文字小文字を区別しない)の利用者がいなければ、パスワードなしで新規登録(ユーザー名は `domain.UsernameFromProfile`。表示名だけが材料で、**メールの一部は使わない**(`user-<乱数>`)。書式の文字(Cf。双方向の上書き・ゼロ幅)は取り除く。あとで変更できる)。**同じ Google アカウントの初回のサインインが並行して、ユーザーの作成が負けたときは、sub で結び付きを引き直して、先に作られた利用者としてサインインさせる**(「パスワードでサインインしてください」と誤って案内しない)。**同じメールの利用者がいるときは、自動では結び付けない**(409 と案内。パスワードでサインインして、プロフィールから結び付ける)。**メールの一意性は、DB が、大文字小文字を区別せずに保証する**(`users` の `lower(email)` の一意の索引 `users_email_lower_key`。退会済みも対象。並行する登録の競合で、破られない。一意違反は `domain.ErrEmailTaken` になり、Google の新規登録は案内のエラー、メール確認での登録は「確認できない」になる)。
+- 結び付け(ログイン済み): **`POST /me/identities/google/link`(認証つき。body の `return_to` は省略できる)が、その要求を出したブラウザで手続きを始め、Google の認可の画面の URL(`redirect_url`)を返す**。結び付ける利用者は、要求の認証から決まり、手続きの cookie(応答の Set-Cookie で、そのブラウザにだけ設定される)の中にだけある。**開始の URL やコードで、別のブラウザに利用者を伝える経路はない**(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに結び付ける攻撃を防ぐため。cookie を持たないブラウザでは、戻ってきても state が合わず失敗する)。画面は、`redirect_url` へ移動する。`GET /me/identities`(一覧。`can_unlink`)。`DELETE /me/identities/google`(204。**パスワードなしのアカウントは、サインインする方法がなくなるので 422**。判断は domain の `CanUnlinkIdentity`)。
+- 戻り先(`return_to`)は、アプリの中のパスだけ(`domain.SanitizeReturnTo`。外部の URL・`//host`・`\`・制御文字は、既定の画面になる)。S39 の許可の画面へ戻る流れ(`/oauth/authorize?...`)も、この経路で戻る。
+- パスワードなしのアカウント: `users.password_digest` は NULL。**明示したときだけ作る**(`CreateUserParams.Passwordless`。digest が空なのに明示していない作成は、`domain.ErrInvalidPasswordDigest` で拒否する。空の digest を黙って NULL にしない)。**退会すると、結び付きも削除する**(退会のトランザクションで、OAuth の許可の取り消しと同じく)。パスワードでのサインインは、知らないメールと同じ失敗(文言・ステータス・hash の比較 1 回分)になる。
+- テーブル: `user_identities`(`UNIQUE(provider, provider_user_id)`・`UNIQUE(user_id, provider)`。Google のトークンは保存しない)、`login_handoffs`(画面へ渡すコードの中身。`code_hash`・`binder_hash` は SHA-256。使うと消える)。`users.password_digest` を NULL 可にしたので、**適用済みの開発用 DB は作り直す**(`migrate drop -f` → `migrate up` → `seed`)。
+- テスト: 本物の Google にはつながず、`internal/testutil/fakeoidc`(OpenID Connect の提供元の代役)を使う。**本番のコードから import しない。**
+
+**環境変数**(有効にしたのに足りない・不正なときは起動時に落ちる。値はログ・エラーに出さない)
+
+| 変数 | 必須 | 内容 |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` | 任意(設定すると有効) | Google Cloud Console で作った OAuth クライアントの ID |
+| `GOOGLE_CLIENT_SECRET` | 有効なとき必須 | そのクライアントの秘密の鍵。**秘密。ログ・コード・PR・チャットに書かない。`.env` は Git に入れない** |
+| `GOOGLE_REDIRECT_URL` | 有効なとき必須 | Google が認可のあとに利用者を戻す URL(この API の `/auth/google/callback` の公開 URL)。Google Cloud Console の「承認済みのリダイレクト URI」と完全に一致させる(例: `http://localhost:5173/api/auth/google/callback`。**画面の `/api` を通る形**にする。API に直接戻すと、画面が呼ぶ `/api/auth/google/exchange` に、交換の cookie が届かず、毎回失敗する)。**https、または開発用のループバックの http だけ**(起動時に断る。`APP_BASE_URL` も、有効なときは同じ制約)。画面と同じオリジンにして(画面の `/api` を通る形)、手続きの cookie が届くようにする |
+| `GOOGLE_OIDC_ISSUER` | 任意 | OpenID Connect の提供元。既定は `https://accounts.google.com`。テスト・隔離した確認で、代役に向けるためだけにある。https か、ループバック(`localhost`・`127.0.0.1`・`[::1]`)の http だけ許す。**本番では設定しない** |
+
 ### リモートの MCP サーバー(`/mcp`)
 
 AI アプリ(Claude Code など)が、このアプリのショップ・レビューを調べ、許可されたときだけ、利用者の名前でレビューの投稿・編集・削除とショップの申請をするための、MCP(Model Context Protocol。AI が外部のツールを使う標準の決まり)のサーバーである。backend-go の API と**同じプロセス**に入っていて(`internal/adapter/handler/mcp*.go`)、OAuth の認可サーバー(上の節)を有効にしたとき(`OAUTH_ISSUER`)だけ登録される。SDK は公式の `github.com/modelcontextprotocol/go-sdk`(Go 1.25 以上が必要)。
@@ -273,6 +299,14 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 **ヘルスチェック**
 - `GET /up` — ヘルスチェック (DB への ping)
 
+**Google でのサインイン**(`GOOGLE_CLIENT_ID` を設定したときだけ。詳細は「Google のアカウントでのサインイン」)
+- `GET /auth/google/start` — Google の認可の画面へ 302(query: `return_to`。サインイン・新規登録の手続き専用)
+- `GET /auth/google/callback` — Google からの戻り。結果を入れた 1 回限りのコードを付けて、frontend の `/auth/google/complete` へ 303
+- `POST /auth/google/exchange` — コードを交換して結果を返す。手続きを終えたブラウザの cookie(結び付けの値)が要る(サインインの成功 200 + `token`・`return_to`、結び付けの成功 200 + `linked`、重複 409・失敗 400(どちらも `errors` + `return_to`)、無効なコード・cookie なし 400)
+- `POST /me/identities/google/link` — 結び付けの手続きを、要求を出したブラウザで始め(cookie を設定)、Google の認可の画面の URL(`redirect_url`)を返す (要認証)
+- `GET /me/identities` — 結び付き(Google など)の一覧。`can_unlink` (要認証)
+- `DELETE /me/identities/google` — 結び付きの解除 204 (要認証。解除するとサインインする方法がなくなるなら 422)
+
 **OAuth の認可サーバー**(`OAUTH_ISSUER` を設定したときだけ。詳細は「OAuth の認可サーバー」)
 - `GET /.well-known/oauth-authorization-server` — 認可サーバーの情報(RFC 8414)
 - `GET /oauth/authorize` — 認可の入口。検証して、許可を尋ねる画面へ 303 で渡す
@@ -290,7 +324,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `POST /signup/confirm` — 確認メールのリンクの平文トークン(`{"token":"…"}`)でアカウントを作成する。成功すると従来の signup と同じ 201 `{id, username, email, admin, can_moderate, token}`(`can_moderate` は login・`GET /me` と共通)を返し、そのままログイン状態にできる。期限切れ・存在しない・改ざん・使用済みのトークン(と、確認までの間に同じ email のユーザーが作られていた場合)は、区別できない同一の 400 `{"error":"Confirmation token is invalid or has expired"}`
 - `POST /login` — 認証して JWT トークンを受け取る (email とパスワードは signup と同じ規則を `domain.ValidateCredentials` で判定し、満たさなければ照合の前に 422。規則を満たしたうえで誤っていれば 401 `Invalid email or password`)
 - `GET /me` — Bearer トークンから解決した現在のユーザー(`id`・`username`・`email`・`admin`・`can_moderate`)。無効・期限切れのトークンは 401。frontend は、トークンの有効性を自分で判断せず、起動時にこの応答でログイン状態を復元する。`can_moderate`(moderation ができるか。domain の `User.CanModerate`)は、`POST /login`・`POST /signup` の応答にも含まれ、frontend は `admin` から権限を導かず、管理画面の出し分けをこの値で行う (要認証)
-- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}, "text": {"review_comment_max_chars": 2000, "burger_name_max_chars": 100, "shop_name_max_chars": 100, "username_max_chars": 50, "bio_max_chars": 500, "moderation_note_max_chars": 500}, "password": {"min_bytes": 8, "max_bytes": 72}}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、文字数の上限は domain の `Max*Chars`、パスワードの長さは `MinPasswordBytes` / `MaxPasswordBytes`、写真の上限は `domain/photo.go` の `MaxPhotoEdge` と `MaxPhotoBytes`)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小・文字数のカウンター・パスワードの説明文にこの値を使う。文字数はコードポイント数(日本語・絵文字も 1 文字)、パスワードはバイト数(日本語は 1 文字が 3 バイト)。domain に `Max*` / `Min*` の公開の定数を足したときは、`GET /meta` に足すか、出さない理由を `handler/meta_limits_test.go` の一覧に書く(書かないとテストが失敗する)。frontend の文字数のカウンター(`CharCounter`)は表示だけで、上限を超えても入力も送信も止めない(判定は backend の 422)
+- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}, "text": {"review_comment_max_chars": 2000, "burger_name_max_chars": 100, "shop_name_max_chars": 100, "username_max_chars": 50, "bio_max_chars": 500, "moderation_note_max_chars": 500}, "password": {"min_bytes": 8, "max_bytes": 72}, "login_providers": []}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、文字数の上限は domain の `Max*Chars`、パスワードの長さは `MinPasswordBytes` / `MaxPasswordBytes`、写真の上限は `domain/photo.go` の `MaxPhotoEdge` と `MaxPhotoBytes`)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小・文字数のカウンター・パスワードの説明文にこの値を使う。文字数はコードポイント数(日本語・絵文字も 1 文字)、パスワードはバイト数(日本語は 1 文字が 3 バイト)。domain に `Max*` / `Min*` の公開の定数を足したときは、`GET /meta` に足すか、出さない理由を `handler/meta_limits_test.go` の一覧に書く(書かないとテストが失敗する)。frontend の文字数のカウンター(`CharCounter`)は表示だけで、上限を超えても入力も送信も止めない(判定は backend の 422)。`login_providers` は、パスワードのほかに使えるサインイン方法で、規則ではなく設定(環境変数)で決まる(Google が有効なら `["google"]`、無効なら空の配列。frontend は、これに含まれる方法のボタンだけを出す。MCP の `get_meta` には含めない)
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**
@@ -391,9 +425,15 @@ frontend/src/
 └── components/   # 共通 UI コンポーネント
 ```
 
+### フォント
+
+- Noto Sans JP は、外部の Google Fonts に頼らず、`@fontsource-variable/noto-sans-jp`(可変フォント。バージョンは完全固定)で自前配信する。分割済みの `wght.css` を `globals.css` の先頭で `@import` する(アプリの `main.tsx` と Storybook の `.storybook/preview.ts` は、どちらも `globals.css` を import しているので、この 1 か所で両方に届く)。画面に出る文字を含む分だけが読まれる。
+- 可変版の family 名は `Noto Sans JP Variable`(静的版の `Noto Sans JP` とは別の名前)。`--ui-font` は、この名前だけを持つ(`uiTokens.test.ts` が確かめる)。
+- 本番のアプリは、`components/ui` を使う画面が増えるまで(S46〜S48)、`--ui-font` を使う要素がなく、この CSS の読み込み分だけを、使わずに払う。Storybook は、部品の見比べに、今も使っている。
+
 ### API の接続先
 
-- ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる。
+- ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる(別のオリジンの絶対 URL にすると、API は CORS に対応していないので、Google でのサインインは使えず、ボタンは出ない)。
 - 開発時は Vite の proxy が `/api` を Go API へ転送する。転送先の既定は `http://host.docker.internal:8080` で、`VITE_API_PROXY_TARGET` で変更できる。レビュー写真の `/photos` も同じ転送先へ proxy される(本番の nginx にも `/photos/` がある)。
 
 ### 写真の送信
@@ -408,6 +448,17 @@ frontend/src/
 - **画面の状態は、それを作った認可の要求(URL の query。`search`)に結び付ける**(`consentFlow.ts`)。同じ画面のまま query だけが変わったとき(履歴を戻る・進む)に、前のアプリの内容が残ったまま、新しいアプリへの許可を送ってしまうのを防ぐため: いまの URL のために作られた状態だけを見せ(それ以外は「確認中」で、ボタンも出ない)、許可・拒否として送るのは、いま画面に内容を見せている要求だけにする。URL が変わったら、前の取得は取り消し(`AbortController`)、遅れて返った応答は画面に届かない。
 - 画面は、`GET /oauth/authorize/request` の結果(アプリの名前・範囲と説明・`consentRequired`)を表示し、選択を `POST /oauth/authorize/decision` に送って、返ってきた `redirectTo`(アプリへの戻り先)へブラウザを移す。`consentRequired` が false(すでに許可済みの範囲に収まる)なら、尋ねずに許可を送る。**要求の検証・範囲の説明・尋ねる必要があるかの判断は、すべて backend が行い、frontend は表示と送信だけ**を行う(範囲の名前や説明を frontend に持たない)。アプリへの戻り先は、http(s) のときだけ開く(`isNavigable`。ページの中でコードが動くのを防ぐ確認)。
 - プロフィール(本人のときだけ。`canEdit`)に「Connected apps」を出す(`ConnectedApps`)。`GET /oauth/grants` の一覧(ページ送り。`X-Has-More` があるときに「Load more」で続きを取る。既存の一覧と同じ `useInfinitePages`。キャッシュのキーには利用者の id を含める)と、`DELETE /oauth/grants/{id}` の取り消し(確認のあと。読み込み済みの全ページを取り直す)。OAuth の認可サーバーが無効な環境(API が 404)では、何も出さない。
+
+### Google でのサインイン(`domains/auth`)
+
+backend の「Google のアカウントでのサインイン」(上の Backend の節)の、画面側。**判断は backend だけが持ち、frontend は、返された値と文言を出すだけ**。
+
+- サインインと新規登録の画面に、「Continue with Google」のリンク(`GoogleSignIn`。ボタンの見た目。文言はサインイン・登録で同じ。置き場所は、サインインはフォームの下、登録は上)を出す。**`GET /meta` の `loginProviders` に `google` が含まれるときだけ**で、取得できていない間・空のときは何も出さない(`googleEnabled`)。リンクは、ブラウザが API の `${API_BASE_URL}/auth/google/start` へ移動する(`googleStartUrl`。fetch ではない)。押すと「Going to Google…」に変わり押せなくなる(二重に開始しない。戻る操作で復元されたときは戻す)。ログインが必要な画面から送られてきたときは、その画面(ルーターの state の `from`)を `return_to` として渡す。
+- `/auth/google/complete`(`GoogleCompletePage`。**ゲスト専用ではなく公開の route**。成功するとログイン状態になるため): backend が、成功も失敗も、1 回限りのコードに入れて、この画面へ戻す。画面は、`code` を**最初に 1 回だけ**読み、URL からはすぐに消し(履歴に残さない)、`POST /auth/google/exchange` で交換する(StrictMode の二重実行でも 1 回)。サインインの成功は `signInWithResponse` でログイン状態にして、戻り先(backend が確かめたアプリの中のパス。空は `/reviews`)へ。重複・失敗・無効なコードは、API の文言(`ApiError.messages`)をそのまま出し、「サインインへ戻る」は、失敗の応答が含める戻り先(`GoogleExchangeError.returnTo`。共有の `ApiError` ではなく、`exchangeGoogleCode` が本文から読む。backend が確かめたもの。許可の画面から来た利用者が、パスワードでサインインしたあと、そこへ戻れる)を、サインイン画面の state の `from` として渡す(画面は、戻り先を保存しない)。交換の要求は、同一オリジンなので、手続きを終えたブラウザの cookie(結び付けの値)が、そのまま付く(`withCredentials` は、明示のため。同一オリジンでは、なくても同じ)。失敗の本文の `return_to` は、interceptor が camelCase にして `ApiError.body` に持ち、`GoogleExchangeError` が読む。**交換が、サーバーの障害・通信の失敗で失敗したときは、backend がコードを消費しないので、コードをこの画面の state に持ったまま、「Try again」で、同じコードでもう一度交換する**(409・400 など、決まった失敗には出さない)。コードがない(URL から消したあとに、戻る操作でこの画面へ戻った)ときは、要求を送らない。画面を離れたあとに結果が返っても、勝手に移動させない。失敗の画面の導線(プロフィールへ / サインインへ)は、ログインの状態の復元(GET /me)が済んでから出す。**ログインの証(JWT)は URL に載らない。**
+- 本人のプロフィールに、Google の連携(`GoogleConnection`。`canEdit` のときだけ、`loginProviders` に含まれるときだけ): `GET /me/identities` の内容を出す。「結び付ける」は、**認証つきの `POST /me/identities/google/link`**(`authApi.startGoogleLink`)で、**このブラウザ**に手続きの cookie を設定して始め、返された Google の認可の URL(`redirectUrl`。http・https だけ移動する)へ移動する(戻り先はこのプロフィール)。**持ち運べる開始のコード(`link_code`)や開始の URL は使わない**(別のブラウザで開かせて、被害者の Google を攻撃者のアカウントに結び付ける攻撃を防ぐため)。この POST は、画面と同一オリジン(`/api` の転送)で出すので、応答の cookie が、そのまま保存され、Google からの戻りで送られる。「解除」は **API が返す `canUnlink` が true のときだけ**出す(解除してよいかの判断は backend の domain。false のときは理由の文言だけを出す)。
+- **Google の手続きの cookie は、同一オリジンの `/api` の道筋(`API_BASE_URL` が `/api` のような path)でだけ往復する**。`VITE_API_BASE_URL` を別のオリジンの絶対 URL にすると、cookie が保存・送信されず、Google でのサインインと結び付けは、毎回失敗する(API が CORS(資格情報つき)に対応していないので、その構成は対応しない。**画面は、API の根が別のオリジンの絶対 URL のとき、Google のボタンを出さない**(`googleEnabled`)。Google を使うときは、変えない)。backend は、`GOOGLE_REDIRECT_URL` が `APP_BASE_URL` と別のオリジンのとき・同じオリジンでも接頭辞(`/api`)がないときは、起動時に警告する(`Config.GoogleWarnings`。英語の `slog.Warn`。オリジンだけを出す。手元の設定は、`http://localhost:5173/api/auth/google/callback`)。
+- 一覧の取得に失敗したときは、エラーと「Retry」だけを出し、「未連携」とは表示しない(`ConnectionState`)。解除が済んだら(204)、再取得を待たずに、キャッシュから Google の連携を外し、「Google disconnected.」を出す(そのあとの再取得の成否は、解除の成否とは別)。**解除が 404 のときは、別のタブで、すでに解除済みなのか、Google の機能が止まっているのか、区別できない**ので、一覧を取り直して確かめ、Google の連携がなければ「解除済み」として扱い、残っている(または、取り直せない)ときは、失敗を出す。一覧の取得の失敗は、自動では再取得せず(失敗の表示と Retry が、「読み込み中」に切り替わって消えるため)、Retry を押したときだけ取り直す。「結び付ける」で Google へ移動したあと、bfcache で復元されたら、処理中を戻す(`pageshow`)。
+- Google のロゴは `google-g.svg`(Google のブランドの決まりに沿ったマーク)。
 
 ### Frontend コマンド
 

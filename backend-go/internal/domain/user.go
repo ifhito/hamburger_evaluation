@@ -58,11 +58,15 @@ func (u User) ProfileFor(viewer *User) UserProfile {
 
 // CreateUserParams は、新しいユーザーとして永続化するフィールドを保持する。
 // パスワードはハッシュ化済みの状態で渡される。repository が平文を目にする
-// ことはない。
+// ことはない。パスワードでサインインする方法を持たないアカウント(外部のサービスだけで作るもの)は、
+// **Passwordless を true にして、PasswordDigest を空にする**ことで、明示する。Passwordless が false のときは、
+// PasswordDigest が必須で、空は誤りとして扱う(呼び出し側の不具合で digest が空になっても、黙って「パスワードなし」の
+// アカウントにしない。Users.Create が ErrInvalidPasswordDigest で拒否する)。
 type CreateUserParams struct {
 	Username       string
 	Email          string
 	PasswordDigest string
+	Passwordless   bool
 	Admin          bool
 }
 
@@ -119,8 +123,13 @@ func NewUsers(repo UserRepository) *Users {
 }
 
 // Create は新しいユーザーを永続化して返す。email が使用済みなら
-// （wrap された）ErrEmailTaken を返す。
+// （wrap された）ErrEmailTaken を、パスワードの扱いが明示と合わないとき(CreateUserParams を参照)は
+// ErrInvalidPasswordDigest を返す。
 func (s *Users) Create(ctx context.Context, params CreateUserParams) (User, error) {
+	// パスワードの扱いが、明示(Passwordless)と合っているか: digest が空なら、パスワードなしを明示していなければならない。
+	if params.Passwordless == (params.PasswordDigest != "") {
+		return User{}, ErrInvalidPasswordDigest
+	}
 	return s.repo.CreateUser(ctx, params)
 }
 

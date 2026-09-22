@@ -5,17 +5,24 @@ import snakecaseKeys from "snakecase-keys";
 export class ApiError extends Error {
   readonly messages: string[];
   readonly status: number;
+  // 失敗の応答の本文(errors・error 以外の項目を読みたい呼び出し側のため。解釈は、呼び出し側が行う)。
+  readonly body: unknown;
 
-  constructor(messages: string[], status: number) {
+  constructor(messages: string[], status: number, body?: unknown) {
     super(messages[0]);
     this.name = "ApiError";
     this.messages = messages;
     this.status = status;
+    this.body = body;
   }
 }
 
+// API の URL の根(開発では、Vite のプロキシを通す "/api")。axios のほかに、ブラウザが API へ直接移動する
+// とき(Google のサインインの開始など)にも使う。
+export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "/api";
+
 export function buildApiClient(getToken?: () => string | null) {
-  const client = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL ?? "/api" });
+  const client = axios.create({ baseURL: API_BASE_URL });
 
   client.interceptors.request.use((config) => {
     const token = getToken?.();
@@ -55,10 +62,13 @@ export function buildApiClient(getToken?: () => string | null) {
     },
     (error: unknown) => {
       if (axios.isAxiosError(error) && error.response) {
-        const data = error.response.data as { error?: string; errors?: string[] };
+        // 本文が空・null・文字列(プロキシの HTML など)のこともある(そのときは、項目なしとして扱う)。
+        const data = (error.response.data ?? {}) as { error?: string; errors?: string[] };
         const messages =
           data.errors ?? (data.error ? [data.error] : ["An error occurred"]);
-        return Promise.reject(new ApiError(messages, error.response.status));
+        // 本文の項目(errors・error 以外)も、成功の応答と同じく、camelCase にして持つ(読む側が、snake_case を知らなくて済む)。
+        const body = camelcaseKeys(data as Record<string, unknown>, { deep: true });
+        return Promise.reject(new ApiError(messages, error.response.status, body));
       }
       return Promise.reject(error);
     }

@@ -1,0 +1,96 @@
+/* Google ログインの見本(google-*.html)だけの CSS。mock.css のトークンは変えず、Google のブランドで決まっている値(色・線)だけを、ここに分けて持つ。
+   「G」の 4 色と、ボタンの色(ライト・ニュートラル・ダーク)は、Google のブランドの決まりで必須の値で、このアプリのトークン(白・黒・黄・赤)とは別に扱う(UI の他の部品には使わない)。
+   出典: Sign in with Google Branding Guidelines(https://developers.google.com/identity/branding-guidelines)。 */
+:root {
+  --g-light-fill: #ffffff;
+  --g-light-stroke: #747775;
+  --g-light-text: #1f1f1f;
+  --g-dark-fill: #131314;
+  --g-dark-stroke: #8e918f;
+  --g-dark-text: #e3e3e3;
+  --g-neutral-fill: #f2f2f2;
+}
+
+/* Google のボタン。標準は高さ 40px・文字 14px の Medium・「G」は 18px で固定(伸ばさない)。
+   フォントは、公式では Google Sans Medium。見本では手元のフォント(Noto Sans JP の 500)で描いている(実装は、公式のボタン画像か、Google Sans を使う) */
+.gbtn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 40px; padding: 0 12px; border: 1px solid transparent; border-radius: 4px; font-size: 14px; font-weight: 500; line-height: 20px; white-space: nowrap; text-decoration: none; cursor: pointer; }
+.gbtn .glogo { width: 18px; height: 18px; flex: none; display: block; }
+.gbtn.light { background: var(--g-light-fill); border-color: var(--g-light-stroke); color: var(--g-light-text); }
+.gbtn.neutral { background: var(--g-neutral-fill); border-color: transparent; color: var(--g-light-text); }
+.gbtn.dark { background: var(--g-dark-fill); border-color: var(--g-dark-stroke); color: var(--g-dark-text); }
+/* ダークのボタンでは、「G」を白い下地の上に置く(「G」は、白い下地の上の標準の色だけ、という決まり。見本の下地の形は、公式の画像で確かめる) */
+.gbtn.dark .gw { display: grid; place-items: center; width: 26px; height: 26px; margin-left: -4px; border-radius: 50%; background: #fff; }
+/* このアプリの高さ・角丸にそろえる(入力欄・ボタンと同じ 44px・8px) */
+.gbtn.app { height: 44px; padding: 0 20px; border-radius: 8px; }
+.gbtn.block { display: flex; width: 100%; }
+.gbtn.icon { width: 40px; padding: 0; }
+/* 送信中: 押せない(pointer-events)。文字は薄めすぎず、灰色の文字(--text-muted、白に対して 6:1 前後)にする。「G」は標準の色のまま(透明にしない) */
+.gbtn[aria-busy="true"] { color: var(--text-muted); cursor: default; pointer-events: none; }
+
+/* 「または」の区切り(両側に線。いまの実装と同じ) */
+.gor { display: flex; align-items: center; gap: 12px; margin: 4px 0; font-size: 13px; color: var(--text-muted); }
+.gor::before, .gor::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.gblock { display: flex; flex-direction: column; gap: 12px; }
+
+/* 比較の表(google-login.html) */
+.gsheet { width: min(1120px, 100% - 32px); margin-inline: auto; padding: 40px 0 72px; }
+.gsheet h1 { font-size: 28px; }
+.gsheet h2 { margin: 48px 0 12px; font-size: 20px; padding-top: 24px; border-top: 2px solid var(--text); }
+.gsheet p, .gsheet li { font-size: 14px; line-height: 1.7; }
+.gsheet ul { margin: 4px 0 0; padding-left: 0; list-style: none; }
+.gsheet code { padding: 1px 4px; border-radius: 4px; background: var(--surface-2); font-size: 12.5px; }
+.gsheet .lead { max-width: 900px; color: var(--text-muted); }
+.gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; margin-top: 16px; }
+.gcard { display: flex; flex-direction: column; gap: 12px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.gcard.rec { border: 2px solid var(--text); }
+.gcard .gtag { align-self: flex-start; padding: 2px 10px; border-radius: 12px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 700; }
+.gcard .gname { font-size: 16px; font-weight: 700; }
+.gcard .gstage { display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 8px; background: var(--surface-2); }
+.gcard .gpm { font-size: 13px; line-height: 1.7; color: var(--text-muted); }
+.gcard .gpm b { color: var(--text); }
+.gscroll { overflow-x: auto; }
+.gscroll:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.gtable { width: 100%; min-width: 640px; border-collapse: collapse; margin-top: 12px; font-size: 14px; line-height: 1.6; }
+.gtable th, .gtable td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.gtable td:first-child { min-width: 9.5em; }
+.gtable th { border-bottom: 2px solid var(--text); font-weight: 700; white-space: nowrap; }
+.grec { margin-top: 32px; padding: 20px 24px; border: 2px solid var(--text); border-radius: var(--radius); background: var(--bg); }
+.grec b { font-weight: 700; }
+.gframes { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; margin-top: 16px; }
+.gframe { display: flex; flex-direction: column; gap: 8px; }
+.gframe .gcap { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.gframe .gcap b { color: var(--text); }
+.gframe iframe { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.gwire { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.gwire .wf { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.gwire .wf p { margin: 0 0 8px; font-size: 12px; color: var(--text-muted); }
+.wbox { display: flex; align-items: center; justify-content: center; height: 24px; margin-bottom: 6px; border: 1px solid var(--control-border); border-radius: 4px; font-size: 11px; color: var(--text-muted); }
+.wbox.wg { border-color: var(--g-light-stroke); }
+.wbox.wp { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+.wbox.wor { height: 14px; border: 0; }
+
+/* 画面(google-complete.html など)の補助 */
+.status .actions-col { display: flex; flex-direction: column; gap: 12px; width: min(360px, 100%); margin-top: 8px; }
+.status .actions-col .btn, .status .actions-col .gbtn { width: 100%; text-decoration: none; }
+.btn.linkbtn { display: inline-flex; align-items: center; justify-content: center; }
+.status .notice { width: 100%; text-align: left; margin: 0; }
+
+/* embed: 比較の表に入れる画面(ヘッダー・実装メモを出さない) */
+body.embed .site-header, body.embed .rule, body.embed .memo { display: none; }
+body.embed .status { padding: 24px 0 24px; }
+body.embed .auth { padding: 24px 0; grid-template-columns: 1fr; }
+body.embed .auth .photo { display: none; }
+body.embed .page { padding: 24px 0; }
+
+@media (max-width: 720px) {
+  .gcards, .gframes { grid-template-columns: 1fr; }
+  .gwire { grid-template-columns: 1fr; }
+}
+
+/* 欄のボタンの文字が、狭い所で折り返さない(Google の連携の欄・状態の見本) */
+.appitem .btn { flex: none; white-space: nowrap; }
+@media (max-width: 720px) {
+  /* 確認のダイアログのボタンが、狭い画面で左にはみ出さない */
+  .appitem .actions-row { flex-wrap: wrap; justify-content: stretch; }
+  .appitem .actions-row .btn { flex: 1 1 100%; }
+}

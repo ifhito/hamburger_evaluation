@@ -5,10 +5,11 @@ import { useAuth } from "../AuthProvider";
 import { useLoginForm } from "../hooks/useAuthForm";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { returnPathFrom } from "../../../app/router/returnTo";
-import { Button } from "../../../components/Button";
-import { ErrorMessage } from "../../../components/ErrorMessage";
-import { Input } from "../../../components/Input";
 import { Layout } from "../../../components/Layout";
+import { Alert } from "../../../components/ui/Alert";
+import { Button } from "../../../components/ui/Button";
+import { TextField } from "../../../components/ui/TextField";
+import { GoogleSignIn } from "../components/GoogleSignIn";
 import styles from "./auth.module.css";
 
 export default function SigninPage() {
@@ -35,31 +36,40 @@ export default function SigninPage() {
   });
 
   return (
-    <Layout title={t("auth.signin.title")}>
-      <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
-        {serverError && <ErrorMessage message={serverError} />}
-        <Input
-          id="email"
-          label={t("auth.signin.email")}
-          type="email"
-          autoComplete="email"
-          {...register("email")}
-        />
-        <Input
-          id="password"
-          label={t("auth.signin.password")}
-          type="password"
-          autoComplete="current-password"
-          {...register("password")}
-        />
-        <Button type="submit" isLoading={isLoading}>
-          {t("auth.signin.submit")}
-        </Button>
-        <p className={styles.hint}>
-          {t("auth.signin.noAccount")}{" "}
-          <a href="/signup">{t("auth.signin.signUpLink")}</a>
-        </p>
-      </form>
+    <Layout>
+      <div className={styles.auth}>
+        <h1 className={styles.title}>{t("auth.signin.title")}</h1>
+        <p className={styles.lead}>{t("auth.signin.lead")}</p>
+        <div className={styles.stack}>
+          <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
+            {serverError && <Alert title={t("auth.signin.errorTitle")} message={serverError} />}
+            <TextField
+              id="email"
+              label={t("auth.signin.email")}
+              type="email"
+              autoComplete="email"
+              placeholder={t("auth.emailPlaceholder")}
+              {...register("email")}
+            />
+            <TextField
+              id="password"
+              label={t("auth.signin.password")}
+              type="password"
+              autoComplete="current-password"
+              {...register("password")}
+            />
+            <Button type="submit" block isLoading={isLoading}>
+              {t("auth.signin.submit")}
+            </Button>
+          </form>
+          {/* ログインが必要な画面から送られてきたときは、Google でのサインインのあとも、その画面へ戻す */}
+          <GoogleSignIn mode="signin" returnTo={returnPathFrom(location.state)} />
+          <p className={styles.linkline}>
+            {t("auth.signin.noAccount")}{" "}
+            <a href="/signup">{t("auth.signin.signUpLink")}</a>
+          </p>
+        </div>
+      </div>
     </Layout>
   );
 }
