@@ -427,8 +427,9 @@ frontend/src/
 
 ### フォント
 
-- Noto Sans JP は、外部の Google Fonts に頼らず、`@fontsource-variable/noto-sans-jp`(可変フォント。`main.tsx` が分割済みの `wght.css` を読み込む)で自前配信する。画面に出る文字を含む分だけが読まれる。
-- 可変版の family 名は `Noto Sans JP Variable`(静的版の `Noto Sans JP` ではない)。`--ui-font` は、この名前を先頭に持つ(`uiTokens.test.ts` が確かめる)。
+- Noto Sans JP は、外部の Google Fonts に頼らず、`@fontsource-variable/noto-sans-jp`(可変フォント。バージョンは完全固定)で自前配信する。分割済みの `wght.css` を `globals.css` の先頭で `@import` する(アプリの `main.tsx` と Storybook の `.storybook/preview.ts` は、どちらも `globals.css` を import しているので、この 1 か所で両方に届く)。画面に出る文字を含む分だけが読まれる。
+- 可変版の family 名は `Noto Sans JP Variable`(静的版の `Noto Sans JP` とは別の名前)。`--ui-font` は、この名前だけを持つ(`uiTokens.test.ts` が確かめる)。
+- 本番のアプリは、`components/ui` を使う画面が増えるまで(S46〜S48)、`--ui-font` を使う要素がなく、この CSS の読み込み分だけを、使わずに払う。Storybook は、部品の見比べに、今も使っている。
 
 ### API の接続先
 
