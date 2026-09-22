@@ -425,6 +425,11 @@ frontend/src/
 └── components/   # 共通 UI コンポーネント
 ```
 
+### フォント
+
+- Noto Sans JP は、外部の Google Fonts に頼らず、`@fontsource-variable/noto-sans-jp`(可変フォント。`main.tsx` が分割済みの `wght.css` を読み込む)で自前配信する。画面に出る文字を含む分だけが読まれる。
+- 可変版の family 名は `Noto Sans JP Variable`(静的版の `Noto Sans JP` ではない)。`--ui-font` は、この名前を先頭に持つ(`uiTokens.test.ts` が確かめる)。
+
 ### API の接続先
 
 - ベースパスは既定で `/api` (同一オリジン)。環境変数 `VITE_API_BASE_URL` で変更できる(別のオリジンの絶対 URL にすると、API は CORS に対応していないので、Google でのサインインは使えず、ボタンは出ない)。

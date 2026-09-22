@@ -35,7 +35,7 @@
   --ui-danger: #b3261e;
   --ui-danger-surface: #fdf0ef;
   --ui-radius: 12px;
-  --ui-font: "Noto Sans JP", system-ui, -apple-system, sans-serif;
+  --ui-font: "Noto Sans JP Variable", "Noto Sans JP", system-ui, -apple-system, sans-serif;
 }
 
 body {

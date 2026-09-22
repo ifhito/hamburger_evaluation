@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import globalsCss from "../../app/styles/globals.css?raw";
+import wghtCss from "@fontsource-variable/noto-sans-jp/wght.css?raw";
+import mainTsx from "../../main.tsx?raw";
 
 // デザインのトークン(リポジトリの design/redesign/mock.css)。frontend だけを取り出した環境では design/ が無いので、
 // その場合は、デザインとの一致の確認を飛ばす(CI では全体が取り出されるので、実行される)。
@@ -13,6 +15,13 @@ it.runIf(inCi)("CI では、デザインの見本のファイルが見つかる"
 const rootBlock = (css: string) => /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
 const variables = (css: string) => Object.fromEntries([...rootBlock(css).matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map(([, name, value]) => [name, value.trim()]));
 const own = variables(globalsCss);
+
+it("--ui-font の先頭は、main.tsx が読み込む可変フォントの family 名と一致する(違うと、読み込んだフォントが使われない)", () => {
+  const family = /font-family:\s*'([^']+)'/.exec(wghtCss)?.[1];
+  expect(family).toBe("Noto Sans JP Variable");
+  expect(mainTsx).toContain("@fontsource-variable/noto-sans-jp/wght.css");
+  expect(own["ui-font"].startsWith(`"${family}"`)).toBe(true);
+});
 
 describe.skipIf(!design)("デザインのトークンとの一致", () => {
   const dv = variables(design);
