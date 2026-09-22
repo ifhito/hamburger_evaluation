@@ -7,7 +7,7 @@
   const VB = { w: 120, h: 100 };
   const TOP = 2, BOTTOM = 98; // バーガー全体の上端と下端(水位の 0% と 100%)
   const INK = '#111111', EMPTY = '#8e8e89';
-  const COLOR = { bun: '#d8a45b', patty: '#6b4432', cheese: '#e9b824', lettuce: '#86b25a', tomato: '#d1533d', seed: '#f7edd3', pocket: '#f2b6a8', mark: '#a2795f', vein: '#c5dda8' };
+  const COLOR = { bun: '#ff7a00', patty: '#ff3ea5', cheese: '#f9f002', lettuce: '#39ff14', tomato: '#b026ff', seed: '#f7edd3', pocket: '#f2b6a8', mark: '#a2795f', vein: '#c5dda8' };
   // 大きさ(アイコンの幅 px)と、線の太さ(px)。小さいほど、線を細くしすぎない。細部(ごま・焼き目など)は、大きい 2 つだけ
   const SIZE = { lg: { w: 160, stroke: 3, detail: true }, md: { w: 64, stroke: 2, detail: true }, sm: { w: 40, stroke: 1.5, detail: false }, xs: { w: 24, stroke: 1.25, detail: false } };
   const n2 = (v) => Math.round(v * 100) / 100;
