@@ -49,6 +49,10 @@
   padding-top: 24px;
 }
 
+.narrow {
+  width: min(760px, 100%);
+}
+
 .forbidden {
   margin-top: 16px;
 }

@@ -72,7 +72,7 @@ export default function ReviewEditPage() {
         {isLoading && <Loading />}
 
         {!isLoading && review && !review.canEdit && (
-          <div className={styles.forbidden}>
+          <div className={styles.narrow}>
             <Alert title={t("reviews.edit.forbiddenTitle")} message={t("reviews.edit.forbiddenBody")} />
             <p className={styles.forbidden}>
               <TextLink to={`/reviews/${id}`}>{t("reviews.edit.backToReview")}</TextLink>
