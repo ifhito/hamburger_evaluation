@@ -7,7 +7,6 @@ import { useDeleteReview } from "../hooks/useReviewMutations";
 import { useRatingRange } from "../hooks/useRatingRange";
 import { formatDate } from "../../../lib/date";
 import { Button } from "../../../components/ui/Button";
-import { Card } from "../../../components/ui/Card";
 import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
 import { RatingBurger } from "../../../components/ui/RatingBurger";
@@ -16,8 +15,9 @@ import { Layout } from "../../../components/Layout";
 import styles from "./reviewDetail.module.css";
 
 // レビュー詳細(design/redesign/review-detail.html)。GET /reviews/:id は、そのバーガーの他のレビューを
-// 返さない(一覧は user_id でしか絞れない)ため、表示中の 1 件だけを並べる(デザインの見本にある、
-// 他のレビューの行は出さない。「表示中のレビュー」の札も、比べる相手がいないため出さない)。
+// 返さない(一覧は user_id でしか絞れない)ため、常にこの 1 件だけを表示する。一覧の中の 1 項目ではなく、
+// このレビュー自体が主役のページなので、「レビュー」「新しい順」のような一覧の見出しは付けず、囲みのカードにも
+// 入れない(評価・本文を、ページの本文としてそのまま大きく見せる)。
 // 「レビューを書く」も、can_review がこの応答にないため置かない(design/redesign の実装メモが挙げる案のとおり)。
 export default function ReviewDetailPage() {
   const { t } = useTranslation();
@@ -83,12 +83,7 @@ export default function ReviewDetailPage() {
             {review.shop && <p className={styles.shop}>{review.shop.name}</p>}
           </section>
 
-          <div className={styles.sectionHead}>
-            <h2 className={styles.heading}>{t("reviews.detail.reviewsHeading")}</h2>
-            <span className={styles.count}>{t("reviews.detail.newestFirst")}</span>
-          </div>
-
-          <Card current className={styles.item}>
+          <section className={styles.review}>
             <div className={styles.who}>
               <span className={styles.avatar} aria-hidden="true">
                 {review.user ? [...review.user.username][0] : "?"}
@@ -98,7 +93,7 @@ export default function ReviewDetailPage() {
                 <time dateTime={review.createdAt}>{formatDate(review.createdAt)}</time>
               </div>
             </div>
-            {ratingRange === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingRange.max} size="sm" variant="stepped" />}
+            {ratingRange === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingRange.max} size="md" variant="stepped" />}
             <p className={styles.comment}>{review.comment}</p>
             {review.canEdit && (
               <div className={styles.actions}>
@@ -108,7 +103,7 @@ export default function ReviewDetailPage() {
                 </Button>
               </div>
             )}
-          </Card>
+          </section>
         </div>
       </div>
     </Layout>
