@@ -271,6 +271,29 @@ const en = {
       revokeError: "Failed to disconnect the app.",
     },
   },
+  home: {
+    hero: {
+      title: "Find your favorite burger",
+      lead: "Search by shop name, or browse the ranking, latest reviews, and new shops below.",
+      searchButton: "Search",
+    },
+    ranking: {
+      heading: "Burger ranking",
+      subheading: "By weighted score",
+      rankAria: "Rank {{rank}}",
+      loadError: "Failed to load the burger ranking.",
+      emptyTitle: "No ranking yet",
+      emptyDescription: "Once reviews come in, burgers will be ranked here.",
+    },
+    reviews: {
+      heading: "Latest reviews",
+    },
+    shops: {
+      heading: "New shops",
+      emptyTitle: "No shops yet",
+      emptyDescription: "Why not add the first shop?",
+    },
+  },
   shops: {
     list: {
       title: "Shops",

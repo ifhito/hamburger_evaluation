@@ -1,6 +1,17 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { router } from "./index";
+import HomePage from "../../domains/home/pages/HomePage";
+
+describe("router の /", () => {
+  // / は、以前の /shops への転送(Navigate)ではなく、新しいトップページ(HomePage)を表示する。
+  it("最上位で HomePage を表示する", () => {
+    const top = router.routes.find((r) => r.path === "/");
+    expect(top, "最上位に / がない").toBeDefined();
+    if (!top || !("element" in top)) throw new Error("route element not found");
+    expect(top.element).toMatchObject({ type: HomePage });
+  });
+});
 
 // Google でのサインインの結果の受け皿は、公開の route(ゲスト専用にしない)。ゲスト専用の route の下に置くと、ログイン中の
 // 利用者が結び付けを終えて戻ったときに、交換の前に /reviews へ移動させられ、1 回限りのコードが使われずに終わる。

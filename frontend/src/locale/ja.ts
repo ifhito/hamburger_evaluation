@@ -258,6 +258,29 @@ const ja = {
       revokeError: "アプリの解除に失敗しました。",
     },
   },
+  home: {
+    hero: {
+      title: "お気に入りのバーガーを見つけよう",
+      lead: "店名で探すか、下のランキング・最新レビュー・新着ショップから見つけてください。",
+      searchButton: "探す",
+    },
+    ranking: {
+      heading: "バーガーランキング",
+      subheading: "加重スコアの高い順",
+      rankAria: "{{rank}} 位",
+      loadError: "バーガーランキングを読み込めませんでした。",
+      emptyTitle: "まだランキングがありません",
+      emptyDescription: "レビューが集まると、ここにランキングが表示されます。",
+    },
+    reviews: {
+      heading: "最新レビュー",
+    },
+    shops: {
+      heading: "新着ショップ",
+      emptyTitle: "まだショップがありません",
+      emptyDescription: "最初のショップを追加してみませんか?",
+    },
+  },
   shops: {
     list: {
       title: "ショップ",

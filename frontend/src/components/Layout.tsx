@@ -18,7 +18,7 @@ export function Layout({ children, title }: LayoutProps) {
   return (
     <div className={styles.wrapper}>
       <header className={styles.header}>
-        <Link to="/shops" className={styles.brand}>
+        <Link to="/" className={styles.brand}>
           <Logo name={t('nav.brand')} />
         </Link>
         <nav className={styles.nav}>
