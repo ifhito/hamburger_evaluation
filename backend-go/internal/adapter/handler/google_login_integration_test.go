@@ -224,7 +224,7 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(pool, usecase.NewAuth(userQuery, hasherFake{}, codec, codec), unusedSignups(),
-		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)),
+		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)), nil,
 		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(userQuery, domain.NewUsers(repository.NewUserRepository(pool)), unitOfWork, recalc, shopRecalc, hasherFake{}),
 		nil, nil, nil, handler.WithGoogleLogin(google))
@@ -1329,7 +1329,7 @@ func TestGoogleLoginDisabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping DB-backed test in short mode")
 	}
-	router := handler.NewRouter(okPinger, nil, unusedSignups(), nil, nil, nil, nil, nil, nil)
+	router := handler.NewRouter(okPinger, nil, unusedSignups(), nil, nil, nil, nil, nil, nil, nil)
 	for _, path := range []string{"/auth/google/start", "/auth/google/callback", "/auth/google/exchange", "/me/identities"} {
 		if rec := do(router, http.MethodGet, path, "", ""); rec.Code != http.StatusNotFound {
 			t.Errorf("Google が無効なとき、%s = %d, want 404", path, rec.Code)

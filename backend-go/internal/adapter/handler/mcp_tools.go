@@ -179,7 +179,7 @@ type listShopsInput struct {
 }
 
 func (t *mcpTools) listShops(ctx context.Context, _ *mcp.CallToolRequest, in listShopsInput) (*mcp.CallToolResult, any, error) {
-	list, hasMore, err := t.shops.List(ctx, &t.viewer, in.Keyword, in.Page, in.PerPage)
+	list, hasMore, err := t.shops.List(ctx, &t.viewer, in.Keyword, "", in.Page, in.PerPage)
 	if err != nil {
 		return t.toolError("list_shops", err)
 	}

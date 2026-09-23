@@ -23,7 +23,7 @@ func TestShopsListSummaries(t *testing.T) {
 	shopB := domain.Shop{ID: uid.N(2), Name: "B", Status: domain.ShopStatusActive}
 	listCalls := 0
 	query := &fakeShopQuery{
-		listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.ShopListing, bool, error) {
+		listShops: func(context.Context, domain.ShopVisibility, string, usecase.ShopSort, int32, int32) ([]domain.ShopListing, bool, error) {
 			listCalls++
 			return []domain.ShopListing{
 				{Shop: shopA, Summary: domain.ShopSummary{ReviewCount: 3, AverageRating: floatPtr(4.0), PhotoKey: strPtr("reviews/a.jpg")}},
@@ -35,7 +35,7 @@ func TestShopsListSummaries(t *testing.T) {
 
 	t.Run("一覧は、query の 1 回の問い合わせで、ショップと集計を取り、写真のキーは公開 URL に直して添える", func(t *testing.T) {
 		listCalls = 0
-		list, _, err := shops.List(context.Background(), nil, "", 1, 20)
+		list, _, err := shops.List(context.Background(), nil, "", "", 1, 20)
 		if err != nil {
 			t.Fatalf("List returned error: %v", err)
 		}
@@ -49,7 +49,7 @@ func TestShopsListSummaries(t *testing.T) {
 	})
 
 	t.Run("まだ集計されていないショップは、件数 0・平均と写真なしの空の集計のままである", func(t *testing.T) {
-		list, _, err := shops.List(context.Background(), nil, "", 1, 20)
+		list, _, err := shops.List(context.Background(), nil, "", "", 1, 20)
 		if err != nil {
 			t.Fatalf("List returned error: %v", err)
 		}

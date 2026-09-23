@@ -343,9 +343,12 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**
-- `GET /shops` — ショップ一覧 (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される。次のページがあるかを、レスポンスヘッダー `X-Has-More: true|false` で返す。本文は従来どおりの配列で、1 ページの件数は backend が決め、frontend は件数から最終ページを推測しない)。各ショップに集計の `photo_url`・`average_rating`・`review_count` を含む(上の「ショップの集計」)
+- `GET /shops` — ショップ一覧 (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される。次のページがあるかを、レスポンスヘッダー `X-Has-More: true|false` で返す。本文は従来どおりの配列で、1 ページの件数は backend が決め、frontend は件数から最終ページを推測しない。`sort=newest` を指定すると `created_at` 降順・`id` 降順(新着順)で返す。指定しなければ、これまでどおり店名順。`newest` 以外の値は無視され、既定の店名順になる)。各ショップに集計の `photo_url`・`average_rating`・`review_count` を含む(上の「ショップの集計」)
 - `GET /shops/:id` — ショップ 1 件の取得 (`can_review`: 閲覧者がこのショップにレビューを書けるか。domain の `CanBeReviewedBy` の結果で、匿名は `false`。frontend は「レビューを書く」ボタンをこの値で出し分ける。一覧と同じ集計 `photo_url`・`average_rating`・`review_count` も含む)
 - `POST /shops` — ショップの申請 (要認証)
+
+**バーガー**
+- `GET /burgers` — バーガーのランキング一覧。`weighted_score`(加重スコア)の降順で返し、同値は `id` の昇順で決着する。review が 1 件もない(`burger_stats` が未計算の)バーガーは対象外。各要素は `id`・`name`・`shop`(紐づく代表のショップ `{id, name}`。複数の active な shop に紐づくバーガーは、作成が最も古い active な shop を代表にする。`domain.ReviewShopFor` が匿名の閲覧者に選ぶショップと同じ選び方で、この endpoint には閲覧者がなく常に匿名と同じ扱いになる)・`average_rating`・`weighted_score`・`review_count`。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。認証不要
 
 **レビュー**
 - `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリ(ユーザーの UUID。正規形でなければ 422 `User id must be a valid UUID`)で、そのユーザーの公開レビューだけに絞り込める。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。各レビューに `can_edit` を含む)
