@@ -24,6 +24,7 @@ export function Layout({ children, title }: LayoutProps) {
         <nav className={styles.nav}>
           <Link to="/shops" className={styles.navLink}>{t('nav.shops')}</Link>
           <Link to="/reviews" className={styles.navLink}>{t('nav.reviews')}</Link>
+          <Link to="/burgers" className={styles.navLink}>{t('nav.burgers')}</Link>
           {user ? (
             <>
               <Link to={`/users/${user.id}`} className={styles.navLink}>{user.username}</Link>

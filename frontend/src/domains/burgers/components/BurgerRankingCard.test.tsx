@@ -25,6 +25,11 @@ describe("BurgerRankingCard", () => {
     expect(page.textContent).toContain("3");
   });
 
+  it("rank を渡さないと、順位バッジを描画しない", async () => {
+    const page = await show(<BurgerRankingCard burger={burger()} ratingMax={5} />);
+    expect(page.querySelector('[aria-label^="Rank"]')).toBeNull();
+  });
+
   it("リンクは 1 つだけで、バーガー名から /burgers/:id へ向かう", async () => {
     const page = await show(<BurgerRankingCard burger={burger({ id: "42", name: "テリヤキバーガー" })} rank={1} ratingMax={5} />);
     const links = page.querySelectorAll("a");
