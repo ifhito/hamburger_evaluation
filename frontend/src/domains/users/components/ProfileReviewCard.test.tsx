@@ -53,4 +53,17 @@ describe("ProfileReviewCard(プロフィールのレビューのカード)", () 
     expect(markup).toContain('href="/reviews/r1"');
     expect(markup).toContain('dateTime="2026-09-21T00:00:00Z"');
   });
+
+  it("「詳しく見る」「View」の文字を出さず、カード全体がレビュー詳細への 1 つのリンクになる", () => {
+    const markup = html(review);
+
+    expect(markup).not.toContain("詳しく見る");
+    expect(markup).not.toContain("View");
+    expect(markup.match(/<a /g)?.length).toBe(1);
+  });
+
+  it("リンクに、空でない aria-label が付く", () => {
+    expect(html(review)).toMatch(/aria-label="[^"]+"/);
+    expect(html({ ...review, burger: null })).toMatch(/aria-label="[^"]+"/);
+  });
 });

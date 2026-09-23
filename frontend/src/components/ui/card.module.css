@@ -4,6 +4,19 @@
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius);
   background: var(--ui-bg);
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.card:hover {
+  text-decoration: none;
+}
+
+/* カード全体を <a> にしたとき(ShopReviewCard など)も、overflow: hidden の内側で見えるように、.current と同じ手法で outline を内側に引く */
+.card:focus-visible {
+  outline: 2px solid var(--ui-text);
+  outline-offset: -2px;
 }
 
 .padded {

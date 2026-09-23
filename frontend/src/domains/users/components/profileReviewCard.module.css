@@ -63,12 +63,6 @@
   overflow-wrap: anywhere;
 }
 
-.foot {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-
 @media (max-width: 720px) {
   .photo,
   .noPhoto {
