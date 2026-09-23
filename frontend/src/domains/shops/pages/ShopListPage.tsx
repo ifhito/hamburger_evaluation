@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useShops } from "../hooks/useShops";
 import { useAuth } from "../../auth/AuthProvider";
@@ -18,7 +19,8 @@ export default function ShopListPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const ratingRange = useRatingRange();
-  const [keyword, setKeyword] = useState("");
+  const [searchParams] = useSearchParams();
+  const [keyword, setKeyword] = useState(() => searchParams.get("keyword") ?? "");
   const {
     data: shops,
     isLoading,

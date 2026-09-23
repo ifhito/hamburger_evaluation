@@ -27,6 +27,11 @@ describe("getKey", () => {
     expect(getKey({ keyword: "" })(0, null)).toBe("/shops?page=1");
   });
 
+  it("sort はキーに入り、指定しなければ入らない", () => {
+    expect(getKey({ sort: "newest" })(0, null)).toBe("/shops?sort=newest&page=1");
+    expect(getKey(undefined)(0, null)).toBe("/shops?page=1");
+  });
+
   it("前ページに続きがある(hasMore が true)なら次ページのキーを返す", () => {
     expect(getKey(undefined)(1, page(true))).toBe("/shops?page=2");
   });

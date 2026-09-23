@@ -1,8 +1,9 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { GuestRoute } from './GuestRoute'
 import { AdminRoute } from './AdminRoute'
 
+import HomePage from '../../domains/home/pages/HomePage'
 import ShopListPage from '../../domains/shops/pages/ShopListPage'
 import ShopDetailPage from '../../domains/shops/pages/ShopDetailPage'
 import ShopNewPage from '../../domains/shops/pages/ShopNewPage'
@@ -22,7 +23,7 @@ import UserUpdatePage from '../../domains/users/pages/UserUpdatePage'
 import OAuthConsentPage from '../../domains/oauth/pages/OAuthConsentPage'
 
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to="/shops" replace /> },
+  { path: '/', element: <HomePage /> },
 
   // 公開ルート
   { path: '/shops', element: <ShopListPage /> },

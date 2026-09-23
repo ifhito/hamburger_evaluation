@@ -1,0 +1,121 @@
+.hero {
+  margin-bottom: 56px;
+}
+
+/* 写真なしのプレースホルダー(グラデーション)を、ヒーロー用に大きくしたもの(design/redesign/home.html)。
+   実際の写真データが無いセクションなので、色は固定の 2 色(design/redesign/home.html の --a・--b)にする。 */
+.heroPhoto {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 520px;
+  padding: 56px 24px;
+  border-radius: var(--ui-radius);
+  overflow: hidden;
+  background: linear-gradient(160deg, #e3c29a 0%, #b98552 100%);
+}
+
+.heroScrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 17, 17, 0.45);
+}
+
+.heroContent {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 640px;
+  text-align: center;
+  font-family: var(--ui-font);
+}
+
+.heroContent h1 {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ui-bg);
+}
+
+.heroLead {
+  color: var(--ui-bg);
+}
+
+.heroSearch {
+  display: flex;
+  gap: 12px;
+  width: min(560px, 100%);
+}
+
+.heroInput {
+  composes: input from '../../../components/ui/field.module.css';
+  flex: 1;
+}
+
+.section {
+  margin-bottom: 56px;
+  font-family: var(--ui-font);
+  color: var(--ui-text);
+}
+
+.section:last-of-type {
+  margin-bottom: 0;
+}
+
+.sectionHead {
+  composes: sectionHead from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.heading {
+  composes: heading from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.count {
+  composes: count from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.rankGrid {
+  composes: grid from '../../shops/pages/shopList.module.css';
+}
+
+.shopGrid {
+  composes: grid from '../../shops/pages/shopList.module.css';
+}
+
+/* 最新レビューのフィード: 既存の ReviewListCard を、1 列で縦に並べる(design/redesign/home.html の .reviews.feed) */
+.reviewGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    margin-bottom: 32px;
+  }
+
+  .heroPhoto {
+    min-height: 460px;
+    padding: 48px 20px;
+  }
+
+  .heroSearch {
+    flex-direction: column;
+  }
+
+  .heroContent h1 {
+    font-size: 28px;
+  }
+
+  .section {
+    margin-bottom: 40px;
+  }
+
+  .reviewGrid {
+    gap: 16px;
+  }
+}
