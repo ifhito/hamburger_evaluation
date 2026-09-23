@@ -52,6 +52,7 @@
   display: flex;
   align-items: baseline;
   gap: 16px;
+  margin-top: 32px;
   margin-bottom: 16px;
 }
 
@@ -127,6 +128,10 @@
 
   .titleSection {
     padding-top: 24px;
+  }
+
+  .sectionHead {
+    margin-top: 24px;
   }
 
   .name {
