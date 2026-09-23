@@ -360,23 +360,29 @@ body { position: relative; }
 }
 
 /* ---- 第 3 弾で足した部品(トップページ・バーガー詳細)。新しい色は足さない ---- */
-/* トップページ: 検索のヒーロー(見出し・説明・入力欄)。サウナイキタイを参考にしたのは構成(検索 → 抜粋セクションが縦に並ぶ)だけで、色はこのアプリの --accent・--surface-2 のまま */
-.home-hero { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 64px 24px; margin-bottom: 56px; border-radius: 16px; background: var(--surface-2); text-align: center; }
-.home-hero h1 { max-width: 640px; }
-.home-hero .lead { max-width: 480px; }
+/* トップページ: 検索のヒーロー(見出し・説明・入力欄)。サウナイキタイを参考にしたのは構成(検索 → 抜粋セクションが縦に並ぶ)だけで、色はこのアプリの --accent・--surface-2 のまま。
+   ヒーローは、大きな写真の背景に文字を重ねる案(実際の写真は無いため、写真なしのプレースホルダーをヒーロー用に大きくしたもの)に決定 */
+.home-hero { margin-bottom: 56px; }
+/* 写真なしのプレースホルダー(.photo と同じグラデーション+「写真」の文字)を、ヒーロー用に大きくし、暗い帯(--text を薄く)を重ねて、白い文字を読みやすくする */
+.hero-photo { position: relative; display: flex; justify-content: center; align-items: center; width: 100%; min-height: 520px; padding: 56px 24px; border-radius: 16px; overflow: hidden; background: linear-gradient(160deg, var(--a) 0%, var(--b) 100%); }
+.hero-photo .photo-label { position: absolute; top: 16px; right: 20px; z-index: 2; color: var(--bg); opacity: 0.85; }
+.hero-photo-overlay { position: absolute; inset: 0; background: rgba(17, 17, 17, 0.45); }
+.hero-photo-content { position: relative; display: flex; flex-direction: column; align-items: center; gap: 20px; max-width: 640px; text-align: center; }
+.hero-photo-content h1, .hero-photo-content .lead { color: var(--bg); }
 .hero-search { display: flex; gap: 12px; width: min(560px, 100%); }
 .hero-search .search { flex: 1; }
 .home-section { margin-bottom: 56px; }
 .home-section:last-of-type { margin-bottom: 0; }
-/* バーガーランキング: 既存の rcard(枠・角丸)を流用し、写真は付けない */
+/* バーガーランキング: 既存の rcard(枠・角丸)を流用し、写真は付けない。順位は、このセクションだけのバッジ(他の場所で rcard を使い回すときは出さない) */
 .rank { grid-template-columns: repeat(3, 1fr); }
 .rankcard .rbody { padding: 20px 24px; }
-.rankno { font-size: 14px; font-weight: 700; color: var(--text-muted); }
+.rankno { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--text); color: var(--bg); font-size: 15px; font-weight: 700; line-height: 1; }
 /* 最新レビューのフィード: 既存の rcard を、1 列で縦に並べる */
 .reviews.feed { grid-template-columns: 1fr; }
 
 @media (max-width: 720px) {
-  .home-hero { padding: 40px 20px; margin-bottom: 32px; }
+  .home-hero { margin-bottom: 32px; }
+  .hero-photo { min-height: 460px; padding: 48px 20px; }
   .hero-search { flex-direction: column; }
   .home-section { margin-bottom: 40px; }
   .rank { grid-template-columns: 1fr; }

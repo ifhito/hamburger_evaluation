@@ -12,11 +12,17 @@
 <body data-active="">
 <main class="wrap page">
   <section class="home-hero">
-    <h1 data-en="Find your favorite burger">お気に入りのバーガーを見つけよう</h1>
-    <p class="lead" data-en="Search by shop name, or browse the ranking, latest reviews, and new shops below.">店名で探すか、下のランキング・最新レビュー・新着ショップから見つけてください。</p>
-    <div class="hero-search">
-      <input class="input search" placeholder="店名で探す" data-en-ph="Search by shop name" aria-label="店名で探す">
-      <button class="btn primary" data-en="Search">探す</button>
+    <div class="hero-photo" style="--a:#e3c29a;--b:#b98552">
+      <span class="photo-label" data-en="Photo">写真</span>
+      <div class="hero-photo-overlay"></div>
+      <div class="hero-photo-content">
+        <h1 data-en="Find your favorite burger">お気に入りのバーガーを見つけよう</h1>
+        <p class="lead" data-en="Search by shop name, or browse the ranking, latest reviews, and new shops below.">店名で探すか、下のランキング・最新レビュー・新着ショップから見つけてください。</p>
+        <div class="hero-search">
+          <input class="input search" placeholder="店名で探す" data-en-ph="Search by shop name" aria-label="店名で探す">
+          <button class="btn primary" data-en="Search">探す</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -179,7 +185,7 @@
     </div>
   </section>
 
-  <aside class="memo"><b>実装メモ</b><ul><li>・検索のヒーローは、いまの <code>GET /shops</code> の店名検索を使う想定(見本)。送信すると、絞り込んだショップ一覧(<code>/shops</code>)に移動する。バーガー名検索は、issue #184 の未解決の問い(まず店名だけで作る)。</li><li>・バーガーランキングは、新設の <code>GET /burgers</code>(issue #183)を、加重スコアの高い順に数件(見本は 6 件)取得して並べる。「もっと見る」導線は、専用の一覧ページがまだ無いため置かない。</li><li>・最新レビューは、既存の <code>GET /reviews</code>(<code>created_at</code> 降順が既定)をそのまま使う。</li><li>・新着ショップは、新設の <code>GET /shops?sort=newest</code>(issue #183)を使う。指定しない <code>GET /shops</code> の既定(店名順)は変えない。</li><li>・各セクションは、0件のときに空の状態を出す(<code>states.html</code> と同じ見た目)。読み込み中は、<code>states.html</code> の「読み込み中」の見本(水位が動くバーガー+骨組み)に準じる想定(この見本には含めていない)。</li><li>・見出し(「バーガーランキング」「最新レビュー」「新着ショップ」)の文言は、まだ決まっていない案。実装時に調整してよい。</li></ul></aside>
+  <aside class="memo"><b>実装メモ</b><ul><li>・検索のヒーローは、いまの <code>GET /shops</code> の店名検索を使う想定(見本)。送信すると、絞り込んだショップ一覧(<code>/shops</code>)に移動する。バーガー名検索は、issue #184 の未解決の問い(まず店名だけで作る)。</li><li>・バーガーランキングは、新設の <code>GET /burgers</code>(issue #183)を、加重スコアの高い順に数件(見本は 6 件)取得して並べる。「もっと見る」導線は、専用の一覧ページがまだ無いため置かない。順位の数字(バッジ)は、<b>このトップページのランキングだけ</b>の見せ方。同じカード(<code>rcard</code>)の見た目を他の場所で使い回すときは、数字を出さない。</li><li>・最新レビューは、既存の <code>GET /reviews</code>(<code>created_at</code> 降順が既定)をそのまま使う。</li><li>・新着ショップは、新設の <code>GET /shops?sort=newest</code>(issue #183)を使う。指定しない <code>GET /shops</code> の既定(店名順)は変えない。</li><li>・各セクションは、0件のときに空の状態を出す(<code>states.html</code> と同じ見た目)。読み込み中は、<code>states.html</code> の「読み込み中」の見本(水位が動くバーガー+骨組み)に準じる想定(この見本には含めていない)。</li><li>・見出し(「バーガーランキング」「最新レビュー」「新着ショップ」)の文言は、まだ決まっていない案。実装時に調整してよい。</li><li>・ヒーローは、大きな写真の背景に、見出し・説明・検索欄を重ねる案(実際の写真が無いため、ほかの画面と同じ「写真なし」のプレースホルダー(グラデーション+「写真」の文字)を、ヒーロー用に大きくしたもの)。</li></ul></aside>
 </main>
 <script src="rating-icons.js"></script>
 <script src="mock.js"></script>
