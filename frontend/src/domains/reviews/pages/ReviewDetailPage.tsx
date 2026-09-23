@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
@@ -71,7 +71,15 @@ export default function ReviewDetailPage() {
 
         <div className={styles.narrow}>
           <section className={styles.titleSection}>
-            <h1 className={styles.name}>{review.burger?.name ?? t("shops.detail.unknown")}</h1>
+            <h1 className={styles.name}>
+              {review.burger ? (
+                <Link to={`/burgers/${review.burger.id}`} className={styles.nameLink}>
+                  {review.burger.name}
+                </Link>
+              ) : (
+                t("shops.detail.unknown")
+              )}
+            </h1>
             {review.shop && <p className={styles.shop}>{review.shop.name}</p>}
           </section>
 
