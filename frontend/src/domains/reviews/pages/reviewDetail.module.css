@@ -63,29 +63,13 @@
   color: var(--ui-text-muted);
 }
 
-.sectionHead {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  margin-top: 32px;
-  margin-bottom: 16px;
-}
-
-.heading {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.count {
-  font-size: 14px;
-  color: var(--ui-text-muted);
-}
-
-.item {
+.review {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid var(--ui-border);
 }
 
 .who {
@@ -100,7 +84,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--ui-bg);
+  background: var(--ui-surface-2);
   font-weight: 700;
 }
 
@@ -120,12 +104,13 @@
 }
 
 .ratingOnly {
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1;
 }
 
 .comment {
+  font-size: 20px;
   line-height: 1.8;
   overflow-wrap: anywhere;
 }
@@ -145,11 +130,16 @@
     padding-top: 24px;
   }
 
-  .sectionHead {
+  .review {
     margin-top: 24px;
+    padding-top: 24px;
   }
 
   .name {
     font-size: 28px;
+  }
+
+  .comment {
+    font-size: 18px;
   }
 }
