@@ -69,9 +69,24 @@ func TestBurgerQueryOrdersByWeightedScoreDescending(t *testing.T) {
 	for _, id := range []string{low, mid, high} {
 		linkShopBurger(ctx, t, conn, shop, id)
 	}
-	insertBurgerStats(ctx, t, conn, low, 1.0)
-	insertBurgerStats(ctx, t, conn, mid, 2.0)
-	insertBurgerStats(ctx, t, conn, high, 3.0)
+	// weighted_score だけでなく average_rating・review_count も burger ごとに変え、
+	// 行 → domain のフィールドの対応(取り違えがないこと)まで検証できるようにする。
+	stats := map[string]struct {
+		reviewCount   int64
+		averageRating float64
+		weightedScore float64
+	}{
+		low:  {reviewCount: 3, averageRating: 2.5, weightedScore: 1.0},
+		mid:  {reviewCount: 5, averageRating: 3.5, weightedScore: 2.0},
+		high: {reviewCount: 8, averageRating: 4.8, weightedScore: 3.0},
+	}
+	for id, s := range stats {
+		if _, err := conn.Exec(ctx,
+			`INSERT INTO burger_stats (burger_id, review_count, average_rating, weighted_score, confidence, calculated_at)
+			 VALUES ($1, $2, $3, $4, 0.5, now())`, id, s.reviewCount, s.averageRating, s.weightedScore); err != nil {
+			t.Fatalf("insert burger stats for %s: %v", id, err)
+		}
+	}
 
 	rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, 100, 0)
 	if err != nil {
@@ -87,6 +102,21 @@ func TestBurgerQueryOrdersByWeightedScoreDescending(t *testing.T) {
 	for i, id := range want {
 		if rankings[i].ID != id {
 			t.Errorf("rankings[%d].ID = %s, want %s (weighted_score desc)", i, rankings[i].ID, id)
+		}
+	}
+
+	got := make(map[string]domain.BurgerRanking, len(rankings))
+	for _, r := range rankings {
+		got[r.ID] = r
+	}
+	for id, s := range stats {
+		r, ok := got[id]
+		if !ok {
+			t.Fatalf("rankings に %s が無い: %+v", id, rankings)
+		}
+		if r.AverageRating != s.averageRating || r.WeightedScore != s.weightedScore || r.ReviewCount != s.reviewCount {
+			t.Errorf("burger %s の統計 = %+v, want average_rating=%v weighted_score=%v review_count=%v",
+				id, r, s.averageRating, s.weightedScore, s.reviewCount)
 		}
 	}
 }
