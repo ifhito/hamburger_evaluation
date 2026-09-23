@@ -348,7 +348,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `POST /shops` — ショップの申請 (要認証)
 
 **バーガー**
-- `GET /burgers/:id` — バーガー1件を、紐づくショップ(id・name)と、評価の統計(average_rating・weighted_score・review_count)つきで返す。レビューが1件もないバーガーは、統計の3項目をすべて `null` にする(0件と区別する)。存在しない・UUID の正規形でない id は404(`GET /shops/:id` と同じ判定)
+- `GET /burgers/:id` — バーガー1件を、紐づくショップ(id・name。閲覧者に見える権限のないショップ(pending/rejected)は除く)と、評価の統計(average_rating・weighted_score・review_count)つきで返す。レビューが1件もないバーガーは、統計の3項目をすべて `null` にする(0件と区別する)。存在しない・UUID の正規形でない id は404(`GET /shops/:id` と同じ判定)
 
 **レビュー**
 - `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリ(ユーザーの UUID。正規形でなければ 422 `User id must be a valid UUID`)と `burger_id` クエリ(バーガーの UUID。正規形でなければ 422 `Burger id must be a valid UUID`)で、それぞれ、そのユーザーの公開レビュー・そのバーガーのレビューだけに絞り込める。同時に指定すると AND で絞り込まれる。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。各レビューに `can_edit` を含む)

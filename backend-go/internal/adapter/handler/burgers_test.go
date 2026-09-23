@@ -41,8 +41,8 @@ func newBurgersRouter(query *burgerQueryFake) http.Handler {
 }
 
 // TestGetBurger は GET /burgers/{id} を扱う：レビューのある burger は、紐づくショップと統計つきの
-// 200 を返す（AC1）。レビューが1件もない burger は、統計の3項目がすべて null になり、0件と
-// 区別できる（AC2）。存在しない・UUID の正規形でない id は、同一の 404 になる（AC3）。
+// 200 を返す。レビューが1件もない burger は、統計の3項目がすべて null になり、0件と
+// 区別できる。存在しない・UUID の正規形でない id は、同一の 404 になる。
 func TestGetBurger(t *testing.T) {
 	burgerID := uid.N(1)
 	shopID := uid.N(2)
