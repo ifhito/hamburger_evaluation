@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { formatDate } from "../../../lib/date";
 import { RatingBurger } from "../../../components/ui/RatingBurger";
+import { shopReviewAriaLabel } from "../../../components/reviewCardAriaLabel";
 import type { Review } from "../../reviews/api/types";
 import styles from "./shopReviewCard.module.css";
 
@@ -11,9 +12,7 @@ import styles from "./shopReviewCard.module.css";
 export function ShopReviewCard({ review, ratingMax }: { review: Review; ratingMax: number | undefined }) {
   const { t } = useTranslation();
   const username = review.user?.username ?? t("shops.detail.unknown");
-  const ariaLabel = review.burger
-    ? t("shops.detail.reviewAriaLabel", { burger: review.burger.name, user: username })
-    : t("shops.detail.reviewAriaLabelNoBurger", { user: username });
+  const ariaLabel = shopReviewAriaLabel(review, t);
   return (
     <Link to={`/reviews/${review.id}`} className={styles.card} aria-label={ariaLabel}>
       {review.photoUrl ? (

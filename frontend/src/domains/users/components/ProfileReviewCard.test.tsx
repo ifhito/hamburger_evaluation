@@ -62,8 +62,13 @@ describe("ProfileReviewCard(プロフィールのレビューのカード)", () 
     expect(markup.match(/<a /g)?.length).toBe(1);
   });
 
-  it("リンクに、空でない aria-label が付く", () => {
-    expect(html(review)).toMatch(/aria-label="[^"]+"/);
-    expect(html({ ...review, burger: null })).toMatch(/aria-label="[^"]+"/);
+  it("リンクの aria-label に、日付を差し替えた文字列が入る(タイムゾーンで変わる書式そのものは固定しない)", () => {
+    const withBurger = html(review).match(/aria-label="([^"]+)"/)?.[1];
+    expect(withBurger).toContain("Teriyaki");
+    expect(withBurger).not.toContain("{{");
+
+    const withoutBurger = html({ ...review, burger: null }).match(/aria-label="([^"]+)"/)?.[1];
+    expect(withoutBurger).toBeTruthy();
+    expect(withoutBurger).not.toContain("{{");
   });
 });

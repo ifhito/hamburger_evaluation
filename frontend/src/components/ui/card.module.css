@@ -4,17 +4,24 @@
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius);
   background: var(--ui-bg);
+}
+
+/* カード全体を <a> にする画面(ShopReviewCard など)専用。display:block などのリンクのリセットは、
+   非リンクの利用側(adminShops の .row、reviewDetail の .item など)の display と衝突しないよう、
+   .card 本体ではなくここに分ける。 */
+.cardLink {
+  composes: card;
   display: block;
   color: inherit;
   text-decoration: none;
 }
 
-.card:hover {
+.cardLink:hover {
   text-decoration: none;
 }
 
 /* カード全体を <a> にしたとき(ShopReviewCard など)も、overflow: hidden の内側で見えるように、.current と同じ手法で outline を内側に引く */
-.card:focus-visible {
+.cardLink:focus-visible {
   outline: 2px solid var(--ui-text);
   outline-offset: -2px;
 }

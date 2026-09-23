@@ -31,17 +31,22 @@ describe("ShopReviewCard(ショップ詳細のレビューのカード)", () => 
     expect(markup).toContain('href="/reviews/r1"');
   });
 
-  it("リンクに、空でない aria-label が付く", () => {
+  it("リンクの aria-label に、バーガー名と投稿者名が入る", () => {
     const markup = html(review);
+    const ariaLabel = markup.match(/aria-label="([^"]+)"/)?.[1];
 
-    expect(markup).toMatch(/aria-label="[^"]+"/);
+    expect(ariaLabel).toContain("Teriyaki");
+    expect(ariaLabel).toContain("alice");
+    expect(ariaLabel).not.toContain("{{");
   });
 
-  it("バーガーの情報がないレビューでも、壊れずに、空でない aria-label を出す", () => {
+  it("バーガーの情報がないレビューでも、壊れずに、投稿者名の入った aria-label を出す", () => {
     const markup = html({ ...review, burger: null });
+    const ariaLabel = markup.match(/aria-label="([^"]+)"/)?.[1];
 
     expect(markup.match(/<a /g)?.length).toBe(1);
     expect(markup).toContain('href="/reviews/r1"');
-    expect(markup).toMatch(/aria-label="[^"]+"/);
+    expect(ariaLabel).toContain("alice");
+    expect(ariaLabel).not.toContain("{{");
   });
 });

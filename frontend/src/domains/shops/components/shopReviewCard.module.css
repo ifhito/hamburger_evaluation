@@ -2,7 +2,7 @@
    日付・コメント・投稿者の行は components/reviewCard.module.css(reviews 一覧の ReviewListCard と共有)から借りる。
    この画面だけの見た目は、上の行に置くバーガー名(.name)だけ。 */
 .card {
-  composes: card from '../../../components/ui/card.module.css';
+  composes: cardLink from '../../../components/ui/card.module.css';
 }
 
 .photo {
