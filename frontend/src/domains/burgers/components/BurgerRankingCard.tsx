@@ -6,7 +6,8 @@ import styles from "./burgerRankingCard.module.css";
 
 // トップページのバーガーランキングのカード(design/redesign/home.html の .rcard.rankcard)。黒い丸の順位バッジは、
 // このトップページのランキングだけの見せ方(design/redesign/home.html の実装メモにあるとおり、ほかで rcard を
-// 使い回すときは出さない)。バーガー名だけを /burgers/:id への Link にする(カード全体はリンクにしない。
+// 使い回すときは出さない)。rank を渡さない呼び出し(バーガー一覧ページなど)ではバッジを描画しない。
+// バーガー名だけを /burgers/:id への Link にする(カード全体はリンクにしない。
 // ReviewDetailPage の burger 名の見せ方と同じ考え方)。
 export function BurgerRankingCard({
   burger,
@@ -14,16 +15,18 @@ export function BurgerRankingCard({
   ratingMax,
 }: {
   burger: BurgerRanking;
-  rank: number;
+  rank?: number;
   ratingMax: number | undefined;
 }) {
   const { t } = useTranslation();
   return (
     <article className={styles.card}>
       <div className={styles.row}>
-        <span className={styles.rankNo} aria-label={t("home.ranking.rankAria", { rank })}>
-          {rank}
-        </span>
+        {rank !== undefined && (
+          <span className={styles.rankNo} aria-label={t("home.ranking.rankAria", { rank })}>
+            {rank}
+          </span>
+        )}
         {ratingMax === undefined ? (
           <b>{burger.averageRating.toFixed(1)}</b>
         ) : (

@@ -6,6 +6,7 @@ const ja = {
     brand: "BurgerStack",
     shops: "ショップ",
     reviews: "レビュー",
+    burgers: "バーガー",
     signout: "サインアウト",
     signin: "サインイン",
     signup: "新規登録",
@@ -117,6 +118,11 @@ const ja = {
     },
   },
   burgers: {
+    list: {
+      title: "バーガー",
+      loadError: "バーガーを読み込めませんでした。",
+      loadMore: "もっと見る",
+    },
     detail: {
       servedAt: "お店:",
     },

@@ -3,6 +3,7 @@ const en = {
     brand: "BurgerStack",
     shops: "Shops",
     reviews: "Reviews",
+    burgers: "Burgers",
     signout: "Sign out",
     signin: "Sign in",
     signup: "Sign up",
@@ -127,6 +128,11 @@ const en = {
     },
   },
   burgers: {
+    list: {
+      title: "Burgers",
+      loadError: "Failed to load burgers.",
+      loadMore: "Load more",
+    },
     detail: {
       servedAt: "Served at:",
     },
