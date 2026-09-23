@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RatingBurgerIcon } from "../../../components/ui/RatingBurger";
-import { LOADING_LEVEL } from "../../../components/ui/states";
+import { useLoadingRatio } from "../../../components/ui/useLoadingRatio";
 import styles from "./auth.module.css";
 
 // メールの確認・Google の結果の交換の待ち画面。絵は飾りなので読み上げず、見出しと「少しお待ちください」を読み上げる。
@@ -10,6 +10,7 @@ import styles from "./auth.module.css";
 export function AuthLoading({ title }: { title: string }) {
   const { t } = useTranslation();
   const description = t("common.states.loading.description");
+  const ratio = useLoadingRatio();
   const [announced, setAnnounced] = useState("");
   useEffect(() => {
     // 次の描画で入れる(この effect の中で直接ではなく)。空のまま挿入したのと同じ描画で埋めると、
@@ -19,7 +20,7 @@ export function AuthLoading({ title }: { title: string }) {
   }, [title, description]);
   return (
     <div className={styles.status}>
-      <RatingBurgerIcon ratio={LOADING_LEVEL} size="lg" />
+      <RatingBurgerIcon ratio={ratio} size="lg" />
       <h1 className={styles.title}>{title}</h1>
       <p className={styles.muted}>{description}</p>
       <p role="status" className={styles.srOnly}>
