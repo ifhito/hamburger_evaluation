@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>バーガー詳細(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="">
+<main class="wrap page">
+  <a class="back" href="#" data-en="← Back to reviews">← レビュー一覧に戻る</a>
+  <div class="narrow">
+    <section class="title">
+      <h1 class="name">テリヤキバーガー</h1>
+      <p class="shop">
+        <span class="muted" data-en="Served at:">お店:</span> <a class="textlink" href="#">バーガーラボ 中目黒</a><span class="muted"> · </span><a class="textlink" href="#">グリルバーガー 吉祥寺</a>
+      </p>
+    </section>
+    <section class="summary" data-only="default">
+      <span class="avg">4.8</span>
+      <div><span class="burger" data-size="lg" data-score="4.8"></span><p class="count" data-en="8 reviews">8 件のレビュー</p></div>
+    </section>
+    <div class="section-head" data-only="default"><h2 data-en="Reviews">レビュー</h2><span class="count" data-en="Newest first">新しい順</span></div>
+    <div class="grid reviews solo" data-only="default">
+      <article class="rcard">
+        <div class="photo rphoto" style="--a:#ecd08f;--b:#c4993a"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="rbody">
+          <div class="rrow"><span class="name-sm">バーガーラボ 中目黒</span><time data-en="Sep 22, 2026">2026年9月22日</time></div>
+          <span class="rate"><span class="burger" data-size="md" data-score="5"></span><b>5</b></span>
+          <p class="comment">また絶対行きたいです。</p>
+          <div class="foot"><span>charlie</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div>
+        </div>
+      </article>
+      <article class="rcard">
+        <div class="photo rphoto" style="--a:#d6c3bc;--b:#a48782"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="rbody">
+          <div class="rrow"><span class="name-sm">グリルバーガー 吉祥寺</span><time data-en="Sep 21, 2026">2026年9月21日</time></div>
+          <span class="rate"><span class="burger" data-size="md" data-score="5"></span><b>5</b></span>
+          <p class="comment">照り焼きのタレが甘辛くて、ご飯がすすむ味でした。</p>
+          <div class="foot"><span>bob</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div>
+        </div>
+      </article>
+      <article class="rcard">
+        <div class="photo rphoto none"><span class="photo-label" data-en="No photo">写真なし</span></div>
+        <div class="rbody">
+          <div class="rrow"><span class="name-sm">バーガーラボ 中目黒</span><time data-en="Sep 20, 2026">2026年9月20日</time></div>
+          <span class="rate"><span class="burger" data-size="md" data-score="4"></span><b>4</b></span>
+          <p class="comment">チーズの量がちょうどよかった。</p>
+          <div class="foot"><span>alice</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div>
+        </div>
+      </article>
+    </div>
+    <section class="panel" data-only="empty">
+      <span class="burger" data-size="lg" data-score="0" data-decor></span>
+      <h2 class="state-title" data-en="Nobody's eaten here yet">まだ誰も食べていません</h2>
+      <p class="state-sub" data-en="Why not write the first review?">最初のレビューを書いてみませんか?</p>
+      <button type="button" class="btn primary" data-en="Write a review">レビューを書く</button>
+    </section>
+  </div>
+  <aside class="memo"><b>実装メモ</b><ul><li>・issue #187 の <code>GET /burgers/:id</code> で、名前・紐づくショップ(配列)・統計(平均・加重スコア・件数)を取得する。レビューが1件もないバーガーは、統計が <code>null</code>(0件と区別)。</li><li>・レビュー一覧は、<code>GET /reviews?burger_id=</code>(issue #187)を、新しい順で取得する。カードの見た目は、既存の <code>ReviewListCard</code>(<code>reviews.html</code>・<code>shop-detail.html</code> と同じ部品)を再利用し、バーガー名の代わりに、そのレビューが投稿されたショップ名を出す(バーガー名は、このページ自体の見出しと重複するため)。</li><li>・紐づくショップが複数のときは、見出しの下にリンクを並べる(1 件だけなら 1 つだけ)。各リンクは、そのショップの詳細ページへ。</li><li>・レビュー詳細画面(<code>review-detail.html</code>)のバーガー名を、このページへのリンクにする(issue #188 R3)。</li><li>・存在しない id は、ほかの詳細ページと同じ 404(<code>states.html</code> の見本)。</li></ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

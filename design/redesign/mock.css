@@ -358,3 +358,26 @@ body { position: relative; }
   .mrow { display: flex; flex-direction: column; gap: 6px; padding: 16px 0; }
   .clabel { display: inline; margin-right: 8px; }
 }
+
+/* ---- 第 3 弾で足した部品(トップページ・バーガー詳細)。新しい色は足さない ---- */
+/* トップページ: 検索のヒーロー(見出し・説明・入力欄)。サウナイキタイを参考にしたのは構成(検索 → 抜粋セクションが縦に並ぶ)だけで、色はこのアプリの --accent・--surface-2 のまま */
+.home-hero { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 64px 24px; margin-bottom: 56px; border-radius: 16px; background: var(--surface-2); text-align: center; }
+.home-hero h1 { max-width: 640px; }
+.home-hero .lead { max-width: 480px; }
+.hero-search { display: flex; gap: 12px; width: min(560px, 100%); }
+.hero-search .search { flex: 1; }
+.home-section { margin-bottom: 56px; }
+.home-section:last-of-type { margin-bottom: 0; }
+/* バーガーランキング: 既存の rcard(枠・角丸)を流用し、写真は付けない */
+.rank { grid-template-columns: repeat(3, 1fr); }
+.rankcard .rbody { padding: 20px 24px; }
+.rankno { font-size: 14px; font-weight: 700; color: var(--text-muted); }
+/* 最新レビューのフィード: 既存の rcard を、1 列で縦に並べる */
+.reviews.feed { grid-template-columns: 1fr; }
+
+@media (max-width: 720px) {
+  .home-hero { padding: 40px 20px; margin-bottom: 32px; }
+  .hero-search { flex-direction: column; }
+  .home-section { margin-bottom: 40px; }
+  .rank { grid-template-columns: 1fr; }
+}

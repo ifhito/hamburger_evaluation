@@ -83,6 +83,11 @@ const GROUPED = [
   ['見え方', 'vis-shop-out', 'ショップ詳細(サインインしていない)', 'shop-detail.html', 'out', 'auth=out', ['ja']],
   ['見え方', 'vis-shops-out', 'ショップ一覧(サインインしていない)', 'shops.html', 'out', 'auth=out', ['ja']],
   ['見え方', 'vis-shops-admin', 'ショップ一覧(管理者)', 'shops.html', 'admin', 'user=admin', ['ja']],
+  // 第 3 弾(新しいトップページ・バーガー詳細。issue #182〜#188)
+  ['トップページ', 'home', 'トップページ', 'home.html', 'default'],
+  ['トップページ', 'home-empty', 'トップページ(各セクションが空)', 'home.html', 'empty', null, ['ja']],
+  ['バーガー詳細', 'burger-detail', 'バーガー詳細', 'burger-detail.html', 'default'],
+  ['バーガー詳細', 'burger-detail-empty', 'バーガー詳細(レビューがない)', 'burger-detail.html', 'empty', null, ['ja']],
 ];
 for (const lang of ['ja', 'en']) {
   for (const [group, key, title, file, state, extra, langs] of GROUPED) {
