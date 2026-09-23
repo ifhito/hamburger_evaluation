@@ -41,31 +41,21 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 		namePattern = pgtype.Text{String: "%" + likeEscaper.Replace(keyword) + "%", Valid: true}
 	}
 
+	params := sqlcgen.ListShopsParams{ViewAll: vis.ViewAll, ViewerID: vis.ViewerID, NamePattern: namePattern, PageLimit: limit + 1, PageOffset: offset}
 	var rows []sqlcgen.ListShopsRow
 	var err error
 	if sort == usecase.ShopSortNewest {
-		// ListShopsByNewestRow は ListShopsRow と列が同一(SELECT 句が同一)なので、
-		// 下の行のマッピングを共有するために、そのまま型変換する。
+		// ListShopsByNewestRow / ListShopsByNewestParams は ListShopsRow / ListShopsParams と
+		// 列・フィールドが同一(SELECT 句が同一)なので、下の行のマッピングを共有するために、
+		// そのまま型変換する。
 		var newestRows []sqlcgen.ListShopsByNewestRow
-		newestRows, err = r.q.ListShopsByNewest(ctx, sqlcgen.ListShopsByNewestParams{
-			ViewAll:     vis.ViewAll,
-			ViewerID:    vis.ViewerID,
-			NamePattern: namePattern,
-			PageLimit:   limit + 1,
-			PageOffset:  offset,
-		})
+		newestRows, err = r.q.ListShopsByNewest(ctx, sqlcgen.ListShopsByNewestParams(params))
 		rows = make([]sqlcgen.ListShopsRow, len(newestRows))
 		for i, row := range newestRows {
 			rows[i] = sqlcgen.ListShopsRow(row)
 		}
 	} else {
-		rows, err = r.q.ListShops(ctx, sqlcgen.ListShopsParams{
-			ViewAll:     vis.ViewAll,
-			ViewerID:    vis.ViewerID,
-			NamePattern: namePattern,
-			PageLimit:   limit + 1,
-			PageOffset:  offset,
-		})
+		rows, err = r.q.ListShops(ctx, params)
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("list shops: %w", err)

@@ -109,6 +109,9 @@ func (f *reviewStoreFake) ListReviews(_ context.Context, filter usecase.ReviewLi
 		if filter.UserID != nil && review.AuthorID != *filter.UserID {
 			return false
 		}
+		if filter.BurgerID != nil && review.BurgerID != *filter.BurgerID {
+			return false
+		}
 		return true
 	}
 	var out []domain.Review
@@ -631,12 +634,12 @@ func TestListReviews(t *testing.T) {
 	})
 }
 
-// TestListReviewsFilters は GET /reviews の rating/keyword/shop_id/user_id の
-// query filter（user_id 以外は Rails ReviewQuery parity）を扱う：各 filter 単独、
+// TestListReviewsFilters は GET /reviews の rating/keyword/shop_id/user_id/burger_id の
+// query filter（user_id・burger_id 以外は Rails ReviewQuery parity）を扱う：各 filter 単独、
 // それらの AND 結合、一致なしの場合の `[]`（決して null ではない）、空の値が
-// 未指定として扱われること、そして整数でない rating/shop_id/user_id に対する
+// 未指定として扱われること、そして整数でない rating/shop_id/user_id/burger_id に対する
 // fail-loud な 422（rating/shop_id については Rails の、黙って 0 に cast する
-// 挙動からの意図的な乖離。user_id は Rails に対応物がなく同じ形に揃えている）。
+// 挙動からの意図的な乖離。user_id・burger_id は Rails に対応物がなく同じ形に揃えている）。
 func TestListReviewsFilters(t *testing.T) {
 	repo := seedReviewWorld(uid.N(1))
 	router, aliceAuth, bobAuth, _ := newReviewsRouter(t, repo)
@@ -704,6 +707,11 @@ func TestListReviewsFilters(t *testing.T) {
 		get(t, "?user_id="+uid.N(2), []string{bobs}, []string{smoky, onCheese, onPlain})
 	})
 
+	t.Run("burger_id はその burger の review だけを残す", func(t *testing.T) {
+		get(t, "?burger_id="+cheeseBurgerID, []string{onCheese, bobs}, []string{smoky, onPlain})
+		get(t, "?burger_id="+plainBurgerID, nil, []string{onCheese, smoky, bobs, onPlain}) // pending のみの shop の burger は公開フィードから隠れたまま
+	})
+
 	t.Run("user_id は UUID の文字列として usecase に渡される", func(t *testing.T) {
 		repo.listFilters = nil
 		get(t, "?user_id="+uid.N(42), nil, nil)
@@ -720,14 +728,33 @@ func TestListReviewsFilters(t *testing.T) {
 		}
 	})
 
+	t.Run("burger_id は UUID の文字列として usecase に渡される", func(t *testing.T) {
+		repo.listFilters = nil
+		get(t, "?burger_id="+cheeseBurgerID, nil, nil)
+		if len(repo.listFilters) != 1 || repo.listFilters[0].BurgerID == nil || *repo.listFilters[0].BurgerID != cheeseBurgerID {
+			t.Errorf("filters = %+v, want exactly one with BurgerID %s", repo.listFilters, cheeseBurgerID)
+		}
+	})
+
+	t.Run("空の burger_id は未指定として usecase に渡される", func(t *testing.T) {
+		repo.listFilters = nil
+		get(t, "?burger_id=", []string{smoky, onCheese, bobs}, []string{onPlain})
+		if len(repo.listFilters) != 1 || repo.listFilters[0].BurgerID != nil {
+			t.Errorf("filters = %+v, want exactly one with nil BurgerID", repo.listFilters)
+		}
+	})
+
 	t.Run("filter は AND で結合される", func(t *testing.T) {
 		get(t, "?shop_id="+active2ShopID+"&rating=5&keyword=veggie", []string{smoky}, []string{onCheese})
 		get(t, "?user_id="+uid.N(1)+"&rating=4", []string{onCheese}, []string{smoky, bobs})
 		get(t, "?user_id="+uid.N(2)+"&rating=4", nil, []string{onCheese, smoky, bobs})
+		// user_id と burger_id を同時に指定すると、両方に一致する review だけが残る。
+		get(t, "?burger_id="+cheeseBurgerID+"&user_id="+uid.N(1), []string{onCheese}, []string{bobs, smoky, onPlain})
+		get(t, "?burger_id="+cheeseBurgerID+"&user_id="+uid.N(2), []string{bobs}, []string{onCheese, smoky, onPlain})
 	})
 
 	t.Run("一致なしは null ではなく空の JSON 配列を返す", func(t *testing.T) {
-		for _, query := range []string{"?rating=2", "?keyword=zzz", "?shop_id=" + uid.N(999), "?user_id=" + uid.N(999), "?rating=5&keyword=cheese"} {
+		for _, query := range []string{"?rating=2", "?keyword=zzz", "?shop_id=" + uid.N(999), "?user_id=" + uid.N(999), "?burger_id=" + uid.N(999), "?rating=5&keyword=cheese"} {
 			rec := do(router, http.MethodGet, "/reviews"+query, "", "")
 			if rec.Code != http.StatusOK || rec.Body.String() != `[]` {
 				t.Errorf("GET /reviews%s = %d %s, want 200 []", query, rec.Code, rec.Body)
@@ -736,10 +763,10 @@ func TestListReviewsFilters(t *testing.T) {
 	})
 
 	t.Run("空の filter 値は未指定として扱われる", func(t *testing.T) {
-		get(t, "?rating=&keyword=&shop_id=&user_id=", []string{smoky, onCheese}, []string{onPlain})
+		get(t, "?rating=&keyword=&shop_id=&user_id=&burger_id=", []string{smoky, onCheese}, []string{onPlain})
 	})
 
-	t.Run("整数でない rating と shop_id、UUID の正規形でない user_id は 422 で明示的に失敗し、usecase を呼ばない", func(t *testing.T) {
+	t.Run("整数でない rating と shop_id、UUID の正規形でない user_id・burger_id は 422 で明示的に失敗し、usecase を呼ばない", func(t *testing.T) {
 		tests := []struct {
 			query    string
 			wantBody string
@@ -748,14 +775,18 @@ func TestListReviewsFilters(t *testing.T) {
 			{query: "?rating=4.5", wantBody: `{"errors":["Rating must be an integer"]}`},
 			{query: "?shop_id=abc", wantBody: `{"errors":["Shop id must be a valid UUID"]}`},
 			{query: "?user_id=abc", wantBody: `{"errors":["User id must be a valid UUID"]}`},
+			{query: "?burger_id=abc", wantBody: `{"errors":["Burger id must be a valid UUID"]}`},
 			// 旧形式の整数、大文字の UUID、ハイフンのない UUID は、正規形ではないので受け付けない。
 			{query: "?user_id=1", wantBody: `{"errors":["User id must be a valid UUID"]}`},
 			{query: "?user_id=0B0E3A5C-8D54-4C1A-9F33-2A9D6F1C7E10", wantBody: `{"errors":["User id must be a valid UUID"]}`},
 			{query: "?user_id=0b0e3a5c8d544c1a9f332a9d6f1c7e10", wantBody: `{"errors":["User id must be a valid UUID"]}`},
-			// パースの順序は rating、shop_id、user_id である。
-			{query: "?rating=abc&shop_id=abc&user_id=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
+			{query: "?burger_id=1", wantBody: `{"errors":["Burger id must be a valid UUID"]}`},
+			{query: "?burger_id=0B0E3A5C-8D54-4C1A-9F33-2A9D6F1C7E10", wantBody: `{"errors":["Burger id must be a valid UUID"]}`},
+			// パースの順序は rating、shop_id、user_id、burger_id である。
+			{query: "?rating=abc&shop_id=abc&user_id=abc&burger_id=abc", wantBody: `{"errors":["Rating must be an integer"]}`},
 			{query: "?shop_id=abc&user_id=abc", wantBody: `{"errors":["Shop id must be a valid UUID"]}`},
 			{query: "?rating=4&shop_id=" + uid.N(1) + "&user_id=abc", wantBody: `{"errors":["User id must be a valid UUID"]}`},
+			{query: "?rating=4&shop_id=" + uid.N(1) + "&user_id=" + uid.N(1) + "&burger_id=abc", wantBody: `{"errors":["Burger id must be a valid UUID"]}`},
 		}
 		repo.listFilters = nil
 		for _, tt := range tests {

@@ -126,6 +126,51 @@ func (q *Queries) GetShopBurgerWithStats(ctx context.Context, arg GetShopBurgerW
 	return i, err
 }
 
+const listBurgerShops = `-- name: ListBurgerShops :many
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id
+FROM shops_burgers sb
+JOIN shops s ON s.id = sb.shop_id
+WHERE sb.burger_id = $1
+ORDER BY s.created_at, s.id
+`
+
+type ListBurgerShopsRow struct {
+	ID             string
+	Name           string
+	Status         int16
+	ModerationNote pgtype.Text
+	CreatorID      *string
+}
+
+// burger に紐づく shop(shops_burgers 経由)を、作成の古い順に返す。viewer ごとの可視性フィルタ
+// (pending/rejected の扱い)は usecase が domain.ShopVisibility で行うので、ここは shop の全カラムを返す
+// (ListReviewShops と同じ形)。
+func (q *Queries) ListBurgerShops(ctx context.Context, burgerID string) ([]ListBurgerShopsRow, error) {
+	rows, err := q.db.Query(ctx, listBurgerShops, burgerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBurgerShopsRow
+	for rows.Next() {
+		var i ListBurgerShopsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
+			&i.ModerationNote,
+			&i.CreatorID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listShopBurgersByShop = `-- name: ListShopBurgersByShop :many
 SELECT sb.shop_id, sb.burger_id FROM shops_burgers sb
 JOIN burgers b ON b.id = sb.burger_id

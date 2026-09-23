@@ -1,7 +1,7 @@
 package domain
 
 // BurgerRanking は GET /burgers の一覧に現れる 1 件である。review が 1 件もない
-// (burger_stats がまだ計算されていない)バーガーは対象外(query 側が除外する)。
+// (burger_stats が未計算、または削除で 0 件に戻った)バーガーは対象外(query 側が除外する)。
 // これは保存された値を読んだだけの純粋な射影で、業務の判断は持たない(repository も
 // 書き込みオブジェクトもない)。
 type BurgerRanking struct {

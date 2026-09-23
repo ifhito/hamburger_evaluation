@@ -56,7 +56,6 @@ func WithGoogleLogin(g *GoogleLogin) RouterOption {
 // とき）、認可サーバーの情報・認可・トークン・取り消しの窓口と、許可の画面・許可したアプリの一覧が使う
 // API を登録する。nil なら、これらは未登録で、404 になる。mcp は nil でない場合（リモートの MCP サーバーが
 // 有効なとき）、POST /mcp と保護されたリソースの情報の窓口を登録する。nil なら未登録で、404 になる。
-// burgers は GET /burgers（バーガーのランキング一覧。認証不要）を提供する。
 func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *usecase.Shops, burgers *usecase.Burgers, reviews *usecase.Reviews, users *usecase.Users, photoFiles http.Handler, oauth *OAuth, mcp MCPEndpoints, opts ...RouterOption) http.Handler {
 	var extras routerExtras
 	for _, opt := range opts {
@@ -88,6 +87,7 @@ func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *u
 		{path: "/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodGet: handleGetShop(shops)}, middleware: OptionalAuth(auth)},
 		// バーガーのランキング一覧は viewer の概念がなく、常に匿名と同じ扱いなので middleware を付けない。
 		{path: "/burgers", methods: map[string]http.HandlerFunc{http.MethodGet: handleListBurgers(burgers)}},
+		{path: "/burgers/{id}", methods: map[string]http.HandlerFunc{http.MethodGet: handleGetBurger(burgers)}, middleware: OptionalAuth(auth)},
 		// review のフィードと詳細は匿名でも使える。ログインが必要なのは
 		// 書き込み（POST/PUT/DELETE）だけである。
 		{

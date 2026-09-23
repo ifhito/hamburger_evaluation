@@ -1,0 +1,52 @@
+import { describe, it, expect } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
+import "../../../lib/i18n";
+import type { Review } from "../../reviews/api/types";
+import { ShopReviewCard } from "./ShopReviewCard";
+
+const review: Review = {
+  id: "r1",
+  rating: 4,
+  comment: "Great patty",
+  photoUrl: null,
+  createdAt: "2026-09-21T00:00:00Z",
+  user: { id: "u1", username: "alice" },
+  burger: { id: "b1", name: "Teriyaki", averageRating: 4, reviewCount: 3, weightedScore: 4, confidence: 1 },
+};
+const html = (r: Review) =>
+  renderToStaticMarkup(
+    <MemoryRouter>
+      <ShopReviewCard review={r} ratingMax={5} />
+    </MemoryRouter>,
+  );
+
+describe("ShopReviewCard(ショップ詳細のレビューのカード)", () => {
+  it("「詳しく見る」の文字を出さず、カード全体がレビュー詳細への 1 つのリンクになる", () => {
+    const markup = html(review);
+
+    expect(markup).not.toContain("詳しく見る");
+    expect(markup).not.toContain("Read more");
+    expect(markup.match(/<a /g)?.length).toBe(1);
+    expect(markup).toContain('href="/reviews/r1"');
+  });
+
+  it("リンクの aria-label に、バーガー名と投稿者名が入る", () => {
+    const markup = html(review);
+    const ariaLabel = markup.match(/aria-label="([^"]+)"/)?.[1];
+
+    expect(ariaLabel).toContain("Teriyaki");
+    expect(ariaLabel).toContain("alice");
+    expect(ariaLabel).not.toContain("{{");
+  });
+
+  it("バーガーの情報がないレビューでも、壊れずに、投稿者名の入った aria-label を出す", () => {
+    const markup = html({ ...review, burger: null });
+    const ariaLabel = markup.match(/aria-label="([^"]+)"/)?.[1];
+
+    expect(markup.match(/<a /g)?.length).toBe(1);
+    expect(markup).toContain('href="/reviews/r1"');
+    expect(ariaLabel).toContain("alice");
+    expect(ariaLabel).not.toContain("{{");
+  });
+});

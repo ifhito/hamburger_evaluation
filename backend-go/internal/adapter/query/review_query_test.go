@@ -194,6 +194,10 @@ func TestReviewQuery(t *testing.T) {
 			{name: "存在しない shop_id は空になる", filter: usecase.ReviewListFilter{ShopID: strp(uid.N(99999))}, want: []string{}},
 			{name: "filter は AND で組み合わされる", filter: usecase.ReviewListFilter{Rating: intp(5), Keyword: "tast", ShopID: strp(active2)}, want: []string{rOld}},
 			{name: "AND の組み合わせが一致しない場合は空になる", filter: usecase.ReviewListFilter{Rating: intp(3), Keyword: "tast"}, want: []string{}},
+			{name: "burger_id はその burger の review だけに絞り込む", filter: usecase.ReviewListFilter{BurgerID: strp(cheese)}, want: []string{rTie1, rOld}},
+			{name: "burger_id が別の burger を指すと、それに絞り込まれる", filter: usecase.ReviewListFilter{BurgerID: strp(plain)}, want: []string{rTie2}},
+			{name: "存在しない burger_id は空になる", filter: usecase.ReviewListFilter{BurgerID: strp(uid.N(99999))}, want: []string{}},
+			{name: "burger_id と user_id は AND で組み合わされる", filter: usecase.ReviewListFilter{BurgerID: strp(cheese), UserID: strp(alice)}, want: []string{rOld}},
 			// 範囲外の rating は比較結果が false にならなければならず、
 			// smallint カラムをオーバーフローさせて SQL エラーに
 			// なってはならない。

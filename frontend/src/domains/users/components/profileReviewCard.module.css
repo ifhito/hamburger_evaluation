@@ -1,7 +1,7 @@
 /* 枠・角丸・背景・overflow:hidden は、S45 の Card(components/ui/card.module.css)の .card から借りる。
    padded は付けない(写真を端まで見せ、余白は .body 側だけに持つ) */
 .card {
-  composes: card from '../../../components/ui/card.module.css';
+  composes: cardLink from '../../../components/ui/card.module.css';
 }
 
 .photo,
@@ -61,12 +61,6 @@
 .comment {
   line-height: 1.8;
   overflow-wrap: anywhere;
-}
-
-.foot {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
 }
 
 @media (max-width: 720px) {
