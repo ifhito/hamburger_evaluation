@@ -11,8 +11,8 @@ RETURNING *;
 -- 複数の active な shop に紐づく burger でも、ちょうど 1 行だけが返るように
 -- するためである。u.discarded_at フィルタは、discard 済みの user の
 -- （まだ kept な）review をフィードから隠す。
--- 4 つの narg フィルタ（NULL = 未指定、AND で結合される）のうち、
--- filter_user_id 以外は Rails の ReviewQuery に対応する：
+-- 5 つの narg フィルタ（NULL = 未指定、AND で結合される）のうち、
+-- filter_user_id と filter_burger_id 以外は Rails の ReviewQuery に対応する：
 -- filter_rating は rating の完全一致である（範囲外の値が smallint 列で
 -- オーバーフローせず、比較結果が false になるよう bigint にしている）。
 -- comment_pattern は comment に対する、あらかじめエスケープ済みの ILIKE
@@ -27,6 +27,9 @@ RETURNING *;
 -- Rails の ReviewQuery にはない）。公開ルール（discard 済みの review・user の
 -- 除外と active な shop の EXISTS）はそのまま維持され、このフィルタは絞り込みだけを
 -- 行う。公開の範囲を広げることはない。
+-- filter_burger_id も、その burger の review だけを残す（本 API の拡張で、
+-- Rails の ReviewQuery にはない）。公開ルールはそのまま維持され、絞り込みだけを行う
+-- （fail-loud に、既存の filter_user_id と同じ形で足す）。
 SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
@@ -52,6 +55,7 @@ WHERE r.discarded_at IS NULL
       WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = sqlc.narg(filter_shop_id)::uuid
   ))
   AND (sqlc.narg(filter_user_id)::uuid IS NULL OR r.user_id = sqlc.narg(filter_user_id)::uuid)
+  AND (sqlc.narg(filter_burger_id)::uuid IS NULL OR r.burger_id = sqlc.narg(filter_burger_id)::uuid)
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 

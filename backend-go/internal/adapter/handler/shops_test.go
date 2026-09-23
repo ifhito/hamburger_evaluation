@@ -110,7 +110,7 @@ func newShopsRouter(t *testing.T, repo *shopStoreFake) (router http.Handler, ali
 		t.Fatalf("issue admin token: %v", err)
 	}
 	reviewRepo := newReviewStoreFake()
-	return handler.NewRouter(okPinger, auth, unusedSignups(), shopsUsecase(repo, repo),
+	return handler.NewRouter(okPinger, auth, unusedSignups(), shopsUsecase(repo, repo), nil,
 			reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
 			usersUsecase(users, hasherFake{}), nil, nil, nil),
 		"Bearer " + aliceToken, "Bearer " + adminToken, alice.ID

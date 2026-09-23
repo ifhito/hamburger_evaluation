@@ -347,8 +347,11 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `GET /shops/:id` — ショップ 1 件の取得 (`can_review`: 閲覧者がこのショップにレビューを書けるか。domain の `CanBeReviewedBy` の結果で、匿名は `false`。frontend は「レビューを書く」ボタンをこの値で出し分ける。一覧と同じ集計 `photo_url`・`average_rating`・`review_count` も含む)
 - `POST /shops` — ショップの申請 (要認証)
 
+**バーガー**
+- `GET /burgers/:id` — バーガー1件を、紐づくショップ(id・name)と、評価の統計(average_rating・weighted_score・review_count)つきで返す。レビューが1件もないバーガーは、統計の3項目をすべて `null` にする(0件と区別する)。存在しない・UUID の正規形でない id は404(`GET /shops/:id` と同じ判定)
+
 **レビュー**
-- `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリ(ユーザーの UUID。正規形でなければ 422 `User id must be a valid UUID`)で、そのユーザーの公開レビューだけに絞り込める。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。各レビューに `can_edit` を含む)
+- `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリ(ユーザーの UUID。正規形でなければ 422 `User id must be a valid UUID`)と `burger_id` クエリ(バーガーの UUID。正規形でなければ 422 `Burger id must be a valid UUID`)で、それぞれ、そのユーザーの公開レビュー・そのバーガーのレビューだけに絞り込める。同時に指定すると AND で絞り込まれる。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。各レビューに `can_edit` を含む)
 - `GET /reviews/:id` — レビュー 1 件の取得 (`can_edit`: 閲覧者がそのレビューを編集・削除できるか。domain の `CanBeModifiedBy` の結果で、作者だけ `true`(admin も他人は `false`)、匿名は `false`。`POST` / `PUT` の応答にも含み、shop 詳細に埋め込まれるレビューには含まない。frontend は所有者を比較せず、この値で編集・削除ボタンを出し分ける。詳細だけ、そのレビューのショップ `shop`(`{id, name}`。閲覧者に見えるショップがないときは `null`。見えないショップの id・名前は出さない)と、`can_review`(閲覧者が、そのショップにレビューを書けるか。ショップ詳細の `can_review` と同じ規則(`Shop.CanBeReviewedByViewer`)で、匿名は `false`)を含み、一覧・`POST` / `PUT` の応答には含まない。バーガーが複数のショップにあるときは、閲覧者が書けるショップの先頭(作成の古い順)、なければ見えるショップの先頭を、domain の `ReviewShopFor` が選ぶ。ショップに紐づかないバーガーのレビューでも、詳細は成功し、`shop` は `null`・`can_review` は `false`。MCP の `get_review` も同じ)
 - `POST /reviews` — レビューの投稿 (要認証)
 - `PUT /reviews/:id` — レビューの更新 (要認証)

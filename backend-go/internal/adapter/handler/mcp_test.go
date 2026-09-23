@@ -100,7 +100,7 @@ func newMCPKit(t *testing.T) *mcpKit {
 	if err != nil {
 		t.Fatalf("new mcp server: %v", err)
 	}
-	srv.Config.Handler = handler.NewRouter(okPinger, auth, unusedSignups(), shops, reviews, usersUC, nil, nil, mcpServer)
+	srv.Config.Handler = handler.NewRouter(okPinger, auth, unusedSignups(), shops, nil, reviews, usersUC, nil, nil, mcpServer)
 	srv.Start()
 	t.Cleanup(srv.Close)
 	return k

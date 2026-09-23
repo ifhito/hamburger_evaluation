@@ -7,6 +7,8 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createBurger = `-- name: CreateBurger :one
@@ -50,6 +52,38 @@ func (q *Queries) GetBurger(ctx context.Context, id string) (Burger, error) {
 		&i.Name,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBurgerWithStats = `-- name: GetBurgerWithStats :one
+SELECT b.id, b.name,
+       bs.review_count, bs.average_rating, bs.weighted_score
+FROM burgers b
+LEFT JOIN burger_stats bs ON bs.burger_id = b.id
+WHERE b.id = $1
+`
+
+type GetBurgerWithStatsRow struct {
+	ID            string
+	Name          string
+	ReviewCount   pgtype.Int8
+	AverageRating pgtype.Float8
+	WeightedScore pgtype.Float8
+}
+
+// burger 1 件を、保存された統計(burger_stats。LEFT JOIN。まだ計算されていない、または削除で 0 件に戻った
+// burger は review_count/average_rating/weighted_score が NULL または 0)とともに返す。存在しない id は
+// 0 行になる(呼び出し側が domain.ErrBurgerNotFound に対応付ける)。
+func (q *Queries) GetBurgerWithStats(ctx context.Context, id string) (GetBurgerWithStatsRow, error) {
+	row := q.db.QueryRow(ctx, getBurgerWithStats, id)
+	var i GetBurgerWithStatsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ReviewCount,
+		&i.AverageRating,
+		&i.WeightedScore,
 	)
 	return i, err
 }

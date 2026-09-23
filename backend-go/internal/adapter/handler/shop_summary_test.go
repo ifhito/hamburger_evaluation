@@ -164,7 +164,7 @@ func TestShopSummaryThroughRealQuery(t *testing.T) {
 	users, auth, _ := newAuthKit()
 	shopFake := &shopStoreFake{}
 	shops := shopsUsecase(query.NewShopQuery(conn), shopFake)
-	router := handler.NewRouter(okPinger, auth, unusedSignups(), shops,
+	router := handler.NewRouter(okPinger, auth, unusedSignups(), shops, nil,
 		reviewsUsecase(newReviewStoreFake(), storage.NewDisk(t.TempDir(), "/photos")), usersUsecase(users, hasherFake{}), nil, nil, nil)
 
 	// 集計は、あとからワーカーが計算する(結果整合)。レビューを入れただけの時点では、まだ集計されていない。
