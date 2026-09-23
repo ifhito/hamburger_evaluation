@@ -18,7 +18,7 @@
   color: var(--ui-text);
 }
 
-/* ショップ詳細・レビュー詳細の、大きな平均値 + 装飾のバーガー + 件数 + 操作(design/redesign の .summary)。 */
+/* ショップ詳細の、大きな平均値 + 装飾のバーガー + 件数 + 操作(design/redesign の .summary)。 */
 .summary {
   font-family: var(--ui-font);
   color: var(--ui-text);
