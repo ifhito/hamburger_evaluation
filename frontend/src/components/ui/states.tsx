@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RatingBurgerIcon } from './RatingBurger'
 import styles from './states.module.css'
+import { useLoadingRatio } from './useLoadingRatio'
 
 interface Props {
   // 押すと次に進める操作(例「レビューを書く」の Button)。なければ出さない。
@@ -24,13 +25,13 @@ export function EmptyState({ title, description, action }: Props & { title?: str
   )
 }
 
-// 読み込み中: 焼き途中のバーガー(見た目だけの水位。評価ではない)+ 灰色の帯。
-export const LOADING_LEVEL = 0.6
+// 読み込み中: 焼き途中のバーガー(下から繰り返し満ちていく。useLoadingRatio) + 灰色の帯。
 export function Loading() {
   const { t } = useTranslation()
+  const ratio = useLoadingRatio()
   return (
     <section className={styles.panel} role="status">
-      <RatingBurgerIcon ratio={LOADING_LEVEL} size="lg" />
+      <RatingBurgerIcon ratio={ratio} size="lg" />
       <h2 className={styles.title}>{t('common.states.loading.title')}</h2>
       <p className={styles.sub}>{t('common.states.loading.description')}</p>
       <div className={styles.skels} aria-hidden="true">
