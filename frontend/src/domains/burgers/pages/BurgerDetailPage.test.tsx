@@ -9,11 +9,12 @@ import BurgerDetailPage from "./BurgerDetailPage";
 
 // バーガー名・お店へのリンク・レビューの並びと、0 件・見つからないときの画面だけを確かめる。
 const state = vi.hoisted(() => ({
+  authUser: null as { id: string } | null,
   burger: undefined as BurgerDetail | undefined,
   error: undefined as unknown,
   reviews: [] as ReviewView[],
 }));
-vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: null, isLoading: false }) }));
+vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: state.authUser, isLoading: false }) }));
 vi.mock("../hooks/useBurger", () => ({ useBurger: () => ({ data: state.burger, isLoading: false, error: state.error }) }));
 vi.mock("../../reviews/hooks/useReviews", () => ({
   useReviews: () => ({
@@ -62,6 +63,7 @@ const show = () =>
   );
 
 beforeEach(() => {
+  state.authUser = null;
   state.burger = baseBurger;
   state.error = undefined;
   state.reviews = [review("1"), review("2")];
@@ -102,5 +104,27 @@ describe("BurgerDetailPage の状態の表示", () => {
 
     expect(page.textContent).toContain("Nobody's eaten here yet");
     expect(page.textContent).not.toContain("4.2");
+  });
+
+  it("投稿直後で reviewCount が統計の再計算待ち(null)でも、既に取得できているレビューは出す", async () => {
+    // 初めてのレビューを投稿した直後: 統計の再計算(非同期)がまだ reviewCount に反映されていない一方、
+    // レビュー一覧(同期)は既にそのレビューを含んでいる状態を再現する。
+    state.burger = { ...baseBurger, averageRating: null, weightedScore: null, reviewCount: null };
+    state.reviews = [review("1")];
+    const page = await show();
+
+    const links = [...page.querySelectorAll('a[href^="/reviews/"]')].map((a) => a.getAttribute("href"));
+    expect(links).toEqual(["/reviews/1"]);
+    expect(page.textContent).not.toContain("Nobody's eaten here yet");
+  });
+
+  it("最後のレビューを削除した直後で reviewCount が古い値のままでも、空の画面を出す", async () => {
+    // 最後のレビューを削除した直後: レビュー一覧(同期)は既に空になっている一方、
+    // reviewCount・averageRating(統計の再計算(非同期))はまだ削除前の値のままの状態を再現する。
+    state.reviews = [];
+    const page = await show();
+
+    expect(page.textContent).toContain("4.2");
+    expect(page.textContent).toContain("Nobody's eaten here yet");
   });
 });

@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../auth/AuthProvider";
 import { useBurger } from "../hooks/useBurger";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
@@ -17,11 +18,15 @@ import styles from "./burgerDetail.module.css";
 // バーガー詳細(design/redesign/burger-detail.html)。GET /burgers/:id には can_review のような閲覧者ごとの値が
 // ないため、「レビューを書く」は置かない(review-detail.html と同じ理由)。レビュー一覧は ReviewListCard を
 // そのまま使う(バーガー名がこの画面の見出しと重なるが、issue の仕様どおり再利用する)。
+// reviewCount は統計の再計算(非同期)由来で、useReviews の取得(同期)と前後することがあるため、
+// レビュー一覧の表示は reviews 側の状態だけで決め、RatingSummary は reviewCount の有無だけで別に出し分ける。
 export default function BurgerDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
-  const { data: burger, isLoading, error } = useBurger(id);
+  // shops の一覧が閲覧者ごとに違うので、認証状態が確定してから取得する
+  const { data: burger, isLoading, error } = useBurger(id, user?.id ?? null, { enabled: !authLoading });
   const {
     data: reviews,
     isLoading: reviewsLoading,
@@ -31,7 +36,7 @@ export default function BurgerDetailPage() {
     isFetchingNextPage,
   } = useReviews({ burgerId: id }, { enabled: burger !== undefined });
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <Layout>
         <Loading />
@@ -66,30 +71,28 @@ export default function BurgerDetailPage() {
           )}
         </section>
 
-        {burger.reviewCount !== null ? (
-          <>
-            <RatingSummary value={burger.averageRating} max={ratingRange?.max} count={burger.reviewCount} />
-            <div className={styles.sectionHead}>
-              <h2 className={styles.heading}>{t("reviews.detail.reviewsHeading")}</h2>
-              <span className={styles.count}>{t("reviews.detail.newestFirst")}</span>
-            </div>
-            {reviewsLoading && <Loading />}
-            {reviewsError && <Alert message={t("reviews.list.loadError")} />}
-            <div className={styles.grid}>
-              {reviews?.map((review) => (
-                <ReviewListCard key={review.id} review={review} ratingMax={ratingRange?.max} />
-              ))}
-            </div>
-            {hasNextPage && (
-              <div className={styles.loadMore}>
-                <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
-                  {t("reviews.list.loadMore")}
-                </Button>
-              </div>
-            )}
-          </>
-        ) : (
-          <EmptyState />
+        {burger.reviewCount !== null && (
+          <RatingSummary value={burger.averageRating} max={ratingRange?.max} count={burger.reviewCount} />
+        )}
+
+        <div className={styles.sectionHead}>
+          <h2 className={styles.heading}>{t("reviews.detail.reviewsHeading")}</h2>
+          {reviews && reviews.length > 0 && <span className={styles.count}>{t("reviews.detail.newestFirst")}</span>}
+        </div>
+        {reviewsLoading && <Loading />}
+        {reviewsError && <Alert message={t("reviews.list.loadError")} />}
+        {reviews && reviews.length === 0 && <EmptyState />}
+        <div className={styles.grid}>
+          {reviews?.map((review) => (
+            <ReviewListCard key={review.id} review={review} ratingMax={ratingRange?.max} />
+          ))}
+        </div>
+        {hasNextPage && (
+          <div className={styles.loadMore}>
+            <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
+              {t("reviews.list.loadMore")}
+            </Button>
+          </div>
         )}
       </div>
     </Layout>
