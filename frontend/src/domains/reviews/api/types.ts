@@ -46,4 +46,5 @@ export interface ReviewSearchParams {
   rating?: number;
   keyword?: string;
   userId?: string;
+  burgerId?: string;
 }

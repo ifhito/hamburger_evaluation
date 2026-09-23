@@ -62,6 +62,13 @@ describe("ReviewDetailPage の状態の表示", () => {
     expect(page.textContent).not.toContain("4.2");
     expect(page.textContent).not.toContain("5 reviews");
   });
+
+  it("バーガー名の見出しは、バーガー詳細へのリンクになる", async () => {
+    const page = await show();
+    const link = page.querySelector("h1 a");
+    expect(link?.textContent).toBe("Cheeseburger");
+    expect(link?.getAttribute("href")).toBe("/burgers/3");
+  });
 });
 
 describe("ReviewDetailPage の「編集」「削除」(can_edit)", () => {

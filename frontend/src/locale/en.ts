@@ -126,6 +126,11 @@ const en = {
       },
     },
   },
+  burgers: {
+    detail: {
+      servedAt: "Served at:",
+    },
+  },
   reviews: {
     list: {
       title: "Reviews",
