@@ -29,7 +29,7 @@ export default function BurgerDetailPage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useReviews({ burgerId: id }, { enabled: id !== undefined && burger !== undefined });
+  } = useReviews({ burgerId: id }, { enabled: burger !== undefined });
 
   if (isLoading) {
     return (
