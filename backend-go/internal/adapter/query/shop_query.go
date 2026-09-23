@@ -29,22 +29,34 @@ func NewShopQuery(db sqlcgen.DBTX) *ShopQuery {
 
 var _ usecase.ShopQuery = (*ShopQuery)(nil)
 
-// ListShops は、keyword に一致する可視の shop を name、id の順に並べて、集計(shop_stats の保存された値。
+// ListShops は、keyword に一致する可視の shop を、sort の並び順（既定は name、id の順。
+// usecase.ShopSortNewest なら created_at 降順、id 降順）で並べて、集計(shop_stats の保存された値。
 // まだ集計されていないショップは空の集計)つきで返す。集計は LEFT JOIN で添えるので、クエリは 1 回である。
 // keyword はエスケープ済みの ILIKE パラメータとして渡され、SQL に連結される
 // ことはない。次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて
 // 返す。2 つ目の戻り値は、offset+limit 件より後ろにも見える shop があるか（has_more）である。
-func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error) {
-	params := sqlcgen.ListShopsParams{
-		ViewAll:    vis.ViewAll,
-		PageLimit:  limit + 1,
-		PageOffset: offset,
-	}
-	params.ViewerID = vis.ViewerID
+func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, sort usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error) {
+	var namePattern pgtype.Text
 	if keyword != "" {
-		params.NamePattern = pgtype.Text{String: "%" + likeEscaper.Replace(keyword) + "%", Valid: true}
+		namePattern = pgtype.Text{String: "%" + likeEscaper.Replace(keyword) + "%", Valid: true}
 	}
-	rows, err := r.q.ListShops(ctx, params)
+
+	params := sqlcgen.ListShopsParams{ViewAll: vis.ViewAll, ViewerID: vis.ViewerID, NamePattern: namePattern, PageLimit: limit + 1, PageOffset: offset}
+	var rows []sqlcgen.ListShopsRow
+	var err error
+	if sort == usecase.ShopSortNewest {
+		// ListShopsByNewestRow / ListShopsByNewestParams は ListShopsRow / ListShopsParams と
+		// 列・フィールドが同一(SELECT 句が同一)なので、下の行のマッピングを共有するために、
+		// そのまま型変換する。
+		var newestRows []sqlcgen.ListShopsByNewestRow
+		newestRows, err = r.q.ListShopsByNewest(ctx, sqlcgen.ListShopsByNewestParams(params))
+		rows = make([]sqlcgen.ListShopsRow, len(newestRows))
+		for i, row := range newestRows {
+			rows[i] = sqlcgen.ListShopsRow(row)
+		}
+	} else {
+		rows, err = r.q.ListShops(ctx, params)
+	}
 	if err != nil {
 		return nil, false, fmt.Errorf("list shops: %w", err)
 	}

@@ -25,7 +25,7 @@ import (
 // 単純な case-fold の部分文字列一致である（メタ文字のセマンティクスは
 // repository の統合テストが扱う）。err を設定するとすべての操作が失敗する
 // （500 の経路）。listCalls は ListShops が呼ばれた回数、lastLimit /
-// lastOffset は最後の呼び出しの引数である（handler が usecase に渡した値と、
+// lastOffset / lastSort は最後の呼び出しの引数である（handler が usecase に渡した値と、
 // 呼ばれなかったことの検証用）。
 type shopStoreFake struct {
 	shops                 []domain.ShopDetail // Reviews は未設定。下の reviews 経由で提供される
@@ -33,6 +33,7 @@ type shopStoreFake struct {
 	err                   error
 	listCalls             int
 	lastLimit, lastOffset int32
+	lastSort              usecase.ShopSort
 	// summaries は shop の id ごとの、保存された集計(query が返す)。ない shop は「まだ集計されていない」(空の集計)になる。
 	summaries map[string]domain.ShopSummary
 }
@@ -42,9 +43,10 @@ var (
 	_ domain.ShopRepository = (*shopStoreFake)(nil)
 )
 
-func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error) {
+func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, keyword string, sortOrder usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error) {
 	f.listCalls++
 	f.lastLimit, f.lastOffset = limit, offset
+	f.lastSort = sortOrder
 	if f.err != nil {
 		return nil, false, f.err
 	}
@@ -221,6 +223,35 @@ func TestListShopsParams(t *testing.T) {
 			}
 			if got := rec.Body.String(); got != tt.wantBody {
 				t.Errorf("body = %s, want %s", got, tt.wantBody)
+			}
+		})
+	}
+}
+
+// TestListShopsSort は、sort クエリパラメータが usecase.Shops.List にそのまま渡ることを
+// 確かめる（並び替えの SQL 自体は internal/adapter/query の DB 統合テストが扱う。ここは配線
+// だけを確かめる）。sort=newest は usecase.ShopSortNewest になり、省略や未知の値は、すべて
+// ゼロ値（既定の店名順）に fallback する（422 にはしない）。
+func TestListShopsSort(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		want  usecase.ShopSort
+	}{
+		{name: "sort を省略すると既定値(空文字)が渡る", query: "", want: ""},
+		{name: "sort=newest は usecase.ShopSortNewest として渡る", query: "?sort=newest", want: usecase.ShopSortNewest},
+		{name: "未知の sort の値も、そのまま usecase まで渡る(ShopSortNewest と一致しないので、query 側が既定の店名順として扱う)", query: "?sort=bogus", want: usecase.ShopSort("bogus")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := seedShops(uid.N(1))
+			router, _, _, _ := newShopsRouter(t, repo)
+			rec := do(router, http.MethodGet, "/shops"+tt.query, "", "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
+			}
+			if repo.lastSort != tt.want {
+				t.Errorf("lastSort = %q, want %q", repo.lastSort, tt.want)
 			}
 		})
 	}

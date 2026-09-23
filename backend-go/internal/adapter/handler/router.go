@@ -85,6 +85,8 @@ func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *u
 			methodMiddleware: map[string]func(http.Handler) http.Handler{http.MethodPost: RequireAuth(auth)},
 		},
 		{path: "/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodGet: handleGetShop(shops)}, middleware: OptionalAuth(auth)},
+		// バーガーのランキング一覧は viewer の概念がなく、常に匿名と同じ扱いなので middleware を付けない。
+		{path: "/burgers", methods: map[string]http.HandlerFunc{http.MethodGet: handleListBurgers(burgers)}},
 		{path: "/burgers/{id}", methods: map[string]http.HandlerFunc{http.MethodGet: handleGetBurger(burgers)}, middleware: OptionalAuth(auth)},
 		// review のフィードと詳細は匿名でも使える。ログインが必要なのは
 		// 書き込み（POST/PUT/DELETE）だけである。

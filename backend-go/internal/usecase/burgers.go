@@ -7,7 +7,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// BurgerQuery は burger 詳細向けの consumer 側の読み取りの契約である。読み取り専用。
+// BurgerQuery は burger 向けの consumer 側の読み取りの契約である。読み取り専用。
 type BurgerQuery interface {
 	// GetBurgerWithStats は burger 1 件を、保存された統計(まだレビューが1件もなければ nil)とともに返す。
 	// 一致する行がなければ(wrap された)domain.ErrBurgerNotFound を返す。
@@ -15,9 +15,16 @@ type BurgerQuery interface {
 	// ListBurgerShops は、burger に紐づく shop(shops_burgers 経由)を、作成の古い順ですべて返す
 	// (viewer ごとの可視性フィルタは usecase が行う)。
 	ListBurgerShops(ctx context.Context, burgerID string) ([]domain.Shop, error)
+	// ListBurgerRankings は、review が 1 件以上ある(burger_stats を持つ)burger を、
+	// weighted_score の降順(同値は id の昇順)で返す。review が無い burger は対象外。
+	// 2 つ目の戻り値は、offset+limit 件より後ろにも一致する burger があるか(has_more)で、
+	// 実装は limit+1 件を取得して判定する。
+	ListBurgerRankings(ctx context.Context, limit, offset int32) ([]domain.BurgerRanking, bool, error)
 }
 
-// Burgers は burger 詳細の use case を実装する。読み取りは query だけを通す。
+// Burgers は burger の use case を実装する: 1 件の詳細(GET /burgers/{id})と、weighted_score
+// 順のランキング一覧(GET /burgers)。読み取りは query だけを通す(repository には依存しない。
+// burger は非ゴールにより独自の書き込みアグリゲートを持たない)。
 type Burgers struct {
 	query BurgerQuery
 }
@@ -48,4 +55,15 @@ func (b *Burgers) Get(ctx context.Context, viewer *domain.User, id string) (doma
 	}
 	detail.Shops = visible
 	return detail, nil
+}
+
+// List は、weighted_score の高い順に burger を返す。範囲外の page/perPage は clampPage の
+// 規則で補正される。2 つ目の戻り値は、次のページがあるか(has_more)である。
+func (b *Burgers) List(ctx context.Context, page, perPage int) ([]domain.BurgerRanking, bool, error) {
+	limit, offset := clampPage(page, perPage)
+	rankings, hasMore, err := b.query.ListBurgerRankings(ctx, limit, offset)
+	if err != nil {
+		return nil, false, fmt.Errorf("list burger rankings: %w", err)
+	}
+	return rankings, hasMore, nil
 }

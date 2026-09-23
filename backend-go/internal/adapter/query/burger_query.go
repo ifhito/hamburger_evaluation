@@ -64,3 +64,30 @@ func (r *BurgerQuery) ListBurgerShops(ctx context.Context, burgerID string) ([]d
 	}
 	return shops, nil
 }
+
+// ListBurgerRankings は、weighted_score の降順(同値は id の昇順)で burger を返す。
+// review が無い(burger_stats がない、または削除で 0 件に戻った)burger と、active な shop に
+// 1 つも紐づかない burger は対象外(SQL 側の JOIN と review_count > 0 の条件で除外する)。
+// 次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて返す。
+func (r *BurgerQuery) ListBurgerRankings(ctx context.Context, limit, offset int32) ([]domain.BurgerRanking, bool, error) {
+	rows, err := r.q.ListBurgerRankings(ctx, sqlcgen.ListBurgerRankingsParams{
+		PageLimit:  limit + 1,
+		PageOffset: offset,
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("list burger rankings: %w", err)
+	}
+	rows, hasMore := trimPage(rows, limit)
+	rankings := make([]domain.BurgerRanking, 0, len(rows))
+	for _, row := range rows {
+		rankings = append(rankings, domain.BurgerRanking{
+			ID:            row.ID,
+			Name:          row.Name,
+			Shop:          domain.ShopRef{ID: row.ShopID, Name: row.ShopName},
+			AverageRating: row.AverageRating,
+			WeightedScore: row.WeightedScore,
+			ReviewCount:   row.ReviewCount,
+		})
+	}
+	return rankings, hasMore, nil
+}

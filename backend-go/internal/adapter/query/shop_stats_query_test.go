@@ -119,7 +119,7 @@ func TestShopQueryReadsStoredStats(t *testing.T) {
 
 	listings := func(t *testing.T) map[string]domain.ShopSummary {
 		t.Helper()
-		got, _, err := shopQuery.ListShops(ctx, anon, "", 100, 0)
+		got, _, err := shopQuery.ListShops(ctx, anon, "", "", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -172,7 +172,7 @@ func TestShopQueryReadsStoredStats(t *testing.T) {
 		countQueries := func(keyword string, perPage int) (queries, shops int) {
 			n := 0
 			shopsUC := usecase.NewShops(query.NewShopQuery(countingDB{conn: conn, n: &n}), domain.NewShops(nil), storage.NewDisk("", "/photos"))
-			list, _, err := shopsUC.List(ctx, nil, keyword, 1, perPage)
+			list, _, err := shopsUC.List(ctx, nil, keyword, "", 1, perPage)
 			if err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}

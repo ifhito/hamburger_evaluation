@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"context"
 	"errors"
+	"io"
 	"reflect"
 	"testing"
 
@@ -16,6 +17,11 @@ type fakeBurgerQuery struct {
 	detail    domain.BurgerDetail
 	detailErr error
 	shops     []domain.Shop
+
+	rankings              []domain.BurgerRanking
+	rankingsHasMore       bool
+	rankingsErr           error
+	lastLimit, lastOffset int32
 }
 
 func (f *fakeBurgerQuery) GetBurgerWithStats(context.Context, string) (domain.BurgerDetail, error) {
@@ -27,6 +33,14 @@ func (f *fakeBurgerQuery) GetBurgerWithStats(context.Context, string) (domain.Bu
 
 func (f *fakeBurgerQuery) ListBurgerShops(context.Context, string) ([]domain.Shop, error) {
 	return f.shops, nil
+}
+
+func (f *fakeBurgerQuery) ListBurgerRankings(_ context.Context, limit, offset int32) ([]domain.BurgerRanking, bool, error) {
+	f.lastLimit, f.lastOffset = limit, offset
+	if f.rankingsErr != nil {
+		return nil, false, f.rankingsErr
+	}
+	return f.rankings, f.rankingsHasMore, nil
 }
 
 var _ usecase.BurgerQuery = (*fakeBurgerQuery)(nil)
@@ -94,5 +108,40 @@ func TestBurgersGetShopVisibility(t *testing.T) {
 				t.Errorf("Shops = %+v, want %+v", detail.Shops, tt.want)
 			}
 		})
+	}
+}
+
+// TestBurgersListPagination は、範囲外の page/perPage が clampPage の規則で補正されて
+// query に渡ることを確かめる(usecase.Shops の TestShopsListPagination と同じ形)。
+func TestBurgersListPagination(t *testing.T) {
+	tests := []struct {
+		name                  string
+		page, perPage         int
+		wantLimit, wantOffset int32
+	}{
+		{name: "既定値の範囲内はそのまま", page: 2, perPage: 10, wantLimit: 10, wantOffset: 10},
+		{name: "page が 1 未満なら 1 に補正", page: 0, perPage: 10, wantLimit: 10, wantOffset: 0},
+		{name: "perPage が 1 未満なら既定の 20 に補正", page: 1, perPage: 0, wantLimit: 20, wantOffset: 0},
+		{name: "perPage が上限を超えたら 100 に補正", page: 1, perPage: 500, wantLimit: 100, wantOffset: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			query := &fakeBurgerQuery{}
+			if _, _, err := usecase.NewBurgers(query).List(context.Background(), tt.page, tt.perPage); err != nil {
+				t.Fatalf("List returned error: %v", err)
+			}
+			if query.lastLimit != tt.wantLimit || query.lastOffset != tt.wantOffset {
+				t.Errorf("limit/offset = %d/%d, want %d/%d", query.lastLimit, query.lastOffset, tt.wantLimit, tt.wantOffset)
+			}
+		})
+	}
+}
+
+// TestBurgersListError は、query の失敗が wrap されてそのまま伝播することを確かめる。
+func TestBurgersListError(t *testing.T) {
+	query := &fakeBurgerQuery{rankingsErr: io.ErrUnexpectedEOF}
+	_, _, err := usecase.NewBurgers(query).List(context.Background(), 1, 20)
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("error = %v, want wrapping %v", err, io.ErrUnexpectedEOF)
 	}
 }

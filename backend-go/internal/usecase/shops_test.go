@@ -11,23 +11,24 @@ import (
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 // fakeShopQuery は、手書きの usecase.ShopQuery の test double である。
 // 未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeShopQuery struct {
-	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error)
+	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, sort usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error)
 	getShopWithCreator     func(ctx context.Context, id string) (domain.ShopDetail, error)
 	listShopReviews        func(ctx context.Context, shopID string) ([]domain.ShopReview, error)
 	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
 }
 
-func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, limit, offset int32) ([]domain.ShopListing, bool, error) {
+func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, sort usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error) {
 	if f.listShops == nil {
 		panic("unexpected ListShops call")
 	}
-	return f.listShops(ctx, vis, keyword, limit, offset)
+	return f.listShops(ctx, vis, keyword, sort, limit, offset)
 }
 
 func (f *fakeShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error) {
@@ -103,12 +104,12 @@ func TestShopsListPagination(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotLimit, gotOffset int32
 			query := &fakeShopQuery{
-				listShops: func(_ context.Context, _ domain.ShopVisibility, _ string, limit, offset int32) ([]domain.ShopListing, bool, error) {
+				listShops: func(_ context.Context, _ domain.ShopVisibility, _ string, _ usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error) {
 					gotLimit, gotOffset = limit, offset
 					return []domain.ShopListing{}, false, nil
 				},
 			}
-			if _, _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", tt.page, tt.perPage); err != nil {
+			if _, _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", "", tt.page, tt.perPage); err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}
 			if gotLimit != tt.wantLimit || gotOffset != tt.wantOffset {
@@ -124,12 +125,12 @@ func TestShopsListVisibilityDescriptor(t *testing.T) {
 	admin := domain.User{ID: uid.N(5), Admin: true}
 	var got domain.ShopVisibility
 	query := &fakeShopQuery{
-		listShops: func(_ context.Context, vis domain.ShopVisibility, _ string, _, _ int32) ([]domain.ShopListing, bool, error) {
+		listShops: func(_ context.Context, vis domain.ShopVisibility, _ string, _ usecase.ShopSort, _, _ int32) ([]domain.ShopListing, bool, error) {
 			got = vis
 			return nil, false, nil
 		},
 	}
-	if _, _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), &admin, "burger", 1, 20); err != nil {
+	if _, _, err := newShops(query, &fakeShopRepo{}).List(context.Background(), &admin, "burger", "", 1, 20); err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
 	if !got.ViewAll || got.ViewerID != nil {
@@ -500,11 +501,11 @@ func TestShopsGetCanReview(t *testing.T) {
 func TestShopsListHasMore(t *testing.T) {
 	for _, want := range []bool{true, false} {
 		query := &fakeShopQuery{
-			listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.ShopListing, bool, error) {
+			listShops: func(context.Context, domain.ShopVisibility, string, usecase.ShopSort, int32, int32) ([]domain.ShopListing, bool, error) {
 				return []domain.ShopListing{{Shop: domain.Shop{ID: uid.N(1)}}}, want, nil
 			},
 		}
-		_, got, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", 1, 20)
+		_, got, err := newShops(query, &fakeShopRepo{}).List(context.Background(), nil, "", "", 1, 20)
 		if err != nil {
 			t.Fatalf("List returned error: %v", err)
 		}
@@ -514,11 +515,11 @@ func TestShopsListHasMore(t *testing.T) {
 	}
 
 	failing := &fakeShopQuery{
-		listShops: func(context.Context, domain.ShopVisibility, string, int32, int32) ([]domain.ShopListing, bool, error) {
+		listShops: func(context.Context, domain.ShopVisibility, string, usecase.ShopSort, int32, int32) ([]domain.ShopListing, bool, error) {
 			return nil, true, io.ErrUnexpectedEOF
 		},
 	}
-	if _, hasMore, err := newShops(failing, &fakeShopRepo{}).List(context.Background(), nil, "", 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) || hasMore {
+	if _, hasMore, err := newShops(failing, &fakeShopRepo{}).List(context.Background(), nil, "", "", 1, 20); !errors.Is(err, io.ErrUnexpectedEOF) || hasMore {
 		t.Errorf("List = (hasMore %v, err %v), want (false, %v)", hasMore, err, io.ErrUnexpectedEOF)
 	}
 }
