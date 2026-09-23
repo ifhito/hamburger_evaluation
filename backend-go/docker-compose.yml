@@ -1,6 +1,8 @@
 services:
   api-go:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     # ビルドしてから exec することで、コンパイルされたバイナリが PID 1 になり、
     # `docker stop` からの SIGTERM を受け取る（go run はそれを API プロセスに
     # 転送しない）。
@@ -92,7 +94,9 @@ services:
   # DATABASE_URL=... docker compose run --rm seed で、別のデータベースを
   # 対象にできる。
   seed:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     profiles: ["tools"]
     command: ["go", "run", "./cmd/seed"]
     volumes:

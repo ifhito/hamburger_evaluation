@@ -549,6 +549,19 @@ pnpm run type-check
 pnpm run test
 ```
 
+## 本番へのデプロイ (CD)
+
+main に入った変更は、GitHub Actions が自動で本番へ配る。手順・必要な secrets・ロールバックは `docs/production-deploy.md` にある。
+
+| ワークフロー | 契機 | 配る先 |
+|---|---|---|
+| `.github/workflows/deploy-frontend.yml` | main の `frontend/**` | Cloudflare Workers |
+| `.github/workflows/deploy-api.yml` | main の `backend-go/**` | Cloud Run (東京)。先に Neon へマイグレーションを当てる |
+
+- `backend-go/Dockerfile` は**本番用**(多段ビルド + distroless)。開発の compose が使うのは `Dockerfile.dev` である。
+- `frontend/wrangler.toml` の `run_worker_first` と、`frontend/worker/index.js` の `redirect: "manual"` は、どちらもページ遷移を伴う `/api/*`(Google ログインなど)が壊れるのを止めている。消さない。
+- 本番の環境変数は Cloud Run 側に置く。CD はイメージだけを入れ替え、環境変数に触れない。
+
 ## Git と PR のワークフロー
 
 - 変更の前後に `git status --short --branch` を確認する。

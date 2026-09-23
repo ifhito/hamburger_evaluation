@@ -1,0 +1,94 @@
+name: Deploy API
+
+# main に入った backend-go の変更を、本番(Cloud Run。東京)へ配る。
+# 先にマイグレーションを当ててから、新しいイメージに入れ替える。
+# 構成と、必要な secrets は docs/production-deploy.md にある。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend-go/**"
+      - ".github/workflows/deploy-api.yml"
+  # 手動でも配れるようにする(ロールバックや、基盤側だけ直したときのため)。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Workload Identity Federation で GCP に入るのに要る(鍵のファイルを持たない)。
+  id-token: write
+
+# 配信先は 1 つなので、同時に 2 つ走らせない。マイグレーションが並ぶのを防ぐ意味もある。
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: マイグレーションを当てる
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # 手元・CI と同じ migrate を使う(backend-go/docker-compose.yml と同じ版)。
+      # 接続先は、pooler ではなく直結の URL にする(pooler 経由だと
+      # "unnamed prepared statement does not exist" で落ちることがある)。
+      - name: migrate up
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${DATABASE_URL}" || { echo "PROD_DATABASE_URL が未設定"; exit 1; }
+          docker run --rm \
+            -v "${PWD}/backend-go/db/migrations:/migrations:ro" \
+            migrate/migrate:v4.18.1 \
+            -path=/migrations -database "${DATABASE_URL}" up
+
+  deploy:
+    name: Cloud Run へ配る
+    needs: migrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # backend-go/Dockerfile(本番用の多段ビルド)を Cloud Build が使う。
+      # 環境変数は Cloud Run 側に設定済みのものを引き継ぐ(ここでは触らない。
+      # 触ると、GitHub に本番の秘密を全部置くことになる)。
+      - name: gcloud run deploy
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          REGION: ${{ vars.CLOUD_RUN_REGION }}
+        run: |
+          set -euo pipefail
+          gcloud run deploy "${SERVICE:-burger-stack}" \
+            --source backend-go \
+            --region "${REGION:-asia-northeast1}" \
+            --project "${GCP_PROJECT}" \
+            --quiet
+
+      # 配信の確認。200 だけでは足りない(基盤の仮ページも 200 を返す)。
+      # DB につながっていることまで見る。
+      - name: 動いていることを確かめる
+        env:
+          API_ORIGIN: ${{ vars.API_ORIGIN }}
+        run: |
+          set -euo pipefail
+          origin="${API_ORIGIN:-https://burger-stack-421794940461.asia-northeast1.run.app}"
+
+          echo "== ${origin}/up が DB まで通ること"
+          ct=$(curl -fsS -o /tmp/up.json -w '%{content_type}' "${origin}/up")
+          echo "content-type: ${ct}"
+          case "${ct}" in application/json*) ;; *) echo "API ではないものが返っている"; exit 1 ;; esac
+          grep -q '"status":"ok"' /tmp/up.json
+
+          echo "== ${origin}/shops が一覧を返すこと"
+          curl -fsS -o /dev/null -w '%{http_code}\n' "${origin}/shops" | grep -q '^200$'

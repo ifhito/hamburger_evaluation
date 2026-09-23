@@ -1,0 +1,83 @@
+name: Deploy Frontend
+
+# main に入った frontend の変更を、本番(Cloudflare Workers)へ配る。
+# 検査(ci.yml)は PR で通っている前提。ここでは本番ビルドが通ることを改めて
+# 確かめてから配る(ビルドが落ちれば、配信物に触らずに終わる)。
+# 構成と、必要な secrets は docs/production-deploy.md にある。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+  # 手動でも配れるようにする(ロールバックや、設定だけ変えたときのため)。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 配信先は 1 つなので、同時に 2 つ走らせない。走っている実行は止めない
+# (途中で止めると、どちらが配信されたか分からなくなる)。
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Cloudflare Workers へ配る
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: 依存を入れる
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: 本番ビルド
+        working-directory: frontend
+        run: pnpm run build
+
+      # wrangler は devDependency に入れていないので、版を固定して実行する。
+      - name: wrangler で配る
+        working-directory: frontend
+        run: npx --yes wrangler@4.136.3 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # 配信の確認。HTTP の 200 だけでは足りない。基盤の仮ページも 200 を返すし、
+      # /api/* の転送が壊れていても index.html が 200 で返る(検証で 2 回とも
+      # これに引っかかった)。中身の種類まで見る。
+      - name: 配信されたことを確かめる
+        env:
+          ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
+        run: |
+          set -euo pipefail
+          origin="${ORIGIN:-https://hamburger-frontend.hito01010101.workers.dev}"
+
+          echo "== ${origin}/ が HTML を返すこと"
+          curl -fsS -o /dev/null -w '%{http_code} %{content_type}\n' "${origin}/" | grep -q '^200 text/html'
+
+          echo "== ${origin}/api/meta が API の JSON を返すこと(転送が生きている)"
+          ct=$(curl -fsS -o /tmp/meta.json -w '%{content_type}' "${origin}/api/meta")
+          echo "content-type: ${ct}"
+          case "${ct}" in application/json*) ;; *) echo "API への転送が壊れている"; exit 1 ;; esac
+          grep -q '"rating"' /tmp/meta.json
+
+          echo "== ページ遷移でも /api/* が Worker に届くこと(Google ログインの経路)"
+          code=$(curl -fsS -o /dev/null -w '%{http_code}' \
+            -H 'Sec-Fetch-Mode: navigate' -H 'Sec-Fetch-Dest: document' -H 'Accept: text/html' \
+            "${origin}/api/auth/google/start")
+          echo "google/start: ${code}"
+          [ "${code}" = "302" ]

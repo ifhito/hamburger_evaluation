@@ -1,0 +1,10 @@
+# ビルドに要らないものを除く。context が小さいほどビルドが速い。
+.git
+.env
+.env.*
+!.env.example
+docker-compose.yml
+docker-compose.override.yml
+docker-compose.override.yml.example
+Dockerfile
+Dockerfile.dev
