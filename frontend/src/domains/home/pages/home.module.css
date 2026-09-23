@@ -78,11 +78,7 @@
   composes: count from '../../reviews/pages/reviewDetail.module.css';
 }
 
-.rankGrid {
-  composes: grid from '../../shops/pages/shopList.module.css';
-}
-
-.shopGrid {
+.itemGrid {
   composes: grid from '../../shops/pages/shopList.module.css';
 }
 

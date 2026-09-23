@@ -262,6 +262,7 @@ const ja = {
     ranking: {
       heading: "バーガーランキング",
       subheading: "加重スコアの高い順",
+      rankAria: "{{rank}} 位",
       loadError: "バーガーランキングを読み込めませんでした。",
       emptyTitle: "まだランキングがありません",
       emptyDescription: "レビューが集まると、ここにランキングが表示されます。",

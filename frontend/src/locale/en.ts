@@ -275,6 +275,7 @@ const en = {
     ranking: {
       heading: "Burger ranking",
       subheading: "By weighted score",
+      rankAria: "Rank {{rank}}",
       loadError: "Failed to load the burger ranking.",
       emptyTitle: "No ranking yet",
       emptyDescription: "Once reviews come in, burgers will be ranked here.",

@@ -38,7 +38,7 @@ export default function HomePage() {
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     const trimmed = keyword.trim();
-    void navigate(trimmed ? `/shops?keyword=${encodeURIComponent(trimmed)}` : "/shops");
+    void navigate(trimmed ? `/shops?${new URLSearchParams({ keyword: trimmed })}` : "/shops");
   };
 
   return (
@@ -75,7 +75,7 @@ export default function HomePage() {
           <EmptyState title={t("home.ranking.emptyTitle")} description={t("home.ranking.emptyDescription")} />
         )}
         {topRanking && topRanking.length > 0 && (
-          <div className={styles.rankGrid}>
+          <div className={styles.itemGrid} data-testid="ranking-grid">
             {topRanking.map((burger, i) => (
               <BurgerRankingCard key={burger.id} burger={burger} rank={i + 1} ratingMax={ratingRange?.max} />
             ))}
@@ -92,7 +92,7 @@ export default function HomePage() {
         {reviewsError && <Alert message={t("reviews.list.loadError")} />}
         {latestReviews && latestReviews.length === 0 && <EmptyState />}
         {latestReviews && latestReviews.length > 0 && (
-          <div className={styles.reviewGrid}>
+          <div className={styles.reviewGrid} data-testid="reviews-grid">
             {latestReviews.map((review) => (
               <ReviewListCard key={review.id} review={review} ratingMax={ratingRange?.max} />
             ))}
@@ -111,9 +111,9 @@ export default function HomePage() {
           <EmptyState title={t("home.shops.emptyTitle")} description={t("home.shops.emptyDescription")} />
         )}
         {newShops && newShops.length > 0 && (
-          <div className={styles.shopGrid}>
+          <div className={styles.itemGrid} data-testid="shops-grid">
             {newShops.map((shop) => (
-              <ShopPosterCard key={shop.id} shop={shop} ratingMax={ratingRange?.max} />
+              <ShopPosterCard key={shop.id} shop={shop} ratingMax={ratingRange?.max} headingLevel="h3" />
             ))}
           </div>
         )}

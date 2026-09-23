@@ -5,7 +5,7 @@ import { toPage, type Page } from "../../../api/page";
 import { useInfinitePages } from "../../../api/useInfinitePages";
 
 // per_page は送らない(1 ページの件数は backend が決める)
-function buildKey(params: { keyword?: string; sort?: string } | undefined, page: number): string {
+function buildKey(params: { keyword?: string; sort?: "newest" } | undefined, page: number): string {
   const qs = new URLSearchParams();
   if (params?.keyword) qs.set("keyword", params.keyword);
   if (params?.sort) qs.set("sort", params.sort);
@@ -14,12 +14,12 @@ function buildKey(params: { keyword?: string; sort?: string } | undefined, page:
 }
 
 // 次のページがあるかは、前のページの hasMore(backend の X-Has-More)で決め、最終ページなら null を返す
-export function getKey(params: { keyword?: string; sort?: string } | undefined) {
+export function getKey(params: { keyword?: string; sort?: "newest" } | undefined) {
   return (index: number, previous: Page<Shop> | null): string | null =>
     previous && !previous.hasMore ? null : buildKey(params, index + 1);
 }
 
-export function useShops(params?: { keyword?: string; sort?: string }) {
+export function useShops(params?: { keyword?: string; sort?: "newest" }) {
   return useInfinitePages<Shop>(getKey(params), async (url: string) =>
     toPage(await shopApiClient.get<Shop[]>(url)),
   );

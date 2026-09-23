@@ -9,9 +9,18 @@ import styles from "./shopPosterCard.module.css";
 // 写真の下に置く。card.module.css の枠・背景は使わない(デザインに、そのふちがないため)。
 // カード全体を押せるようにする(stretched link)。実際のリンクは店名の 1 つだけにして(読み上げの二重を避ける)、
 // CSS(nameLink::after)で、そのリンクの当たり判定を、カード全体(.poster、position: relative)まで広げる。
-export function ShopPosterCard({ shop, ratingMax }: { shop: Shop; ratingMax: number | undefined }) {
+export function ShopPosterCard({
+  shop,
+  ratingMax,
+  headingLevel = "h2",
+}: {
+  shop: Shop;
+  ratingMax: number | undefined;
+  headingLevel?: "h2" | "h3";
+}) {
   const { t } = useTranslation();
   const to = `/shops/${shop.id}`;
+  const Heading = headingLevel;
   return (
     <article className={styles.poster}>
       <div className={styles.photoWrap}>
@@ -27,11 +36,11 @@ export function ShopPosterCard({ shop, ratingMax }: { shop: Shop; ratingMax: num
         )}
       </div>
       <div className={styles.info}>
-        <h2 className={styles.name}>
+        <Heading className={styles.name}>
           <Link to={to} className={styles.nameLink}>
             {shop.name}
           </Link>
-        </h2>
+        </Heading>
         <p className={styles.meta}>
           {shop.reviewCount > 0 && shop.averageRating !== null ? (
             ratingMax === undefined ? (
