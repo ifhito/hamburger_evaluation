@@ -59,6 +59,8 @@ describe("ReviewDetailPage の状態の表示", () => {
     const page = await show();
     expect(page.querySelector("h1")?.textContent).toBe("Cheeseburger");
     expect(page.textContent).toContain("Test Shop");
+    expect(page.textContent).not.toContain("4.2");
+    expect(page.textContent).not.toContain("5 reviews");
   });
 });
 
