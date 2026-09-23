@@ -77,7 +77,7 @@ func newMailKit(t *testing.T, smtpHost string, smtpPort int) *mailKit {
 	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pool)),
 		unitOfWork, hasher, mailer, codec, usecase.SignupConfig{BaseURL: "https://app.example.com", Now: func() time.Time { return kit.now }})
 	kit.router = handler.NewRouter(pool, usecase.NewAuth(userQuery, hasher, codec, codec), signups,
-		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)),
+		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)), nil,
 		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos")),
 		usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, shopRecalc, hasher), nil, nil, nil)
 	return kit

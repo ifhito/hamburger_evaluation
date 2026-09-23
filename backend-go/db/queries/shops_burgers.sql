@@ -40,3 +40,13 @@ LIMIT 1;
 -- name: DeleteShopBurger :exec
 DELETE FROM shops_burgers
 WHERE shop_id = $1 AND burger_id = $2;
+
+-- name: ListBurgerShops :many
+-- burger に紐づく shop(shops_burgers 経由)を、作成の古い順に返す。viewer ごとの可視性フィルタ
+-- (pending/rejected の扱い)は usecase が domain.ShopVisibility で行うので、ここは shop の全カラムを返す
+-- (ListReviewShops と同じ形)。
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id
+FROM shops_burgers sb
+JOIN shops s ON s.id = sb.shop_id
+WHERE sb.burger_id = $1
+ORDER BY s.created_at, s.id;

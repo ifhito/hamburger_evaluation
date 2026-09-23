@@ -32,9 +32,9 @@ var _ usecase.ReviewQuery = (*ReviewQuery)(nil)
 // かつ author（user）も discard されていない review のうち、burger が少なくとも
 // 1 つの active な shop に紐づいているものに限る。filter で絞り込まれ、その意味は
 // Rails の ReviewQuery に対応する（ただし shop の絞り込みは、対象の shop 自身も
-// active であることを要求する点で Rails より厳しい）。filter.UserID（本 API の
-// 拡張）は、その user が書いた review に絞り込むだけで、上記の公開ルールは
-// 一切迂回しない。author、burger、stats を 1 回のクエリで取得し（N+1 なし）、
+// active であることを要求する点で Rails より厳しい）。filter.UserID・filter.BurgerID（本 API の
+// 拡張）は、それぞれ、その user が書いた review・その burger の review に絞り込むだけで、
+// 上記の公開ルールは一切迂回しない。author、burger、stats を 1 回のクエリで取得し（N+1 なし）、
 // 新しい順（created_at desc、id desc）に並ぶ。
 // keyword は likeEscaper を通して ILIKE パラメータに渡され、SQL に連結される
 // ことはない。指定のない filter は NULL のままである。
@@ -53,6 +53,7 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 	}
 	params.FilterShopID = filter.ShopID
 	params.FilterUserID = filter.UserID
+	params.FilterBurgerID = filter.BurgerID
 	rows, err := r.q.ListPublicReviews(ctx, params)
 	if err != nil {
 		return nil, false, fmt.Errorf("list reviews: %w", err)

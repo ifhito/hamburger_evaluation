@@ -68,6 +68,10 @@ type ReviewListFilter struct {
 	// 現れない。存在しない（または discard 済みの）user の id を指定すると結果は
 	// 空になる。
 	UserID *string
+	// BurgerID は、その burger の review だけを残す（本 API の拡張で、Rails の
+	// ReviewQuery にはない）。UserID と同じ形で AND 結合され、公開ルールは維持される。
+	// 存在しない（または active な shop に紐づかない）burger の id を指定すると結果は空になる。
+	BurgerID *string
 }
 
 // Reviews は review の use case を実装する。公開フィードと詳細、および
