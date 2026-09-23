@@ -55,12 +55,19 @@ describe("ReviewDetailPage の状態の表示", () => {
     expect(page.textContent).toContain("Sold out");
   });
 
-  it("バーガー名・ショップ名・バーガーの平均を出す", async () => {
+  it("バーガー名・ショップ名を出す", async () => {
     const page = await show();
     expect(page.querySelector("h1")?.textContent).toBe("Cheeseburger");
     expect(page.textContent).toContain("Test Shop");
-    expect(page.textContent).toContain("4.2");
-    expect(page.textContent).toContain("5 reviews");
+    expect(page.textContent).not.toContain("4.2");
+    expect(page.textContent).not.toContain("5 reviews");
+  });
+
+  it("バーガー名の見出しは、バーガー詳細へのリンクになる", async () => {
+    const page = await show();
+    const link = page.querySelector("h1 a");
+    expect(link?.textContent).toBe("Cheeseburger");
+    expect(link?.getAttribute("href")).toBe("/burgers/3");
   });
 });
 

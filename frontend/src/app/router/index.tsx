@@ -13,6 +13,7 @@ import ReviewListPage from '../../domains/reviews/pages/ReviewListPage'
 import ReviewDetailPage from '../../domains/reviews/pages/ReviewDetailPage'
 import ReviewNewPage from '../../domains/reviews/pages/ReviewNewPage'
 import ReviewEditPage from '../../domains/reviews/pages/ReviewEditPage'
+import BurgerDetailPage from '../../domains/burgers/pages/BurgerDetailPage'
 import SignupPage from '../../domains/auth/pages/SignupPage'
 import SignupConfirmPage from '../../domains/auth/pages/SignupConfirmPage'
 import GoogleCompletePage from '../../domains/auth/pages/GoogleCompletePage'
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
   { path: '/shops/:id', element: <ShopDetailPage /> },
   { path: '/reviews', element: <ReviewListPage /> },
   { path: '/reviews/:id', element: <ReviewDetailPage /> },
+  { path: '/burgers/:id', element: <BurgerDetailPage /> },
   { path: '/users/:id', element: <UserDetailPage /> },
   // 確認メールのリンクの受け皿(ログイン中でも開ける。成功すると確認したアカウントのログイン状態になる)
   { path: '/signup/confirm', element: <SignupConfirmPage /> },

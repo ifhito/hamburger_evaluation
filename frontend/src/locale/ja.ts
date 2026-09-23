@@ -116,6 +116,11 @@ const ja = {
       },
     },
   },
+  burgers: {
+    detail: {
+      servedAt: "お店:",
+    },
+  },
   reviews: {
     list: {
       title: "レビュー",

@@ -50,6 +50,11 @@ describe("getKey", () => {
     expect(getKey({ userId })(0, null)).toBe(`/reviews?user_id=${userId}&page=1`);
   });
 
+  it("burgerId は snake_case の burger_id としてキーに入る", () => {
+    const burgerId = "1a2b3c4d-5e6f-4a1b-8c2d-9e0f1a2b3c4d";
+    expect(getKey({ burgerId })(0, null)).toBe(`/reviews?burger_id=${burgerId}&page=1`);
+  });
+
   it("空の keyword はキーに含まれない", () => {
     expect(getKey({ keyword: "" })(0, null)).not.toContain("keyword");
   });
