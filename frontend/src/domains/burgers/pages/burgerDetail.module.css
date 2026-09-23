@@ -1,0 +1,37 @@
+.narrow {
+  composes: narrow from '../../reviews/pages/reviewDetail.module.css';
+  font-family: var(--ui-font);
+  color: var(--ui-text);
+}
+
+.titleSection {
+  composes: titleSection from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.name {
+  composes: name from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.shop {
+  composes: shop from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.sectionHead {
+  composes: sectionHead from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.heading {
+  composes: heading from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.count {
+  composes: count from '../../reviews/pages/reviewDetail.module.css';
+}
+
+.grid {
+  composes: grid from '../../reviews/pages/reviewList.module.css';
+}
+
+.loadMore {
+  composes: loadMore from '../../reviews/pages/reviewList.module.css';
+}

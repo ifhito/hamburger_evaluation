@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>トップページ(リデザインのラフ)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-active="">
+<main class="wrap page">
+  <section class="home-hero">
+    <div class="hero-photo" style="--a:#e3c29a;--b:#b98552">
+      <span class="photo-label" data-en="Photo">写真</span>
+      <div class="hero-photo-overlay"></div>
+      <div class="hero-photo-content">
+        <h1 data-en="Find your favorite burger">お気に入りのバーガーを見つけよう</h1>
+        <p class="lead" data-en="Search by shop name, or browse the ranking, latest reviews, and new shops below.">店名で探すか、下のランキング・最新レビュー・新着ショップから見つけてください。</p>
+        <div class="hero-search">
+          <input class="input search" placeholder="店名で探す" data-en-ph="Search by shop name" aria-label="店名で探す">
+          <button class="btn primary" data-en="Search">探す</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="home-section" data-only="default">
+    <div class="section-head"><h2 data-en="Burger ranking">バーガーランキング</h2><span class="count" data-en="By weighted score">加重スコアの高い順</span></div>
+    <div class="grid rank">
+      <article class="rcard rankcard">
+        <div class="rbody">
+          <div class="rrow"><span class="rankno">1</span><span class="rate"><span class="burger" data-size="md" data-score="4.8"></span><b>4.8</b></span></div>
+          <p class="name-sm">テリヤキバーガー</p>
+          <p class="muted">バーガーラボ 中目黒</p>
+          <p class="count" data-en="8 reviews">8 件のレビュー</p>
+        </div>
+      </article>
+      <article class="rcard rankcard">
+        <div class="rbody">
+          <div class="rrow"><span class="rankno">2</span><span class="rate"><span class="burger" data-size="md" data-score="4.7"></span><b>4.7</b></span></div>
+          <p class="name-sm">クラシックチーズバーガー</p>
+          <p class="muted">J.S. BURGERS CAFE 新宿</p>
+          <p class="count" data-en="6 reviews">6 件のレビュー</p>
+        </div>
+      </article>
+      <article class="rcard rankcard">
+        <div class="rbody">
+          <div class="rrow"><span class="rankno">3</span><span class="rate"><span class="burger" data-size="md" data-score="4.5"></span><b>4.5</b></span></div>
+          <p class="name-sm">クラシックバーガー</p>
+          <p class="muted">Shake Shack 渋谷</p>
+          <p class="count" data-en="4 reviews">4 件のレビュー</p>
+        </div>
+      </article>
+      <article class="rcard rankcard">
+        <div class="rbody">
+          <div class="rrow"><span class="rankno">4</span><span class="rate"><span class="burger" data-size="md" data-score="4.3"></span><b>4.3</b></span></div>
+          <p class="name-sm">アボカドバーガー</p>
+          <p class="muted">フレッシュネスバーガー 原宿</p>
+          <p class="count" data-en="5 reviews">5 件のレビュー</p>
+        </div>
+      </article>
+      <article class="rcard rankcard">
+        <div class="rbody">
+          <div class="rrow"><span class="rankno">5</span><span class="rate"><span class="burger" data-size="md" data-score="4.2"></span><b>4.2</b></span></div>
+          <p class="name-sm">チーズバーガー</p>
+          <p class="muted">バーガーラボ 中目黒</p>
+          <p class="count" data-en="3 reviews">3 件のレビュー</p>
+        </div>
+      </article>
+      <article class="rcard rankcard">
+        <div class="rbody">
+          <div class="rrow"><span class="rankno">6</span><span class="rate"><span class="burger" data-size="md" data-score="4.0"></span><b>4.0</b></span></div>
+          <p class="name-sm">グリルチキンバーガー</p>
+          <p class="muted">グリルバーガー 吉祥寺</p>
+          <p class="count" data-en="2 reviews">2 件のレビュー</p>
+        </div>
+      </article>
+    </div>
+  </section>
+  <section class="home-section" data-only="empty">
+    <div class="section-head"><h2 data-en="Burger ranking">バーガーランキング</h2></div>
+    <div class="panel">
+      <span class="burger" data-size="lg" data-score="0" data-decor></span>
+      <h2 class="state-title" data-en="No ranking yet">まだランキングがありません</h2>
+      <p class="state-sub" data-en="Once reviews come in, burgers will be ranked here.">レビューが集まると、ここにランキングが表示されます。</p>
+    </div>
+  </section>
+
+  <section class="home-section" data-only="default">
+    <div class="section-head"><h2 data-en="Latest reviews">最新レビュー</h2><span class="count" data-en="Newest first">新しい順</span></div>
+    <div class="grid reviews feed">
+      <article class="rcard">
+        <div class="photo rphoto" style="--a:#e3c29a;--b:#b98552"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="rbody">
+          <div class="rrow"><span class="rate"><span class="burger" data-size="md" data-score="5"></span><b>5</b></span><time data-en="Sep 22, 2026">2026年9月22日</time></div>
+          <p class="comment">また絶対行きたいです。</p>
+          <p class="target"><b>テリヤキバーガー</b> <span class="muted">· バーガーラボ 中目黒</span></p>
+          <div class="foot"><span>charlie</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div>
+        </div>
+      </article>
+      <article class="rcard">
+        <div class="photo rphoto" style="--a:#d6b08a;--b:#a5714a"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="rbody">
+          <div class="rrow"><span class="rate"><span class="burger" data-size="md" data-score="4"></span><b>4</b></span><time data-en="Sep 21, 2026">2026年9月21日</time></div>
+          <p class="comment">バンズがふわふわで美味しかった。</p>
+          <p class="target"><b>クラシックバーガー</b> <span class="muted">· Shake Shack 渋谷</span></p>
+          <div class="foot"><span>bob</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div>
+        </div>
+      </article>
+      <article class="rcard">
+        <div class="photo rphoto none"><span class="photo-label" data-en="No photo">写真なし</span></div>
+        <div class="rbody">
+          <div class="rrow"><span class="rate"><span class="burger" data-size="md" data-score="4"></span><b>4</b></span><time data-en="Sep 21, 2026">2026年9月21日</time></div>
+          <p class="comment">チーズの量がちょうどよかった。</p>
+          <p class="target"><b>クラシックチーズバーガー</b> <span class="muted">· J.S. BURGERS CAFE 新宿</span></p>
+          <div class="foot"><span>alice</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div>
+        </div>
+      </article>
+      <article class="rcard">
+        <div class="photo rphoto" style="--a:#c9d3b0;--b:#8fa06b"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="rbody">
+          <div class="rrow"><span class="rate"><span class="burger" data-size="md" data-score="3"></span><b>3</b></span><time data-en="Sep 20, 2026">2026年9月20日</time></div>
+          <p class="comment">ちょっとしょっぱかったけど美味しい。</p>
+          <p class="target"><b>アボカドバーガー</b> <span class="muted">· フレッシュネスバーガー 原宿</span></p>
+          <div class="foot"><span>bob</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div>
+        </div>
+      </article>
+      <article class="rcard">
+        <div class="photo rphoto" style="--a:#ecd08f;--b:#c4993a"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="rbody">
+          <div class="rrow"><span class="rate"><span class="burger" data-size="md" data-score="5"></span><b>5</b></span><time data-en="Sep 20, 2026">2026年9月20日</time></div>
+          <p class="comment">ボリューム満点でコスパ良し。</p>
+          <p class="target"><b>チーズバーガー</b> <span class="muted">· バーガーラボ 中目黒</span></p>
+          <div class="foot"><span>bob</span><a class="more" href="#" data-en="Read more →">詳しく見る →</a></div>
+        </div>
+      </article>
+    </div>
+  </section>
+  <section class="home-section" data-only="empty">
+    <div class="section-head"><h2 data-en="Latest reviews">最新レビュー</h2></div>
+    <div class="panel">
+      <span class="burger" data-size="lg" data-score="0" data-decor></span>
+      <h2 class="state-title" data-en="Nobody's eaten here yet">まだ誰も食べていません</h2>
+      <p class="state-sub" data-en="Why not write the first review?">最初のレビューを書いてみませんか?</p>
+    </div>
+  </section>
+
+  <section class="home-section" data-only="default">
+    <div class="section-head"><h2 data-en="New shops">新着ショップ</h2><span class="count" data-en="Newest first">新しい順</span></div>
+    <div class="grid shops">
+      <article class="poster">
+        <div class="photo pphoto" style="--a:#e3c29a;--b:#b98552"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="pinfo"><h2 class="name">J.S. BURGERS CAFE 新宿</h2><p class="meta"><span class="burger" data-size="md" data-score="4.5"></span><b>4.5</b><span data-en="2 reviews">2 件のレビュー</span></p></div>
+      </article>
+      <article class="poster">
+        <div class="photo pphoto" style="--a:#d6b08a;--b:#a5714a"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="pinfo"><h2 class="name">Shake Shack 渋谷</h2><p class="meta"><span class="burger" data-size="md" data-score="4.2"></span><b>4.2</b><span data-en="3 reviews">3 件のレビュー</span></p></div>
+      </article>
+      <article class="poster">
+        <div class="photo pphoto" style="--a:#c9d3b0;--b:#8fa06b"><span class="photo-label" data-en="Photo">写真</span><span class="chip"><span data-en="Pending review">審査待ち</span></span></div>
+        <div class="pinfo"><h2 class="name">バーガースタンド 下北沢</h2><p class="meta"><span class="burger" data-size="md" data-score="0" data-decor></span><span data-en="No reviews yet">まだレビューがありません</span></p></div>
+      </article>
+      <article class="poster">
+        <div class="photo pphoto" style="--a:#e8b49b;--b:#bd7150"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="pinfo"><h2 class="name">フレッシュネスバーガー 原宿</h2><p class="meta"><span class="burger" data-size="md" data-score="3.8"></span><b>3.8</b><span data-en="2 reviews">2 件のレビュー</span></p></div>
+      </article>
+      <article class="poster">
+        <div class="photo pphoto" style="--a:#ecd08f;--b:#c4993a"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="pinfo"><h2 class="name">バーガーラボ 中目黒</h2><p class="meta"><span class="burger" data-size="md" data-score="4.7"></span><b>4.7</b><span data-en="5 reviews">5 件のレビュー</span></p></div>
+      </article>
+      <article class="poster">
+        <div class="photo pphoto" style="--a:#d6c3bc;--b:#a48782"><span class="photo-label" data-en="Photo">写真</span></div>
+        <div class="pinfo"><h2 class="name">グリルバーガー 吉祥寺</h2><p class="meta"><span class="burger" data-size="md" data-score="4.0"></span><b>4.0</b><span data-en="1 review">1 件のレビュー</span></p></div>
+      </article>
+    </div>
+  </section>
+  <section class="home-section" data-only="empty">
+    <div class="section-head"><h2 data-en="New shops">新着ショップ</h2></div>
+    <div class="panel">
+      <span class="burger" data-size="lg" data-score="0" data-decor></span>
+      <h2 class="state-title" data-en="No shops yet">まだショップがありません</h2>
+      <p class="state-sub" data-en="Why not add the first shop?">最初のショップを追加してみませんか?</p>
+    </div>
+  </section>
+
+  <aside class="memo"><b>実装メモ</b><ul><li>・検索のヒーローは、いまの <code>GET /shops</code> の店名検索を使う想定(見本)。送信すると、絞り込んだショップ一覧(<code>/shops</code>)に移動する。バーガー名検索は、issue #184 の未解決の問い(まず店名だけで作る)。</li><li>・バーガーランキングは、新設の <code>GET /burgers</code>(issue #183)を、加重スコアの高い順に数件(見本は 6 件)取得して並べる。「もっと見る」導線は、専用の一覧ページがまだ無いため置かない。順位の数字(バッジ)は、<b>このトップページのランキングだけ</b>の見せ方。同じカード(<code>rcard</code>)の見た目を他の場所で使い回すときは、数字を出さない。</li><li>・最新レビューは、既存の <code>GET /reviews</code>(<code>created_at</code> 降順が既定)をそのまま使う。</li><li>・新着ショップは、新設の <code>GET /shops?sort=newest</code>(issue #183)を使う。指定しない <code>GET /shops</code> の既定(店名順)は変えない。</li><li>・各セクションは、0件のときに空の状態を出す(<code>states.html</code> と同じ見た目)。読み込み中は、<code>states.html</code> の「読み込み中」の見本(水位が動くバーガー+骨組み)に準じる想定(この見本には含めていない)。</li><li>・見出し(「バーガーランキング」「最新レビュー」「新着ショップ」)の文言は、まだ決まっていない案。実装時に調整してよい。</li><li>・ヒーローは、大きな写真の背景に、見出し・説明・検索欄を重ねる案(実際の写真が無いため、ほかの画面と同じ「写真なし」のプレースホルダー(グラデーション+「写真」の文字)を、ヒーロー用に大きくしたもの)。</li></ul></aside>
+</main>
+<script src="rating-icons.js"></script>
+<script src="mock.js"></script>
+</body>
+</html>

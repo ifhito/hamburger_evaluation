@@ -3,6 +3,7 @@ const en = {
     brand: "BurgerStack",
     shops: "Shops",
     reviews: "Reviews",
+    burgers: "Burgers",
     signout: "Sign out",
     signin: "Sign in",
     signup: "Sign up",
@@ -126,6 +127,16 @@ const en = {
       },
     },
   },
+  burgers: {
+    list: {
+      title: "Burgers",
+      loadError: "Failed to load burgers.",
+      loadMore: "Load more",
+    },
+    detail: {
+      servedAt: "Served at:",
+    },
+  },
   reviews: {
     list: {
       title: "Reviews",
@@ -204,7 +215,8 @@ const en = {
       copyLinkManually: "Copying failed. Select the link below and copy it.",
       reviewsHeading: "Reviews",
       noReviews: "No reviews yet.",
-      viewLink: "View \u2192",
+      reviewAriaLabel: "{{burger}} review, posted {{date}}",
+      reviewAriaLabelNoBurger: "Review posted {{date}}",
       newestFirst: "Newest first",
       noPhoto: "No photo",
     },
@@ -265,6 +277,29 @@ const en = {
       revokeError: "Failed to disconnect the app.",
     },
   },
+  home: {
+    hero: {
+      title: "Find your favorite burger",
+      lead: "Search by shop name, or browse the ranking, latest reviews, and new shops below.",
+      searchButton: "Search",
+    },
+    ranking: {
+      heading: "Burger ranking",
+      subheading: "By weighted score",
+      rankAria: "Rank {{rank}}",
+      loadError: "Failed to load the burger ranking.",
+      emptyTitle: "No ranking yet",
+      emptyDescription: "Once reviews come in, burgers will be ranked here.",
+    },
+    reviews: {
+      heading: "Latest reviews",
+    },
+    shops: {
+      heading: "New shops",
+      emptyTitle: "No shops yet",
+      emptyDescription: "Why not add the first shop?",
+    },
+  },
   shops: {
     list: {
       title: "Shops",
@@ -290,7 +325,8 @@ const en = {
       signInToReview: "Sign in to write a review \u2192",
       reviewsHeading: "Reviews",
       newestFirst: "Newest first",
-      readMore: "Read more \u2192",
+      reviewAriaLabel: "{{burger}}, review by {{user}}",
+      reviewAriaLabelNoBurger: "Review by {{user}}",
       noPhoto: "No photo",
       unknown: "unknown",
       pendingNoticeTitle: "This shop is awaiting review and is not public yet.",

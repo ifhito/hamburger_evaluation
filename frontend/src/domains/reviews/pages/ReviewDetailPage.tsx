@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
@@ -10,7 +10,7 @@ import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
-import { RatingBurger, RatingSummary } from "../../../components/ui/RatingBurger";
+import { RatingBurger } from "../../../components/ui/RatingBurger";
 import { Loading, NotFound } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
 import styles from "./reviewDetail.module.css";
@@ -71,13 +71,17 @@ export default function ReviewDetailPage() {
 
         <div className={styles.narrow}>
           <section className={styles.titleSection}>
-            <h1 className={styles.name}>{review.burger?.name ?? t("shops.detail.unknown")}</h1>
+            <h1 className={styles.name}>
+              {review.burger ? (
+                <Link to={`/burgers/${review.burger.id}`} className={styles.nameLink}>
+                  {review.burger.name}
+                </Link>
+              ) : (
+                t("shops.detail.unknown")
+              )}
+            </h1>
             {review.shop && <p className={styles.shop}>{review.shop.name}</p>}
           </section>
-
-          {review.burger && (
-            <RatingSummary value={review.burger.averageRating} max={ratingRange?.max} count={review.burger.reviewCount} />
-          )}
 
           <div className={styles.sectionHead}>
             <h2 className={styles.heading}>{t("reviews.detail.reviewsHeading")}</h2>

@@ -316,13 +316,13 @@ func writeReviewError(w http.ResponseWriter, r *http.Request, op string, err err
 	}
 }
 
-// reviewListFilter は GET /reviews の省略可能な rating/keyword/shop_id/user_id の
-// クエリフィルタをパースする（Rails ReviewQuery。user_id は本 API の拡張）。
+// reviewListFilter は GET /reviews の省略可能な rating/keyword/shop_id/user_id/burger_id の
+// クエリフィルタをパースする（Rails ReviewQuery。user_id・burger_id は本 API の拡張）。
 // 空の値は存在しないものと数える（params[:x].present?）。false は、rating、
-// shop_id・user_id が UUID の正規形でない場合の 422 が既に
+// shop_id・user_id・burger_id が UUID の正規形でない場合の 422 が既に
 // 書き込まれたことを意味する。rating と shop_id については Rails からの意図的な
 // fail-loud な乖離であり（Rails はゴミを 0 にキャストして黙って空のリストを返す）、
-// user_id は Rails に対応物がないため、同じ fail-loud の形に揃えただけである。
+// user_id・burger_id は Rails に対応物がないため、同じ fail-loud の形に揃えただけである。
 func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewListFilter, bool) {
 	filter := usecase.ReviewListFilter{Keyword: r.URL.Query().Get("keyword")}
 	if raw := r.URL.Query().Get("rating"); raw != "" {
@@ -347,12 +347,19 @@ func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewLis
 		}
 		filter.UserID = &raw
 	}
+	if raw := r.URL.Query().Get("burger_id"); raw != "" {
+		if !domain.IsUUID(raw) {
+			writeErrorList(w, r, http.StatusUnprocessableEntity, msgBurgerIDInvalid)
+			return usecase.ReviewListFilter{}, false
+		}
+		filter.BurgerID = &raw
+	}
 	return filter, true
 }
 
 // handleListReviews は GET /reviews を処理する：active な shop の burger の
 // review の、公開されたトップレベルの JSON 配列で、任意で rating/keyword/
-// shop_id/user_id のフィルタにより絞り込まれ、新しい順で、ページネーションされる。
+// shop_id/user_id/burger_id のフィルタにより絞り込まれ、新しい順で、ページネーションされる。
 // OptionalAuth の viewer は、絞り込みには関与せず、各 review の can_edit にだけ使う。
 // 次のページの有無は、レスポンスヘッダー X-Has-More（true / false）で返す。
 // filter と page / per_page のどちらも不正な場合は、filter の 422 が先に返る。

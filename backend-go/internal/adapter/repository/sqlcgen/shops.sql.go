@@ -258,6 +258,79 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 	return items, nil
 }
 
+const listShopsByNewest = `-- name: ListShopsByNewest :many
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+       COALESCE(ss.review_count, 0)::bigint AS review_count,
+       ss.average_rating,
+       ss.photo_key
+FROM shops s
+LEFT JOIN shop_stats ss ON ss.shop_id = s.id
+WHERE ($1::boolean
+       OR s.status = 1
+       OR s.creator_id = $2::uuid)
+  AND ($3::text IS NULL OR s.name ILIKE $3::text)
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListShopsByNewestParams struct {
+	ViewAll     bool
+	ViewerID    *string
+	NamePattern pgtype.Text
+	PageOffset  int32
+	PageLimit   int32
+}
+
+type ListShopsByNewestRow struct {
+	ID             string
+	Name           string
+	Status         int16
+	ModerationNote pgtype.Text
+	CreatorID      *string
+	ReviewCount    int64
+	AverageRating  pgtype.Float8
+	PhotoKey       pgtype.Text
+}
+
+// GET /shops?sort=newest 向け。WHERE 句(可視性・keyword フィルタ)と集計の JOIN は ListShops と
+// 同一で、ORDER BY だけが違う(name 昇順+id 昇順 → created_at 降順+id 降順)。列ごとに向きが違う
+// 並び替えを 1 つの動的な ORDER BY に詰め込むより、クエリを分けた方が読みやすく安全なので、
+// そうしている。
+func (q *Queries) ListShopsByNewest(ctx context.Context, arg ListShopsByNewestParams) ([]ListShopsByNewestRow, error) {
+	rows, err := q.db.Query(ctx, listShopsByNewest,
+		arg.ViewAll,
+		arg.ViewerID,
+		arg.NamePattern,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListShopsByNewestRow
+	for rows.Next() {
+		var i ListShopsByNewestRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
+			&i.ModerationNote,
+			&i.CreatorID,
+			&i.ReviewCount,
+			&i.AverageRating,
+			&i.PhotoKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listShopsForModeration = `-- name: ListShopsForModeration :many
 SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
        u.username AS creator_username

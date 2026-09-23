@@ -1,8 +1,9 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { GuestRoute } from './GuestRoute'
 import { AdminRoute } from './AdminRoute'
 
+import HomePage from '../../domains/home/pages/HomePage'
 import ShopListPage from '../../domains/shops/pages/ShopListPage'
 import ShopDetailPage from '../../domains/shops/pages/ShopDetailPage'
 import ShopNewPage from '../../domains/shops/pages/ShopNewPage'
@@ -12,6 +13,8 @@ import ReviewListPage from '../../domains/reviews/pages/ReviewListPage'
 import ReviewDetailPage from '../../domains/reviews/pages/ReviewDetailPage'
 import ReviewNewPage from '../../domains/reviews/pages/ReviewNewPage'
 import ReviewEditPage from '../../domains/reviews/pages/ReviewEditPage'
+import BurgerListPage from '../../domains/burgers/pages/BurgerListPage'
+import BurgerDetailPage from '../../domains/burgers/pages/BurgerDetailPage'
 import SignupPage from '../../domains/auth/pages/SignupPage'
 import SignupConfirmPage from '../../domains/auth/pages/SignupConfirmPage'
 import GoogleCompletePage from '../../domains/auth/pages/GoogleCompletePage'
@@ -22,13 +25,15 @@ import UserUpdatePage from '../../domains/users/pages/UserUpdatePage'
 import OAuthConsentPage from '../../domains/oauth/pages/OAuthConsentPage'
 
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to="/shops" replace /> },
+  { path: '/', element: <HomePage /> },
 
   // 公開ルート
   { path: '/shops', element: <ShopListPage /> },
   { path: '/shops/:id', element: <ShopDetailPage /> },
   { path: '/reviews', element: <ReviewListPage /> },
   { path: '/reviews/:id', element: <ReviewDetailPage /> },
+  { path: '/burgers', element: <BurgerListPage /> },
+  { path: '/burgers/:id', element: <BurgerDetailPage /> },
   { path: '/users/:id', element: <UserDetailPage /> },
   // 確認メールのリンクの受け皿(ログイン中でも開ける。成功すると確認したアカウントのログイン状態になる)
   { path: '/signup/confirm', element: <SignupConfirmPage /> },

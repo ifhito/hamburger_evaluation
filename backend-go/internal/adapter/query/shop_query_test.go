@@ -12,6 +12,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 // このファイルは adapter/query の DB 統合テストである。読み取りの SQL（絞り込み・順序・
@@ -81,7 +82,7 @@ func TestShopQuery(t *testing.T) {
 
 	list := func(t *testing.T, vis domain.ShopVisibility, keyword string, limit, offset int32) []domain.Shop {
 		t.Helper()
-		listings, _, err := shopQuery.ListShops(ctx, vis, keyword, limit, offset)
+		listings, _, err := shopQuery.ListShops(ctx, vis, keyword, "", limit, offset)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -159,7 +160,7 @@ func TestShopQuery(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				shops, hasMore, err := shopQuery.ListShops(ctx, anon, "Order Cafe", tt.limit, tt.offset)
+				shops, hasMore, err := shopQuery.ListShops(ctx, anon, "Order Cafe", "", tt.limit, tt.offset)
 				if err != nil {
 					t.Fatalf("ListShops returned error: %v", err)
 				}
@@ -317,6 +318,73 @@ func TestShopQuery(t *testing.T) {
 
 		if got, err := shopQuery.ListShopReviews(ctx, golfRejected); err != nil || len(got) != 0 {
 			t.Errorf("reviews of shop without burgers = %v, %v; want empty, nil", got, err)
+		}
+	})
+}
+
+// TestShopQueryListShopsByNewest は、ShopQuery.ListShops の sort=newest（usecase.ShopSortNewest）が
+// created_at 降順・id 降順（新着順）で返すこと、可視性のフィルタ（匿名には active な shop だけ）が
+// 並び順を変えても同じように効くことを、実際の PostgreSQL に対して検証する。既定（sort を渡さない）の
+// 店名順は TestShopQuery が広く扱っているので、ここでは新着順との切り替えの正しさだけを確かめる。
+func TestShopQueryListShopsByNewest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed query test in short mode")
+	}
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	shopQuery := query.NewShopQuery(conn)
+
+	insertShop := `INSERT INTO shops (name, status, moderation_note, creator_id, created_at)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id`
+	// status のコード：0=pending、1=active、2=rejected。created_at を明示して新着順を固定する。
+	// old1/old2 は同一の instant を共有するので、id 降順が同順位を解消しなければならない。
+	tOld := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	tMid := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
+	tNew := time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
+	old1 := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Old One", 1, nil, nil, tOld)
+	old2 := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Old Two", 1, nil, nil, tOld)
+	mid := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Mid Diner", 1, nil, nil, tMid)
+	pending := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "New Pending", 0, nil, nil, tNew)
+
+	anon := domain.ShopVisibilityFor(nil)
+	adminVis := domain.ShopVisibilityFor(&domain.User{ID: uid.N(999), Admin: true})
+	sameOld := sortedIDs(old1, old2)
+
+	t.Run("sort=newest は created_at 降順・id 降順で返し、可視性のフィルタも変わらず効く", func(t *testing.T) {
+		listings, _, err := shopQuery.ListShops(ctx, anon, "", usecase.ShopSortNewest, 100, 0)
+		if err != nil {
+			t.Fatalf("ListShops returned error: %v", err)
+		}
+		ids := make([]string, 0, len(listings))
+		for _, l := range listings {
+			ids = append(ids, l.ID)
+		}
+		if want := []string{mid, sameOld[1], sameOld[0]}; !reflect.DeepEqual(ids, want) { // pending は匿名には見えない
+			t.Fatalf("ids = %v, want %v", ids, want)
+		}
+	})
+
+	t.Run("管理者には pending なショップも見え、新着順の先頭になる", func(t *testing.T) {
+		listings, _, err := shopQuery.ListShops(ctx, adminVis, "", usecase.ShopSortNewest, 100, 0)
+		if err != nil {
+			t.Fatalf("ListShops returned error: %v", err)
+		}
+		if len(listings) == 0 || listings[0].ID != pending {
+			t.Fatalf("先頭 = %+v, want %s", listings, pending)
+		}
+	})
+
+	t.Run("sort を渡さなければ、これまでどおりの店名順のままである", func(t *testing.T) {
+		listings, _, err := shopQuery.ListShops(ctx, anon, "", "", 100, 0)
+		if err != nil {
+			t.Fatalf("ListShops returned error: %v", err)
+		}
+		names := make([]string, 0, len(listings))
+		for _, l := range listings {
+			names = append(names, l.Name)
+		}
+		if want := []string{"Mid Diner", "Old One", "Old Two"}; !reflect.DeepEqual(names, want) {
+			t.Fatalf("names = %v, want %v", names, want)
 		}
 	})
 }

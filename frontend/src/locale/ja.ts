@@ -6,6 +6,7 @@ const ja = {
     brand: "BurgerStack",
     shops: "ショップ",
     reviews: "レビュー",
+    burgers: "バーガー",
     signout: "サインアウト",
     signin: "サインイン",
     signup: "新規登録",
@@ -116,6 +117,16 @@ const ja = {
       },
     },
   },
+  burgers: {
+    list: {
+      title: "バーガー",
+      loadError: "バーガーを読み込めませんでした。",
+      loadMore: "もっと見る",
+    },
+    detail: {
+      servedAt: "お店:",
+    },
+  },
   reviews: {
     list: {
       title: "レビュー",
@@ -192,7 +203,8 @@ const ja = {
       copyLinkManually: "コピーできませんでした。下のリンクを選んでコピーしてください。",
       reviewsHeading: "レビュー",
       noReviews: "まだレビューがありません。",
-      viewLink: "詳しく見る →",
+      reviewAriaLabel: "{{burger}} のレビュー({{date}} 投稿)",
+      reviewAriaLabelNoBurger: "レビュー({{date}} 投稿)",
       newestFirst: "新しい順",
       noPhoto: "写真なし",
     },
@@ -252,6 +264,29 @@ const ja = {
       revokeError: "アプリの解除に失敗しました。",
     },
   },
+  home: {
+    hero: {
+      title: "お気に入りのバーガーを見つけよう",
+      lead: "店名で探すか、下のランキング・最新レビュー・新着ショップから見つけてください。",
+      searchButton: "探す",
+    },
+    ranking: {
+      heading: "バーガーランキング",
+      subheading: "加重スコアの高い順",
+      rankAria: "{{rank}} 位",
+      loadError: "バーガーランキングを読み込めませんでした。",
+      emptyTitle: "まだランキングがありません",
+      emptyDescription: "レビューが集まると、ここにランキングが表示されます。",
+    },
+    reviews: {
+      heading: "最新レビュー",
+    },
+    shops: {
+      heading: "新着ショップ",
+      emptyTitle: "まだショップがありません",
+      emptyDescription: "最初のショップを追加してみませんか?",
+    },
+  },
   shops: {
     list: {
       title: "ショップ",
@@ -276,7 +311,8 @@ const ja = {
       signInToReview: "サインインして、レビューを書く →",
       reviewsHeading: "レビュー",
       newestFirst: "新しい順",
-      readMore: "詳しく見る →",
+      reviewAriaLabel: "{{burger}} のレビュー(投稿者: {{user}})",
+      reviewAriaLabelNoBurger: "レビュー(投稿者: {{user}})",
       noPhoto: "写真なし",
       unknown: "不明",
       pendingNoticeTitle: "このショップは、審査中で、まだ公開されていません。",

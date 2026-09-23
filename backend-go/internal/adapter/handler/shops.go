@@ -141,6 +141,8 @@ func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok b
 // handleListShops は GET /shops を処理する：（存在する場合の）viewer から
 // 見える shop のトップレベルの JSON 配列で、keyword で絞り込まれ、
 // ページネーションされる。page / per_page が整数でなければ 422 である。
+// sort=newest を指定すると新着順（created_at 降順・id 降順）になり、それ以外の値
+// （省略・空・未知の値を含む）は、これまでどおりの店名順になる（422 にはしない）。
 // 次のページの有無は、レスポンスヘッダー X-Has-More（true / false）で返す。
 func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +150,8 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		list, hasMore, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"), page, perPage)
+		sort := usecase.ShopSort(r.URL.Query().Get("sort"))
+		list, hasMore, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"), sort, page, perPage)
 		if err != nil {
 			log.Printf("shops: list: %v", err)
 			writeInternalError(w)

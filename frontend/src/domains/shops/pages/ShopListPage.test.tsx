@@ -17,7 +17,7 @@ vi.mock("../hooks/useShops", () => ({
 }));
 vi.mock("../../reviews/hooks/useRatingRange", () => ({ useRatingRange: () => ({ min: 1, max: 5 }) }));
 
-const show = () => mount(<MemoryRouter initialEntries={["/shops"]}><ShopListPage /></MemoryRouter>);
+const show = (initialEntries: string[] = ["/shops"]) => mount(<MemoryRouter initialEntries={initialEntries}><ShopListPage /></MemoryRouter>);
 
 beforeEach(() => {
   state.authUser = null;
@@ -51,5 +51,14 @@ describe("ShopListPage の空の一覧", () => {
     state.shops = [];
     const page = await show();
     expect(page.textContent).toContain("Nobody's eaten here yet");
+  });
+});
+
+describe("ShopListPage の初期の keyword", () => {
+  // トップページの検索欄から /shops?keyword=... で移動したとき、絞り込みの入力欄に反映される(URL からの初期値)。
+  it("URL の keyword クエリを、検索欄の初期値にする", async () => {
+    const page = await show(["/shops?keyword=Shake"]);
+    const input = page.querySelector<HTMLInputElement>("input[type='text']");
+    expect(input?.value).toBe("Shake");
   });
 });

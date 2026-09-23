@@ -212,6 +212,20 @@ func CalculateBurgerStat(burgerID string, facts []ReviewFact, now time.Time) Bur
 	}
 }
 
+// BurgerDetail は、GET /burgers/{id} が返す、バーガー 1 件の読み取り専用のプロジェクションである
+// (burger は非ゴールにより独自の書き込みアグリゲートを持たない)。Shops は viewer に見えるショップだけ
+// (domain.ShopVisibility でフィルタ済み。usecase の Burgers.Get が設定する)。ReviewCount・AverageRating・
+// WeightedScore は、レビューが1件もない(統計行がまだ計算されていない、または削除で0件に戻った)バーガーでは
+// すべて nil になり、実際の値 0 と区別できる。
+type BurgerDetail struct {
+	ID            string
+	Name          string
+	Shops         []ShopRef
+	ReviewCount   *int64
+	AverageRating *float64
+	WeightedScore *float64
+}
+
 // 統計の再計算は、書き込みと同じトランザクションで「再計算の依頼」を登録しておき、
 // バックグラウンドのワーカーがあとから実行する。依頼は、DB の表(burger_stats_recalc_requests)に
 // 溜まる待ち行列(順番待ちの列)で、ワーカーが取り出して処理し、終えた依頼を消す。次の型と規則は、

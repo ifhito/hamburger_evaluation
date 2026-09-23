@@ -76,7 +76,7 @@ interface SummaryProps {
   action?: ReactNode
 }
 
-// ショップ詳細・レビュー詳細で共有する、大きな平均値 + 装飾のバーガー + 件数(design/redesign の .summary /
+// ショップ詳細で使う、大きな平均値 + 装飾のバーガー + 件数(design/redesign の .summary /
 // .shop-summary)。RatingBurger と違い、数字とバーガーを別々の大きさで見せるための専用の組み合わせ。
 export function RatingSummary({ value, max, count, action }: SummaryProps) {
   const { t } = useTranslation()

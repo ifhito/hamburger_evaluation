@@ -7,6 +7,8 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createBurger = `-- name: CreateBurger :one
@@ -52,6 +54,108 @@ func (q *Queries) GetBurger(ctx context.Context, id string) (Burger, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getBurgerWithStats = `-- name: GetBurgerWithStats :one
+SELECT b.id, b.name,
+       bs.review_count, bs.average_rating, bs.weighted_score
+FROM burgers b
+LEFT JOIN burger_stats bs ON bs.burger_id = b.id
+WHERE b.id = $1
+`
+
+type GetBurgerWithStatsRow struct {
+	ID            string
+	Name          string
+	ReviewCount   pgtype.Int8
+	AverageRating pgtype.Float8
+	WeightedScore pgtype.Float8
+}
+
+// burger 1 件を、保存された統計(burger_stats。LEFT JOIN。まだ計算されていない、または削除で 0 件に戻った
+// burger は review_count/average_rating/weighted_score が NULL または 0)とともに返す。存在しない id は
+// 0 行になる(呼び出し側が domain.ErrBurgerNotFound に対応付ける)。
+func (q *Queries) GetBurgerWithStats(ctx context.Context, id string) (GetBurgerWithStatsRow, error) {
+	row := q.db.QueryRow(ctx, getBurgerWithStats, id)
+	var i GetBurgerWithStatsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.ReviewCount,
+		&i.AverageRating,
+		&i.WeightedScore,
+	)
+	return i, err
+}
+
+const listBurgerRankings = `-- name: ListBurgerRankings :many
+WITH representative_shop AS (
+    SELECT DISTINCT ON (sb.burger_id)
+        sb.burger_id, s.id AS shop_id, s.name AS shop_name
+    FROM shops_burgers sb
+    JOIN shops s ON s.id = sb.shop_id
+    WHERE s.status = 1
+    ORDER BY sb.burger_id, s.created_at, s.id
+)
+SELECT b.id, b.name,
+       rs.shop_id, rs.shop_name,
+       bs.average_rating, bs.weighted_score, bs.review_count
+FROM burgers b
+JOIN burger_stats bs ON bs.burger_id = b.id AND bs.review_count > 0
+JOIN representative_shop rs ON rs.burger_id = b.id
+ORDER BY bs.weighted_score DESC, b.id ASC
+LIMIT $2 OFFSET $1
+`
+
+type ListBurgerRankingsParams struct {
+	PageOffset int32
+	PageLimit  int32
+}
+
+type ListBurgerRankingsRow struct {
+	ID            string
+	Name          string
+	ShopID        string
+	ShopName      string
+	AverageRating float64
+	WeightedScore float64
+	ReviewCount   int64
+}
+
+// GET /burgers 向けの公開ランキング。対象は、review が 1 件以上ある burger(bs.review_count > 0。
+// burger_stats は、レビューが 0 件に戻っても行が残る(削除されない)ので、行の有無だけでは判定できない)、
+// かつ少なくとも 1 つの active な shop(status 1)に紐づく burger で、weighted_score の降順(同値は
+// id の昇順で決着)で返す。1 つの burger が複数の active な shop に紐づくときの代表 shop は、
+// 作成の古い順(created_at 昇順、同時刻は id 昇順)の先頭を採る(DISTINCT ON)。これは、
+// domain.ReviewShopFor が匿名の viewer に対して選ぶショップ(見えるショップの先頭)と同じ選び方
+// である(この一覧には viewer がなく、常に匿名と同じ扱いになるため)。次のページの有無を知るために
+// limit+1 件を取得する。
+func (q *Queries) ListBurgerRankings(ctx context.Context, arg ListBurgerRankingsParams) ([]ListBurgerRankingsRow, error) {
+	rows, err := q.db.Query(ctx, listBurgerRankings, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBurgerRankingsRow
+	for rows.Next() {
+		var i ListBurgerRankingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ShopID,
+			&i.ShopName,
+			&i.AverageRating,
+			&i.WeightedScore,
+			&i.ReviewCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listBurgers = `-- name: ListBurgers :many
