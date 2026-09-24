@@ -125,24 +125,27 @@ func (r *ShopQuery) ListShopReviews(ctx context.Context, shopID string) ([]domai
 
 // ListShopsForModeration は、すべての shop をその creator とともに新しい順
 // （created_at desc、id desc）に返す。任意で 1 つの status に絞り込める。
-func (r *ShopQuery) ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
+func (r *ShopQuery) ListShopsForModeration(ctx context.Context, status *domain.ShopStatus, limit, offset int32) ([]domain.ShopDetail, bool, error) {
 	var filter pgtype.Int2
 	if status != nil {
 		code, err := rowmap.ShopStatusCode(*status)
 		if err != nil {
-			return nil, fmt.Errorf("list shops for moderation: %w", err)
+			return nil, false, fmt.Errorf("list shops for moderation: %w", err)
 		}
 		filter = pgtype.Int2{Int16: code, Valid: true}
 	}
-	rows, err := r.q.ListShopsForModeration(ctx, filter)
+	rows, err := r.q.ListShopsForModeration(ctx, sqlcgen.ListShopsForModerationParams{
+		StatusCode: filter, PageLimit: limit + 1, PageOffset: offset,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("list shops for moderation: %w", err)
+		return nil, false, fmt.Errorf("list shops for moderation: %w", err)
 	}
+	rows, hasMore := trimPage(rows, limit)
 	details := make([]domain.ShopDetail, 0, len(rows))
 	for _, row := range rows {
 		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
 		if err != nil {
-			return nil, fmt.Errorf("list shops for moderation: %w", err)
+			return nil, false, fmt.Errorf("list shops for moderation: %w", err)
 		}
 		detail := domain.ShopDetail{Shop: shop}
 		if row.CreatorID != nil {
@@ -151,5 +154,5 @@ func (r *ShopQuery) ListShopsForModeration(ctx context.Context, status *domain.S
 		}
 		details = append(details, detail)
 	}
-	return details, nil
+	return details, hasMore, nil
 }

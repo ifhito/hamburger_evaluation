@@ -8,7 +8,8 @@ import { byText, cleanup, click, eventually, mount, need } from "../../../../tes
 import type { AdminShop } from "../../api/types";
 import AdminShopListPage from "./AdminShopListPage";
 
-const state = vi.hoisted(() => ({ shops: [] as AdminShop[], isLoading: false, statusAsked: [] as (string | undefined)[] }));
+const state = vi.hoisted(() => ({ shops: [] as AdminShop[], isLoading: false, hasNextPage: false, isFetchingNextPage: false, error: undefined as unknown, statusAsked: [] as (string | undefined)[] }));
+const fetchNextPage = vi.hoisted(() => vi.fn());
 const approve = vi.hoisted(() => vi.fn());
 const reject = vi.hoisted(() => vi.fn());
 const close = vi.hoisted(() => vi.fn());
@@ -16,7 +17,7 @@ const reopen = vi.hoisted(() => vi.fn());
 vi.mock("../../hooks/useShopMutations", () => ({
   useAdminShops: (status?: string) => {
     state.statusAsked.push(status);
-    return { data: state.isLoading ? undefined : state.shops, isLoading: state.isLoading };
+    return { data: state.isLoading ? undefined : state.shops, isLoading: state.isLoading, hasNextPage: state.hasNextPage, isFetchingNextPage: state.isFetchingNextPage, error: state.error, fetchNextPage };
   },
   useShopModeration: () => ({ approve, reject, close, reopen }),
 }));
@@ -52,10 +53,37 @@ beforeEach(() => {
   state.shops = [];
   state.isLoading = false;
   state.statusAsked = [];
+  state.hasNextPage = false;
+  state.isFetchingNextPage = false;
+  state.error = undefined;
 });
 afterEach(cleanup);
 
 describe("AdminShopListPage(ショップの管理の一覧)", () => {
+  it("次ページがあるときは続きを取得するボタンを出す", async () => {
+    state.hasNextPage = true;
+    const page = await show();
+    await click(need(byText(page, "button", "Load more"), "Load more"));
+    expect(fetchNextPage).toHaveBeenCalledOnce();
+  });
+
+  it("最終ページなら続きを取得するボタンを出さない", async () => {
+    const page = await show();
+    expect(byText(page, "button", "Load more")).toBeUndefined();
+  });
+
+  it("次ページの取得中は連打できない", async () => {
+    state.hasNextPage = true;
+    state.isFetchingNextPage = true;
+    const page = await show();
+    expect(need(page.querySelector('button[aria-busy="true"]'), "読み込み中のボタン").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("取得に失敗するとエラーを表示する", async () => {
+    state.error = new Error("failed");
+    const page = await show();
+    expect(page.querySelector('[role="alert"]')).not.toBeNull();
+  });
   it("承認・却下のボタンは、ショップごとに backend が返す canApprove・canReject だけで出し分ける(状態からは決めない)", async () => {
     state.shops = [
       shop({ id: "a", name: "Pending", status: "pending", canApprove: true, canReject: true }),

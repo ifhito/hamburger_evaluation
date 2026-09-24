@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAdminShops, useUpdateShop } from "../../hooks/useShopMutations";
+import { useUpdateShop } from "../../hooks/useShopMutations";
+import { useShopDetail } from "../../hooks/useShops";
+import { useAuth } from "../../../auth/AuthProvider";
 import { useShopForm } from "../../hooks/useShopForm";
 import { ApiError } from "../../../../api/client/buildApiClient";
 import { useMeta } from "../../../../api/meta";
@@ -20,14 +22,14 @@ export default function AdminShopEditPage() {
   const { id } = useParams<{ id: string }>();
   const shopId = id ?? "";
 
-  const { data: shops, isLoading } = useAdminShops();
-  const shop = shops?.find((s) => s.id === shopId);
+  const { user, isLoading: authLoading } = useAuth();
+  const { data: shop, isLoading, error } = useShopDetail(shopId, user?.id ?? null, { enabled: !authLoading });
 
   const { update } = useUpdateShop(shopId);
   const { register, handleSubmit, reset, watch } = useShopForm();
   const textLimits = useMeta().data?.text;
 
-  // shop は一覧(SWR)から find した「オブジェクト」なので、バックグラウンドの再取得のたびに、値が同じでも
+  // shop は詳細(SWR)の「オブジェクト」なので、バックグラウンドの再取得のたびに、値が同じでも
   // 参照が変わる。依存を shop?.id(変わらない識別子)にして、同じショップの再取得では reset せず、入力中の
   // 内容(打ちかけの新しい名前)を、無言で消さないようにする。
   useEffect(() => {
@@ -56,8 +58,10 @@ export default function AdminShopEditPage() {
       <div className={styles.column}>
         <TextLink to="/admin/shops">{t("shops.admin.backToList")}</TextLink>
         <h1 className={styles.title}>{t("shops.admin.editTitle")}</h1>
-        {isLoading ? (
+        {isLoading || authLoading ? (
           <Loading />
+        ) : error ? (
+          <Alert message={t("shops.list.loadError")} />
         ) : (
           <form onSubmit={(e) => void onSubmit(e)} className={styles.form}>
             {serverError && <Alert title={t("shops.admin.editErrorTitle")} message={serverError} />}

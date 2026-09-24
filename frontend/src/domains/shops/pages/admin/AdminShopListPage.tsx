@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAdminShops, useShopModeration } from "../../hooks/useShopMutations";
+import { useAuth } from "../../../auth/AuthProvider";
 import type { ShopStatus } from "../../api/types";
 import { ApiError } from "../../../../api/client/buildApiClient";
 import { useMeta } from "../../../../api/meta";
@@ -18,7 +19,10 @@ const STATUS_FILTERS: (ShopStatus | "all")[] = ["all", "pending", "active", "rej
 export default function AdminShopListPage() {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<ShopStatus | "all">("all");
-  const { data: shops, isLoading } = useAdminShops(filter === "all" ? undefined : filter);
+  const { user } = useAuth();
+  const { data: shops, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useAdminShops(
+    filter === "all" ? undefined : filter, user?.id ?? null,
+  );
   const { approve, reject, close, reopen } = useShopModeration();
   const textLimits = useMeta().data?.text;
 
@@ -126,6 +130,7 @@ export default function AdminShopListPage() {
         {closeError && <Alert title={t("shops.admin.closeErrorTitle")} message={closeError} />}
         {reopenError && <Alert title={t("shops.admin.reopenErrorTitle")} message={reopenError} />}
         {isLoading && <Loading />}
+        {error && <Alert message={t("shops.list.loadError")} />}
         {shops && shops.length === 0 &&
           (filter === "pending" ? (
             <EmptyState title={t("shops.admin.emptyPendingTitle")} description={t("shops.admin.emptyPendingDescription")} />
@@ -219,6 +224,11 @@ export default function AdminShopListPage() {
             </article>
           ))}
         </div>
+        {hasNextPage && (
+          <Button type="button" variant="secondary" isLoading={isFetchingNextPage} onClick={fetchNextPage}>
+            {t("shops.list.loadMore")}
+          </Button>
+        )}
       </div>
     </Layout>
   );

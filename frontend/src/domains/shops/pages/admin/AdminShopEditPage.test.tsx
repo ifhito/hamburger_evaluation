@@ -7,13 +7,18 @@ import { ApiError } from "../../../../api/client/buildApiClient";
 import { byText, cleanup, click, eventually, mount, need, type } from "../../../../test/dom";
 import AdminShopEditPage from "./AdminShopEditPage";
 
-// SWR は、バックグラウンドの再取得のたびに、値が同じでも新しい配列・新しいオブジェクトを返す(参照は変わる)。
-// この mock も、呼ばれるたびに新しい配列・オブジェクトを作って、その挙動を再現する(同じ参照を使い回さない)。
-const state = vi.hoisted(() => ({ isLoading: false, shop: { id: "s1", name: "Old name", status: "active" } }));
+// 詳細の再取得で参照が変わっても、編集中の値が消えないことを確かめる。
+const state = vi.hoisted(() => ({ isLoading: false, error: undefined as unknown, shop: { id: "s1", name: "Old name", status: "active" } }));
 const update = vi.hoisted(() => vi.fn());
+const detail = vi.hoisted(() => vi.fn());
 vi.mock("../../hooks/useShopMutations", () => ({
-  useAdminShops: () => ({ data: state.isLoading ? undefined : [{ ...state.shop }], isLoading: state.isLoading }),
   useUpdateShop: () => ({ update }),
+}));
+vi.mock("../../hooks/useShops", () => ({
+  useShopDetail: (...args: unknown[]) => {
+    detail(...args);
+    return { data: state.isLoading || state.error ? undefined : { ...state.shop }, isLoading: state.isLoading, error: state.error };
+  },
 }));
 vi.mock("../../../../api/meta", () => ({ useMeta: () => ({ data: { text: { shopNameMaxChars: 100 } } }) }));
 vi.mock("../../../auth/AuthProvider", () => ({ useAuth: () => ({ user: { id: "1", username: "admin", canModerate: true }, isLoading: false }) }));
@@ -31,13 +36,21 @@ const show = () =>
 beforeEach(() => {
   vi.resetAllMocks();
   state.isLoading = false;
+  state.error = undefined;
 });
 afterEach(cleanup);
 
 describe("AdminShopEditPage(ショップの名前の編集)", () => {
+  it("詳細の取得に失敗したときは空の編集フォームを出さない", async () => {
+    state.error = new ApiError(["Shop not found"], 404);
+    const page = await show();
+    expect(page.querySelector('[role="alert"]')).not.toBeNull();
+    expect(page.querySelector("form")).toBeNull();
+  });
   it("いまの名前を入れた欄を出し、変えて保存すると、更新して、管理の一覧へ戻る", async () => {
     update.mockResolvedValue(undefined);
     const page = await show();
+    expect(detail).toHaveBeenCalledWith("s1", "1", { enabled: true });
     const input = need(page.querySelector<HTMLInputElement>("#name"), "name");
     await eventually(() => expect(input.value).toBe("Old name"));
 
@@ -69,7 +82,7 @@ describe("AdminShopEditPage(ショップの名前の編集)", () => {
 
     await type(input, "New name in progress");
 
-    // 打った直後(useAdminShops はレンダーのたびに新しい配列・オブジェクトを返す)でも、消えていない
+    // 詳細のオブジェクトが変わる再描画の後も、入力は残る。
     expect(input.value).toBe("New name in progress");
   });
 

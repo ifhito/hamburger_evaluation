@@ -21,7 +21,7 @@ type fakeShopQuery struct {
 	listShops              func(ctx context.Context, vis domain.ShopVisibility, keyword string, sort usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error)
 	getShopWithCreator     func(ctx context.Context, id string) (domain.ShopDetail, error)
 	listShopReviews        func(ctx context.Context, shopID string) ([]domain.ShopReview, error)
-	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
+	listShopsForModeration func(ctx context.Context, status *domain.ShopStatus, limit, offset int32) ([]domain.ShopDetail, bool, error)
 }
 
 func (f *fakeShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, sort usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error) {
@@ -45,11 +45,11 @@ func (f *fakeShopQuery) ListShopReviews(ctx context.Context, shopID string) ([]d
 	return f.listShopReviews(ctx, shopID)
 }
 
-func (f *fakeShopQuery) ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
+func (f *fakeShopQuery) ListShopsForModeration(ctx context.Context, status *domain.ShopStatus, limit, offset int32) ([]domain.ShopDetail, bool, error) {
 	if f.listShopsForModeration == nil {
 		panic("unexpected ListShopsForModeration call")
 	}
-	return f.listShopsForModeration(ctx, status)
+	return f.listShopsForModeration(ctx, status, limit, offset)
 }
 
 // fakeShopRepo は、手書きの domain.ShopRepository（書き込み）の test double
@@ -299,7 +299,7 @@ func TestShopsAdminForbidden(t *testing.T) {
 		name string
 		call func() error
 	}{
-		{name: "AdminList は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminList(ctx, alice, ""); return err }},
+		{name: "AdminList は admin でない viewer に ErrForbidden を返す", call: func() error { _, _, err := shops.AdminList(ctx, alice, "", 0, 0); return err }},
 		{name: "AdminUpdateName は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminUpdateName(ctx, alice, uid.N(1), "x", ""); return err }},
 		{name: "Approve は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Approve(ctx, alice, uid.N(1)); return err }},
 		{name: "Reject は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Reject(ctx, alice, uid.N(1), nil); return err }},
@@ -318,6 +318,41 @@ func TestShopsAdminForbidden(t *testing.T) {
 // TestShopsAdminList は moderation の一覧を扱う。既知の status は ShopQuery の
 // フィルタになり、status なしはすべてを意味し、未知の status は ShopQuery を
 // 呼ばずに空の結果へ short-circuit する。
+func TestShopsAdminListPagination(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		page, perPage int
+		limit, offset int32
+	}{
+		{"省略時は先頭から20件", 0, 0, 20, 0},
+		{"2ページ目は指定件数だけ進める", 2, 3, 3, 3},
+		{"負数は既定値に補正する", -1, -1, 20, 0},
+		{"件数が上限を超えると100件にする", 2, 101, 100, 100},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			q := &fakeShopQuery{listShopsForModeration: func(_ context.Context, status *domain.ShopStatus, limit, offset int32) ([]domain.ShopDetail, bool, error) {
+				if status == nil || *status != domain.ShopStatusPending || limit != tt.limit || offset != tt.offset {
+					t.Fatalf("status=%v limit=%d offset=%d", status, limit, offset)
+				}
+				return []domain.ShopDetail{{Shop: domain.Shop{ID: uid.N(1)}}}, true, nil
+			}}
+			items, hasMore, err := newShops(q, &fakeShopRepo{}).AdminList(context.Background(), domain.User{Admin: true}, "pending", tt.page, tt.perPage)
+			if err != nil || !hasMore || len(items) != 1 {
+				t.Fatalf("items=%v hasMore=%v err=%v", items, hasMore, err)
+			}
+		})
+	}
+	t.Run("問い合わせの失敗を伝える", func(t *testing.T) {
+		q := &fakeShopQuery{listShopsForModeration: func(context.Context, *domain.ShopStatus, int32, int32) ([]domain.ShopDetail, bool, error) {
+			return nil, false, io.ErrUnexpectedEOF
+		}}
+		_, hasMore, err := newShops(q, &fakeShopRepo{}).AdminList(context.Background(), domain.User{Admin: true}, "", 1, 1)
+		if !errors.Is(err, io.ErrUnexpectedEOF) || hasMore {
+			t.Fatalf("hasMore=%v err=%v", hasMore, err)
+		}
+	})
+}
+
 func TestShopsAdminList(t *testing.T) {
 	admin := domain.User{ID: uid.N(2), Admin: true}
 	ctx := context.Background()
@@ -325,12 +360,12 @@ func TestShopsAdminList(t *testing.T) {
 	t.Run("status のフィルタはそのまま repository に渡される", func(t *testing.T) {
 		var got *domain.ShopStatus
 		query := &fakeShopQuery{
-			listShopsForModeration: func(_ context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
+			listShopsForModeration: func(_ context.Context, status *domain.ShopStatus, _, _ int32) ([]domain.ShopDetail, bool, error) {
 				got = status
-				return []domain.ShopDetail{}, nil
+				return []domain.ShopDetail{}, false, nil
 			},
 		}
-		if _, err := newShops(query, &fakeShopRepo{}).AdminList(ctx, admin, "pending"); err != nil {
+		if _, _, err := newShops(query, &fakeShopRepo{}).AdminList(ctx, admin, "pending", 0, 0); err != nil {
 			t.Fatalf("AdminList returned error: %v", err)
 		}
 		if got == nil || *got != domain.ShopStatusPending {
@@ -341,15 +376,15 @@ func TestShopsAdminList(t *testing.T) {
 	t.Run("status なしはフィルタなしを意味する", func(t *testing.T) {
 		called := false
 		query := &fakeShopQuery{
-			listShopsForModeration: func(_ context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
+			listShopsForModeration: func(_ context.Context, status *domain.ShopStatus, _, _ int32) ([]domain.ShopDetail, bool, error) {
 				called = true
 				if status != nil {
 					t.Errorf("filter = %v, want nil", *status)
 				}
-				return []domain.ShopDetail{}, nil
+				return []domain.ShopDetail{}, false, nil
 			},
 		}
-		if _, err := newShops(query, &fakeShopRepo{}).AdminList(ctx, admin, ""); err != nil {
+		if _, _, err := newShops(query, &fakeShopRepo{}).AdminList(ctx, admin, "", 0, 0); err != nil {
 			t.Fatalf("AdminList returned error: %v", err)
 		}
 		if !called {
@@ -358,11 +393,11 @@ func TestShopsAdminList(t *testing.T) {
 	})
 
 	t.Run("未知の status は repository を呼ばずに空の一覧を返す", func(t *testing.T) {
-		got, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).AdminList(ctx, admin, "bogus")
+		got, hasMore, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).AdminList(ctx, admin, "bogus", 0, 0)
 		if err != nil {
 			t.Fatalf("AdminList returned error: %v", err)
 		}
-		if got == nil || len(got) != 0 {
+		if got == nil || len(got) != 0 || hasMore {
 			t.Errorf("AdminList = %v, want empty non-nil slice", got)
 		}
 	})

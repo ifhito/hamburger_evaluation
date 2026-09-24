@@ -371,6 +371,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `DELETE /users/:id` — ユーザーの削除 (要認証。本人のみ。usecase で判定。論理削除と、統計の再計算の依頼、AI アプリへの許可の取り消しを、1 つのトランザクションで行う)
 
 **管理者** (要認証。管理者のみ許可する判定は usecase で行う)
+- 一覧は `status` で絞り込み、`page` / `per_page` でページングする。既定は1ページ目・20件、件数の上限は100件。整数でない入力は422。並び順は `created_at DESC, id DESC` のまま。RESTは配列を返し、`X-Has-More` に次ページの有無を含める。MCPの `list_admin_shops` も同じ引数を受け取り、`{items, has_more}` を返す。
 - `GET /admin/shops` — モデレーション用のショップ一覧 (各ショップに `can_approve` / `can_reject`: 承認・却下の操作を画面が提示してよいか。domain の `Shop.CanBeApproved` / `CanBeRejected` が status から判断する。`PUT`・`approve`・`reject` の応答にも含まれる。frontend は status を比較してボタンを出さない)
 - `PUT /admin/shops/:id` — ショップの更新
 - `POST /admin/shops/:id/approve` — 申請されたショップの承認

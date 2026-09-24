@@ -133,13 +133,18 @@ func handleCreateShop(shops *usecase.Shops) http.HandlerFunc {
 
 // handleAdminListShops は GET /admin/shops を処理する：すべての shop の
 // トップレベルの配列で、新しい順に並び、任意で ?status= により絞り込まれる。
+// page / per_page でページングし、X-Has-More で次ページの有無を返す。
 func handleAdminListShops(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)
 		if !ok {
 			return
 		}
-		list, err := shops.AdminList(r.Context(), viewer, r.URL.Query().Get("status"))
+		page, perPage, ok := pageParams(w, r)
+		if !ok {
+			return
+		}
+		list, hasMore, err := shops.AdminList(r.Context(), viewer, r.URL.Query().Get("status"), page, perPage)
 		if err != nil {
 			writeShopModerationError(w, r, "admin list", err)
 			return
@@ -148,6 +153,7 @@ func handleAdminListShops(shops *usecase.Shops) http.HandlerFunc {
 		for _, detail := range list {
 			resp = append(resp, newAdminShopResponse(detail))
 		}
+		setHasMore(w, hasMore)
 		writeJSON(w, http.StatusOK, resp)
 	}
 }
