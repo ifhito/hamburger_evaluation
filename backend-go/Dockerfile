@@ -1,21 +1,22 @@
-FROM golang:1.27
-
-WORKDIR /app
+# 本番用。多くの基盤は Dockerfile 名を選べず既定の `Dockerfile` を見るため、本番用をこの名前にする。
+# 開発用(コンテナ起動時に go build するもの)は Dockerfile.dev にある。
+# 静的バイナリを distroless へ入れるので、イメージは数十 MB、起動は即時になる。
+FROM golang:1.27 AS build
+WORKDIR /src
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+# CGO なしの静的リンク。-trimpath と -ldflags="-s -w" でバイナリを小さくする。
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 
-# 依存ツリー全体を image のビルド時にコンパイルする（ランタイムのメモリ
-# cgroup の制限を受けない）。これにより /root/.cache/go-build が温まった状態
-# になる。Docker は新規の named volume である go_build_cache をそこから
-# 初期化するので、ランタイムの `go build` はインクリメンタルになる
-# （main パッケージのみ）。
-RUN go build -o /tmp/api ./cmd/api
+# nonroot 版は UID 65532 で動く。書き込み先を持たない(写真は S3 へ、PHOTO_STORAGE=s3)。
+FROM gcr.io/distroless/static:nonroot
+COPY --from=build /out/api /api
 
+# PORT はホスト(Render / Cloud Run など)が上書きする。
+ENV PORT=8080
 EXPOSE 8080
-
-# ビルドしてから exec することで、コンパイルされたバイナリが PID 1 になり
-# SIGTERM を受け取る（go run はそれを API プロセスに転送しない）。
-CMD ["sh", "-c", "go build -o /tmp/api ./cmd/api && exec /tmp/api"]
+USER nonroot:nonroot
+ENTRYPOINT ["/api"]

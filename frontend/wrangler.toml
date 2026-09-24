@@ -1,0 +1,26 @@
+# 本番のフロントエンド(Cloudflare Workers の Static Assets)。
+# 配るのは GitHub Actions(.github/workflows/deploy-frontend.yml)で、手元から配るときは
+#
+#   pnpm run build
+#   npx wrangler login       # 初回のみ
+#   npx wrangler deploy
+#
+# 構成と、なぜ Cloudflare なのかは docs/production-deploy.md を参照。
+name = "hamburger-frontend"
+main = "worker/index.js"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+# SPA なので、見つからない path は index.html を返す(deep link 対応)。
+not_found_handling = "single-page-application"
+# ブラウザのナビゲーション(Sec-Fetch-Mode: navigate)に対しては、既定だと
+# アセット配信が Worker より先に働き、index.html を返してしまう。そうなると
+# /api/* の転送コードに届かず、Google ログインのようなページ遷移が壊れる。
+# Worker を必ず先に走らせる。
+run_worker_first = ["/api/*"]
+
+[vars]
+# 転送先の API(Cloud Run。東京)。秘密ではないのでここに書く。
+API_ORIGIN = "https://burger-stack-421794940461.asia-northeast1.run.app"
