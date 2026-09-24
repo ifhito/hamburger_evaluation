@@ -135,12 +135,12 @@ published: false
 
 書き込みだけが 4 倍遅いのは、BEGIN から COMMIT まで 4 往復しているからです。4 社とも倍率がぴったり 4.02〜4.04 で揃いました。時間を決めているのは DB の性能ではなく往復回数なので、CTE で 1 文にまとめれば 1 往復にできます。
 
-### システムへ組み込むときに知っておきたい癖
+### 実際に組み込んで気づいた癖
 
-pooler は、アプリと PostgreSQL の間で DB 接続を使い回す中継サービスです。接続数を抑えられる一方、接続方法によってはアプリ実行用とマイグレーション用の URL を分ける必要があります。
+ここで少し分かりにくかったのが pooler です。これはアプリと PostgreSQL の間に入って、DB 接続を使い回してくれる仕組みです。接続数を抑えられるのは便利なのですが、用途によって URL を使い分ける場面がありました。
 
-- **Supabase** の Direct connection は IPv6 前提です。IPv4 しか使えない実行環境からは、Session pooler を接続経路として使います
-- **Neon** は通常の API 接続には pooler 用 URL を使えますが、マイグレーションでは prepared statement と相性が悪い場合があります。その場合はマイグレーションだけ直結 URL を使います
+- **Supabase** の Direct connection は IPv6 前提でした。実行環境が IPv4 にしか対応していない場合は、Session pooler 経由でつなぐことになります
+- **Neon** は普段の API なら pooler 用 URL で問題ありません。ただ、マイグレーションでは prepared statement と相性が悪いことがあるので、そのときだけ直結 URL に切り替えます
 
 ## 2. 写真ストレージ
 
@@ -234,10 +234,12 @@ Supabase は中央値こそ速いのに、2 割ほどの閲覧で目に見えて
 
 Region を `auto` に固定しているコードも、4 社ともそのまま通りました。エンドポイントと鍵を差し替えるだけで動きます。
 
-### システムへ組み込むときに知っておきたい癖
+### 実際に組み込んで気づいた癖
 
-- **B2** の S3 互換 API では、通常のアカウント情報ではなく App Key を使います。App Key の keyID と applicationKey を、S3 の Access Key ID と Secret Access Key に対応させます
-- **R2** は S3 API のエンドポイントと、画像を配信する公開 URL が別です。`*.r2.dev` は開発用なので、本番配信では独自ドメインを組み合わせます
+どちらも S3 互換なので、コード側はほとんど変えずに使えました。ただ、管理画面に出てくる名前と、アプリに設定する値が少し分かりにくいです。
+
+- **B2** では、普段のアカウント情報ではなく App Key を使います。keyID が S3 の Access Key ID、applicationKey が Secret Access Key に当たります
+- **R2** では、アップロードに使う S3 API のエンドポイントと、画像を見せるための公開 URL が別になっています。`*.r2.dev` は開発用なので、本番では独自ドメインも用意することになります
 
 ## 3. メール送信
 
@@ -319,11 +321,13 @@ Region を `auto` に固定しているコードも、4 社ともそのまま通
 
 最初は関門のない Mailjet を選びました。でも **Mailjet は認証していないドメインのアドレスからでも送れてしまいます**。これは利点ではなく弱点だと考え直して、Resend に変えました。鍵が漏れたら任意の差出人で送られてしまいますし、他社なら弾かれる設定ミスに気づけないからです。
 
-### システムへ組み込むときに知っておきたい癖
+### 実際に組み込んで気づいた癖
 
-- **Brevo** はドメイン認証とは別に送信元 IP の登録を求めます。送信元 IP が固定されない Cloud Run のような実行基盤とは、そのままでは組み合わせにくい構成です
-- **MailerSend** はドメイン設定の不備にも 450(一時的エラー)を返します。メール送信処理が再試行を続けないよう、アプリ側に再試行上限が必要です
-- **Resend** の共有ドメインは送信先が厳しく限定されます。開発中の確認は共有ドメイン、本番送信は認証済みの独自ドメインと分けて考えます
+メールは、単に SMTP の設定を入れれば終わり、とはなりませんでした。サービスごとに「どこまで確認できたら送信を許すか」がかなり違います。
+
+- **Brevo** は、ドメイン認証とは別に送信元 IP の登録も必要です。そのため、Cloud Run のように送信元 IP が固定されない環境とは、そのままでは組み合わせにくいです
+- **MailerSend** は、ドメイン設定の不備でも 450 という一時的なエラーを返します。そのまま受け取るとアプリが再試行し続けるので、再試行回数には上限を設けたほうがよさそうです
+- **Resend** の共有ドメインは、送信先がかなり限られます。開発中の動作確認には使えますが、本番で送るなら認証済みの独自ドメインが必要です
 
 ## 4. API
 
@@ -411,12 +415,14 @@ API をインターネットへ公開するなら、動くか、速いか、安�
 
 ここは負荷をかける実測ではなく、2026 年 9 月時点の公式資料で比較しました。Cloud Run は [security overview](https://docs.cloud.google.com/run/docs/securing/security) と [ingress の制限](https://docs.cloud.google.com/run/docs/securing/ingress)、Northflank は [network security](https://northflank.com/docs/v1/application/network/networking-on-northflank) と [path-based security policies](https://northflank.com/docs/v1/application/network/create-path-based-security-policies)、Render は [Web Services](https://render.com/docs/web-services) と [DDoS protection](https://render.com/docs/ddos-protection)、Back4App は [Containers の custom domain](https://www.back4app.com/docs-containers/custom-domain) を参照しています。
 
-### システムへ組み込むときに知っておきたい癖
+### 実際に組み込んで気づいた癖
 
-- **Render** は monorepo の Root Directory を明示する必要があります。リージョンは作成後に変更できず、SMTP 接続も制限されるため、最初の構成決定とメール送信方法に影響します
-- **Northflank** は無料枠で選べるリージョンが US に限られます。画像処理のようにメモリを使う処理では、失敗する前に応答が大きく遅くなることがあります
-- **Back4App** は Dockerfile の名前を指定できず、既定の `Dockerfile` だけを使います。`Dockerfile.prod` など別名のファイルを使うリポジトリでは、配置かファイル名を合わせる必要があります
-- **Cloud Run** は scale-to-zero すると、API と同じプロセスに置いた常駐ワーカーも止まります。常時動かす処理は別サービスや定期実行に分ける必要があります
+API の 4 社は、同じ Docker イメージを置けば同じように動くと思っていました。実際には、リポジトリの見方やスリープ時の扱いにそれぞれ癖があります。
+
+- **Render** では、monorepo のどこを起点にするかを Root Directory で指定します。リージョンはあとから変えられず、SMTP 接続にも制限があるので、この 2 点は作り始める前に決めておいたほうがよさそうです
+- **Northflank** の無料枠で選べるリージョンは US だけでした。また、画像処理のようにメモリを使う処理では、すぐ失敗するのではなく、先に応答がかなり遅くなることがあります
+- **Back4App** は Dockerfile の名前を指定できず、`Dockerfile` という名前のファイルだけを見ます。本番用を `Dockerfile.prod` に分けている場合は、そのままでは使ってもらえません
+- **Cloud Run** が scale-to-zero すると、API と同じプロセスで動かしている常駐ワーカーも一緒に止まります。常に動いてほしい処理は、別サービスか定期実行に分ける必要があります
 
 事前調査では「SMTP を塞ぐのは Cloud Run」と考えていましたが、今回の実測では Render から接続できませんでした。**少なくとも今回確認した資料だけでは判別できず、実際に接続して確かめる必要がありました。**
 
@@ -502,11 +508,13 @@ API をインターネットへ公開するなら、動くか、速いか、安�
 
 Cloudflare だけがコードを書く方式なので減点していましたが、行数の差は 4 行でした。しかも転送は最速です。**「コードを書く手間」は減点になりませんでした。**
 
-### システムへ組み込むときに知っておきたい癖
+### 実際に組み込んで気づいた癖
 
-- **Cloudflare Workers** は静的アセット配信が Worker より先に処理されます。API や OAuth callback を Worker へ通すには `run_worker_first` が必要です。また、OAuth の 302 をブラウザへ返す処理では、Worker 側の `fetch` に `redirect: "manual"` を指定します
-- **Render Static Site** は API 転送に Redirect ではなく Rewrite を使います。Redirect ではブラウザから見えるオリジンが変わり、CORS の影響を受けます
-- **Vercel** はデプロイ方法によって SSO 付きの非公開 URL になったり、URL がデプロイごとに変わったりします。OAuth callback や外部サービスの接続先には、固定された Production URL を使います
+フロントエンドは静的ファイルを置くだけなので、いちばん素直に進むと思っていました。ところが、API 転送や OAuth まで含めると、各社のルーティングの考え方が効いてきます。
+
+- **Cloudflare Workers** では、静的アセットの配信が Worker より先に処理されます。API や OAuth callback を Worker に通すには `run_worker_first` が必要でした。OAuth の 302 をそのままブラウザへ返したい場合は、Worker 側の `fetch` に `redirect: "manual"` も指定します
+- **Render Static Site** で API を転送するときは、Redirect ではなく Rewrite を使います。Redirect にするとブラウザから見える接続先まで変わり、CORS の影響を受けてしまいます
+- **Vercel** は、デプロイの仕方によって URL が非公開になったり、デプロイのたびに変わったりします。OAuth callback の登録先には、固定された Production URL を使うのがよさそうです
 
 ## 選んだ構成
 
