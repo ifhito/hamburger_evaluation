@@ -5,6 +5,9 @@
 # 新しいリビジョンは最初の要求で起動するので、数回やり直す。
 set -euo pipefail
 origin="${1:?オリジンを渡す}"
+# 末尾の / は取り除く(変数に https://example.com/ と入っていると、"${origin}/" が // になり、
+# 別の応答(307 など)が返って確認が誤って失敗する)。
+origin="${origin%/}"
 
 check() {
   local ct
