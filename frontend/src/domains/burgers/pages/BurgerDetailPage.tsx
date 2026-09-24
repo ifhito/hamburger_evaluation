@@ -34,7 +34,7 @@ export default function BurgerDetailPage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useReviews({ burgerId: id }, { enabled: burger !== undefined });
+  } = useReviews({ burgerId: id }, user?.id ?? null, { enabled: burger !== undefined });
 
   if (isLoading || authLoading) {
     return (
