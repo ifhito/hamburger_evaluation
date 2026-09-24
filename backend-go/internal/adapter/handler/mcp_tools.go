@@ -95,8 +95,8 @@ func (m *MCPServer) newToolServer(viewer domain.User, scopes []string, lang doma
 	mcp.AddTool(s, tool("delete_review", "自分のレビューを削除する。他人のレビューは削除できない。"+writesNote, destructive), guarded(t, "delete_review", t.deleteReview))
 	mcp.AddTool(s, tool("submit_shop", "新しいショップを申請する。申請したショップは、管理者が承認するまで、審査待ちになる。"+writesNote, additive), guarded(t, "submit_shop", t.submitShop))
 	mcp.AddTool(s, tool("list_admin_shops", "審査用に、すべての状態のショップの一覧を返す(管理者だけ)。status を省略すると、すべての状態を返す。"+untrustedNote, readOnly), guarded(t, "list_admin_shops", t.listAdminShops))
-	mcp.AddTool(s, tool("approve_shop", "審査待ちのショップを承認する(管理者だけ)。"+writesNote, destructive), guarded(t, "approve_shop", t.approveShop))
-	mcp.AddTool(s, tool("reject_shop", "審査待ちのショップを却下する(管理者だけ)。理由は moderation_note に任意で書ける。"+writesNote, destructive), guarded(t, "reject_shop", t.rejectShop))
+	mcp.AddTool(s, tool("approve_shop", "審査待ちのショップを承認する(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(t, "approve_shop", t.approveShop))
+	mcp.AddTool(s, tool("reject_shop", "審査待ちのショップを却下する(管理者だけ)。理由は moderation_note に任意で書ける。"+writesNote+untrustedNote, destructive), guarded(t, "reject_shop", t.rejectShop))
 	return s
 }
 
@@ -373,19 +373,15 @@ func (t *mcpTools) approveShop(ctx context.Context, _ *mcp.CallToolRequest, in a
 }
 
 type rejectShopInput struct {
-	ShopID         string `json:"shop_id" jsonschema:"却下するショップの ID(UUID)。list_admin_shops で分かる"`
-	ModerationNote string `json:"moderation_note,omitempty" jsonschema:"却下の理由(任意)"`
+	ShopID         string  `json:"shop_id" jsonschema:"却下するショップの ID(UUID)。list_admin_shops で分かる"`
+	ModerationNote *string `json:"moderation_note,omitempty" jsonschema:"却下の理由(任意)"`
 }
 
 func (t *mcpTools) rejectShop(ctx context.Context, _ *mcp.CallToolRequest, in rejectShopInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ShopID) {
 		return t.failMessage(msgShopNotFound)
 	}
-	var note *string
-	if in.ModerationNote != "" {
-		note = &in.ModerationNote
-	}
-	detail, err := t.shops.Reject(ctx, t.viewer, in.ShopID, note)
+	detail, err := t.shops.Reject(ctx, t.viewer, in.ShopID, in.ModerationNote)
 	if err != nil {
 		return t.toolError("reject_shop", err)
 	}
