@@ -363,6 +363,8 @@ const ja = {
       editErrorTitle: "保存できませんでした",
       rejectError: "ショップを却下できませんでした。",
       rejectErrorTitle: "却下できませんでした",
+      approveError: "ショップを承認できませんでした。",
+      approveErrorTitle: "承認できませんでした",
       filter: {
         all: "すべて",
         pending: "審査待ち",

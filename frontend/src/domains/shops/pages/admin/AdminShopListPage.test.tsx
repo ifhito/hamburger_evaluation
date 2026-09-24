@@ -165,6 +165,49 @@ describe("AdminShopListPage(ショップの管理の一覧)", () => {
     expect(approve).toHaveBeenCalledWith("a");
   });
 
+  it("承認に失敗したとき(API の文言)は、画面の見出しと、その文言を出す", async () => {
+    state.shops = [shop({ id: "a" })];
+    approve.mockRejectedValue(new ApiError(["Shop is already approved"], 422));
+    const page = await show();
+
+    await click(need(byText(page, "button", "Approve"), "Approve"));
+
+    await eventually(() => expect(page.querySelector('[role="alert"]')?.textContent).toContain("Shop is already approved"));
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("Could not approve the shop");
+  });
+
+  it("行ごとの処理中は独立している: A の却下が進行中でも、B の承認を始めたことで A の読み込み中の表示は消えない", async () => {
+    state.shops = [shop({ id: "a", name: "Shop A" }), shop({ id: "b", name: "Shop B" })];
+    let resolveReject: (() => void) | undefined;
+    reject.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveReject = resolve;
+        }),
+    );
+    approve.mockResolvedValue(undefined);
+    const page = await show();
+    const rows = [...page.querySelectorAll("article")];
+
+    await click(need(byText(rows[0], "button", "Reject"), "Reject(A)"));
+    const confirmButton = need(byText<HTMLButtonElement>(rows[0], "button", "Confirm reject"), "Confirm reject(A)");
+    await click(confirmButton);
+    expect(confirmButton.disabled).toBe(true);
+    expect(confirmButton.getAttribute("aria-busy")).toBe("true");
+
+    // B の承認を始めても、A の却下の読み込み中の表示が消えてはいけない(別の行の busy 状態を巻き込んで消さない)。
+    await click(need(byText(rows[1], "button", "Approve"), "Approve(B)"));
+
+    expect(confirmButton.disabled).toBe(true);
+    expect(confirmButton.getAttribute("aria-busy")).toBe("true");
+    expect(approve).toHaveBeenCalledWith("b");
+
+    await act(async () => {
+      resolveReject?.();
+    });
+    await eventually(() => expect(rows[0].querySelector("textarea")).toBeNull());
+  });
+
   it("0 件のとき: 審査待ちの絞り込みには専用の空の画面、そのほかの絞り込みには「No shops.」を出す", async () => {
     const page = await show();
     expect(page.textContent).toContain("No shops.");

@@ -377,6 +377,8 @@ const en = {
       editErrorTitle: "Could not save your changes",
       rejectError: "Failed to reject the shop.",
       rejectErrorTitle: "Could not reject the shop",
+      approveError: "Failed to approve the shop.",
+      approveErrorTitle: "Could not approve the shop",
       filter: {
         all: "All",
         pending: "Pending",
