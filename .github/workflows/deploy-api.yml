@@ -1,15 +1,21 @@
 name: Deploy API
 
 # main に入った backend-go の変更を、本番(Cloud Run。東京)へ配る。
-# 先にマイグレーションを当ててから、新しいイメージに入れ替える。
-# 構成と、必要な secrets は docs/production-deploy.md にある。
+# 構成と、必要な値は docs/production-deploy.md にある。
+#
+# 流れ: マイグレーション → 新しいリビジョンを作る(要求はまだ流さない)
+#      → そのリビジョン専用の URL で確かめる → 通ったら要求を切り替える
+#      → 本番を確かめる(落ちたら直前のリビジョンに戻す)
+# 確かめてから切り替えるので、壊れた版が本番に出ない。
 on:
   push:
     branches: [main]
     paths:
       - "backend-go/**"
       - ".github/workflows/deploy-api.yml"
-  # 手動でも配れるようにする(ロールバックや、基盤側だけ直したときのため)。
+      - ".github/scripts/smoke-api.sh"
+  # 手動でも配れる(基盤側だけ直したときなど)。main 以外からは配らない(下の if、
+  # Production 環境の配信ブランチの制限、GCP 側の入り口の条件の三重)。
   workflow_dispatch:
 
 permissions:
@@ -25,8 +31,11 @@ concurrency:
 jobs:
   migrate:
     name: マイグレーションを当てる
+    # 手動実行で別のブランチを選んでも、本番の DB には触らない。
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: Production
     steps:
       - uses: actions/checkout@v4
 
@@ -47,8 +56,15 @@ jobs:
   deploy:
     name: Cloud Run へ配る
     needs: migrate
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: Production
+    # 値は Production 環境から読む(環境の Variables は、環境を指定したジョブの中でしか見えない)。
+    env:
+      GCP_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'burger-stack' }}
+      REGION: ${{ vars.CLOUD_RUN_REGION || 'asia-northeast1' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -59,36 +75,60 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: いま要求を受けているリビジョンを控える(切り戻し用)
+        id: before
+        run: |
+          set -euo pipefail
+          prev=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$GCP_PROJECT" --format=json \
+            | jq -r '[.status.traffic[] | select(.percent == 100)][0].revisionName // empty')
+          echo "直前のリビジョン: ${prev:-なし}"
+          echo "revision=${prev}" >> "$GITHUB_OUTPUT"
+
       # backend-go/Dockerfile(本番用の多段ビルド)を Cloud Build が使う。
+      # --no-traffic で、要求はまだ流さない。candidate の札を付け、そのリビジョン専用の URL を作る。
       # 環境変数は Cloud Run 側に設定済みのものを引き継ぐ(ここでは触らない。
       # 触ると、GitHub に本番の秘密を全部置くことになる)。
-      - name: gcloud run deploy
-        env:
-          GCP_PROJECT: ${{ vars.GCP_PROJECT_ID }}
-          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
-          REGION: ${{ vars.CLOUD_RUN_REGION }}
+      - name: 新しいリビジョンを作る(要求はまだ流さない)
+        id: create
         run: |
           set -euo pipefail
-          gcloud run deploy "${SERVICE:-burger-stack}" \
+          gcloud run deploy "$SERVICE" \
             --source backend-go \
-            --region "${REGION:-asia-northeast1}" \
-            --project "${GCP_PROJECT}" \
+            --region "$REGION" \
+            --project "$GCP_PROJECT" \
+            --no-traffic --tag candidate \
+            --quiet
+          desc=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$GCP_PROJECT" --format=json)
+          rev=$(echo "$desc" | jq -r '.status.latestCreatedRevisionName')
+          url=$(echo "$desc" | jq -r '.status.traffic[] | select(.tag == "candidate") | .url')
+          test -n "$rev" && test -n "$url" || { echo "新しいリビジョンか、その URL が読めない"; exit 1; }
+          echo "新しいリビジョン: ${rev} (${url})"
+          echo "revision=${rev}" >> "$GITHUB_OUTPUT"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      - name: 新しいリビジョンを確かめる
+        run: .github/scripts/smoke-api.sh "${{ steps.create.outputs.url }}"
+
+      - name: 要求を新しいリビジョンに切り替える
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --region "$REGION" --project "$GCP_PROJECT" \
+            --to-revisions "${{ steps.create.outputs.revision }}=100" \
+            --remove-tags candidate \
             --quiet
 
-      # 配信の確認。200 だけでは足りない(基盤の仮ページも 200 を返す)。
-      # DB につながっていることまで見る。
-      - name: 動いていることを確かめる
+      - name: 本番を確かめる
+        id: verify
         env:
           API_ORIGIN: ${{ vars.API_ORIGIN }}
+        run: .github/scripts/smoke-api.sh "${API_ORIGIN:-https://burger-stack-421794940461.asia-northeast1.run.app}"
+
+      # 専用の URL で通っていれば、ここで落ちることはまずない。落ちたら直前のリビジョンに戻す。
+      # マイグレーションは戻らない(前方互換が前提。docs/production-deploy.md)。
+      - name: 失敗したので直前のリビジョンに戻す
+        if: failure() && steps.verify.outcome == 'failure' && steps.before.outputs.revision != ''
         run: |
-          set -euo pipefail
-          origin="${API_ORIGIN:-https://burger-stack-421794940461.asia-northeast1.run.app}"
-
-          echo "== ${origin}/up が DB まで通ること"
-          ct=$(curl -fsS -o /tmp/up.json -w '%{content_type}' "${origin}/up")
-          echo "content-type: ${ct}"
-          case "${ct}" in application/json*) ;; *) echo "API ではないものが返っている"; exit 1 ;; esac
-          grep -q '"status":"ok"' /tmp/up.json
-
-          echo "== ${origin}/shops が一覧を返すこと"
-          curl -fsS -o /dev/null -w '%{http_code}\n' "${origin}/shops" | grep -q '^200$'
+          gcloud run services update-traffic "$SERVICE" \
+            --region "$REGION" --project "$GCP_PROJECT" \
+            --to-revisions "${{ steps.before.outputs.revision }}=100" \
+            --quiet

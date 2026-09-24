@@ -1,16 +1,20 @@
 name: Deploy Frontend
 
 # main に入った frontend の変更を、本番(Cloudflare Workers)へ配る。
-# 検査(ci.yml)は PR で通っている前提。ここでは本番ビルドが通ることを改めて
-# 確かめてから配る(ビルドが落ちれば、配信物に触らずに終わる)。
-# 構成と、必要な secrets は docs/production-deploy.md にある。
+# 構成と、必要な値は docs/production-deploy.md にある。
+#
+# 流れ: 本番ビルド → 版をアップロード(まだ配信しない) → その版のプレビュー URL で確かめる
+#      → 通ったら切り替える → 本番を確かめる(落ちたら直前の版に戻す)
+# 確かめてから切り替えるので、壊れた版が本番に出ない。
 on:
   push:
     branches: [main]
     paths:
       - "frontend/**"
       - ".github/workflows/deploy-frontend.yml"
-  # 手動でも配れるようにする(ロールバックや、設定だけ変えたときのため)。
+      - ".github/scripts/smoke-frontend.sh"
+  # 手動でも配れる(設定だけ変えたときなど)。main 以外からは配らない(下の if と、
+  # Production 環境の配信ブランチの制限の二重)。
   workflow_dispatch:
 
 permissions:
@@ -25,8 +29,17 @@ concurrency:
 jobs:
   deploy:
     name: Cloudflare Workers へ配る
+    # 手動実行で別のブランチを選んでも、本番には配らない。
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # 値(トークン・アカウント ID)は Production 環境に置く。環境は main からしか使えない。
+    environment: Production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      # wrangler は devDependency に入れていないので、版を固定して実行する。
+      WRANGLER: npx --yes wrangler@4.136.3
     steps:
       - uses: actions/checkout@v4
 
@@ -48,36 +61,34 @@ jobs:
         working-directory: frontend
         run: pnpm run build
 
-      # wrangler は devDependency に入れていないので、版を固定して実行する。
-      - name: wrangler で配る
+      - name: 版をアップロードする(まだ配信しない)
+        id: upload
         working-directory: frontend
-        run: npx --yes wrangler@4.136.3 deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-
-      # 配信の確認。HTTP の 200 だけでは足りない。基盤の仮ページも 200 を返すし、
-      # /api/* の転送が壊れていても index.html が 200 で返る(検証で 2 回とも
-      # これに引っかかった)。中身の種類まで見る。
-      - name: 配信されたことを確かめる
-        env:
-          ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
         run: |
           set -euo pipefail
-          origin="${ORIGIN:-https://hamburger-frontend.hito01010101.workers.dev}"
+          $WRANGLER versions upload --message "${GITHUB_SHA::7}" | tee /tmp/upload.log
+          version_id=$(sed -n 's/^Worker Version ID: *//p' /tmp/upload.log)
+          preview_url=$(sed -n 's/^Version Preview URL: *//p' /tmp/upload.log)
+          test -n "${version_id}" || { echo "版の ID が読めない"; exit 1; }
+          test -n "${preview_url}" || { echo "プレビュー URL が読めない(workers.dev のプレビューが無効かもしれない)"; exit 1; }
+          echo "version_id=${version_id}" >> "$GITHUB_OUTPUT"
+          echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
 
-          echo "== ${origin}/ が HTML を返すこと"
-          curl -fsS -o /dev/null -w '%{http_code} %{content_type}\n' "${origin}/" | grep -q '^200 text/html'
+      - name: プレビューで確かめる
+        run: .github/scripts/smoke-frontend.sh "${{ steps.upload.outputs.preview_url }}"
 
-          echo "== ${origin}/api/meta が API の JSON を返すこと(転送が生きている)"
-          ct=$(curl -fsS -o /tmp/meta.json -w '%{content_type}' "${origin}/api/meta")
-          echo "content-type: ${ct}"
-          case "${ct}" in application/json*) ;; *) echo "API への転送が壊れている"; exit 1 ;; esac
-          grep -q '"rating"' /tmp/meta.json
+      - name: 本番を切り替える
+        working-directory: frontend
+        run: $WRANGLER versions deploy "${{ steps.upload.outputs.version_id }}@100%" --message "${GITHUB_SHA::7}" --yes
 
-          echo "== ページ遷移でも /api/* が Worker に届くこと(Google ログインの経路)"
-          code=$(curl -fsS -o /dev/null -w '%{http_code}' \
-            -H 'Sec-Fetch-Mode: navigate' -H 'Sec-Fetch-Dest: document' -H 'Accept: text/html' \
-            "${origin}/api/auth/google/start")
-          echo "google/start: ${code}"
-          [ "${code}" = "302" ]
+      - name: 本番を確かめる
+        id: verify
+        env:
+          ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
+        run: .github/scripts/smoke-frontend.sh "${ORIGIN:-https://hamburger-frontend.hito01010101.workers.dev}"
+
+      # プレビューで通っていれば、ここで落ちることはまずない。落ちたら直前の版に戻す。
+      - name: 失敗したので直前の版に戻す
+        if: failure() && steps.verify.outcome == 'failure'
+        working-directory: frontend
+        run: $WRANGLER rollback --message "自動の切り戻し(${GITHUB_SHA::7} の確認に失敗)" --yes

@@ -2,7 +2,7 @@
 
 main に入った変更を、GitHub Actions が自動で本番へ配ります。この文書は、その仕組みと、初回に一度だけ必要な準備をまとめたものです。
 
-> **秘密の扱い**: ここに出てくる値(API トークン、DB の接続 URL など)は、すべて GitHub の Secrets に入れます。リポジトリ・PR・チャット・ログに、値そのものを書きません。この文書には**名前だけ**が載っています。
+> **秘密の扱い**: ここに出てくる値(API トークン、DB の接続 URL など)は、すべて GitHub の **Production 環境**の Secrets に入れます。リポジトリ・PR・チャット・ログに、値そのものを書きません。この文書には**名前だけ**が載っています。
 
 ## 本番の構成
 
@@ -22,19 +22,32 @@ main に入った変更を、GitHub Actions が自動で本番へ配ります。
 
 | ワークフロー | いつ走るか | 何をするか |
 |---|---|---|
-| `.github/workflows/deploy-frontend.yml` | main の `frontend/**` が変わったとき | 本番ビルド → Cloudflare へ配る → 配信を確かめる |
-| `.github/workflows/deploy-api.yml` | main の `backend-go/**` が変わったとき | マイグレーション → Cloud Run へ配る → 動作を確かめる |
+| `.github/workflows/deploy-frontend.yml` | main の `frontend/**` が変わったとき | 本番ビルド → 版をアップロード → プレビューで確かめる → 切り替える → 本番を確かめる |
+| `.github/workflows/deploy-api.yml` | main の `backend-go/**` が変わったとき | マイグレーション → 要求を流さないリビジョンを作る → 専用の URL で確かめる → 切り替える → 本番を確かめる |
 
-どちらも、Actions の画面から手動でも実行できます(`workflow_dispatch`)。
+どちらも、Actions の画面から手動でも実行できます(`workflow_dispatch`)。**ただし main からしか配りません。** 手動実行で別のブランチを選んでも、次の 3 つのどれかで止まります。
 
-### 配ったあとの確認
+1. ジョブの `if: github.ref == 'refs/heads/main'`
+2. GitHub の Production 環境の、配信できるブランチの制限(main だけ)。値はこの環境に置いてあり、ほかのブランチからは読めない
+3. GCP 側の入り口の条件(main の `deploy-api.yml` からだけ入れる。API のみ)
 
-**HTTP の 200 だけでは足りません。** 検証中、基盤の仮ページが 200 を返していたために、間違ったものを計測し続けたことが 2 度ありました。どちらのワークフローも、**中身の種類(Content-Type)と、中身の一部**まで確かめます。
+### 確かめてから切り替える
+
+**壊れた版を本番に出さないため、新しい版を先に作って確かめてから、要求を切り替えます。**
+
+| | 先に作る版 | 確かめる先 | 切り替え |
+|---|---|---|---|
+| フロントエンド | `wrangler versions upload`(まだ配信しない) | その版のプレビュー URL | `wrangler versions deploy <版>@100%` |
+| API | `gcloud run deploy --no-traffic --tag candidate` | `candidate` の札が付いたリビジョン専用の URL | `gcloud run services update-traffic --to-revisions <リビジョン>=100` |
+
+切り替えたあとにも本番を確かめ、落ちたら直前の版・リビジョンに自動で戻します。事前に確かめているので、ここで落ちることはまずありません。
+
+確かめる中身は `.github/scripts/smoke-*.sh` にあります。**HTTP の 200 だけでは足りません。** 検証中、基盤の仮ページが 200 を返していたために、間違ったものを計測し続けたことが 2 度ありました。**中身の種類(Content-Type)と、中身の一部**まで確かめます。配った直後は伝播や起動が追いつかないことがあるので、5 秒おきに 5 回までやり直します。
 
 - フロントエンド: `/` が HTML、`/api/meta` が API の JSON、`/api/auth/google/start` がページ遷移でも 302
 - API: `/up` が `{"status":"ok"}`(DB まで通っている)、`/shops` が 200
 
-3 つ目のフロントエンドの確認は、`Sec-Fetch-Mode: navigate` を付けて送ります。**ページ遷移のときだけ壊れる経路**があるためです(下の「既知の落とし穴」)。
+フロントエンドの 3 つ目は、`Sec-Fetch-Mode: navigate` を付けて送ります。**ページ遷移のときだけ壊れる経路**があるためです(下の「既知の落とし穴」)。Worker の転送の約束(クエリ・本文・ヘッダー・302 の素通し)は、`frontend/worker/index.test.js` の単体テストでも固めています。
 
 ### マイグレーションが先
 
@@ -43,6 +56,8 @@ API のワークフローは、マイグレーションを当ててから、新�
 列を消す・名前を変えるといった破壊的な変更は、2 回のリリースに分けます。1 回目で新しい形を足してコードを両対応にし、2 回目で古い形を消します。
 
 ## GitHub に入れる値
+
+すべて、リポジトリの Settings → Environments → **Production** に入れます。リポジトリ全体の Secrets / Variables ではありません。Production 環境は、配信できるブランチを main だけに制限してあります。
 
 ### Secrets(値は秘密)
 
@@ -124,7 +139,7 @@ gcloud iam workload-identity-pools providers create-oidc github \
   --project="$PROJECT_ID" --location=global --workload-identity-pool=github \
   --issuer-uri=https://token.actions.githubusercontent.com \
   --attribute-mapping='google.subject=assertion.sub,attribute.repository=assertion.repository' \
-  --attribute-condition="assertion.repository=='${REPO}'"
+  --attribute-condition="assertion.repository=='${REPO}' && assertion.ref=='refs/heads/main' && assertion.workflow_ref=='${REPO}/.github/workflows/deploy-api.yml@refs/heads/main'"
 
 # 配る役のサービスアカウント
 gcloud iam service-accounts create github-deployer \
@@ -148,7 +163,15 @@ echo "GCP_SERVICE_ACCOUNT=${SA}"
 echo "GCP_PROJECT_ID=${PROJECT_ID}"
 ```
 
-最後の 3 行に出た値を、GitHub の **Variables** に入れます(Settings → Secrets and variables → Actions → Variables)。どれも秘密の値ではありません。`attribute-condition` は、**このリポジトリ以外からは入れない**ようにするためのもので、省略できません。
+最後の 3 行に出た値を、GitHub の Production 環境の **Variables** に入れます(Settings → Environments → Production)。どれも秘密の値ではありません。`attribute-condition` は、**このリポジトリの main の `deploy-api.yml` 以外からは入れない**ようにするためのもので、省略できません。GitHub 側の制限を誰かが外しても、GCP 側で止まります。
+
+すでに入り口を作ってある場合は、条件だけを次のコマンドで締め直します。
+
+```bash
+gcloud iam workload-identity-pools providers update-oidc github \
+  --project="$PROJECT_ID" --location=global --workload-identity-pool=github \
+  --attribute-condition="assertion.repository=='${REPO}' && assertion.ref=='refs/heads/main' && assertion.workflow_ref=='${REPO}/.github/workflows/deploy-api.yml@refs/heads/main'"
+```
 
 ### 3. Cloud Run の継続的デプロイは使わない
 
@@ -172,14 +195,19 @@ Cloud Run のサービスを作り直したときや、コンソールから「�
 
 ### フロントエンド
 
+切り替え後の確認に落ちたときは、CD が自動で直前の版に戻します。それ以外で戻すときは、手元から次を実行します。
+
 ```bash
 cd frontend
 npx wrangler rollback          # 直前の版に戻す
+npx wrangler deployments list  # それより前に戻すときは、版の一覧から選ぶ
 ```
 
-または、問題のコミットを revert して main に入れると、CD がもう一度配ります。
+問題のコミットを revert して main に入れても、CD がもう一度配ります。**手動実行で古いブランチを選んで戻すことはできません**(main からしか配らないため)。
 
 ### API
+
+切り替え後の確認に落ちたときは、CD が自動で直前のリビジョンに戻します。それ以外で戻すときは、Cloud Shell から次を実行します。
 
 ```bash
 gcloud run revisions list --service=burger-stack --region=asia-northeast1
