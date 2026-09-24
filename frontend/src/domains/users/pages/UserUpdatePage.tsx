@@ -30,17 +30,33 @@ function EditColumn({ id, children }: { id: string | undefined; children: ReactN
 }
 
 // 編集フォーム本体。編集してよい(backend の canEdit が true の)ときだけ、UserUpdatePage が表示する。
-function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) {
+// 初期値は、取得済みの profile(initialUsername/initialEmail/initialBio)から取る。AuthProvider の authUser は
+// ログイン直後のキャッシュで、他の画面での更新後に古いままのことがあるため、初期値にも変更の判定にも使わない。
+function UserUpdateForm({
+  id,
+  initialUsername,
+  initialBio,
+  initialEmail,
+}: {
+  id: string;
+  initialUsername: string;
+  initialBio: string;
+  initialEmail: string;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { user: authUser, logout, refreshUser } = useAuth();
+  const { logout, refreshUser } = useAuth();
   const { update } = useUpdateUser(id);
   const { destroy } = useDeleteUser();
   const meta = useMeta().data;
 
-  const [username, setUsername] = useState(authUser?.username ?? "");
+  // 変更したかどうかの比較の基準は、マウント時点の値で固定する(props の initialUsername/initialBio/initialEmail は、
+  // SWR の裏での再取得で、マウント後に新しい値へ変わることがある。基準が動くと、触っていない項目まで
+  // 「変更あり」と判定して、フォームの古い値で上書き送信してしまう)。
+  const [initial] = useState({ username: initialUsername, bio: initialBio, email: initialEmail });
+  const [username, setUsername] = useState(initialUsername);
   const [bio, setBio] = useState(initialBio);
-  const [email, setEmail] = useState(authUser?.email ?? "");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   // 失敗の見出しは画面の言葉、文言(messages)は API が返したものをそのまま出す
@@ -52,11 +68,11 @@ function UserUpdateForm({ id, initialBio }: { id: string; initialBio: string }) 
     e.preventDefault();
     setServerError(null);
     const data: Record<string, string> = {};
-    if (username !== authUser?.username) data.username = username;
+    if (username !== initial.username) data.username = username;
     // 自己紹介文の上限などの規則は backend だけが判定し、違反はサーバーの 422 のメッセージで表示する。
     // 空文字も「書いた内容を消す」操作なので、そのまま送る
-    if (bio !== initialBio) data.bio = bio;
-    if (email !== authUser?.email) data.email = email;
+    if (bio !== initial.bio) data.bio = bio;
+    if (email !== initial.email) data.email = email;
     if (password) {
       // 空のときは変更しない。規則の判定は backend だけが持ち、違反はサーバーの 422 のメッセージで表示する
       data.password = password;
@@ -196,5 +212,12 @@ export default function UserUpdatePage() {
       </EditColumn>
     );
   }
-  return <UserUpdateForm id={profile.id} initialBio={profile.bio} />;
+  return (
+    <UserUpdateForm
+      id={profile.id}
+      initialUsername={profile.username}
+      initialBio={profile.bio}
+      initialEmail={profile.email ?? ""}
+    />
+  );
 }
