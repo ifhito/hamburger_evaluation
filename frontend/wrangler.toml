@@ -10,6 +10,12 @@ name = "hamburger-frontend"
 main = "worker/index.js"
 compatibility_date = "2026-09-01"
 
+# 版ごとのプレビュー URL(<版>-hamburger-frontend.<アカウント>.workers.dev)を有効にしておく。
+# CD は、新しい版をこの URL で確かめてから本番を切り替える。プレビュー URL は workers.dev の上に
+# しか作れず、この設定を書いていないと workers.dev を止めたときに一緒に止まるため、明示する。
+# 公開の入口は独自ドメイン(burger-stack.com。ダッシュボードで設定)で、workers.dev は止めてよい。
+preview_urls = true
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"

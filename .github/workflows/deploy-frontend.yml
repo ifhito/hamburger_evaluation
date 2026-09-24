@@ -74,6 +74,8 @@ jobs:
           echo "version_id=${version_id}" >> "$GITHUB_OUTPUT"
           echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
 
+      # 新しいドメインは、切り替えるまで古い版を返すので、切り替え前の確認には使えない。
+      # 版のプレビュー URL(workers.dev)で確かめる(wrangler.toml の preview_urls)。
       - name: プレビューで確かめる
         run: .github/scripts/smoke-frontend.sh "${{ steps.upload.outputs.preview_url }}"
 
@@ -85,7 +87,7 @@ jobs:
         id: verify
         env:
           ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
-        run: .github/scripts/smoke-frontend.sh "${ORIGIN:-https://hamburger-frontend.hito01010101.workers.dev}"
+        run: .github/scripts/smoke-frontend.sh "${ORIGIN:-https://burger-stack.com}"
 
       # プレビューで通っていれば、ここで落ちることはまずない。落ちたら直前の版に戻す。
       - name: 失敗したので直前の版に戻す
