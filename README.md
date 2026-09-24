@@ -24,6 +24,8 @@
 - ユーザー詳細、プロフィール更新、退会
 - レビュー由来のバーガー統計
 
+システム全体の責務、データフロー、設計思想は [`docs/architecture.md`](docs/architecture.md) を参照してください。
+
 ## Local Development
 
 フロントエンドとバックエンドは別々に起動します。
