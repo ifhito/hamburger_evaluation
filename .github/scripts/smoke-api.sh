@@ -9,12 +9,18 @@ origin="${1:?オリジンを渡す}"
 # 別の応答(307 など)が返って確認が誤って失敗する)。
 origin="${origin%/}"
 
+# CI はサービスの正規 URL を宛先にした ID トークンを渡す(candidate URL でも同じ)。
+curl_args=(-fsS)
+if [[ -n "${CLOUD_RUN_ID_TOKEN:-}" ]]; then
+  curl_args+=(-H "X-Serverless-Authorization: Bearer ${CLOUD_RUN_ID_TOKEN}")
+fi
+
 check() {
   local ct
-  ct=$(curl -fsS -o /tmp/up.json -w '%{content_type}' "${origin}/up") || { echo "/up に届かない"; return 1; }
+  ct=$(curl "${curl_args[@]}" -o /tmp/up.json -w '%{content_type}' "${origin}/up") || { echo "/up に届かない"; return 1; }
   case "${ct}" in application/json*) ;; *) echo "/up が JSON ではない: ${ct}"; return 1 ;; esac
   grep -q '"status":"ok"' /tmp/up.json || { echo "/up が ok ではない(DB に届いていない)"; return 1; }
-  curl -fsS -o /dev/null -w '%{http_code}\n' "${origin}/shops" | grep -q '^200$' || { echo "/shops が 200 ではない"; return 1; }
+  curl "${curl_args[@]}" -o /dev/null -w '%{http_code}\n' "${origin}/shops" | grep -q '^200$' || { echo "/shops が 200 ではない"; return 1; }
 }
 
 for attempt in 1 2 3 4 5; do

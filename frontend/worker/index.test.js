@@ -4,11 +4,14 @@
 // GET と 302 の一部しか見られないので、ここで POST・クエリ・ヘッダー・応答の素通しまで見る。
 // Cloudflare の実行環境は使わず、fetch と env.ASSETS を差し替えて呼ぶ。
 import { afterEach, describe, expect, it, vi } from 'vitest'
+const { getIDToken } = vi.hoisted(() => ({ getIDToken: vi.fn() }))
+vi.mock('./google-identity.js', () => ({ createGoogleIdentityProvider: () => getIDToken }))
 import worker from './index.js'
 
-const API_ORIGIN = 'https://api.example.test'
+const API_ORIGIN = 'https://api-test.run.app'
 
 function setup() {
+  getIDToken.mockReset().mockResolvedValue('google-id-token')
   const upstream = vi.fn(async () => new Response('from-api'))
   vi.stubGlobal('fetch', upstream)
   const assets = { fetch: vi.fn(async () => new Response('from-assets')) }
@@ -89,3 +92,49 @@ describe('worker の /api 転送', () => {
     expect(upstream).not.toHaveBeenCalled()
   })
 })
+
+ describe('IAM認証とMCPの発見用URL', () => {
+  it('利用者の認証を保持し、外部からのインフラ認証ヘッダーは上書きする', async () => {
+   const { upstream, env } = setup()
+   await worker.fetch(new Request('https://front.test/api/mcp', { headers: {
+    Authorization: 'Bearer user-token', 'X-Serverless-Authorization': 'Bearer attacker',
+   } }), env)
+   const [req] = upstream.mock.calls[0]
+   expect(req.headers.get('Authorization')).toBe('Bearer user-token')
+   expect(req.headers.get('X-Serverless-Authorization')).toBe('Bearer google-id-token')
+   expect(getIDToken).toHaveBeenCalledWith(env, API_ORIGIN)
+  })
+  it('Google認証に失敗したときは匿名で転送せず503を返す', async () => {
+   const { upstream, env } = setup()
+   getIDToken.mockRejectedValue(new Error('private-key-material'))
+   const res = await worker.fetch(new Request('https://front.test/api/meta'), env)
+   expect(res.status).toBe(503)
+   expect(await res.text()).not.toContain('private-key-material')
+   expect(upstream).not.toHaveBeenCalled()
+  })
+  it.each([
+   ['/.well-known/oauth-authorization-server/api', '/.well-known/oauth-authorization-server'],
+   ['/.well-known/oauth-authorization-server', '/.well-known/oauth-authorization-server'],
+   ['/.well-known/oauth-protected-resource/api/mcp', '/.well-known/oauth-protected-resource/api/mcp'],
+   ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource'],
+  ])('%sをSPAではなくAPIへ渡す', async (path, expected) => {
+   const { upstream, assets, env } = setup()
+   await worker.fetch(new Request('https://front.test'+path), env)
+   expect(upstream.mock.calls[0][0].url).toBe(API_ORIGIN+expected)
+   expect(assets.fetch).not.toHaveBeenCalled()
+  })
+  it('二重スラッシュのパスでも認証情報を別ホストへ送らない', async () => {
+   const { upstream, env } = setup()
+   await worker.fetch(new Request('https://front.test/api//evil.test/path'), env)
+   expect(new URL(upstream.mock.calls[0][0].url).origin).toBe(API_ORIGIN)
+  })
+  it.each(['http://api-test.run.app', 'https://evil.test', 'https://api-test.run.app/path',
+   'https://user:pass@api-test.run.app'])('不正な転送先%sには認証情報を送らない', async origin => {
+   const { upstream, env } = setup()
+   env.API_ORIGIN = origin
+   const res = await worker.fetch(new Request('https://front.test/api/meta'), env)
+   expect(res.status).toBe(503)
+   expect(getIDToken).not.toHaveBeenCalled()
+   expect(upstream).not.toHaveBeenCalled()
+  })
+ })
