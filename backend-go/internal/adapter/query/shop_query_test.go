@@ -436,8 +436,38 @@ func TestShopModerationQuery(t *testing.T) {
 	old2 := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Old Two", 2, "needs fixes", nil, tOld)
 	newest := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
 
+	t.Run("ページをまたいでも同時刻の店舗を重複や欠落なく取得し最終ページを判定する", func(t *testing.T) {
+		sameOld := sortedIDs(old1, old2)
+		want := []string{newest, sameOld[1], sameOld[0]}
+		for offset := int32(0); offset <= 3; offset++ {
+			shops, hasMore, err := shopQuery.ListShopsForModeration(ctx, nil, 1, offset)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if hasMore != (offset < 2) {
+				t.Errorf("offset=%d hasMore=%v", offset, hasMore)
+			}
+			if offset == 3 {
+				if len(shops) != 0 {
+					t.Fatalf("shops=%v, want empty", shops)
+				}
+			} else if len(shops) != 1 || shops[0].ID != want[offset] {
+				t.Fatalf("offset=%d shops=%v want=%s", offset, shops, want[offset])
+			}
+		}
+	})
+	t.Run("絞り込み後の件数で次ページを判定する", func(t *testing.T) {
+		status := domain.ShopStatusRejected
+		for offset := int32(0); offset < 2; offset++ {
+			shops, hasMore, err := shopQuery.ListShopsForModeration(ctx, &status, 1, offset)
+			if err != nil || hasMore || len(shops) != 1-int(offset) {
+				t.Fatalf("shops=%v hasMore=%v err=%v", shops, hasMore, err)
+			}
+		}
+	})
+
 	t.Run("ListShopsForModeration は created_at 降順、次に id 降順に並べる", func(t *testing.T) {
-		shops, err := shopQuery.ListShopsForModeration(ctx, nil)
+		shops, _, err := shopQuery.ListShopsForModeration(ctx, nil, 20, 0)
 		if err != nil {
 			t.Fatalf("ListShopsForModeration returned error: %v", err)
 		}
@@ -468,7 +498,7 @@ func TestShopModerationQuery(t *testing.T) {
 
 	t.Run("ListShopsForModeration は status で絞り込む", func(t *testing.T) {
 		status := domain.ShopStatusRejected
-		shops, err := shopQuery.ListShopsForModeration(ctx, &status)
+		shops, _, err := shopQuery.ListShopsForModeration(ctx, &status, 20, 0)
 		if err != nil {
 			t.Fatalf("ListShopsForModeration returned error: %v", err)
 		}
@@ -487,7 +517,7 @@ func TestShopModerationQuery(t *testing.T) {
 				t.Fatalf("reset closed_at: %v", err)
 			}
 		})
-		shops, err := shopQuery.ListShopsForModeration(ctx, nil)
+		shops, _, err := shopQuery.ListShopsForModeration(ctx, nil, 20, 0)
 		if err != nil {
 			t.Fatalf("ListShopsForModeration returned error: %v", err)
 		}

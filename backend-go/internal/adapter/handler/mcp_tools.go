@@ -357,11 +357,13 @@ func (t *mcpTools) submitShop(ctx context.Context, _ *mcp.CallToolRequest, in su
 // ---- 管理者のツール(ショップの審査) ----
 
 type listAdminShopsInput struct {
-	Status string `json:"status,omitempty" jsonschema:"審査の状態(pending / active / rejected)で絞り込む。省略するとすべての状態を返す"`
+	Status  string `json:"status,omitempty" jsonschema:"審査の状態(pending / active / rejected)で絞り込む。省略するとすべての状態を返す"`
+	Page    int    `json:"page,omitempty" jsonschema:"ページ番号(1 から)。省略すると 1"`
+	PerPage int    `json:"per_page,omitempty" jsonschema:"1 ページの件数。省略すると既定の件数で、多すぎる値は上限に丸められる"`
 }
 
 func (t *mcpTools) listAdminShops(ctx context.Context, _ *mcp.CallToolRequest, in listAdminShopsInput) (*mcp.CallToolResult, any, error) {
-	list, err := t.shops.AdminList(ctx, t.viewer, in.Status)
+	list, hasMore, err := t.shops.AdminList(ctx, t.viewer, in.Status, in.Page, in.PerPage)
 	if err != nil {
 		return t.toolError("list_admin_shops", err)
 	}
@@ -369,7 +371,7 @@ func (t *mcpTools) listAdminShops(ctx context.Context, _ *mcp.CallToolRequest, i
 	for _, detail := range list {
 		items = append(items, newAdminShopResponse(detail))
 	}
-	return success(items)
+	return success(mcpList[adminShopResponse]{HasMore: hasMore, Items: items})
 }
 
 type approveShopInput struct {

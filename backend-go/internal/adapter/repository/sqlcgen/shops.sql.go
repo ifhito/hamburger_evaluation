@@ -359,7 +359,14 @@ LEFT JOIN users u ON u.id = s.creator_id
 WHERE $1::smallint IS NULL
    OR s.status = $1::smallint
 ORDER BY s.created_at DESC, s.id DESC
+LIMIT $3 OFFSET $2
 `
+
+type ListShopsForModerationParams struct {
+	StatusCode pgtype.Int2
+	PageOffset int32
+	PageLimit  int32
+}
 
 type ListShopsForModerationRow struct {
 	ID              string
@@ -376,8 +383,8 @@ type ListShopsForModerationRow struct {
 // （id desc が created_at の同値を解消し、順序を決定的にする）。
 // status_code は smallint の status フィルタで、すべての status なら NULL
 // である。文字列から smallint への対応付けは repository にある。
-func (q *Queries) ListShopsForModeration(ctx context.Context, statusCode pgtype.Int2) ([]ListShopsForModerationRow, error) {
-	rows, err := q.db.Query(ctx, listShopsForModeration, statusCode)
+func (q *Queries) ListShopsForModeration(ctx context.Context, arg ListShopsForModerationParams) ([]ListShopsForModerationRow, error) {
+	rows, err := q.db.Query(ctx, listShopsForModeration, arg.StatusCode, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}

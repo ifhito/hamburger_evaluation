@@ -58,7 +58,8 @@ FROM shops s
 LEFT JOIN users u ON u.id = s.creator_id
 WHERE sqlc.narg(status_code)::smallint IS NULL
    OR s.status = sqlc.narg(status_code)::smallint
-ORDER BY s.created_at DESC, s.id DESC;
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: GetShopWithCreator :one
 -- 集計(件数・平均・写真)は、shop_stats の保存された値を添える(未集計のショップは、件数 0・平均と写真なし)。

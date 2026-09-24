@@ -34,9 +34,9 @@ func (f *shopStoreFake) CreateShop(_ context.Context, shop domain.Shop) (domain.
 	return shop, nil
 }
 
-func (f *shopStoreFake) ListShopsForModeration(_ context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error) {
+func (f *shopStoreFake) ListShopsForModeration(_ context.Context, status *domain.ShopStatus, limit, offset int32) ([]domain.ShopDetail, bool, error) {
 	if f.err != nil {
-		return nil, f.err
+		return nil, false, f.err
 	}
 	out := make([]domain.ShopDetail, 0, len(f.shops))
 	for _, d := range f.shops {
@@ -46,7 +46,9 @@ func (f *shopStoreFake) ListShopsForModeration(_ context.Context, status *domain
 		out = append(out, d)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID > out[j].ID })
-	return out, nil
+	start := min(int(offset), len(out))
+	end := min(start+int(limit), len(out))
+	return out[start:end], end < len(out), nil
 }
 
 func (f *shopStoreFake) UpdateShopName(_ context.Context, id string, name string, mapURL *string) (domain.Shop, error) {
@@ -231,6 +233,47 @@ func TestAdminShopsForbidden(t *testing.T) {
 // TestAdminListShops は GET /admin/shops を扱う：すべての shop を admin shop の
 // 形で新しい順に返すこと、pending/active/rejected の filter、そして未知の
 // filter の値が空配列に縮退すること。
+func TestAdminListShopsPagination(t *testing.T) {
+	router, _, adminAuth, _ := newShopsRouter(t, seedShops(uid.N(1)))
+	for _, tt := range []struct {
+		name, query, hasMore string
+		code                 int
+		ids                  []string
+	}{
+		{"先頭ページは続きあり", "?page=1&per_page=2", "true", 200, []string{uid.N(3), uid.N(2)}},
+		{"最終ページは残りだけ返す", "?page=2&per_page=2", "false", 200, []string{uid.N(1)}},
+		{"範囲外は空配列", "?page=3&per_page=2", "false", 200, []string{}},
+		{"件数ぴったりの最終ページ", "?per_page=3", "false", 200, []string{uid.N(3), uid.N(2), uid.N(1)}},
+		{"状態で絞ってからページング", "?status=pending&per_page=1", "false", 200, []string{uid.N(2)}},
+		{"未知の状態は次ページなし", "?status=unknown&per_page=1", "false", 200, []string{}},
+		{"負数は既定値に補正", "?page=-1&per_page=-1", "false", 200, []string{uid.N(3), uid.N(2), uid.N(1)}},
+		{"ページが整数でないと422", "?page=abc", "", 422, nil},
+		{"件数が整数でないと422", "?per_page=1.5", "", 422, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := do(router, http.MethodGet, "/admin/shops"+tt.query, "", adminAuth)
+			if rec.Code != tt.code || rec.Header().Get("X-Has-More") != tt.hasMore {
+				t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body)
+			}
+			if tt.code != 200 {
+				return
+			}
+			var items []struct{ ID string }
+			if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+				t.Fatal(err)
+			}
+			if items == nil || len(items) != len(tt.ids) {
+				t.Fatalf("items=%v want=%v", items, tt.ids)
+			}
+			for i, id := range tt.ids {
+				if items[i].ID != id {
+					t.Errorf("items[%d]=%s want=%s", i, items[i].ID, id)
+				}
+			}
+		})
+	}
+}
+
 func TestAdminListShops(t *testing.T) {
 	repo := seedShops(uid.N(1))
 	repo.shops[2].Shop.ModerationNote = shopPtr("needs fixes")

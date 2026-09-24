@@ -43,8 +43,8 @@ type ShopQuery interface {
 	ListShopReviews(ctx context.Context, shopID string) ([]domain.ShopReview, error)
 	// ListShopsForModeration は、creator つきのすべての shop（Reviews は
 	// 空のまま）を新しい順（created_at desc、id desc）に返す。任意で 1 つの
-	// status に絞り込める（nil = すべて）。
-	ListShopsForModeration(ctx context.Context, status *domain.ShopStatus) ([]domain.ShopDetail, error)
+	// status に絞り込める（nil = すべて）。limit+1 件を取得して次ページの有無も返す。
+	ListShopsForModeration(ctx context.Context, status *domain.ShopStatus, limit, offset int32) ([]domain.ShopDetail, bool, error)
 }
 
 // Shops は shop の use case を実装する。公開の一覧と詳細、ユーザーによる
@@ -134,13 +134,13 @@ func (s *Shops) Create(ctx context.Context, viewer domain.User, name string, map
 	}, nil
 }
 
-// AdminList は moderation 画面向けにすべての shop を新しい順で返し、
+// AdminList は moderation 画面向けに shop を新しい順でページングして返し、
 // API の status 文字列で任意に絞り込む。未知の status はエラーにならず、
 // 何にも一致しない（Rails の where(status: unknown) と同様）。
 // admin でない viewer には domain.ErrForbidden を返す。
-func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string) ([]domain.ShopDetail, error) {
+func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string, page, perPage int) ([]domain.ShopDetail, bool, error) {
 	if !viewer.CanModerate() {
-		return nil, domain.ErrForbidden
+		return nil, false, domain.ErrForbidden
 	}
 	var filter *domain.ShopStatus
 	if status != "" {
@@ -148,14 +148,15 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 		case domain.ShopStatusPending, domain.ShopStatusActive, domain.ShopStatusRejected:
 			filter = &st
 		default:
-			return []domain.ShopDetail{}, nil
+			return []domain.ShopDetail{}, false, nil
 		}
 	}
-	shops, err := s.query.ListShopsForModeration(ctx, filter)
+	limit, offset := clampPage(page, perPage)
+	shops, hasMore, err := s.query.ListShopsForModeration(ctx, filter, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("admin list shops: %w", err)
+		return nil, false, fmt.Errorf("admin list shops: %w", err)
 	}
-	return shops, nil
+	return shops, hasMore, nil
 }
 
 // AdminUpdateName は shop の名前(と地図リンク)を変更する（唯一の moderation 編集、Rails

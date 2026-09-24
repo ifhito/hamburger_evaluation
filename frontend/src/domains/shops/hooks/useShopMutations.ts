@@ -1,6 +1,7 @@
-import useSWR, { useSWRConfig } from "swr";
+import { useSWRConfig } from "swr";
 import { shopApiClient } from "../api/shopApiClient";
-import { revalidateInfiniteLists } from "../../../api/useInfinitePages";
+import { revalidateInfiniteLists, useInfinitePages } from "../../../api/useInfinitePages";
+import { toPage, type Page } from "../../../api/page";
 import type {
   AdminShop,
   Shop,
@@ -28,12 +29,23 @@ export function useCreateShop() {
   };
 }
 
-export function useAdminShops(status?: ShopStatus) {
-  const key = status ? `/admin/shops?status=${status}` : "/admin/shops";
-  return useSWR<AdminShop[]>(key, async (url: string) => {
-    const res = await shopApiClient.get<AdminShop[]>(url);
-    return res.data;
-  });
+export function adminShopsKey(status: ShopStatus | undefined, enabled = true) {
+  return (index: number, previous: Page<AdminShop> | null): string | null => {
+    if (!enabled || (previous && !previous.hasMore)) return null;
+    const qs = new URLSearchParams();
+    if (status) qs.set("status", status);
+    qs.set("page", String(index + 1));
+    return `/admin/shops?${qs.toString()}`;
+  };
+}
+
+// ページサイズはbackendに任せ、管理者が切り替わったときもキャッシュを共有しない。
+export function useAdminShops(status: ShopStatus | undefined, viewerId: string | null) {
+  return useInfinitePages<AdminShop>(
+    adminShopsKey(status, viewerId !== null),
+    async (url: string) => toPage(await shopApiClient.get<AdminShop[]>(url)),
+    { scope: viewerId ?? undefined },
+  );
 }
 
 export function useShopModeration() {
