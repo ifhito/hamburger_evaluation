@@ -199,6 +199,12 @@ func (g *GoogleLogins) signIn(ctx context.Context, ident domain.ExternalIdentity
 
 	// 結び付きがない: 同じメールの利用者がいれば、自動では結び付けない(他人のアカウントへの侵入を防ぐ)。
 	if _, err := g.users.GetActiveUserByEmailIgnoreCase(ctx, ident.Email); err == nil {
+		// 同じ Google アカウントの初回のサインインが並行して、直前の signInLinked のあとに先に作られ、
+		// すでにコミット済みのことがある。その利用者を、他人のアカウントと誤認して「メールが使われている」と
+		// 案内する前に、結び付きを引き直す(先に作られたのは、まさにこの Google アカウントの利用者である)。
+		if outcome, userID, done := g.signInLinked(ctx, ident); done {
+			return outcome, userID
+		}
 		return domain.OutcomeAccountExists, ""
 	} else if !errors.Is(err, domain.ErrUserNotFound) {
 		log.Printf("google login: get user by email: %v", err)
