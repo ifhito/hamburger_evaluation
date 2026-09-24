@@ -4,6 +4,7 @@
 const ja = {
   nav: {
     brand: "BurgerStack",
+    about: "BurgerStackとは？",
     shops: "ショップ",
     reviews: "レビュー",
     burgers: "バーガー",
@@ -206,6 +207,7 @@ const ja = {
       linkCopied: "リンクをコピーしました",
       copyLinkManually: "コピーできませんでした。下のリンクを選んでコピーしてください。",
       reviewsHeading: "レビュー",
+      emptyTitle: "何も食べていません",
       noReviews: "まだレビューがありません。",
       reviewAriaLabel: "{{burger}} のレビュー({{date}} 投稿)",
       reviewAriaLabelNoBurger: "レビュー({{date}} 投稿)",
@@ -233,7 +235,25 @@ const ja = {
       backToProfile: "← プロフィールに戻る",
     },
   },
+  about: {
+    title: "BurgerStackとは？",
+    lead: "食べたハンバーガーを記録して、次に食べたい一品を見つけるサービスです。",
+    discoverTitle: "気になるハンバーガーを探す",
+    discoverBody: "お店やハンバーガーの一覧、みんなのレビューから、気になる一品を探せます。閲覧にはアカウントは必要ありません。",
+    recordTitle: "食べた体験を残す",
+    recordBody: "サインインして、お店のページからレビューを書けます。ハンバーガーの名前、評価、感想に加えて、写真や食べた日付も記録できます。",
+    profileTitle: "自分のレビューを振り返る",
+    profileBody: "投稿したレビューはプロフィールにまとまります。お気に入りの味や訪れたお店を、あとから振り返れます。",
+    start: "お店を探す",
+    browseReviews: "みんなのレビューを見る",
+  },
   oauth: {
+    // backend-go/internal/domain/oauth.go の oauthScopes に対応する表示用の翻訳。権限の説明を変えるときは併せて更新する。
+    scopeDescriptions: {
+      read: "お店、レビュー、プロフィールを閲覧する",
+      write: "あなたに代わってレビューの投稿・編集・削除と、お店の登録申請を行う",
+      admin: "お店の登録申請を一覧表示・承認・却下し、閉業・営業再開を登録する",
+    },
     writeAccess: "書き込み",
     consent: {
       eyebrow: "アプリの接続",

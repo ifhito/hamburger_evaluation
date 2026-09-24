@@ -24,3 +24,11 @@ describe("router の /auth/google/complete", () => {
     expect(guarded.some((r) => r.path === "/auth/google/complete")).toBe(false);
   });
 });
+
+describe("サービス紹介ページ", () => {
+  it("サインインを求めずに公開ページを開ける", () => {
+    expect(router.routes.find((route) => route.path === "/about")).toBeDefined();
+    const guarded = router.routes.filter((route) => route.path === undefined).flatMap((route) => route.children ?? []);
+    expect(guarded.some((route) => route.path === "/about")).toBe(false);
+  });
+});

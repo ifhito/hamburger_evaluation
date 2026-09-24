@@ -1,6 +1,7 @@
 const en = {
   nav: {
     brand: "BurgerStack",
+    about: "About BurgerStack",
     shops: "Shops",
     reviews: "Reviews",
     burgers: "Burgers",
@@ -218,6 +219,7 @@ const en = {
       linkCopied: "Link copied",
       copyLinkManually: "Copying failed. Select the link below and copy it.",
       reviewsHeading: "Reviews",
+      emptyTitle: "No burgers tried yet",
       noReviews: "No reviews yet.",
       reviewAriaLabel: "{{burger}} review, posted {{date}}",
       reviewAriaLabelNoBurger: "Review posted {{date}}",
@@ -245,7 +247,25 @@ const en = {
       backToProfile: "\u2190 Back to profile",
     },
   },
+  about: {
+    title: "About BurgerStack",
+    lead: "Keep a record of the burgers you try and find your next favorite.",
+    discoverTitle: "Discover a burger",
+    discoverBody: "Browse shops, burgers, and reviews to find something you want to try. You do not need an account to browse.",
+    recordTitle: "Record your experience",
+    recordBody: "Sign in and write a review from a shop page. Add the burger name, a rating, and your thoughts, along with an optional photo and the date you ate it.",
+    profileTitle: "Look back at your reviews",
+    profileBody: "Your reviews appear together on your profile, so you can revisit your favorite flavors and the shops you have visited.",
+    start: "Explore shops",
+    browseReviews: "Browse reviews",
+  },
   oauth: {
+    // backend-go/internal/domain/oauth.go の oauthScopes に対応する表示用の翻訳。権限の説明を変えるときは併せて更新する。
+    scopeDescriptions: {
+      read: "View shops, reviews and profiles",
+      write: "Post, edit and delete reviews, and submit shops, on your behalf",
+      admin: "Moderate shop submissions: list, approve, reject, close and reopen them",
+    },
     // 書き込みを伴う範囲(API の writes)の横に出す、目立たせる印。許可の画面と、接続済みのアプリの一覧の、どちらでも使う。
     writeAccess: "Writes",
     consent: {

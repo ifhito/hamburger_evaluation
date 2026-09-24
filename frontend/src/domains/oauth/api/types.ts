@@ -1,4 +1,4 @@
-// 許可の範囲。名前と、利用者に見せる説明は backend が決める(frontend は写さず、そのまま表示する)。
+// 許可の範囲。名前と権限の内容は backend が決める。frontend は既知の範囲の説明を翻訳し、未知の範囲は description を表示する。
 export interface OAuthScope {
   name: string;
   description: string;

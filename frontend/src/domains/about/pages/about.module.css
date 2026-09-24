@@ -1,0 +1,25 @@
+.content {
+  max-width: 44rem;
+  display: grid;
+  gap: 2rem;
+  line-height: 1.8;
+}
+
+.content h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.content p {
+  margin: 0;
+}
+
+.lead {
+  font-size: 1.125rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
