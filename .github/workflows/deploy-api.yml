@@ -115,7 +115,20 @@ jobs:
           echo "revision=${rev}" >> "$GITHUB_OUTPUT"
           echo "url=${url}" >> "$GITHUB_OUTPUT"
 
+      # ビルド中に短命のトークンが失効しないよう、確認する直前に発行する。
+      - name: 候補版の確認直前にIDトークンを取得する
+        id: candidate_auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ vars.CLOUD_RUN_AUDIENCE || 'https://burger-stack-azcarxd7mq-an.a.run.app' }}
+          id_token_include_email: true
+
       - name: 新しいリビジョンを確かめる
+        env:
+          CLOUD_RUN_ID_TOKEN: ${{ steps.candidate_auth.outputs.id_token }}
         run: .github/scripts/smoke-api.sh "${{ steps.create.outputs.url }}"
 
       - name: 要求を新しいリビジョンに切り替える
@@ -126,16 +139,28 @@ jobs:
             --remove-tags candidate \
             --quiet
 
+      # ビルド中に短命のトークンが失効しないよう、確認する直前に発行する。
+      - name: 本番の確認直前にIDトークンを取得する
+        id: verify_auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ vars.CLOUD_RUN_AUDIENCE || 'https://burger-stack-azcarxd7mq-an.a.run.app' }}
+          id_token_include_email: true
+
       - name: 本番を確かめる
         id: verify
         env:
           API_ORIGIN: ${{ vars.API_ORIGIN }}
+          CLOUD_RUN_ID_TOKEN: ${{ steps.verify_auth.outputs.id_token }}
         run: .github/scripts/smoke-api.sh "${API_ORIGIN:-https://burger-stack-421794940461.asia-northeast1.run.app}"
 
       # 専用の URL で通っていれば、ここで落ちることはまずない。落ちたら直前のリビジョンに戻す。
       # マイグレーションは戻らない(前方互換が前提。docs/production-deploy.md)。
       - name: 失敗したので直前のリビジョンに戻す
-        if: failure() && steps.verify.outcome == 'failure' && steps.before.outputs.revision != ''
+        if: failure() && (steps.verify_auth.outcome == 'failure' || steps.verify.outcome == 'failure') && steps.before.outputs.revision != ''
         run: |
           gcloud run services update-traffic "$SERVICE" \
             --region "$REGION" --project "$GCP_PROJECT" \
