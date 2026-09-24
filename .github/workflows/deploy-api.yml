@@ -54,8 +54,8 @@ jobs:
 
       - uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -64,7 +64,7 @@ jobs:
       # 触ると、GitHub に本番の秘密を全部置くことになる)。
       - name: gcloud run deploy
         env:
-          GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT: ${{ vars.GCP_PROJECT_ID }}
           SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
           REGION: ${{ vars.CLOUD_RUN_REGION }}
         run: |

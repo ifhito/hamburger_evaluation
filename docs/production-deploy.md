@@ -51,13 +51,21 @@ API のワークフローは、マイグレーションを当ててから、新�
 | `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。範囲は `hamburger-frontend` だけ、役割は Editor |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID |
 | `PROD_DATABASE_URL` | Neon の接続 URL。**pooler ではなく直結のほう** |
+
+**Neon の URL は、pooler ではなく直結のものにします。** pooler 経由だと、マイグレーションが `unnamed prepared statement does not exist` で落ちることがあります(検証中に 2 回発生。再実行で通るが、当たり外れがある)。
+
+### Variables(秘密ではない)
+
+GCP の 3 つは必須です。「2. GCP に、鍵を持たない入り口を作る」の最後に表示されます。秘密ではないので Variables に置きます(ログで伏せ字にならず、失敗したときに追いやすい)。
+
+| 名前 | 中身 |
+|---|---|
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/<番号>/locations/global/workloadIdentityPools/github/providers/github` |
 | `GCP_SERVICE_ACCOUNT` | `github-deployer@<プロジェクト ID>.iam.gserviceaccount.com` |
 | `GCP_PROJECT_ID` | Google Cloud のプロジェクト ID |
 
-**Neon の URL は、pooler ではなく直結のものにします。** pooler 経由だと、マイグレーションが `unnamed prepared statement does not exist` で落ちることがあります(検証中に 2 回発生。再実行で通るが、当たり外れがある)。
+次の 4 つは任意で、未設定なら既定値で動きます。
 
-### Variables(秘密ではない。未設定なら既定値で動く)
 
 | 名前 | 既定値 |
 |---|---|
@@ -141,7 +149,7 @@ echo "GCP_SERVICE_ACCOUNT=${SA}"
 echo "GCP_PROJECT_ID=${PROJECT_ID}"
 ```
 
-最後の 3 行に出た値を、GitHub の Secrets に入れます。どれも秘密の値ではありませんが、手順をそろえるため Secrets に置きます。`attribute-condition` は、**このリポジトリ以外からは入れない**ようにするためのもので、省略できません。
+最後の 3 行に出た値を、GitHub の **Variables** に入れます(Settings → Secrets and variables → Actions → Variables)。どれも秘密の値ではありません。`attribute-condition` は、**このリポジトリ以外からは入れない**ようにするためのもので、省略できません。
 
 ### 3. Cloud Run の継続的デプロイは使わない
 
