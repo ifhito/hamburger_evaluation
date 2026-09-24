@@ -1083,3 +1083,49 @@ func TestCreateReviewTargetIDFormat(t *testing.T) {
 		})
 	}
 }
+
+// TestCreateReviewVisitedAtInvalid は、実食日(visited_at)が "YYYY-MM-DD" の形式で読めない
+// ときの 422(`Visited at must be in YYYY-MM-DD format`)を、POST /reviews の JSON と multipart
+// の両方の経路で固定する。shop_id・burger_id は有効な値にし、visited_at の形式だけが原因で
+// 422 になることを確かめる。malformed な値は永続化より前に弾かれるので、review は 1 件も
+// 作られない。
+func TestCreateReviewVisitedAtInvalid(t *testing.T) {
+	const wantBody = `{"errors":["Visited at must be in YYYY-MM-DD format"]}`
+	tests := []struct {
+		name      string
+		visitedAt string
+	}{
+		{"日付として読めない文字列", "not-a-date"},
+		{"暦として存在しない日付", "2024-02-30"},
+	}
+	for _, tt := range tests {
+		t.Run("JSON の本文で、"+tt.name, func(t *testing.T) {
+			repo := seedReviewWorld(uid.N(1))
+			router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+			body := fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q,"burger_id":%q,"visited_at":%q}}`,
+				activeShopID, cheeseBurgerID, tt.visitedAt)
+			rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
+			if rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != wantBody {
+				t.Errorf("status/body = %d %s, want %d %s", rec.Code, rec.Body, http.StatusUnprocessableEntity, wantBody)
+			}
+			if len(repo.reviews) != 0 {
+				t.Errorf("422 なのに review が作られた: %d 件", len(repo.reviews))
+			}
+		})
+		t.Run("multipart の本文で、"+tt.name, func(t *testing.T) {
+			repo := seedReviewWorld(uid.N(1))
+			router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+			form, ct := multipartBody(t, map[string]string{
+				"rating": "4", "comment": "ok",
+				"shop_id": activeShopID, "burger_id": cheeseBurgerID, "visited_at": tt.visitedAt,
+			})
+			rec := doMultipart(router, http.MethodPost, "/reviews", form, ct, aliceAuth)
+			if rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != wantBody {
+				t.Errorf("status/body = %d %s, want %d %s", rec.Code, rec.Body, http.StatusUnprocessableEntity, wantBody)
+			}
+			if len(repo.reviews) != 0 {
+				t.Errorf("422 なのに review が作られた: %d 件", len(repo.reviews))
+			}
+		})
+	}
+}

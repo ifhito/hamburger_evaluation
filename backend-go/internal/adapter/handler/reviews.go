@@ -431,16 +431,16 @@ func checkReviewTargetIDs(shopID, burgerID string) (status int, msg apiMessage, 
 	return 0, apiMessage{}, true
 }
 
-// parseVisitedAtString は "YYYY-MM-DD" 形式の日付のみの文字列(空なら未指定)をパースする。パースした値を
-// 同じ書式で文字列に戻し、入力と比較することで、ゼロ埋めされていない入力("2024-1-1" など)と、暦として
-// 存在しない日付("2024-02-30" など。time.Parse は黙って正規化してしまい、そのままでは弾けない)の両方を
-// 拒否する。HTTP の handler と MCP のツールで共有し、形式の判定を重複させない。
+// parseVisitedAtString は "YYYY-MM-DD" 形式の日付のみの文字列(空なら未指定)をパースする。
+// layout "2006-01-02" は、ゼロ埋めされていない入力("2024-1-1" など)や、暦として存在しない
+// 日付("2024-02-30" など)を time.Parse 自身がエラーにする(黙って正規化することはない)ので、
+// err の確認だけで足りる。HTTP の handler と MCP のツールで共有し、形式の判定を重複させない。
 func parseVisitedAtString(s string) (*time.Time, bool) {
 	if s == "" {
 		return nil, true
 	}
 	t, err := time.Parse("2006-01-02", s)
-	if err != nil || t.Format("2006-01-02") != s {
+	if err != nil {
 		return nil, false
 	}
 	return &t, true

@@ -504,6 +504,23 @@ func TestReviewsUpdate(t *testing.T) {
 			t.Fatalf("Update error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
+
+	t.Run("未来日の実食日での編集は、何も書き込まずに ValidationError になる（usecase が Clock を domain の検証に渡していることの確認）", func(t *testing.T) {
+		// newReviews は uowtest.Clock{} を配線しており、その Now() は uowtest.FixedTime
+		// (2024-06-01T12:00:00Z) を返す。その翌日を visitedAt に渡すことで、domain.ValidateReviewContent
+		// が受け取る now が、テストの実行時刻ではなく実際に usecase 配線の Clock 由来であることを確かめる。
+		future := time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC)
+		query := &fakeReviewQuery{getReview: getReview}
+		repo := &fakeReviewRepo{} // updateReviewContent は未設定：呼び出しは panic する
+		_, err := newReviews(query, repo, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 5, "ok", &future, nil)
+		var vErr *domain.ValidationError
+		if !errors.As(err, &vErr) {
+			t.Fatalf("error = %v, want *domain.ValidationError", err)
+		}
+		if want := []string{"Visited at can't be in the future"}; !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
+			t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
+		}
+	})
 }
 
 // TestReviewsDelete は論理削除（soft delete）のフローを扱う。投稿者のみ、

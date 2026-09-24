@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
   profile: undefined as undefined | { id: string; username: string; bio: string; email?: string; canEdit: boolean },
   userLoading: false,
   userError: undefined as unknown,
-  reviews: [] as { id: string; rating: number; comment: string; photoUrl: null; createdAt: string; user: null; burger: null }[],
+  reviews: [] as { id: string; rating: number; comment: string; photoUrl: null; createdAt: string; visitedAt: string | null; user: null; burger: null }[],
 }));
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: { id: "9", username: "dave" }, isLoading: false }) }));
 vi.mock("../hooks/useUser", () => ({
@@ -84,7 +84,7 @@ describe("UserDetailPage のプロフィール本体", () => {
   });
 
   it("レビューがあるとき: 「Newest first」と、レビューごとのカードを出す", async () => {
-    state.reviews = [{ id: "r1", rating: 4, comment: "Nice", photoUrl: null, createdAt: "2026-09-21T00:00:00Z", user: null, burger: null }];
+    state.reviews = [{ id: "r1", rating: 4, comment: "Nice", photoUrl: null, createdAt: "2026-09-21T00:00:00Z", visitedAt: null, user: null, burger: null }];
     const page = await show();
 
     expect(page.textContent).toContain("Newest first");

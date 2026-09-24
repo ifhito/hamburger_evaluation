@@ -134,8 +134,18 @@ func TestReviewRepository(t *testing.T) {
 	})
 
 	t.Run("UpdateReviewContent に visitedAt として nil を渡すと、実食日は NULL に戻る（部分更新ではなく全置換）", func(t *testing.T) {
-		// 直前の subtest で rOld の visited_at は非 NULL になっている。ここで nil を渡すと
-		// review_repository.go の doc comment どおり「full replace」として NULL に戻ることを確かめる。
+		// この subtest 自身で、まず非 NULL の visited_at を書き込み、それが確かに保存された
+		// ことを確認したうえで、nil を渡す 2 回目の呼び出しが NULL に戻すことを確かめる。他の
+		// subtest の実行順・実行有無に依存しない（単独実行しても意味のある検証になる）。
+		visitedAt := time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC)
+		withVisitedAt, err := repo.UpdateReviewContent(ctx, rOld, 2, "Changed my mind", &visitedAt)
+		if err != nil {
+			t.Fatalf("UpdateReviewContent (setup, non-nil visitedAt) returned error: %v", err)
+		}
+		if withVisitedAt.VisitedAt == nil || !withVisitedAt.VisitedAt.Equal(visitedAt) {
+			t.Fatalf("setup VisitedAt = %v, want %v (non-nil, to prove the later clear is meaningful)", withVisitedAt.VisitedAt, visitedAt)
+		}
+
 		updated, err := repo.UpdateReviewContent(ctx, rOld, 2, "Changed my mind", nil)
 		if err != nil {
 			t.Fatalf("UpdateReviewContent returned error: %v", err)
