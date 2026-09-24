@@ -9,8 +9,23 @@ name: Deploy Frontend
 on:
   push:
     branches: [main]
+    # 配る中身(ビルドした静的ファイルと Worker)が変わるときだけ走る。
+    # テスト・Storybook・開発用の Docker と nginx の設定・ESLint の設定・文書だけの変更では走らない。
+    # 否定(!)は、それより前の肯定に一致したものから外す。順番を入れ替えない。
     paths:
       - "frontend/**"
+      - "!frontend/**/*.test.ts"
+      - "!frontend/**/*.test.tsx"
+      - "!frontend/**/*.test.js"
+      - "!frontend/**/*.stories.tsx"
+      - "!frontend/src/test/**"
+      - "!frontend/.storybook/**"
+      - "!frontend/Dockerfile"
+      - "!frontend/docker-compose*.yml"
+      - "!frontend/nginx.conf"
+      - "!frontend/eslint.config.js"
+      - "!frontend/docs/**"
+      - "!frontend/**/*.md"
       - ".github/workflows/deploy-frontend.yml"
       - ".github/scripts/smoke-frontend.sh"
   # 手動でも配れる(設定だけ変えたときなど)。main 以外からは配らない(下の if と、
