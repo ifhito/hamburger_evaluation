@@ -40,7 +40,9 @@ main に入った変更を、GitHub Actions が自動で本番へ配ります。
 | フロントエンド | `wrangler versions upload`(まだ配信しない) | その版のプレビュー URL | `wrangler versions deploy <版>@100%` |
 | API | `gcloud run deploy --no-traffic --tag candidate` | `candidate` の札が付いたリビジョン専用の URL | `gcloud run services update-traffic --to-revisions <リビジョン>=100` |
 
-切り替えたあとにも本番を確かめ、落ちたら直前の版・リビジョンに自動で戻します。事前に確かめているので、ここで落ちることはまずありません。
+切り替えたあとにも本番を確かめ、落ちたら直前の版・リビジョンに自動で戻します。
+
+フロントエンドの切り替え前の確認は、独自ドメイン(`burger-stack.com`)ではできません。独自ドメインは、切り替えるまで古い版を返すからです。版のプレビュー URL は workers.dev の上にしか作れないので、`wrangler.toml` の `preview_urls = true` で有効にしてあります。公開の入口としての workers.dev は止めて構いませんが、この設定は消さないでください。事前に確かめているので、ここで落ちることはまずありません。
 
 確かめる中身は `.github/scripts/smoke-*.sh` にあります。**HTTP の 200 だけでは足りません。** 検証中、基盤の仮ページが 200 を返していたために、間違ったものを計測し続けたことが 2 度ありました。**中身の種類(Content-Type)と、中身の一部**まで確かめます。配った直後は伝播や起動が追いつかないことがあるので、5 秒おきに 5 回までやり直します。
 
@@ -83,7 +85,7 @@ API のワークフローは、マイグレーションを当ててから、新�
 
 | 名前 | 既定値 |
 |---|---|
-| `FRONTEND_ORIGIN` | `https://hamburger-frontend.hito01010101.workers.dev` |
+| `FRONTEND_ORIGIN` | `https://burger-stack.com` |
 | `API_ORIGIN` | `https://burger-stack-421794940461.asia-northeast1.run.app` |
 | `CLOUD_RUN_SERVICE` | `burger-stack` |
 | `CLOUD_RUN_REGION` | `asia-northeast1` |
