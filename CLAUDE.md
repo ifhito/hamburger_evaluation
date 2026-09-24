@@ -398,7 +398,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - 文字数は Unicode の**コードポイント数**で数える(バイト数でも書記素クラスタでもない。日本語は 1 文字、通常の絵文字も 1 文字。結合文字は 1 コードポイントごとに数える)。PostgreSQL の `char_length` と同じ数え方である
 - `PUT` の部分更新は、送られた項目だけを検証する
 - DB にも `CHECK (char_length(...) <= N)` がある(多層防御。最初のマイグレーションの `CREATE TABLE` に、名前つきの制約として入っている)。値は domain の定数と同じで、食い違いは `db/migrations_test.go` が検出する。上限を変えるときは、定数と、該当する `CREATE TABLE` の `CHECK` の 2 か所を直す(実運用に入ったあとは、新しいマイグレーションで直す)
-- リクエスト body のバイト数の上限は経路と Content-Type で決まる: 既定は 1 MiB。`POST /reviews` と `PUT /reviews/:id` の `multipart/form-data`(写真つき)が 6 MiB(写真は別に 5 MiB)。`POST /mcp` は写真の Base64 増分と JSON 用の 1 MiB を含む上限(写真の上限は同じ)で、SDK の上限も揃える。それ以外の JSON は、レビューの書き込みでも 1 MiB を超えると 413。multipart のテキスト項目は 1 項目 64 KiB(外側のガード。超えると 400)
+- リクエスト body 全体の上限は、経路・Content-Type にかかわらず 10 MiB。MCP SDK も同じ上限に揃える。超過すると 413。写真自体は別に 5 MiB まで。multipart のテキスト項目は 1 項目 64 KiB(外側のガード。超えると 400)
 
 ### データベーススキーマ
 

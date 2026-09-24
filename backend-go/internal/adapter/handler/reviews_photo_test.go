@@ -363,51 +363,31 @@ func TestPhotoDirectoryRequests(t *testing.T) {
 	}
 }
 
-// TestReviewBodyLimit は body の上限を Content-Type で固定する：review の
-// 書き込み endpoint に対する multipart/form-data だけが 6 MiB まで受け付けられ（401 は、
-// request が認証なしで上限を通過したことを示す）、6 MiB を超えると 413 で拒否される。
-// JSON（Content-Type なしを含む）は、review の書き込みでもグローバルな 1 MiB のままで、
-// それ以外のすべての route も 1 MiB の上限を保つ。
+// TestReviewBodyLimit は、経路や Content-Type にかかわらず同じ上限を適用することを確認する。
+// 401 は本文上限を通過して認証処理まで到達したことを示す。
 func TestReviewBodyLimit(t *testing.T) {
 	router, _, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
-	const (
-		multipartCT = "multipart/form-data; boundary=x"
-		jsonCT      = "application/json"
-	)
-	oneMiBPlus := strings.Repeat("a", 1<<20+1)
-	twoMiB := strings.Repeat("a", 2<<20)
-	sevenMiB := strings.Repeat("a", 7<<20)
-
-	tests := []struct {
-		name        string
-		method      string
-		path        string
-		contentType string
-		body        string
-		wantCode    int
-	}{
-		{name: "POST /reviews は multipart なら 2MiB でも上限を通過する", method: http.MethodPost, path: "/reviews", contentType: multipartCT, body: twoMiB, wantCode: http.StatusUnauthorized},
-		{name: "PUT /reviews/1 は multipart なら 2MiB でも上限を通過する", method: http.MethodPut, path: "/reviews/" + uid.N(1), contentType: multipartCT, body: twoMiB, wantCode: http.StatusUnauthorized},
-		{name: "POST /reviews は multipart でも 7MiB だと 413 になる", method: http.MethodPost, path: "/reviews", contentType: multipartCT, body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "PUT /reviews/1 は multipart でも 7MiB だと 413 になる", method: http.MethodPut, path: "/reviews/" + uid.N(1), contentType: multipartCT, body: sevenMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "POST /reviews は JSON だと 1MiB を超えると 413 になる", method: http.MethodPost, path: "/reviews", contentType: jsonCT, body: oneMiBPlus, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "PUT /reviews/1 は JSON だと 2MiB で 413 になる", method: http.MethodPut, path: "/reviews/" + uid.N(1), contentType: jsonCT, body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "POST /reviews は Content-Type がなければ JSON と同じ 1MiB になる", method: http.MethodPost, path: "/reviews", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "POST /shops は multipart を名乗っても 1MiB の上限を保つ", method: http.MethodPost, path: "/shops", contentType: multipartCT, body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "POST /shops は 1MiB の上限を保つ", method: http.MethodPost, path: "/shops", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
-		{name: "POST /signup は 1MiB の上限を保つ", method: http.MethodPost, path: "/signup", body: twoMiB, wantCode: http.StatusRequestEntityTooLarge},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
-			if tt.contentType != "" {
-				req.Header.Set("Content-Type", tt.contentType)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodPost, "/reviews"},
+		{http.MethodPut, "/reviews/" + uid.N(1)},
+		{http.MethodPost, "/shops"},
+	} {
+		for _, contentType := range []string{"application/json", "multipart/form-data; boundary=x", ""} {
+			for _, size := range []int{10 << 20, (10 << 20) + 1} {
+				t.Run(fmt.Sprintf("%s %s %s 本文%dバイト", route.method, route.path, contentType, size), func(t *testing.T) {
+					req := httptest.NewRequest(route.method, route.path, strings.NewReader(strings.Repeat("a", size)))
+					req.Header.Set("Content-Type", contentType)
+					rec := httptest.NewRecorder()
+					router.ServeHTTP(rec, req)
+					want := http.StatusUnauthorized
+					if size > 10<<20 {
+						want = http.StatusRequestEntityTooLarge
+					}
+					if rec.Code != want {
+						t.Fatalf("status = %d, want %d (body %s)", rec.Code, want, rec.Body)
+					}
+				})
 			}
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-			if rec.Code != tt.wantCode {
-				t.Errorf("status = %d, want %d (body %s)", rec.Code, tt.wantCode, rec.Body)
-			}
-		})
+		}
 	}
 }

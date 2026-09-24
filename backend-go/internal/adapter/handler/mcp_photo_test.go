@@ -132,13 +132,25 @@ func TestMCPPhotoBodyLimit(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			k := newMCPKit(t)
-			req := k.rpcRequest(t, k.token(k.alice, writeScope), strings.Repeat("a", 8<<20))
-			if chunked {
-				req.ContentLength = -1
-			}
-			resp, body := k.do(t, req)
-			if resp.StatusCode != http.StatusRequestEntityTooLarge {
-				t.Fatalf("status=%d body=%s", resp.StatusCode, body)
+			token := k.token(k.alice, readScope)
+			for _, tc := range []struct {
+				name       string
+				size, want int
+			}{
+				{"10MiBちょうどならSDKも受け付ける", 10 << 20, http.StatusOK},
+				{"10MiBを1バイト超えると拒否する", (10 << 20) + 1, http.StatusRequestEntityTooLarge},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					body := rpcToolsList + strings.Repeat(" ", tc.size-len(rpcToolsList))
+					req := k.rpcRequest(t, token, body)
+					if chunked {
+						req.ContentLength = -1
+					}
+					resp, body := k.do(t, req)
+					if resp.StatusCode != tc.want {
+						t.Fatalf("status=%d want=%d body=%s", resp.StatusCode, tc.want, body)
+					}
+				})
 			}
 		})
 	}

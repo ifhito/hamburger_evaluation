@@ -404,7 +404,7 @@ func TestMCPAuthentication(t *testing.T) {
 	t.Run("上限を超える大きさの本文は、トークンを確かめる前に 413 になる", func(t *testing.T) {
 		k := newMCPKit(t)
 		token := k.token(k.alice, readScope)
-		big := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"pad":"` + strings.Repeat("a", 8<<20) + `"}}`
+		big := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"pad":"` + strings.Repeat("a", (10<<20)+1) + `"}}`
 		if resp, _ := k.rpc(t, token, big); resp.StatusCode != http.StatusRequestEntityTooLarge {
 			t.Fatalf("status = %d, want 413", resp.StatusCode)
 		}

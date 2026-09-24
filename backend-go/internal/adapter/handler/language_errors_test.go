@@ -149,7 +149,7 @@ func TestClientErrorsFollowAcceptLanguage(t *testing.T) {
 		en, ja := single("request body too large", "送られた内容が大きすぎます")
 		add("リクエストの形: 本文が大きすぎる", func(t *testing.T, lang string) *httptest.ResponseRecorder {
 			// Content-Length を隠して、事前の検査を迂回し、読み取りの上限を作動させる。
-			body := struct{ io.Reader }{strings.NewReader(`{"username":"` + strings.Repeat("a", 2<<20))}
+			body := struct{ io.Reader }{strings.NewReader(`{"username":"` + strings.Repeat("a", (10<<20)+1))}
 			req := httptest.NewRequest(http.MethodPost, "/signup", body)
 			if lang != "" {
 				req.Header.Set("Accept-Language", lang)
