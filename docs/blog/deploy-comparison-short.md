@@ -135,13 +135,12 @@ published: false
 
 書き込みだけが 4 倍遅いのは、BEGIN から COMMIT まで 4 往復しているからです。4 社とも倍率がぴったり 4.02〜4.04 で揃いました。時間を決めているのは DB の性能ではなく往復回数なので、CTE で 1 文にまとめれば 1 往復にできます。
 
-### 今回の構成で確認した注意点
+### システムへ組み込むときに知っておきたい癖
 
-以下は、今回の Docker 環境、リージョン、接続方法で確認した内容です。環境が違えば同じ事象が起きるとは限りません。
+pooler は、アプリと PostgreSQL の間で DB 接続を使い回す中継サービスです。接続数を抑えられる一方、接続方法によってはアプリ実行用とマイグレーション用の URL を分ける必要があります。
 
-- 今回の Docker 環境では、**Supabase** の Direct connection を名前解決できませんでした。psql では接続できたため、マイグレーションだけが失敗してテーブルがないように見えます。今回は Session pooler に切り替えて接続しました
-- **Neon** では、今回 pooler 経由でマイグレーションしたときに `unnamed prepared statement does not exist` が出ることがありました。直結の URL に切り替えると通りました
-- Render と Xata は、今回試した範囲では追加の対応は不要でした。Supabase は新規なら東京を選べるため、リージョンが違えば計測結果も変わるはずです
+- **Supabase** の Direct connection は IPv6 前提です。IPv4 しか使えない実行環境からは、Session pooler を接続経路として使います
+- **Neon** は通常の API 接続には pooler 用 URL を使えますが、マイグレーションでは prepared statement と相性が悪い場合があります。その場合はマイグレーションだけ直結 URL を使います
 
 ## 2. 写真ストレージ
 
@@ -235,13 +234,10 @@ Supabase は中央値こそ速いのに、2 割ほどの閲覧で目に見えて
 
 Region を `auto` に固定しているコードも、4 社ともそのまま通りました。エンドポイントと鍵を差し替えるだけで動きます。
 
-### 今回の構成で確認した注意点
+### システムへ組み込むときに知っておきたい癖
 
-以下は、今回の S3 互換アダプタと公開方法で確認した内容です。別の SDK や配信方法では条件が変わります。
-
-- **B2** では、今回最初に選んだマスターキーを S3 API に使えず、`Malformed Access Key Id` になりました。App Keys で S3 用のキーを作ると接続できました
-- **R2** では、バケット名の指定を取り違えたため `NoSuchBucket` になりました。また、今回使った公開 URL の `*.r2.dev` は開発用なので、本番利用では独自ドメインを用意する必要があります
-- Tigris と Supabase は、今回試した範囲では追加の対応は不要でした
+- **B2** の S3 互換 API では、通常のアカウント情報ではなく App Key を使います。App Key の keyID と applicationKey を、S3 の Access Key ID と Secret Access Key に対応させます
+- **R2** は S3 API のエンドポイントと、画像を配信する公開 URL が別です。`*.r2.dev` は開発用なので、本番配信では独自ドメインを組み合わせます
 
 ## 3. メール送信
 
@@ -323,14 +319,11 @@ Region を `auto` に固定しているコードも、4 社ともそのまま通
 
 最初は関門のない Mailjet を選びました。でも **Mailjet は認証していないドメインのアドレスからでも送れてしまいます**。これは利点ではなく弱点だと考え直して、Resend に変えました。鍵が漏れたら任意の差出人で送られてしまいますし、他社なら弾かれる設定ミスに気づけないからです。
 
-### 今回の構成で確認した注意点
+### システムへ組み込むときに知っておきたい癖
 
-以下は、今回使ったアカウント、ドメイン、Cloud Run 構成で確認した内容です。審査状況やプランによって挙動が変わる可能性があります。
-
-- **Brevo** では、今回ドメイン認証後も `525 Unauthorized IP` が残り、送信元 IP の登録が必要でした。送信元 IP が固定されない今回の Cloud Run 構成では採用しにくい条件でした
-- **MailerSend** は、今回の設定不備に 450(一時的エラー)を返したため、アプリ側が再試行を続けました
-- **Resend** の共有ドメインでは、今回 `+` エイリアスを自分のアドレスとして扱えませんでした
-- **SMTP2GO** は、今回使ったメールアドレスでは `Please use an email at your own domain to sign up` と表示され、登録を完了できませんでした
+- **Brevo** はドメイン認証とは別に送信元 IP の登録を求めます。送信元 IP が固定されない Cloud Run のような実行基盤とは、そのままでは組み合わせにくい構成です
+- **MailerSend** はドメイン設定の不備にも 450(一時的エラー)を返します。メール送信処理が再試行を続けないよう、アプリ側に再試行上限が必要です
+- **Resend** の共有ドメインは送信先が厳しく限定されます。開発中の確認は共有ドメイン、本番送信は認証済みの独自ドメインと分けて考えます
 
 ## 4. API
 
@@ -418,14 +411,12 @@ API をインターネットへ公開するなら、動くか、速いか、安�
 
 ここは負荷をかける実測ではなく、2026 年 9 月時点の公式資料で比較しました。Cloud Run は [security overview](https://docs.cloud.google.com/run/docs/securing/security) と [ingress の制限](https://docs.cloud.google.com/run/docs/securing/ingress)、Northflank は [network security](https://northflank.com/docs/v1/application/network/networking-on-northflank) と [path-based security policies](https://northflank.com/docs/v1/application/network/create-path-based-security-policies)、Render は [Web Services](https://render.com/docs/web-services) と [DDoS protection](https://render.com/docs/ddos-protection)、Back4App は [Containers の custom domain](https://www.back4app.com/docs-containers/custom-domain) を参照しています。
 
-### 今回の構成で確認した注意点
+### システムへ組み込むときに知っておきたい癖
 
-以下は、検証時点の無料プランと今回のリポジトリ構成で確認した内容です。リージョン、プラン、設定によって条件は変わります。
-
-- **Render** では、今回 `render.yaml` にシンガポールを指定してもオレゴンに作成され、後から変更できませんでした。Root Directory は `backend-go` にするとビルドできました。今回の SMTP 接続は通らず、サインアップを完結できませんでした
-- **Northflank** は、検証時点の無料枠では US だけを選べました。今回の画像処理は 384 万画素で 33 秒かかり、失敗する前から応答が大きく遅くなりました
-- **Back4App** では、今回の設定画面から Dockerfile の名前を選べず、既定の `Dockerfile` に合わせる必要がありました。検証用の一時 URL には期限があり、今回の方法のままでは継続運用に使えませんでした
-- **Cloud Run** は、今回の scale-to-zero 設定では要求がない間インスタンスが 0 になり、同じプロセスの常駐ワーカーも止まりました
+- **Render** は monorepo の Root Directory を明示する必要があります。リージョンは作成後に変更できず、SMTP 接続も制限されるため、最初の構成決定とメール送信方法に影響します
+- **Northflank** は無料枠で選べるリージョンが US に限られます。画像処理のようにメモリを使う処理では、失敗する前に応答が大きく遅くなることがあります
+- **Back4App** は Dockerfile の名前を指定できず、既定の `Dockerfile` だけを使います。`Dockerfile.prod` など別名のファイルを使うリポジトリでは、配置かファイル名を合わせる必要があります
+- **Cloud Run** は scale-to-zero すると、API と同じプロセスに置いた常駐ワーカーも止まります。常時動かす処理は別サービスや定期実行に分ける必要があります
 
 事前調査では「SMTP を塞ぐのは Cloud Run」と考えていましたが、今回の実測では Render から接続できませんでした。**少なくとも今回確認した資料だけでは判別できず、実際に接続して確かめる必要がありました。**
 
@@ -511,16 +502,11 @@ API をインターネットへ公開するなら、動くか、速いか、安�
 
 Cloudflare だけがコードを書く方式なので減点していましたが、行数の差は 4 行でした。しかも転送は最速です。**「コードを書く手間」は減点になりませんでした。**
 
-### 今回の構成で確認した注意点
+### システムへ組み込むときに知っておきたい癖
 
-以下は、今回の SPA、Google ログイン、API 転送の構成で確認した内容です。静的サイトだけを配信する場合や、別の認証方式では条件が変わります。
-
-- **Cloudflare** では、今回のページ遷移でアセット配信が Worker より先に働き、さらに `fetch` が 302 を追いかけたため、Google ログインが期待どおり動きませんでした。今回は `run_worker_first` と `redirect: "manual"` の両方を設定しました
-- **Render** では、今回 Action を Redirect にするとオリジンが変わり、CORS で失敗しました。Rewrite にすると動きました
-- **Vercel** は、今回の初期設定では非公開で SSO へ 302 を返しました。また、50 回の計測中に Bot 対策で遮断され、CLI での配信では本番 URL が変わりました
-- **Netlify** は、今回追加の設定変更は不要でした。一方で、API 転送とデプロイ時間の計測値には大きなばらつきがありました
-
-今回の計測では、「コマンドが終わった時刻」と「変更が配信された時刻」を分けました。Render は push が 1 秒で戻り、その後にビルドが非同期で進みます。そこで今回は、変えた値そのものが配信物に現れた時点を反映完了として計測しました。
+- **Cloudflare Workers** は静的アセット配信が Worker より先に処理されます。API や OAuth callback を Worker へ通すには `run_worker_first` が必要です。また、OAuth の 302 をブラウザへ返す処理では、Worker 側の `fetch` に `redirect: "manual"` を指定します
+- **Render Static Site** は API 転送に Redirect ではなく Rewrite を使います。Redirect ではブラウザから見えるオリジンが変わり、CORS の影響を受けます
+- **Vercel** はデプロイ方法によって SSO 付きの非公開 URL になったり、URL がデプロイごとに変わったりします。OAuth callback や外部サービスの接続先には、固定された Production URL を使います
 
 ## 選んだ構成
 
