@@ -65,7 +65,8 @@ func TestValidationErrorsFollowAcceptLanguage(t *testing.T) {
 		repo.seed("bob", "bob@example.com", "Password123!")
 		return router, token(alice.ID), ""
 	}
-	reviewBody := fmt.Sprintf(`{"review":{"rating":0,"comment":"","shop_id":%q,"burger_id":%q}}`, activeShopID, cheeseBurgerID)
+	tooLongComment := strings.Repeat("a", domain.MaxCommentChars+1)
+	reviewBody := fmt.Sprintf(`{"review":{"rating":0,"comment":%q,"shop_id":%q,"burger_id":%q}}`, tooLongComment, activeShopID, cheeseBurgerID)
 	calls := []call{
 		{"ログイン: メールとパスワードが空", authKit, http.MethodPost, "/login", `{"email":"","password":""}`,
 			`{"errors":["Email can't be blank","Password can't be blank"]}`,
@@ -87,17 +88,17 @@ func TestValidationErrorsFollowAcceptLanguage(t *testing.T) {
 		{"ショップの追加: 名前が空", shopsKit, http.MethodPost, "/shops", `{"shop":{"name":"   "}}`,
 			`{"errors":["Name can't be blank"]}`,
 			`{"errors":["ショップの名前を入力してください"]}`},
-		{"レビューの投稿: 評価が範囲外で、コメントが空(評価の文言が先)", reviewsKit, http.MethodPost, "/reviews", reviewBody,
-			`{"errors":["Rating must be in 1..5","Comment can't be blank"]}`,
-			`{"errors":["評価は 1〜5 の整数で指定してください","コメントを入力してください"]}`},
+		{"レビューの投稿: 評価が範囲外で、コメントが長すぎる(評価の文言が先)", reviewsKit, http.MethodPost, "/reviews", reviewBody,
+			fmt.Sprintf(`{"errors":["Rating must be in 1..5","Comment is too long (maximum is %d characters)"]}`, domain.MaxCommentChars),
+			fmt.Sprintf(`{"errors":["評価は 1〜5 の整数で指定してください","コメントが長すぎます(最大 %d 文字)"]}`, domain.MaxCommentChars)},
 		{"レビューの投稿: バーガーの名前が空", reviewsKit, http.MethodPost, "/reviews",
 			fmt.Sprintf(`{"review":{"rating":5,"comment":"good","shop_id":%q,"burger_name":"  "}}`, activeShopID),
 			`{"errors":["Burger name can't be blank"]}`,
 			`{"errors":["バーガーの名前を入力してください"]}`},
-		{"レビューの編集: 評価が範囲外で、コメントが空", editReviewKit, http.MethodPut, "",
+		{"レビューの編集: 評価が範囲外(コメントは空でもよい)", editReviewKit, http.MethodPut, "",
 			`{"review":{"rating":6,"comment":""}}`,
-			`{"errors":["Rating must be in 1..5","Comment can't be blank"]}`,
-			`{"errors":["評価は 1〜5 の整数で指定してください","コメントを入力してください"]}`},
+			`{"errors":["Rating must be in 1..5"]}`,
+			`{"errors":["評価は 1〜5 の整数で指定してください"]}`},
 		{"プロフィールの更新: 自己紹介が長すぎる", usersKit, http.MethodPut, "/users/" + uid.N(1),
 			fmt.Sprintf(`{"user":{"bio":%q}}`, strings.Repeat("a", domain.MaxBioChars+1)),
 			fmt.Sprintf(`{"errors":["Bio is too long (maximum is %d characters)"]}`, domain.MaxBioChars),

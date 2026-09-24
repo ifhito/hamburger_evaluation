@@ -49,4 +49,10 @@ describe("ReviewListCard(レビュー一覧のカード)", () => {
     expect(ariaLabel).toContain("alice");
     expect(ariaLabel).not.toContain("{{");
   });
+
+  it("comment が空のときは、空のコメント欄を出さない(評価だけのレビュー)", () => {
+    const markup = html({ ...review, comment: "" });
+
+    expect(markup).not.toMatch(/<p[^>]*class="[^"]*comment[^"]*"[^>]*>/);
+  });
 });

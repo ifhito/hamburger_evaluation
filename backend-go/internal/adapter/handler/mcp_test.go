@@ -881,13 +881,20 @@ func TestMCPWriteTools(t *testing.T) {
 		}
 	})
 
-	t.Run("create_review は、範囲外の評価・空の本文・存在しないショップを、API と同じ文言の失敗にする", func(t *testing.T) {
+	t.Run("create_review は評価だけで本文が空でも成功する", func(t *testing.T) {
+		id := create(t, alice, "  ")
+		got, _ := call(t, alice, "get_review", map[string]any{"review_id": id})
+		if !strings.Contains(got, `"comment":"  "`) {
+			t.Errorf("review = %s, want comment を空白のまま保持する", got)
+		}
+	})
+
+	t.Run("create_review は、範囲外の評価・存在しないショップを、API と同じ文言の失敗にする", func(t *testing.T) {
 		for name, tc := range map[string]struct {
 			args map[string]any
 			want string
 		}{
 			"評価が範囲外":             {map[string]any{"shop_id": activeShopID, "burger_id": cheeseBurgerID, "rating": 9, "comment": "x"}, "Rating must be in 1..5"},
-			"本文が空":               {map[string]any{"shop_id": activeShopID, "burger_id": cheeseBurgerID, "rating": 3, "comment": "  "}, "Comment can't be blank"},
 			"ショップがない":            {map[string]any{"shop_id": uidMissing, "burger_id": cheeseBurgerID, "rating": 3, "comment": "x"}, "Shop not found"},
 			"ショップ ID が空":         {map[string]any{"shop_id": "", "burger_id": cheeseBurgerID, "rating": 3, "comment": "x"}, "Shop not found"},
 			"ショップ ID が UUID でない": {map[string]any{"shop_id": "abc", "burger_id": cheeseBurgerID, "rating": 3, "comment": "x"}, "Shop id must be a valid UUID"},

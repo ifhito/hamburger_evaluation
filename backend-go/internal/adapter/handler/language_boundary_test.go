@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
@@ -87,10 +88,11 @@ func TestMCPErrorsFollowAcceptLanguage(t *testing.T) {
 	})
 
 	t.Run("ツールの入力が検証で断られると、その文言も、要求の言語で返る(複数あれば「; 」でつなぐ)", func(t *testing.T) {
-		args := `{"shop_id":"` + activeShopID + `","burger_id":"` + cheeseBurgerID + `","rating":0,"comment":""}`
+		tooLongComment := strings.Repeat("a", domain.MaxCommentChars+1)
+		args := `{"shop_id":"` + activeShopID + `","burger_id":"` + cheeseBurgerID + `","rating":0,"comment":"` + tooLongComment + `"}`
 		for header, want := range map[string]string{
-			"":   "Rating must be in 1..5; Comment can't be blank",
-			"ja": "評価は 1〜5 の整数で指定してください; コメントを入力してください",
+			"":   "Rating must be in 1..5; Comment is too long (maximum is 2000 characters)",
+			"ja": "評価は 1〜5 の整数で指定してください; コメントが長すぎます(最大 2000 文字)",
 		} {
 			headers := map[string]string{}
 			if header != "" {

@@ -314,15 +314,16 @@ func TestReviewsCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("不正な内容(評価が範囲外、コメントが空)の投稿は、保存せずに ValidationError になる", func(t *testing.T) {
+	t.Run("不正な内容(評価が範囲外、コメントが長すぎる)の投稿は、保存せずに ValidationError になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		repo := &fakeReviewRepo{} // createReview は未設定
-		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, " ", nil)
+		tooLongComment := strings.Repeat("a", domain.MaxCommentChars+1)
+		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, tooLongComment, nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
 		}
-		want := []string{"Rating must be in 1..5", "Comment can't be blank"}
+		want := []string{"Rating must be in 1..5", "Comment is too long (maximum is 2000 characters)"}
 		if !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
 			t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
 		}
@@ -403,12 +404,13 @@ func TestReviewsCreate(t *testing.T) {
 	t.Run("burger_name 経由では書き込みの前に内容を validate する", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop}
 		repo := &fakeReviewRepo{} // バーガー名の解決(createShopBurger)は代役に設定していない。書き込みの前に検証で失敗するので、呼ばれない
-		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", "Smash", 0, " ", nil)
+		tooLongComment := strings.Repeat("a", domain.MaxCommentChars+1)
+		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", "Smash", 0, tooLongComment, nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
 		}
-		want := []string{"Rating must be in 1..5", "Comment can't be blank"}
+		want := []string{"Rating must be in 1..5", "Comment is too long (maximum is 2000 characters)"}
 		if !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
 			t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
 		}

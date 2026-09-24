@@ -31,7 +31,7 @@ export function ProfileReviewCard({ review, ratingMax }: { review: Review; ratin
           </time>
         </div>
         {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} variant="stepped" />}
-        <p className={styles.comment}>{review.comment}</p>
+        {review.comment && <p className={styles.comment}>{review.comment}</p>}
       </div>
     </Link>
   );
