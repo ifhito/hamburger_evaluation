@@ -101,10 +101,10 @@ type Shop struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	CreatorID      *string
-	ClosedAt       pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	MapURL         pgtype.Text
+	ClosedAt       pgtype.Timestamptz
 }
 
 type ShopStat struct {

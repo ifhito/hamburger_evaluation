@@ -43,9 +43,9 @@ func TestShopClosedAtUpgrade(t *testing.T) {
 				}
 			}
 			dbtest.Apply(ctx, t, conn, before)
-			if !tt.hasColumn {
-				// 過去に適用済みのDBと同じ状態を、テスト専用DBに再現する。
-				if _, err := conn.Exec(ctx, "ALTER TABLE shops DROP COLUMN IF EXISTS closed_at"); err != nil {
+			if tt.hasColumn {
+				// 一時的に列を含んでいたCREATE TABLEから作られたDBも更新できる。
+				if _, err := conn.Exec(ctx, "ALTER TABLE shops ADD COLUMN closed_at timestamptz"); err != nil {
 					t.Fatal(err)
 				}
 			}
