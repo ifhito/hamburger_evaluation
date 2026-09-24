@@ -10,8 +10,17 @@ name: Deploy API
 on:
   push:
     branches: [main]
+    # 配る中身(本番のイメージとマイグレーション)が変わるときだけ走る。
+    # テスト・テスト用のデータ・開発用の Docker 設定・sqlc の設定・文書だけの変更では走らない。
+    # 否定(!)は、それより前の肯定に一致したものから外す。順番を入れ替えない。
     paths:
       - "backend-go/**"
+      - "!backend-go/**/*_test.go"
+      - "!backend-go/**/testdata/**"
+      - "!backend-go/Dockerfile.dev"
+      - "!backend-go/docker-compose*.yml"
+      - "!backend-go/sqlc.yaml"
+      - "!backend-go/**/*.md"
       - ".github/workflows/deploy-api.yml"
       - ".github/scripts/smoke-api.sh"
   # 手動でも配れる(基盤側だけ直したときなど)。main 以外からは配らない(下の if、
