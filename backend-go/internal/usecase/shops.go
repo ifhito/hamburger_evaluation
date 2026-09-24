@@ -107,6 +107,12 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id string) (domain
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("list shop reviews: %w", err)
 	}
+	for i := range reviews {
+		if reviews[i].PhotoKey != nil {
+			url := s.photos.URL(*reviews[i].PhotoKey)
+			reviews[i].PhotoURL = &url
+		}
+	}
 	detail.Reviews = reviews
 	detail.CanReview = detail.CanBeReviewedByViewer(viewer)
 	detail.Summary = s.withPhotoURL(detail.Summary)

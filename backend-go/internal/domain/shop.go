@@ -257,8 +257,11 @@ type ShopReview struct {
 	CreatedAt time.Time
 	// VisitedAt は、実食日(日付のみ、未指定は nil)である。Review.VisitedAt と同じ意味を持つ。
 	VisitedAt *time.Time
-	User      *UserRef
-	Burger    *ShopReviewBurger
+	// PhotoKey は保存先のキー、PhotoURL は usecase が設定する公開 URL。写真がなければ nil。
+	PhotoKey *string
+	PhotoURL *string
+	User     *UserRef
+	Burger   *ShopReviewBurger
 }
 
 // ShopReviewBurger は統計付きの対象 burger であり、統計はまだ計算されて
