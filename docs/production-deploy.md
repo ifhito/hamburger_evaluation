@@ -96,12 +96,18 @@ API のワークフローは、マイグレーションを当ててから、新�
 
 長く使えるサービスアカウントの鍵を GitHub に置かずに済む方法(Workload Identity Federation)を使います。流出しても悪用できる期間が数分に限られるためです。
 
-`gcloud` を入れたうえで、次を実行します。`PROJECT_ID` と `REPO` は自分のものに置き換えます。
+Google Cloud コンソール右上の **Cloud Shell**(`gcloud` が入った端末)で、次を実行します。手元に `gcloud` を入れる必要はありません。`PROJECT_ID` と `REPO` は自分のものに置き換えます。
 
 ```bash
 PROJECT_ID=<Google Cloud のプロジェクト ID>
 REPO=ifhito/hamburger_evaluation
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+
+# 使う API を有効にする(有効済みなら何も起きない)。
+# iamcredentials と sts は、鍵なしで入る仕組みそのものに要る。
+gcloud services enable --project="$PROJECT_ID" \
+  iamcredentials.googleapis.com sts.googleapis.com \
+  run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 
 # 入り口(プール)と、GitHub からの身元を受け付ける設定
 gcloud iam workload-identity-pools create github \
@@ -132,9 +138,10 @@ gcloud iam service-accounts add-iam-policy-binding "$SA" \
 
 echo "GCP_WORKLOAD_IDENTITY_PROVIDER=projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/providers/github"
 echo "GCP_SERVICE_ACCOUNT=${SA}"
+echo "GCP_PROJECT_ID=${PROJECT_ID}"
 ```
 
-最後の 2 行に出た値を、GitHub の Secrets に入れます。`attribute-condition` は、**このリポジトリ以外からは入れない**ようにするためのもので、省略できません。
+最後の 3 行に出た値を、GitHub の Secrets に入れます。どれも秘密の値ではありませんが、手順をそろえるため Secrets に置きます。`attribute-condition` は、**このリポジトリ以外からは入れない**ようにするためのもので、省略できません。
 
 ### 3. Cloud Run の継続的デプロイは使わない
 
