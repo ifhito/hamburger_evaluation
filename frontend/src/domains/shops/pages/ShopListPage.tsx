@@ -17,7 +17,7 @@ import styles from "./shopList.module.css";
 // (公開中だけ・自分が作ったものも含む・すべて)は API が行い、frontend は返された一覧をそのまま出す。
 export default function ShopListPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
   const [searchParams] = useSearchParams();
   const [keyword, setKeyword] = useState(() => searchParams.get("keyword") ?? "");
@@ -28,7 +28,7 @@ export default function ShopListPage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useShops(keyword ? { keyword } : undefined);
+  } = useShops(keyword ? { keyword } : undefined, user?.id ?? null, { enabled: !authLoading });
 
   return (
     <Layout>
@@ -52,7 +52,7 @@ export default function ShopListPage() {
         )}
       </div>
 
-      {isLoading && <Loading />}
+      {(isLoading || authLoading) && <Loading />}
       {error && <Alert message={t("shops.list.loadError")} />}
       {shops && shops.length === 0 && <EmptyState />}
 

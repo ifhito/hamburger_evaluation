@@ -1,5 +1,6 @@
 import useSWR, { useSWRConfig } from "swr";
 import { shopApiClient } from "../api/shopApiClient";
+import { revalidateInfiniteLists } from "../../../api/useInfinitePages";
 import type {
   AdminShop,
   Shop,
@@ -17,11 +18,11 @@ export function isShopKey(key: unknown): boolean {
 }
 
 export function useCreateShop() {
-  const { mutate } = useSWRConfig();
+  const { cache, mutate } = useSWRConfig();
   return {
     create: async (data: ShopCreateInput): Promise<Shop> => {
       const res = await shopApiClient.post<Shop>("/shops", { shop: data });
-      await mutate(isShopKey);
+      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
       return res.data;
     },
   };
@@ -36,29 +37,29 @@ export function useAdminShops(status?: ShopStatus) {
 }
 
 export function useShopModeration() {
-  const { mutate } = useSWRConfig();
+  const { cache, mutate } = useSWRConfig();
   return {
     approve: async (id: string): Promise<AdminShop> => {
       const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/approve`, {});
-      await mutate(isShopKey);
+      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
       return res.data;
     },
     reject: async (id: string, moderationNote: string): Promise<AdminShop> => {
       const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/reject`, {
         moderationNote,
       });
-      await mutate(isShopKey);
+      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
       return res.data;
     },
   };
 }
 
 export function useUpdateShop(id: string) {
-  const { mutate } = useSWRConfig();
+  const { cache, mutate } = useSWRConfig();
   return {
     update: async (data: ShopUpdateInput): Promise<AdminShop> => {
       const res = await shopApiClient.put<AdminShop>(`/admin/shops/${id}`, { shop: data });
-      await mutate(isShopKey);
+      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
       return res.data;
     },
   };

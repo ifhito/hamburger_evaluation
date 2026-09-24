@@ -1,7 +1,20 @@
-import { describe, it, expect } from "vitest";
-import { getKey } from "./useReviews";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { getKey, useReviews } from "./useReviews";
+import { useInfinitePages } from "../../../api/useInfinitePages";
 import type { Page } from "../../../api/page";
 import type { ReviewView } from "../api/types";
+
+vi.mock("../../../api/useInfinitePages", () => ({
+  useInfinitePages: vi.fn(() => ({
+    data: undefined,
+    error: undefined,
+    isLoading: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    refresh: vi.fn(),
+    fetchNextPage: vi.fn(),
+  })),
+}));
 
 function review(id: string): ReviewView {
   return {
@@ -75,5 +88,31 @@ describe("getKey", () => {
   it("enabled を省略した場合と true の場合は、これまでどおりキーを返す", () => {
     expect(getKey({ userId })(0, null)).toBe(`/reviews?user_id=${userId}&page=1`);
     expect(getKey({ userId }, true)(0, null)).toBe(`/reviews?user_id=${userId}&page=1`);
+  });
+});
+
+describe("useReviews", () => {
+  beforeEach(() => {
+    vi.mocked(useInfinitePages).mockClear();
+  });
+
+  it("閲覧者の id を useInfinitePages の scope として渡す(閲覧者ごとにキャッシュを分けるため)", () => {
+    useReviews(undefined, userId);
+
+    expect(vi.mocked(useInfinitePages)).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      { scope: userId },
+    );
+  });
+
+  it("匿名(viewerId が null)のときは scope を付けない(未ログインの誰とも重ならない素のキーになる)", () => {
+    useReviews(undefined, null);
+
+    expect(vi.mocked(useInfinitePages)).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      { scope: undefined },
+    );
   });
 });

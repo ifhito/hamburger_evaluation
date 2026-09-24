@@ -25,10 +25,19 @@ export function getKey(params: ReviewSearchParams | undefined, enabled = true) {
   };
 }
 
+// GET /reviews の中身は閲覧者ごとに違う(各レビューの can_edit。作者本人だけ true)ため、useShops と同じ理由で、
+// 一覧のキャッシュにも viewerId を含める(useInfinitePages の scope)。匿名(viewerId が null)は scope を
+// 付けない(素の URL のままのキーになり、ログイン中の誰とも重ならない)。
 // options.enabled: 呼び出し側が取得を止められる。例: user_id が不正なとき、そのまま呼ぶと 422 になり、
 // user_id を外して呼ぶと全件が返る。未指定なら常に取得する
-export function useReviews(params?: ReviewSearchParams, options?: { enabled?: boolean }) {
-  return useInfinitePages<ReviewView>(getKey(params, options?.enabled !== false), async (url: string) =>
-    toPage(await reviewApiClient.get<ReviewView[]>(url)),
+export function useReviews(
+  params: ReviewSearchParams | undefined,
+  viewerId: string | null,
+  options?: { enabled?: boolean },
+) {
+  return useInfinitePages<ReviewView>(
+    getKey(params, options?.enabled !== false),
+    async (url: string) => toPage(await reviewApiClient.get<ReviewView[]>(url)),
+    { scope: viewerId ?? undefined },
   );
 }

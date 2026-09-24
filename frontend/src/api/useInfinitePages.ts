@@ -2,6 +2,31 @@ import { useMemo } from "react";
 import useSWRInfinite from "swr/infinite";
 import { mergePages, type Page } from "./page";
 
+// getKey の結果に scope を重ねる。scope が undefined なら素のキーのまま(閲覧者を区別しない一覧、または匿名の一覧)。
+// scope が違えば同じ url でも別々にキャッシュされ、scope が同じでも url が違えば別々にキャッシュされる。
+export function withScope(
+  key: string | null,
+  scope: string | undefined,
+): string | readonly [string, string] | null {
+  return key === null || scope === undefined ? key : ([scope, key] as const);
+}
+
+const INFINITE_KEY_PREFIX = "$inf$"; // useSWRInfinite が内部で一覧の集計キーに付ける接頭辞。swr の非公開の実装詳細だが、
+// SWR の mutate(フィルタ関数) がこの接頭辞のキーを常に除外する(下の既存コメント、および swr 内部の
+// /^\$(inf|sub)\$/ の除外)ため、フィルタでは一覧を再検証できない。ここでは $inf$ のキーを直接なめて、
+// キーごとに mutate する(キーだけを渡す mutate は、この関数の revalidateAll: true の設定に従って、読み込み
+// 済みの全ページを再取得する。対応する一覧が現在マウントされていなくても、デデュープの印だけ消すので、
+// 次にその一覧がマウントされたときの取得が確実に新しくなる)。
+// ponytail: 対象を絞らず、このアプリの useSWRInfinite の利用先を全部洗い替える(4 種類だけなので許容)。
+// 種類が増えて負荷が気になったら、swr/infinite の unstable_serialize(getKey) で対象を絞る。
+export function revalidateInfiniteLists(
+  cache: { keys(): IterableIterator<string> },
+  mutate: (key: string) => Promise<unknown>,
+): Promise<unknown[]> {
+  const keys = [...cache.keys()].filter((key) => key.startsWith(INFINITE_KEY_PREFIX));
+  return Promise.all(keys.map((key) => mutate(key)));
+}
+
 // 続きを読み込める一覧(GET /shops・GET /reviews)の共通の取得フック。
 // 次のページがあるかは、各ページの hasMore(backend が X-Has-More で返す)だけで決める。
 // getKey は、前のページの hasMore が false なら null を返して読み込みを止める。
@@ -14,10 +39,7 @@ export function useInfinitePages<T extends { id: number | string }>(
   options?: { scope?: string; shouldRetryOnError?: (error: unknown) => boolean },
 ) {
   const scope = options?.scope;
-  const scopedKey = (index: number, previous: Page<T> | null) => {
-    const url = getKey(index, previous);
-    return url === null || scope === undefined ? url : ([scope, url] as const);
-  };
+  const scopedKey = (index: number, previous: Page<T> | null) => withScope(getKey(index, previous), scope);
   const { data, error, isLoading, size, setSize, mutate } = useSWRInfinite<Page<T>>(
     scopedKey,
     (key: string | readonly [string, string]) => fetchPage(typeof key === "string" ? key : key[1]),

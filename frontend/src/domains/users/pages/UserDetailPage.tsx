@@ -36,7 +36,7 @@ export default function UserDetailPage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useReviews({ userId: id }, { enabled: id !== undefined && user !== undefined });
+  } = useReviews({ userId: id }, authUser?.id ?? null, { enabled: id !== undefined && user !== undefined });
 
   return (
     // 名前は、プロフィールの見出し(h1)として、下の本体に出す。取得できるまでの間だけ、画面の見出しを出す

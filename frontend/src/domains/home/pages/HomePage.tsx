@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../auth/AuthProvider";
 import { useBurgerRanking } from "../../burgers/hooks/useBurgerRanking";
 import { BurgerRankingCard } from "../../burgers/components/BurgerRankingCard";
 import { useReviews } from "../../reviews/hooks/useReviews";
@@ -24,12 +25,17 @@ const SHOPS_LIMIT = 6;
 export default function HomePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
   const [keyword, setKeyword] = useState("");
 
   const { data: ranking, isLoading: rankingLoading, error: rankingError } = useBurgerRanking();
-  const { data: reviews, isLoading: reviewsLoading, error: reviewsError } = useReviews();
-  const { data: shops, isLoading: shopsLoading, error: shopsError } = useShops({ sort: "newest" });
+  const { data: reviews, isLoading: reviewsLoading, error: reviewsError } = useReviews(undefined, user?.id ?? null, {
+    enabled: !authLoading,
+  });
+  const { data: shops, isLoading: shopsLoading, error: shopsError } = useShops({ sort: "newest" }, user?.id ?? null, {
+    enabled: !authLoading,
+  });
 
   const topRanking = ranking?.slice(0, RANKING_LIMIT);
   const latestReviews = reviews?.slice(0, REVIEWS_LIMIT);
@@ -88,7 +94,7 @@ export default function HomePage() {
           <h2 className={styles.heading}>{t("home.reviews.heading")}</h2>
           {latestReviews && latestReviews.length > 0 && <span className={styles.count}>{t("reviews.detail.newestFirst")}</span>}
         </div>
-        {reviewsLoading && <Loading />}
+        {(reviewsLoading || authLoading) && <Loading />}
         {reviewsError && <Alert message={t("reviews.list.loadError")} />}
         {latestReviews && latestReviews.length === 0 && <EmptyState />}
         {latestReviews && latestReviews.length > 0 && (
@@ -105,7 +111,7 @@ export default function HomePage() {
           <h2 className={styles.heading}>{t("home.shops.heading")}</h2>
           {newShops && newShops.length > 0 && <span className={styles.count}>{t("reviews.detail.newestFirst")}</span>}
         </div>
-        {shopsLoading && <Loading />}
+        {(shopsLoading || authLoading) && <Loading />}
         {shopsError && <Alert message={t("shops.list.loadError")} />}
         {newShops && newShops.length === 0 && (
           <EmptyState title={t("home.shops.emptyTitle")} description={t("home.shops.emptyDescription")} />

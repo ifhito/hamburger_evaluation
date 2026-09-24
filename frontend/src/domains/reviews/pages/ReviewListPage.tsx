@@ -15,12 +15,14 @@ import styles from "./reviewList.module.css";
 // ショップ一覧へ送る(サインインしている人だけに出す。API の項目ではなく、サインインの状態で決める)。
 export default function ReviewListPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
   const [keyword, setKeyword] = useState("");
   const [ratingFilter, setRatingFilter] = useState<number | undefined>(undefined);
   const { data: reviews, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useReviews(
     ratingFilter !== undefined || keyword ? { rating: ratingFilter, keyword: keyword || undefined } : undefined,
+    user?.id ?? null,
+    { enabled: !authLoading },
   );
   const ratingOptions = ratingRange ? Array.from({ length: ratingRange.max - ratingRange.min + 1 }, (_, i) => ratingRange.max - i) : [];
 
@@ -63,7 +65,7 @@ export default function ReviewListPage() {
         )}
       </div>
 
-      {isLoading && <Loading />}
+      {(isLoading || authLoading) && <Loading />}
       {error && <Alert message={t("reviews.list.loadError")} />}
       {reviews && reviews.length === 0 && <EmptyState />}
 

@@ -1,5 +1,6 @@
 import { useSWRConfig } from "swr";
 import { reviewApiClient } from "../api/reviewApiClient";
+import { revalidateInfiniteLists } from "../../../api/useInfinitePages";
 import type { ReviewCreateInput, ReviewUpdateInput, ReviewView } from "../api/types";
 
 // multipart のフィールド名は API に合わせた snake_case。JSON と違い自動変換は掛からない。
@@ -40,35 +41,35 @@ export function isReviewKey(key: unknown): boolean {
 // lib/photoResize の shrinkPhoto を通す)。ここでもう一度縮小すると、同じ写真を二重にデコードすることになるため、
 // 縮小はしない(PhotoField を経由しない呼び出しが増えたら、そのときに再検討する)。
 export function useCreateReview() {
-  const { mutate } = useSWRConfig();
+  const { cache, mutate } = useSWRConfig();
   return {
     create: async (data: ReviewCreateInput, photo?: File | null): Promise<ReviewView> => {
       const body = photo ? toCreateFormData(data, photo) : { review: data };
       const res = await reviewApiClient.post<ReviewView>("/reviews", body);
-      await mutate(isReviewKey);
+      await Promise.all([mutate(isReviewKey), revalidateInfiniteLists(cache, mutate)]);
       return res.data;
     },
   };
 }
 
 export function useUpdateReview(id: string) {
-  const { mutate } = useSWRConfig();
+  const { cache, mutate } = useSWRConfig();
   return {
     update: async (data: ReviewUpdateInput, photo?: File | null): Promise<ReviewView> => {
       const body = photo ? toUpdateFormData(data, photo) : { review: data };
       const res = await reviewApiClient.put<ReviewView>(`/reviews/${id}`, body);
-      await mutate(isReviewKey);
+      await Promise.all([mutate(isReviewKey), revalidateInfiniteLists(cache, mutate)]);
       return res.data;
     },
   };
 }
 
 export function useDeleteReview() {
-  const { mutate } = useSWRConfig();
+  const { cache, mutate } = useSWRConfig();
   return {
     destroy: async (id: string): Promise<void> => {
       await reviewApiClient.delete(`/reviews/${id}`);
-      await mutate(isReviewKey);
+      await Promise.all([mutate(isReviewKey), revalidateInfiniteLists(cache, mutate)]);
     },
   };
 }
