@@ -4,7 +4,6 @@ BurgerStack の本番は、5 つの外部サービスの組み合わせで動い
 
 - 配り方(CD)と初回の準備: [本番へのデプロイ](production-deploy.md)
 - なぜそれを選んだか: [ADR](adr/)(技術判断の記録)
-- 比べたときの計測: [計測記録](benchmarks/)
 
 ## 全体像
 
@@ -101,13 +100,3 @@ main に入った変更は、GitHub Actions が本番へ配ります。詳しく
 | バックアップが Neon の無料枠の保持期間だけ | 長期の復元ができない | データが増えたら週次の `pg_dump` を R2 へ |
 | 送信ドメインがまだ `burger-stack.com` ではない | — | Resend で `burger-stack.com` を検証し、`MAIL_FROM` を変える([ADR-0006](adr/0006-email-delivery.md)) |
 | 開発用の `r2.dev` の公開 URL が有効 | レート制限つきの別経路が残っている | 独自ドメインでの表示を確かめたら止める |
-
-## 検証の記録
-
-構成を決める前に、5 層 × 4 候補を本物のアプリで動かして比べました。
-
-- [検証の計画](deploy-verification-plan.md) と [手順書](deploy-verification-runbook.md)
-- 計測記録: [benchmarks/](benchmarks/)。層ごとの候補の解説(`phase*-candidates.md`)、まとめ(`phase*-summary.md`)、生データ(`raw/`)
-- 計測に使ったスクリプト: `scripts/bench/`。接続情報は `backend-go/.env.bench`(`.env.bench.example` を写して作る。Git に入れない)
-
-一番の学びは、**無料枠の落とし穴は料金表に書いていない**ことでした。20 候補すべてで、実際にデプロイするまで分からない制約に当たっています。

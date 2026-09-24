@@ -91,7 +91,7 @@ CREATE TABLE users (
 
 ただし格上げは「技術的に動く」という意味であり、**採用の推奨ではない**。
 単一リージョンの個人アプリでは、分散のコスト(書き込みレイテンシ、運用の複雑さ)だけを払う。
-[検証計画](../deploy-verification-plan.md)では、個人向けでないという理由で検証対象から外している。
+個人向けでないという理由で、実測の対象から外した。
 
 ## それ以外(有料のみ)
 
@@ -142,9 +142,7 @@ PostgreSQL は 17 以上で `gen_random_uuid()` も問題ない。**互換性で
 2 については、CTE で 1 文にまとめれば 1 往復で済む。348ms が 87ms になる見込みで、
 遠いリージョンほど効果が大きい。実装の変更になるため別途扱う。
 
-詳細と、Supabase の Direct connection が IPv6 専用で Docker から繋がらない件は
-`docs/benchmarks/phase1-summary.md` にある。候補の解説と選ばなかった理由は
-`docs/benchmarks/phase1-candidates.md` にある。
+Supabase の Direct connection は IPv6 専用で、Docker のコンテナから名前解決できなかった。Session pooler なら繋がる。
 
 ### リージョンの制約
 

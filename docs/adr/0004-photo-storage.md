@@ -127,8 +127,6 @@ GET 26.0ms は R2 の 3 分の 1 である。本 ADR は Tigris を「Fly.io を
 
 **速さでは Tigris、費用では R2(転送量が無料・無制限)。** 配信量の見込みで決まる。
 
-詳細は `docs/benchmarks/phase2-summary.md` にある。
-
 ## 決定
 
 **Cloudflare R2** を使い、独自ドメイン **`photos.burger-stack.com`** から配信する。バケットは `burger-stack`。本番は `PHOTO_STORAGE=s3`、`PHOTO_PUBLIC_BASE_URL=https://photos.burger-stack.com`(2026-09-24 に設定)。

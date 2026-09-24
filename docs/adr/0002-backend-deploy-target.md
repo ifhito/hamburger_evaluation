@@ -42,7 +42,7 @@ Rails は退役済み(`chore!: Rails 退役 — backend/ を削除`)。`backend-
 Back4App Containers は指定できず、既定の `Dockerfile` を見る(2026-09-22 実測)。
 本番用を既定の名前に置かないと、そうした基盤で開発用がビルドされてしまう。
 
-実測: **イメージ 29MB、待機時メモリ 12.75 MiB、起動は即時**(`docs/benchmarks/phase0-baseline.md`)。
+実測: **イメージ 29MB、待機時メモリ 12.75 MiB、起動は即時**。
 
 ### メモリが無料枠の壁になる(実測で確認済み)
 
@@ -190,8 +190,6 @@ DB 往復ではオレゴンの Render より遅い。scale-to-zero で DB 接続
 したがって「動かなくなる」のではなく「**次のアクセスまで遅れる**」だけである。
 
 Render のスリープと同じ構造で、Cloud Run 固有の問題ではない。
-
-詳細は `docs/benchmarks/phase4-summary.md` にある。
 
 ## 決定
 

@@ -136,8 +136,6 @@ PR ごとに URL が変わるプレビュー環境は**事前登録できない*
 
 Vercel は制約が 3 つあり、候補から外す。
 
-詳細は `docs/benchmarks/phase6-summary.md` にある。
-
 ## 決定
 
 **Cloudflare Workers(Static Assets)** に置き、独自ドメイン **`burger-stack.com`** で公開する。`/api/*` は Worker のコード(`frontend/worker/index.js`)が Cloud Run の API へ転送する。

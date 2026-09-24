@@ -163,9 +163,6 @@ B は実装作業が発生するため、**SMTP が通るホストを選べる�
 **ドメイン取得後は Brevo 以外の 3 社に実質的な差がない。** 選定は「関門の少なさ」で決まり、
 その基準では Mailjet が最良である。
 
-詳細は `docs/benchmarks/phase3-summary.md`、候補の解説と除外理由は
-`docs/benchmarks/phase3-candidates.md` にある。
-
 ## 決定
 
 **Resend** を採用する。**Mailjet** は代替とする。

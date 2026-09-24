@@ -16,9 +16,6 @@ frontend/.env
 frontend/.env.*
 # Penpot(design/)は、値の雛形(.env.example)だけをコミットする。design/.env は鍵を含むのでコミットしない
 !design/.env.example
-# 本番の構成を決めたときの計測(scripts/bench)が使う接続情報の雛形。値そのものは backend-go/.env.bench・.env.mail に書き、コミットしない
-!backend-go/.env.bench.example
-!backend-go/.env.mail.example
 
 # 旧 API(backend/)の名残として手元に残りうる秘密ファイル。誤って commit しない
 backend/.kamal/secrets
