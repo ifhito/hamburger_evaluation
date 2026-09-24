@@ -555,7 +555,7 @@ pnpm run test
 
 ## 本番へのデプロイ (CD)
 
-main に入った変更は、GitHub Actions が自動で本番へ配る。手順・必要な secrets・ロールバックは `docs/production-deploy.md` にある。
+main に入った変更は、GitHub Actions が自動で本番へ配る。手順・必要な secrets・ロールバックは `docs/production-deploy.md` にある。本番の構成(使っているサービス・ドメイン・設定の置き場所・既知の課題)は `docs/infrastructure.md`、それぞれを選んだ理由は `docs/adr/` にある。
 
 | ワークフロー | 契機 | 配る先 |
 |---|---|---|
