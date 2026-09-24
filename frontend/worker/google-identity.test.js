@@ -33,7 +33,7 @@ describe('GoogleのIDトークン取得', () => {
     await get(env, audience)
     const [url, options] = exchange.mock.calls[0]
     expect(url).toBe('https://oauth2.googleapis.com/token')
-    expect(options.redirect).toBe('error')
+    expect(options.redirect).toBe('manual')
     const assertion = options.body.get('assertion')
     const [header, payload, signature] = assertion.split('.')
     expect(decode(header)).toEqual({ alg: 'RS256', typ: 'JWT', kid: 'test-key' })
@@ -69,6 +69,7 @@ describe('GoogleのIDトークン取得', () => {
     ['期限切れ', () => Response.json({ id_token: token(audience, Date.now()/1000-1) })],
     ['トークンなし', () => Response.json({})],
     ['交換失敗', () => new Response('sensitive-upstream-error', { status: 400 })],
+    ['別URLへの転送', () => new Response(null, { status: 302, headers: { Location: 'https://other.test' } })],
   ])('%sの応答は受け付けない', async (_name, response) => {
     const { exchange, get, env } = setup()
     exchange.mockImplementation(async () => response())

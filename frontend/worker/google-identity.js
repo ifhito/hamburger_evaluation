@@ -42,7 +42,8 @@ export function createGoogleIdentityProvider() {
     })}`
     const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, encoder.encode(unsigned))
     const response = await fetch(TOKEN_URL, {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000),
+      // Workers は redirect: 'error' に非対応。3xx は response.ok で拒否する。
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(10000),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         assertion: `${unsigned}.${base64url(new Uint8Array(signature))}` }),
