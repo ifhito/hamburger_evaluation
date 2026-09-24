@@ -11,29 +11,9 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
-// maxRequestBodyBytes は request body を 1 MiB に制限する
-// （resource guardrail）。
-const maxRequestBodyBytes int64 = 1 << 20
-
-// maxReviewRequestBodyBytes は review の投稿 body（multipart のみ）を、写真の上限
-// （domain.MaxPhotoBytes）に 1 MiB を足した大きさ（いまは 6 MiB）に制限する：写真に加え、
-// フィールドと multipart のフレーミングの分の余裕がある。写真自体は引き続き独自の上限で検査され、422 を返す
-// のはそちらである。この cap は暴走した body を 413 で止めるだけである。
-const maxReviewRequestBodyBytes int64 = domain.MaxPhotoBytes + 1<<20
-
-// bodyLimit は request の body の上限を返す：より大きな上限を得るのは、
-// review の書き込み endpoint（POST /reviews、PUT /reviews/{id}）に対する
-// multipart/form-data の request（写真を含みうる）だけである。JSON を含む
-// それ以外の Content-Type は、review の書き込みでも 1 MiB のままである
-// （コメントの上限が 2,000 文字なので、JSON に 6 MiB は要らない）。
-func bodyLimit(r *http.Request) int64 {
-	isReviewWrite := (r.Method == http.MethodPost && r.URL.Path == "/reviews") ||
-		(r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/reviews/"))
-	if isReviewWrite && isMultipart(r) {
-		return maxReviewRequestBodyBytes
-	}
-	return maxRequestBodyBytes
-}
+// maxRequestBodyBytes は、すべての経路・Content-Type で本文全体を 10 MiB に制限する。
+// 写真自体のサイズや各入力項目の検査は、個別の処理で引き続き行う。
+const maxRequestBodyBytes int64 = 10 << 20
 
 // limitBody はグローバルな body cap の middleware である。宣言された
 // Content-Length が上限を超える request は、事前に 413 とエラー JSON 形式で
@@ -42,7 +22,7 @@ func bodyLimit(r *http.Request) int64 {
 // ない chunked request を含む）も上限の対象にする。
 func limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		limit := bodyLimit(r)
+		limit := maxRequestBodyBytes
 		if r.ContentLength > limit {
 			writeError(w, r, http.StatusRequestEntityTooLarge, msgBodyTooLarge)
 			return

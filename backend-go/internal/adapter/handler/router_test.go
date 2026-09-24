@@ -126,14 +126,14 @@ func TestUnknownRouteAndMethod(t *testing.T) {
 	}
 }
 
-// TestBodyLimit は、上限を超える body の扱いを確かめる：2 MiB の body を持つ POST は、エラーの JSON の
+// TestBodyLimit は、上限を超える body の扱いを確かめる：10 MiB を超える body を持つ POST は、エラーの JSON の
 // 形を伴う 413 になり、同じ client での後続の request は成功する。
 func TestBodyLimit(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(t, okPinger))
 	defer srv.Close()
 	client := srv.Client()
 
-	big := bytes.Repeat([]byte("a"), 2<<20) // 2 MiB
+	big := bytes.Repeat([]byte("a"), (10<<20)+1)
 	resp, err := client.Post(srv.URL+"/up", "application/octet-stream", bytes.NewReader(big))
 	if err != nil {
 		t.Fatalf("oversized POST failed: %v", err)

@@ -591,13 +591,13 @@ func TestOptionalAuthInfraFailure(t *testing.T) {
 	}
 }
 
-// TestSignupBodyTooLarge は decodeJSON の 413 経路を実行する：1 MiB を超える
+// TestSignupBodyTooLarge は decodeJSON の 413 経路を実行する：10 MiB を超える
 // chunked body（Content-Length なし）は、decoder が読み込む間に
 // http.MaxBytesReader を作動させ、JSON のエラー形式で 413 を返す。
 func TestSignupBodyTooLarge(t *testing.T) {
 	// httptest.NewRequest が Content-Length を設定できないように reader を
 	// ラップし、事前の limitBody のチェックを迂回する。
-	body := struct{ io.Reader }{strings.NewReader(`{"username":"` + strings.Repeat("a", 2<<20))}
+	body := struct{ io.Reader }{strings.NewReader(`{"username":"` + strings.Repeat("a", (10<<20)+1))}
 	req := httptest.NewRequest(http.MethodPost, "/signup", body)
 	rec := httptest.NewRecorder()
 	newTestRouter(t, okPinger).ServeHTTP(rec, req)

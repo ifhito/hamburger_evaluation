@@ -92,8 +92,8 @@ func (m *MCPServer) newToolServer(viewer domain.User, scopes []string, lang doma
 	mcp.AddTool(s, tool("list_reviews", "レビューの一覧を新しい順に返す。ショップ・投稿者・評価・本文の語で絞り込める。"+untrustedNote, readOnly), guarded(t, "list_reviews", t.listReviews))
 	mcp.AddTool(s, tool("get_review", "レビュー 1 件の詳細を返す。can_edit が true なら、自分のレビューで、編集・削除できる。shop は、そのレビューのショップ(id・name。見えないショップは null)で、can_review が true なら、そのショップに、自分がレビューを書ける。"+untrustedNote, readOnly), guarded(t, "get_review", t.getReview))
 	mcp.AddTool(s, tool("get_user", "利用者 1 人のプロフィール(名前・自己紹介)を返す。メールアドレスが含まれるのは、自分のプロフィールを見るときだけ。"+untrustedNote, readOnly), guarded(t, "get_user", t.getUser))
-	mcp.AddTool(s, tool("create_review", "ショップのバーガーに、レビュー(評価と本文)を投稿する。バーガーは burger_id で指定し、なければ burger_name で指定する(なければ作る)。"+writesNote, additive), guarded(t, "create_review", t.createReview))
-	mcp.AddTool(s, tool("update_review", "自分のレビューの、評価と本文を書き換える。他人のレビューは編集できない。"+writesNote, destructive), guarded(t, "update_review", t.updateReview))
+	mcp.AddTool(s, tool("create_review", "ショップのバーガーに、レビュー(評価・本文・任意の写真1枚)を投稿する。バーガーは burger_id で指定し、なければ burger_name で指定する(なければ作る)。"+writesNote, additive), guarded(t, "create_review", t.createReview))
+	mcp.AddTool(s, tool("update_review", "自分のレビューの、評価と本文を書き換える。photo_base64 を指定すると写真を差し替え、省略すると現在の写真を保持する。他人のレビューは編集できない。"+writesNote, destructive), guarded(t, "update_review", t.updateReview))
 	mcp.AddTool(s, tool("delete_review", "自分のレビューを削除する。他人のレビューは削除できない。"+writesNote, destructive), guarded(t, "delete_review", t.deleteReview))
 	mcp.AddTool(s, tool("submit_shop", "新しいショップを申請する。申請したショップは、管理者が承認するまで、審査待ちになる。"+writesNote, additive), guarded(t, "submit_shop", t.submitShop))
 	mcp.AddTool(s, tool("list_admin_shops", "審査用に、すべての状態のショップの一覧を返す(管理者だけ)。status を省略すると、すべての状態を返す。"+untrustedNote, readOnly), guarded(t, "list_admin_shops", t.listAdminShops))
@@ -282,12 +282,13 @@ func (t *mcpTools) getUser(ctx context.Context, _ *mcp.CallToolRequest, in getUs
 // ---- 書き込みのツール ----
 
 type createReviewInput struct {
-	ShopID     string `json:"shop_id" jsonschema:"レビューを書くショップの ID(UUID)"`
-	BurgerID   string `json:"burger_id,omitempty" jsonschema:"レビューするバーガーの ID(UUID)。get_shop で分かる。省略するときは burger_name を指定する"`
-	BurgerName string `json:"burger_name,omitempty" jsonschema:"バーガーの名前。burger_id を省略したときに使い、そのショップにその名前のバーガーがなければ作る"`
-	Rating     int    `json:"rating" jsonschema:"評価(整数)。範囲は get_meta の rating で分かる"`
-	Comment    string `json:"comment" jsonschema:"レビューの本文(必須)"`
-	VisitedAt  string `json:"visited_at,omitempty" jsonschema:"実食日(YYYY-MM-DD)。未来日は指定できない。省略すると設定しない"`
+	PhotoBase64 *string `json:"photo_base64,omitempty" jsonschema:"任意の写真1枚の標準Base64文字列(data URI不可)。JPEG/PNG/WebP。上限はget_metaの写真上限を参照。クライアントが利用者のローカルファイルまたは添付画像の実バイトを読み取ってエンコードする。パスやURLは不可。推測で生成しない。省略時は写真を変更しない"`
+	ShopID      string  `json:"shop_id" jsonschema:"レビューを書くショップの ID(UUID)"`
+	BurgerID    string  `json:"burger_id,omitempty" jsonschema:"レビューするバーガーの ID(UUID)。get_shop で分かる。省略するときは burger_name を指定する"`
+	BurgerName  string  `json:"burger_name,omitempty" jsonschema:"バーガーの名前。burger_id を省略したときに使い、そのショップにその名前のバーガーがなければ作る"`
+	Rating      int     `json:"rating" jsonschema:"評価(整数)。範囲は get_meta の rating で分かる"`
+	Comment     string  `json:"comment" jsonschema:"レビューの本文(必須)"`
+	VisitedAt   string  `json:"visited_at,omitempty" jsonschema:"実食日(YYYY-MM-DD)。未来日は指定できない。省略すると設定しない"`
 }
 
 func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in createReviewInput) (*mcp.CallToolResult, any, error) {
@@ -298,7 +299,14 @@ func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if !ok {
 		return t.failMessage(msgVisitedAtInvalid)
 	}
-	detail, err := t.reviews.Create(ctx, t.viewer, in.ShopID, in.BurgerID, in.BurgerName, in.Rating, in.Comment, visitedAt, nil)
+	processed, msg, err := decodeMCPPhoto(ctx, in.PhotoBase64)
+	if err != nil {
+		return t.toolError("create_review", err)
+	}
+	if msg != nil {
+		return t.failMessage(*msg)
+	}
+	detail, err := t.reviews.Create(ctx, t.viewer, in.ShopID, in.BurgerID, in.BurgerName, in.Rating, in.Comment, visitedAt, processed)
 	if err != nil {
 		return t.toolError("create_review", err)
 	}
@@ -306,10 +314,11 @@ func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 type updateReviewInput struct {
-	ReviewID  string `json:"review_id" jsonschema:"編集するレビューの ID(UUID)"`
-	Rating    int    `json:"rating" jsonschema:"新しい評価(整数)。範囲は get_meta の rating で分かる"`
-	Comment   string `json:"comment" jsonschema:"新しい本文(必須。変えないときも、今の本文を渡す)"`
-	VisitedAt string `json:"visited_at,omitempty" jsonschema:"新しい実食日(YYYY-MM-DD)。未来日は指定できない。省略すると未設定にする"`
+	PhotoBase64 *string `json:"photo_base64,omitempty" jsonschema:"任意の写真1枚の標準Base64文字列(data URI不可)。JPEG/PNG/WebP。上限はget_metaの写真上限を参照。クライアントが利用者のローカルファイルまたは添付画像の実バイトを読み取ってエンコードする。パスやURLは不可。推測で生成しない。省略時は写真を変更しない"`
+	ReviewID    string  `json:"review_id" jsonschema:"編集するレビューの ID(UUID)"`
+	Rating      int     `json:"rating" jsonschema:"新しい評価(整数)。範囲は get_meta の rating で分かる"`
+	Comment     string  `json:"comment" jsonschema:"新しい本文(必須。変えないときも、今の本文を渡す)"`
+	VisitedAt   string  `json:"visited_at,omitempty" jsonschema:"新しい実食日(YYYY-MM-DD)。未来日は指定できない。省略すると未設定にする"`
 }
 
 func (t *mcpTools) updateReview(ctx context.Context, _ *mcp.CallToolRequest, in updateReviewInput) (*mcp.CallToolResult, any, error) {
@@ -320,7 +329,14 @@ func (t *mcpTools) updateReview(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if !ok {
 		return t.failMessage(msgVisitedAtInvalid)
 	}
-	detail, err := t.reviews.Update(ctx, t.viewer, in.ReviewID, in.Rating, in.Comment, visitedAt, nil)
+	processed, msg, err := decodeMCPPhoto(ctx, in.PhotoBase64)
+	if err != nil {
+		return t.toolError("update_review", err)
+	}
+	if msg != nil {
+		return t.failMessage(*msg)
+	}
+	detail, err := t.reviews.Update(ctx, t.viewer, in.ReviewID, in.Rating, in.Comment, visitedAt, processed)
 	if err != nil {
 		return t.toolError("update_review", err)
 	}

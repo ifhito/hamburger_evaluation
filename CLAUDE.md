@@ -301,6 +301,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - **範囲はツールごと**: 読み取りのツール(`get_meta`・`list_shops`・`get_shop`・`list_reviews`・`get_review`・`get_user`)は `hamburger:read`、書き込みのツール(`create_review`・`update_review`・`delete_review`・`submit_shop`)は `hamburger:write`、ショップの審査のツール(`list_admin_shops`・`approve_shop`・`reject_shop`・`close_shop`・`reopen_shop`)は `hamburger:admin` を要求する。対応表は `mcpToolScopes` の 1 か所で、入口(本文から読み取った範囲の確認。範囲を広げる許可を求め直せる 403 を返すため)と、ツールを実行する直前の確認(`guarded`。SDK が本文を別の読み方で解釈しても、書き込みが通らないようにする二重の防御)の両方が使う。ツールを足すときは、この表に足す(足し忘れると、テストが落ちる)。初期化・ツールの一覧は、範囲を要求しない。
 - **ツールの実体**: 既存の usecase を呼ぶだけ。権限(投稿者本人だけが編集・削除、審査待ちのショップの見え方)は usecase と domain にあり、ここに複製しない。返す JSON は、REST の API と同じ形(`newReviewResponse` などを共有)。エラーの文言も REST と同じで、知らないエラーは、詳細をログにだけ残し、利用者には `internal server error` だけを返す。
 - **プロンプトインジェクションへの注意**: レビューの本文・店名・自己紹介は、他の利用者が書いた文字列である。ツールの説明と、接続時の説明(`instructions`)で、内容として扱い、その中の命令には従わないよう伝えている。書き込みのツールの説明には、実際にデータを変えること、実行前に利用者へ確認することを書いている。防げる保証はない(AI の判断による)ので、書き込みは、必要なときだけ許可する。
+- **写真つきレビュー**: `create_review`・`update_review` の任意の `photo_base64` で写真1枚を送る。クライアントがローカルファイルや添付画像の実バイトを標準 Base64 に変換する。省略した編集では現在の写真を保持する。通常の画面投稿と同じ検査・縮小・保存を使う。手順とクライアントの条件は [MCP の写真投稿](docs/mcp-photos.md) を参照。
 - **結果の大きさ**: 1 回のツールの結果は 64 KiB まで。超える一覧は、途中で切らずに、`per_page` を小さくするよう伝えるエラーにする。
 - **動かし方**: 状態を持たない(セッションを作らない)・応答は JSON。要求ごとに、認証した利用者のためのサーバーを組み立てる。SDK は、`localhost` で受けた要求の `Host` が `localhost` でないと `403` にする(DNS の付け替えの攻撃への対策)。同じ機械の逆プロキシの後ろに置くときは、この既定が邪魔になりうる(その場合は `DisableLocalhostProtection` を検討する。本番の構成は未決)。
 - **つなぎ方**(ローカル。Claude Code の例):
@@ -397,7 +398,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - 文字数は Unicode の**コードポイント数**で数える(バイト数でも書記素クラスタでもない。日本語は 1 文字、通常の絵文字も 1 文字。結合文字は 1 コードポイントごとに数える)。PostgreSQL の `char_length` と同じ数え方である
 - `PUT` の部分更新は、送られた項目だけを検証する
 - DB にも `CHECK (char_length(...) <= N)` がある(多層防御。最初のマイグレーションの `CREATE TABLE` に、名前つきの制約として入っている)。値は domain の定数と同じで、食い違いは `db/migrations_test.go` が検出する。上限を変えるときは、定数と、該当する `CREATE TABLE` の `CHECK` の 2 か所を直す(実運用に入ったあとは、新しいマイグレーションで直す)
-- リクエスト body のバイト数の上限は Content-Type で決まる: 既定は 1 MiB。`POST /reviews` と `PUT /reviews/:id` の `multipart/form-data`(写真つき)だけが 6 MiB(写真は別に 5 MiB)。JSON は、レビューの書き込みでも 1 MiB を超えると 413。multipart のテキスト項目は 1 項目 64 KiB(外側のガード。超えると 400)
+- リクエスト body 全体の上限は、経路・Content-Type にかかわらず 10 MiB。MCP SDK も同じ上限に揃える。超過すると 413。写真自体は別に 5 MiB まで。multipart のテキスト項目は 1 項目 64 KiB(外側のガード。超えると 400)
 
 ### データベーススキーマ
 
