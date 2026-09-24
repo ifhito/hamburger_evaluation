@@ -23,6 +23,7 @@ const baseReview: ReviewDetailView = {
   comment: "Tasty",
   photoUrl: null,
   createdAt: "2026-09-21T00:00:00Z",
+  visitedAt: null,
   user: { id: "2", username: "alice" },
   burger: { id: "3", name: "Cheeseburger", averageRating: 4.2, reviewCount: 5, weightedScore: 4.1, confidence: 0.8 },
   canEdit: false,
@@ -74,6 +75,19 @@ describe("ReviewDetailPage の状態の表示", () => {
     state.review = { ...baseReview, comment: "" };
     const page = await show();
     expect(page.querySelector('[class*="comment"]')).toBeNull();
+  });
+});
+
+describe("ReviewDetailPage の実食日(visitedAt)", () => {
+  it("visitedAt があるときは、実食日を出す", async () => {
+    state.review = { ...baseReview, visitedAt: "2026-09-10" };
+    const page = await show();
+    expect(page.textContent).toContain("Visited Sep 10, 2026");
+  });
+
+  it("visitedAt が null のときは、実食日を出さない", async () => {
+    const page = await show();
+    expect(page.textContent).not.toContain("Visited ");
   });
 });
 

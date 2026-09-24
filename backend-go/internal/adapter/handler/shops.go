@@ -76,6 +76,8 @@ type shopReviewResponse struct {
 	Rating    int     `json:"rating"`
 	Comment   *string `json:"comment"`
 	CreatedAt string  `json:"created_at"`
+	// VisitedAt は実食日("YYYY-MM-DD"。未指定なら null)で、投稿日時(created_at)とは独立である。
+	VisitedAt *string `json:"visited_at"`
 	// PhotoURL は review の写真の公開 URL で、添付がない場合は null である。
 	// GET /shops/{id} に埋め込まれる review では、現状は常に
 	// null である(shop 詳細のレビューの問い合わせと domain.ShopReview に、
@@ -205,6 +207,7 @@ func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 			Rating:    review.Rating,
 			Comment:   review.Comment,
 			CreatedAt: review.CreatedAt.UTC().Format(time.RFC3339),
+			VisitedAt: formatVisitedAt(review.VisitedAt),
 			User:      newUserRefResponse(review.User),
 		}
 		if review.Burger != nil {

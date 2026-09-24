@@ -228,7 +228,7 @@ func (f *reviewStoreFake) CreateShopBurger(_ context.Context, shopID string, bur
 	return burger, nil
 }
 
-func (f *reviewStoreFake) UpdateReviewContent(_ context.Context, id string, rating int, comment string) (domain.Review, error) {
+func (f *reviewStoreFake) UpdateReviewContent(_ context.Context, id string, rating int, comment string, visitedAt *time.Time) (domain.Review, error) {
 	if f.err != nil {
 		return domain.Review{}, f.err
 	}
@@ -239,10 +239,11 @@ func (f *reviewStoreFake) UpdateReviewContent(_ context.Context, id string, rati
 	rec.review.Rating = rating
 	c := comment
 	rec.review.Comment = &c
+	rec.review.VisitedAt = visitedAt
 	return rec.review, nil
 }
 
-func (f *reviewStoreFake) UpdateReviewContentAndPhotoKey(_ context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error) {
+func (f *reviewStoreFake) UpdateReviewContentAndPhotoKey(_ context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, error) {
 	if f.err != nil {
 		return domain.Review{}, f.err
 	}
@@ -253,6 +254,7 @@ func (f *reviewStoreFake) UpdateReviewContentAndPhotoKey(_ context.Context, id s
 	rec.review.Rating = rating
 	c := comment
 	rec.review.Comment = &c
+	rec.review.VisitedAt = visitedAt
 	rec.review.PhotoKey = photoKey
 	return rec.review, nil
 }
@@ -354,7 +356,7 @@ func TestCreateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
 		// 作成のレスポンスは投稿者本人（can_edit が true）。匿名で読む一覧・詳細は false になる。
-		want := `{"id":"` + uid.N(1) + `","rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
+		want := `{"id":"` + uid.N(1) + `","rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`
 		wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
 		wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false,"shop":{"id":"` + uid.N(1) + `","name":"Active Diner"}}` // 匿名は、詳細でも can_review が false で、見える先頭のショップが付く(一覧・作成・更新には、この 2 項目がない)
@@ -452,7 +454,7 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		want := `{"id":"` + uid.N(1) + `","rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
+		want := `{"id":"` + uid.N(1) + `","rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the existing Cheese burger %s", got, want)
@@ -471,7 +473,7 @@ func TestCreateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
 		// 作成された burger（fake の id 7）の統計はゼロである。
-		want := `{"id":"` + uid.N(1) + `","rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
+		want := `{"id":"` + uid.N(1) + `","rating":5,"comment":"New","created_at":"2024-06-01T12:01:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":"` + uid.N(7) + `","name":"Veggie","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0},"can_edit":true}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the created burger %s", got, want)
@@ -490,7 +492,7 @@ func TestCreateReview(t *testing.T) {
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
 		}
-		want := `{"id":"` + uid.N(1) + `","rating":4,"comment":"Both","created_at":"2024-06-01T12:01:00Z","photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
+		want := `{"id":"` + uid.N(1) + `","rating":4,"comment":"Both","created_at":"2024-06-01T12:01:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want the burger_id burger %s", got, want)
@@ -591,7 +593,7 @@ func TestListReviews(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := fmt.Sprintf(`[{"id":%q,"rating":4,"comment":"On cheese","created_at":"2024-06-01T12:01:00Z",`+
+		want := fmt.Sprintf(`[{"id":%q,"rating":4,"comment":"On cheese","created_at":"2024-06-01T12:01:00Z","visited_at":null,`+
 			`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":false}]`,
 			cheeseReviewID)
 		if got := rec.Body.String(); got != want {
@@ -890,7 +892,7 @@ func TestUpdateReview(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 		// PUT のレスポンスは author 本人（can_edit が true）。匿名で読む詳細は false になる。
-		want := fmt.Sprintf(`{"id":%q,"rating":5,"comment":"Even better","created_at":"2024-06-01T12:01:00Z",`+
+		want := fmt.Sprintf(`{"id":%q,"rating":5,"comment":"Even better","created_at":"2024-06-01T12:01:00Z","visited_at":null,`+
 			`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`,
 			cheeseReviewID)
 		wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
@@ -940,7 +942,7 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
-	want := fmt.Sprintf(`{"id":%q,"rating":2,"comment":"Tampered","created_at":"2024-06-01T12:01:00Z",`+
+	want := fmt.Sprintf(`{"id":%q,"rating":2,"comment":"Tampered","created_at":"2024-06-01T12:01:00Z","visited_at":null,`+
 		`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`,
 		cheeseReviewID)
 	wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
@@ -1077,6 +1079,52 @@ func TestCreateReviewTargetIDFormat(t *testing.T) {
 			rec := doMultipart(router, http.MethodPost, "/reviews", form, ct, aliceAuth)
 			if rec.Code != tt.wantCode || rec.Body.String() != tt.wantBody {
 				t.Errorf("status/body = %d %s, want %d %s", rec.Code, rec.Body, tt.wantCode, tt.wantBody)
+			}
+		})
+	}
+}
+
+// TestCreateReviewVisitedAtInvalid は、実食日(visited_at)が "YYYY-MM-DD" の形式で読めない
+// ときの 422(`Visited at must be in YYYY-MM-DD format`)を、POST /reviews の JSON と multipart
+// の両方の経路で固定する。shop_id・burger_id は有効な値にし、visited_at の形式だけが原因で
+// 422 になることを確かめる。malformed な値は永続化より前に弾かれるので、review は 1 件も
+// 作られない。
+func TestCreateReviewVisitedAtInvalid(t *testing.T) {
+	const wantBody = `{"errors":["Visited at must be in YYYY-MM-DD format"]}`
+	tests := []struct {
+		name      string
+		visitedAt string
+	}{
+		{"日付として読めない文字列", "not-a-date"},
+		{"暦として存在しない日付", "2024-02-30"},
+	}
+	for _, tt := range tests {
+		t.Run("JSON の本文で、"+tt.name, func(t *testing.T) {
+			repo := seedReviewWorld(uid.N(1))
+			router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+			body := fmt.Sprintf(`{"review":{"rating":4,"comment":"ok","shop_id":%q,"burger_id":%q,"visited_at":%q}}`,
+				activeShopID, cheeseBurgerID, tt.visitedAt)
+			rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
+			if rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != wantBody {
+				t.Errorf("status/body = %d %s, want %d %s", rec.Code, rec.Body, http.StatusUnprocessableEntity, wantBody)
+			}
+			if len(repo.reviews) != 0 {
+				t.Errorf("422 なのに review が作られた: %d 件", len(repo.reviews))
+			}
+		})
+		t.Run("multipart の本文で、"+tt.name, func(t *testing.T) {
+			repo := seedReviewWorld(uid.N(1))
+			router, aliceAuth, _, _ := newReviewsRouter(t, repo)
+			form, ct := multipartBody(t, map[string]string{
+				"rating": "4", "comment": "ok",
+				"shop_id": activeShopID, "burger_id": cheeseBurgerID, "visited_at": tt.visitedAt,
+			})
+			rec := doMultipart(router, http.MethodPost, "/reviews", form, ct, aliceAuth)
+			if rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != wantBody {
+				t.Errorf("status/body = %d %s, want %d %s", rec.Code, rec.Body, http.StatusUnprocessableEntity, wantBody)
+			}
+			if len(repo.reviews) != 0 {
+				t.Errorf("422 なのに review が作られた: %d 件", len(repo.reviews))
 			}
 		})
 	}

@@ -505,6 +505,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		// photo_key は 000007 で追加されたので、ordinal position では
 		// 最後に来る。
 		"reviews/photo_key/text/YES",
+		// visited_at は 000017 で追加されたので、ordinal position では photo_key の後に来る。
+		"reviews/visited_at/date/YES",
 		// shop_stats は 000015、shop_stats_recalc_requests は 000016 で追加された(ショップの集計と、その再計算の依頼)。
 		"shop_stats/shop_id/uuid/NO",
 		"shop_stats/review_count/bigint/NO",

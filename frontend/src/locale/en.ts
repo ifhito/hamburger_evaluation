@@ -157,6 +157,7 @@ const en = {
       edit: "Edit",
       delete: "Delete",
       deleteConfirm: "Delete this review?",
+      visitedOn: "Visited {{date}}",
     },
     new: {
       backToShop: "\u2190 Back to the shop",
@@ -174,6 +175,8 @@ const en = {
       error: "Failed to create review",
       // R6: \u8a55\u4fa1\u3092\u9078\u3070\u305a\u306b\u9001\u4fe1\u3057\u305f\u3068\u304d\u306b\u3001\u8a55\u4fa1\u306e\u5165\u529b\u306e\u8fd1\u304f\u306b\u51fa\u3059\u30a8\u30e9\u30fc(API \u306f\u547c\u3070\u306a\u3044)\u3002
       ratingRequired: "Please choose a rating before posting your review.",
+      visitedAt: "Visited on",
+      visitedAtOptional: "(optional)",
     },
     // \u5199\u771f\u306e\u8ffd\u52a0\u6b04(design/redesign/review-new.html\u30fbreview-photo.html\u30fbreview-edit.html)\u3002
     photo: {
@@ -201,6 +204,7 @@ const en = {
       errorTitle: "Could not save the review",
       error: "Failed to update review",
       postedOn: "Posted on {{date}}",
+      visitedAt: "Visited on",
     },
   },
   users: {

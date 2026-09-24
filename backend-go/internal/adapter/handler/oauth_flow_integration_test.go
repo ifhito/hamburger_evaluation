@@ -87,7 +87,7 @@ func newOAuthKit(t *testing.T) *oauthKit {
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(pool, usecase.NewAuth(userQuery, hasherFake{}, codec, codec), unusedSignups(),
 		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)), nil,
-		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{}),
 		usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, shopRecalc, hasherFake{}), nil,
 		&handler.OAuth{
 			Endpoints: server,

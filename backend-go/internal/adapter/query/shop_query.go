@@ -110,6 +110,7 @@ func (r *ShopQuery) ListShopReviews(ctx context.Context, shopID string) ([]domai
 			ID:        row.ID,
 			Rating:    int(row.Rating),
 			CreatedAt: row.CreatedAt.Time,
+			VisitedAt: rowmap.VisitedAt(row.VisitedAt),
 			User:      &domain.UserRef{ID: row.UserID, Username: row.UserUsername},
 			Burger:    &burger,
 		}

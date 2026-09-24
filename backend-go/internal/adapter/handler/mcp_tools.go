@@ -283,13 +283,18 @@ type createReviewInput struct {
 	BurgerName string `json:"burger_name,omitempty" jsonschema:"バーガーの名前。burger_id を省略したときに使い、そのショップにその名前のバーガーがなければ作る"`
 	Rating     int    `json:"rating" jsonschema:"評価(整数)。範囲は get_meta の rating で分かる"`
 	Comment    string `json:"comment" jsonschema:"レビューの本文(必須)"`
+	VisitedAt  string `json:"visited_at,omitempty" jsonschema:"実食日(YYYY-MM-DD)。未来日は指定できない。省略すると設定しない"`
 }
 
 func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in createReviewInput) (*mcp.CallToolResult, any, error) {
 	if _, msg, ok := checkReviewTargetIDs(in.ShopID, in.BurgerID); !ok {
 		return t.failMessage(msg)
 	}
-	detail, err := t.reviews.Create(ctx, t.viewer, in.ShopID, in.BurgerID, in.BurgerName, in.Rating, in.Comment, nil)
+	visitedAt, ok := parseVisitedAtString(in.VisitedAt)
+	if !ok {
+		return t.failMessage(msgVisitedAtInvalid)
+	}
+	detail, err := t.reviews.Create(ctx, t.viewer, in.ShopID, in.BurgerID, in.BurgerName, in.Rating, in.Comment, visitedAt, nil)
 	if err != nil {
 		return t.toolError("create_review", err)
 	}
@@ -297,16 +302,21 @@ func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 type updateReviewInput struct {
-	ReviewID string `json:"review_id" jsonschema:"編集するレビューの ID(UUID)"`
-	Rating   int    `json:"rating" jsonschema:"新しい評価(整数)。範囲は get_meta の rating で分かる"`
-	Comment  string `json:"comment" jsonschema:"新しい本文(必須。変えないときも、今の本文を渡す)"`
+	ReviewID  string `json:"review_id" jsonschema:"編集するレビューの ID(UUID)"`
+	Rating    int    `json:"rating" jsonschema:"新しい評価(整数)。範囲は get_meta の rating で分かる"`
+	Comment   string `json:"comment" jsonschema:"新しい本文(必須。変えないときも、今の本文を渡す)"`
+	VisitedAt string `json:"visited_at,omitempty" jsonschema:"新しい実食日(YYYY-MM-DD)。未来日は指定できない。省略すると未設定にする"`
 }
 
 func (t *mcpTools) updateReview(ctx context.Context, _ *mcp.CallToolRequest, in updateReviewInput) (*mcp.CallToolResult, any, error) {
 	if !domain.IsUUID(in.ReviewID) {
 		return t.failMessage(msgReviewNotFound)
 	}
-	detail, err := t.reviews.Update(ctx, t.viewer, in.ReviewID, in.Rating, in.Comment, nil)
+	visitedAt, ok := parseVisitedAtString(in.VisitedAt)
+	if !ok {
+		return t.failMessage(msgVisitedAtInvalid)
+	}
+	detail, err := t.reviews.Update(ctx, t.viewer, in.ReviewID, in.Rating, in.Comment, visitedAt, nil)
 	if err != nil {
 		return t.toolError("update_review", err)
 	}

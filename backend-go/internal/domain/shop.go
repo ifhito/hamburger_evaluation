@@ -188,6 +188,8 @@ type ShopReview struct {
 	Rating    int
 	Comment   *string
 	CreatedAt time.Time
+	// VisitedAt は、実食日(日付のみ、未指定は nil)である。Review.VisitedAt と同じ意味を持つ。
+	VisitedAt *time.Time
 	User      *UserRef
 	Burger    *ShopReviewBurger
 }

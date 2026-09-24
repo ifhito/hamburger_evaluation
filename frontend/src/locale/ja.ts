@@ -147,6 +147,7 @@ const ja = {
       edit: "編集",
       delete: "削除",
       deleteConfirm: "このレビューを削除しますか?",
+      visitedOn: "実食日: {{date}}",
     },
     new: {
       backToShop: "← ショップに戻る",
@@ -163,6 +164,8 @@ const ja = {
       errorTitle: "レビューを保存できませんでした",
       error: "レビューを作成できませんでした",
       ratingRequired: "投稿する前に、評価を選んでください。",
+      visitedAt: "実食日",
+      visitedAtOptional: "(任意)",
     },
     photo: {
       label: "写真",
@@ -189,6 +192,7 @@ const ja = {
       errorTitle: "レビューを保存できませんでした",
       error: "レビューを更新できませんでした",
       postedOn: "{{date}} に投稿",
+      visitedAt: "実食日",
     },
   },
   users: {

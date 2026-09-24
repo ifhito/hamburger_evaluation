@@ -224,7 +224,7 @@ func TestShopStatsFollowsReviewChanges(t *testing.T) {
 	carolReview := w.review(t, carol, burger, 1, "c")
 	expect(t, 3, 3, "3 件目を投稿した(5・3・1)")
 
-	if _, err := w.reviews.Update(w.ctx, carol, carolReview.ID, 4, "changed", nil); err != nil {
+	if _, err := w.reviews.Update(w.ctx, carol, carolReview.ID, 4, "changed", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	expect(t, 3, 4, "carol が 1 を 4 に編集した")
@@ -361,7 +361,7 @@ func TestShopStatsConvergesAfterConcurrentWrite(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	pool := w.pool(t)
-	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
+	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{})
 
 	alice, bob := w.user(t, "conv-alice"), w.user(t, "conv-bob")
 	b1, b2 := w.burger(t, "Converge 1"), w.burger(t, "Converge 2")
@@ -383,7 +383,7 @@ func TestShopStatsConvergesAfterConcurrentWrite(t *testing.T) {
 		// 依頼の登録は、ショップの行を更新せず、依頼の行も待たないので、再計算に待たされない。
 		writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		if _, err := otherReviews.Create(writeCtx, bob, w.shop, b2, "", 3, "second", nil); err != nil {
+		if _, err := otherReviews.Create(writeCtx, bob, w.shop, b2, "", 3, "second", nil, nil); err != nil {
 			return err
 		}
 		if _, err := statsworkertest.NewWorker(pool, infra.SystemClock{}).RunOnce(writeCtx); err != nil {
@@ -518,7 +518,7 @@ func TestShopStatsWorkersConcurrently(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	pool := w.pool(t)
-	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
+	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{})
 
 	const writers, perWriter = 4, 5
 	burgers := make([]string, writers)
@@ -556,7 +556,7 @@ func TestShopStatsWorkersConcurrently(t *testing.T) {
 		go func() {
 			defer writes.Done()
 			for n := 0; n < perWriter; n++ {
-				if _, err := otherReviews.Create(context.Background(), users[i], w.shop, burgers[i], "", 1+(n+i)%5, "concurrent", nil); err != nil {
+				if _, err := otherReviews.Create(context.Background(), users[i], w.shop, burgers[i], "", 1+(n+i)%5, "concurrent", nil, nil); err != nil {
 					t.Errorf("レビューの投稿: %v", err)
 					return
 				}

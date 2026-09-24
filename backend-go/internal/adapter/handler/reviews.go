@@ -24,6 +24,9 @@ var msgReviewNotFound = apiMsg(keyReviewNotFound)
 // 提供していない burger に対する 404 body である。
 var msgBurgerNotFound = apiMsg(keyBurgerNotFound)
 
+// msgVisitedAtInvalid は、実食日(visited_at)が "YYYY-MM-DD" の形式で読めないときの 422 body である。
+var msgVisitedAtInvalid = apiMsg(keyVisitedAtInvalid)
+
 // reviewParamsRequest は POST /reviews と PUT /reviews/{id} の
 // {"review":{...}} ラッパーである（PUT は shop_id/burger_id/burger_name を
 // 無視する。review が別の burger に移ることはない）。POST では、burger は
@@ -40,6 +43,7 @@ type reviewParamsRequest struct {
 		ShopID     string `json:"shop_id"`
 		BurgerID   string `json:"burger_id"`
 		BurgerName string `json:"burger_name"`
+		VisitedAt  string `json:"visited_at"`
 	} `json:"review"`
 }
 
@@ -74,6 +78,7 @@ type multipartReviewForm struct {
 	shopID     string
 	burgerID   string
 	burgerName string
+	visitedAt  string
 	photo      *photo.Processed
 }
 
@@ -148,6 +153,8 @@ func decodeReviewMultipart(w http.ResponseWriter, r *http.Request) (multipartRev
 			form.burgerID = value
 		case "burger_name":
 			form.burgerName = value
+		case "visited_at":
+			form.visitedAt = value
 		}
 		// 未知のフィールドは無視される。decodeJSON が未知のフィールドを
 		// 許容するのと同じである。
@@ -266,6 +273,7 @@ func newReviewResponse(detail domain.ReviewDetail) reviewResponse {
 		Rating:    detail.Rating,
 		Comment:   detail.Comment,
 		CreatedAt: detail.CreatedAt.UTC().Format(time.RFC3339),
+		VisitedAt: formatVisitedAt(detail.VisitedAt),
 		PhotoURL:  detail.PhotoURL,
 		User:      newUserRefResponse(detail.User),
 	}
@@ -423,6 +431,41 @@ func checkReviewTargetIDs(shopID, burgerID string) (status int, msg apiMessage, 
 	return 0, apiMessage{}, true
 }
 
+// parseVisitedAtString は "YYYY-MM-DD" 形式の日付のみの文字列(空なら未指定)をパースする。
+// layout "2006-01-02" は、ゼロ埋めされていない入力("2024-1-1" など)や、暦として存在しない
+// 日付("2024-02-30" など)を time.Parse 自身がエラーにする(黙って正規化することはない)ので、
+// err の確認だけで足りる。HTTP の handler と MCP のツールで共有し、形式の判定を重複させない。
+func parseVisitedAtString(s string) (*time.Time, bool) {
+	if s == "" {
+		return nil, true
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return nil, false
+	}
+	return &t, true
+}
+
+// parseVisitedAt は parseVisitedAtString の HTTP 向けの wrapper である。false は、422 が既に
+// 書き込まれたことを意味する。
+func parseVisitedAt(w http.ResponseWriter, r *http.Request, s string) (*time.Time, bool) {
+	t, ok := parseVisitedAtString(s)
+	if !ok {
+		writeErrorList(w, r, http.StatusUnprocessableEntity, msgVisitedAtInvalid)
+	}
+	return t, ok
+}
+
+// formatVisitedAt は、domain の実食日(*time.Time。nil = 未指定)を、通信の形("YYYY-MM-DD" または null)に
+// 変換する。
+func formatVisitedAt(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.Format("2006-01-02")
+	return &s
+}
+
 // validReviewTargetIDs は checkReviewTargetIDs の結果を HTTP の応答に写す。false は、そのレスポンスが
 // 既に書き込まれたことを意味する。
 func validReviewTargetIDs(w http.ResponseWriter, r *http.Request, form multipartReviewForm) bool {
@@ -465,13 +508,18 @@ func handleCreateReview(reviews *usecase.Reviews) http.HandlerFunc {
 				shopID:     req.Review.ShopID,
 				burgerID:   req.Review.BurgerID,
 				burgerName: req.Review.BurgerName,
+				visitedAt:  req.Review.VisitedAt,
 			}
 		}
 		if !validReviewTargetIDs(w, r, form) {
 			return
 		}
+		visitedAt, ok := parseVisitedAt(w, r, form.visitedAt)
+		if !ok {
+			return
+		}
 		detail, err := reviews.Create(r.Context(), viewer, form.shopID, form.burgerID,
-			form.burgerName, form.rating, form.comment, form.photo)
+			form.burgerName, form.rating, form.comment, visitedAt, form.photo)
 		if err != nil {
 			writeReviewError(w, r, "create", err)
 			return
@@ -493,9 +541,10 @@ func handleUpdateReview(reviews *usecase.Reviews) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		// PUT が使うのは rating、comment、写真だけである。multipart パーサーの
+		// PUT が使うのは rating、comment、visited_at、写真だけである。multipart パーサーの
 		// その他のフィールドは、JSON body の shop_id/burger_id/burger_name と
-		// まったく同じように無視される。
+		// まったく同じように無視される。visited_at は rating/comment と同じ全置換(送れば設定、
+		// 省略・空文字なら未設定に戻る)で、「変えない」ための特別な扱いはない。
 		var form multipartReviewForm
 		if isMultipart(r) {
 			var ok bool
@@ -507,9 +556,13 @@ func handleUpdateReview(reviews *usecase.Reviews) http.HandlerFunc {
 			if !decodeJSON(w, r, &req) {
 				return
 			}
-			form = multipartReviewForm{rating: req.Review.Rating, comment: req.Review.Comment}
+			form = multipartReviewForm{rating: req.Review.Rating, comment: req.Review.Comment, visitedAt: req.Review.VisitedAt}
 		}
-		detail, err := reviews.Update(r.Context(), viewer, id, form.rating, form.comment, form.photo)
+		visitedAt, ok := parseVisitedAt(w, r, form.visitedAt)
+		if !ok {
+			return
+		}
+		detail, err := reviews.Update(r.Context(), viewer, id, form.rating, form.comment, visitedAt, form.photo)
 		if err != nil {
 			writeReviewError(w, r, "update", err)
 			return

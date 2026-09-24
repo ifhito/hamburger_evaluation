@@ -8,6 +8,7 @@ package rowmap
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -92,6 +93,16 @@ func UserIdentity(row sqlcgen.UserIdentity) domain.UserIdentity {
 		Email:          row.Email,
 		CreatedAt:      row.CreatedAt.Time,
 	}
+}
+
+// VisitedAt は sqlc の date 列(NULL 許容)を、domain の実食日(*time.Time。日付のみ、UTC の深夜 0 時)に
+// 変換する。query と repository の両方が使う。
+func VisitedAt(d pgtype.Date) *time.Time {
+	if !d.Valid {
+		return nil
+	}
+	t := d.Time
+	return &t
 }
 
 // ShopSummary は、ショップに LEFT JOIN した集計の列(shop_stats。まだ集計されていないショップは、件数 0・

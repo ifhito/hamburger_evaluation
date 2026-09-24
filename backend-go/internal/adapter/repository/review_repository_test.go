@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
@@ -24,17 +26,22 @@ type reviewRow struct {
 	CreatedAt   time.Time
 	DiscardedAt *time.Time
 	PhotoKey    *string
+	VisitedAt   *time.Time
 }
 
-// readReviewRow は reviews の行を直接読み取る（discard 済みの行も読める）。
+// readReviewRow は reviews の行を直接読み取る（discard 済みの行も読める）。visited_at は
+// date 列なので、他の adapter と同じく pgtype.Date で受けてから rowmap.VisitedAt で変換する
+// （pgx は date を *time.Time に直接 Scan できない）。
 func readReviewRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id string) reviewRow {
 	t.Helper()
 	var r reviewRow
+	var visitedAt pgtype.Date
 	if err := conn.QueryRow(ctx,
-		`SELECT rating, comment, user_id, burger_id, created_at, discarded_at, photo_key FROM reviews WHERE id = $1`, id,
-	).Scan(&r.Rating, &r.Comment, &r.UserID, &r.BurgerID, &r.CreatedAt, &r.DiscardedAt, &r.PhotoKey); err != nil {
+		`SELECT rating, comment, user_id, burger_id, created_at, discarded_at, photo_key, visited_at FROM reviews WHERE id = $1`, id,
+	).Scan(&r.Rating, &r.Comment, &r.UserID, &r.BurgerID, &r.CreatedAt, &r.DiscardedAt, &r.PhotoKey, &visitedAt); err != nil {
 		t.Fatalf("select review %s: %v", id, err)
 	}
+	r.VisitedAt = rowmap.VisitedAt(visitedAt)
 	return r
 }
 
@@ -63,8 +70,9 @@ func TestReviewRepository(t *testing.T) {
 	rOld := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 5, "Tasty", alice, cheese, nil, t1)
 	rDiscarded := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 1, "gone", alice, cheese, time.Now(), t2)
 
-	t.Run("CreateReview は insert して保存された行を返す", func(t *testing.T) {
-		review, err := domain.NewReview(4, "Fresh", carol, cheese)
+	t.Run("CreateReview は insert して保存された行を返す（実食日つき）", func(t *testing.T) {
+		visitedAt := time.Date(2024, 4, 20, 0, 0, 0, 0, time.UTC)
+		review, err := domain.NewReview(4, "Fresh", carol, cheese, &visitedAt, time.Now())
 		if err != nil {
 			t.Fatalf("NewReview returned error: %v", err)
 		}
@@ -81,39 +89,79 @@ func TestReviewRepository(t *testing.T) {
 		if created.CreatedAt.IsZero() {
 			t.Error("CreatedAt is zero, want the DB timestamp")
 		}
-		// 保存された行：渡した値で、kept（discarded_at なし）のまま。
+		if created.VisitedAt == nil || !created.VisitedAt.Equal(visitedAt) {
+			t.Errorf("created VisitedAt = %v, want %v", created.VisitedAt, visitedAt)
+		}
+		// 保存された行：渡した値で、kept（discarded_at なし）のまま。visited_at も、
+		// SQL で直接読み取った行が、渡したとおりの日付を持つ（date 列の丸め・時差ずれがないこと）。
 		stored := readReviewRow(ctx, t, conn, created.ID)
 		if stored.Rating != 4 || stored.UserID != carol || stored.BurgerID != cheese ||
 			stored.Comment == nil || *stored.Comment != "Fresh" || stored.DiscardedAt != nil {
 			t.Errorf("stored = %+v, want the created review (kept)", stored)
 		}
+		if stored.VisitedAt == nil || !stored.VisitedAt.Equal(visitedAt) {
+			t.Errorf("stored VisitedAt = %v, want %v", stored.VisitedAt, visitedAt)
+		}
 	})
 
-	t.Run("UpdateReviewContent は rating と comment だけを書き込む", func(t *testing.T) {
-		updated, err := repo.UpdateReviewContent(ctx, rOld, 2, "Changed my mind")
+	t.Run("UpdateReviewContent は rating・comment・実食日を書き込むが、discarded_at には触れない", func(t *testing.T) {
+		visitedAt := time.Date(2024, 5, 10, 0, 0, 0, 0, time.UTC)
+		updated, err := repo.UpdateReviewContent(ctx, rOld, 2, "Changed my mind", &visitedAt)
 		if err != nil {
 			t.Fatalf("UpdateReviewContent returned error: %v", err)
 		}
 		if updated.Rating != 2 || updated.Comment == nil || *updated.Comment != "Changed my mind" {
 			t.Errorf("updated = %+v, want rating 2 and the new comment", updated)
 		}
+		if updated.VisitedAt == nil || !updated.VisitedAt.Equal(visitedAt) {
+			t.Errorf("updated VisitedAt = %v, want %v", updated.VisitedAt, visitedAt)
+		}
 		if !updated.CreatedAt.Equal(t1) {
 			t.Errorf("CreatedAt = %v, want unchanged %v", updated.CreatedAt, t1)
 		}
 		// discarded_at には触れていない：review は依然として kept であり、保存された行に
-		// rating と comment の変更だけが反映されている。
+		// rating・comment・visited_at の変更だけが反映されている。
 		stored := readReviewRow(ctx, t, conn, rOld)
 		if stored.Rating != 2 || stored.Comment == nil || *stored.Comment != "Changed my mind" || stored.DiscardedAt != nil {
 			t.Errorf("stored = %+v, want the new rating and comment, still kept", stored)
+		}
+		if stored.VisitedAt == nil || !stored.VisitedAt.Equal(visitedAt) {
+			t.Errorf("stored VisitedAt = %v, want %v", stored.VisitedAt, visitedAt)
 		}
 		if !stored.CreatedAt.Equal(t1) || stored.UserID != alice || stored.BurgerID != cheese {
 			t.Errorf("stored = %+v, want created_at, user and burger untouched", stored)
 		}
 	})
 
+	t.Run("UpdateReviewContent に visitedAt として nil を渡すと、実食日は NULL に戻る（部分更新ではなく全置換）", func(t *testing.T) {
+		// この subtest 自身で、まず非 NULL の visited_at を書き込み、それが確かに保存された
+		// ことを確認したうえで、nil を渡す 2 回目の呼び出しが NULL に戻すことを確かめる。他の
+		// subtest の実行順・実行有無に依存しない（単独実行しても意味のある検証になる）。
+		visitedAt := time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC)
+		withVisitedAt, err := repo.UpdateReviewContent(ctx, rOld, 2, "Changed my mind", &visitedAt)
+		if err != nil {
+			t.Fatalf("UpdateReviewContent (setup, non-nil visitedAt) returned error: %v", err)
+		}
+		if withVisitedAt.VisitedAt == nil || !withVisitedAt.VisitedAt.Equal(visitedAt) {
+			t.Fatalf("setup VisitedAt = %v, want %v (non-nil, to prove the later clear is meaningful)", withVisitedAt.VisitedAt, visitedAt)
+		}
+
+		updated, err := repo.UpdateReviewContent(ctx, rOld, 2, "Changed my mind", nil)
+		if err != nil {
+			t.Fatalf("UpdateReviewContent returned error: %v", err)
+		}
+		if updated.VisitedAt != nil {
+			t.Errorf("updated VisitedAt = %v, want nil (cleared)", updated.VisitedAt)
+		}
+		stored := readReviewRow(ctx, t, conn, rOld)
+		if stored.VisitedAt != nil {
+			t.Errorf("stored VisitedAt = %v, want nil (cleared)", stored.VisitedAt)
+		}
+	})
+
 	t.Run("UpdateReviewContent に discard 済みまたは存在しない review を渡すと ErrReviewNotFound になる", func(t *testing.T) {
 		for name, id := range map[string]string{"discarded": rDiscarded, "unknown": uid.N(99999)} {
-			if _, err := repo.UpdateReviewContent(ctx, id, 3, "x"); !errors.Is(err, domain.ErrReviewNotFound) {
+			if _, err := repo.UpdateReviewContent(ctx, id, 3, "x", nil); !errors.Is(err, domain.ErrReviewNotFound) {
 				t.Errorf("%s: error = %v, want %v", name, err, domain.ErrReviewNotFound)
 			}
 		}
@@ -283,7 +331,7 @@ func TestReviewRepositoryCreateShopBurger(t *testing.T) {
 // mustCreateReview は repository を通して review を構築し永続化する。
 func mustCreateReview(ctx context.Context, t *testing.T, repo *repository.ReviewRepository, rating int, comment string, authorID string, burgerID string) domain.Review {
 	t.Helper()
-	review, err := domain.NewReview(rating, comment, authorID, burgerID)
+	review, err := domain.NewReview(rating, comment, authorID, burgerID, nil, time.Now())
 	if err != nil {
 		t.Fatalf("NewReview returned error: %v", err)
 	}
@@ -330,19 +378,23 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateReviewContentAndPhotoKey は content と key を一緒に書き込む", func(t *testing.T) {
-		updated, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 5, "Even better", strPtr("reviews/both.png"))
+	t.Run("UpdateReviewContentAndPhotoKey は content・実食日・key を一緒に書き込む", func(t *testing.T) {
+		visitedAt := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+		updated, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 5, "Even better", &visitedAt, strPtr("reviews/both.png"))
 		if err != nil {
 			t.Fatalf("UpdateReviewContentAndPhotoKey returned error: %v", err)
 		}
 		if updated.Rating != 5 || updated.Comment == nil || *updated.Comment != "Even better" {
 			t.Errorf("updated = %+v, want rating 5 and the new comment", updated)
 		}
+		if updated.VisitedAt == nil || !updated.VisitedAt.Equal(visitedAt) {
+			t.Errorf("updated VisitedAt = %v, want %v", updated.VisitedAt, visitedAt)
+		}
 		if updated.PhotoKey == nil || *updated.PhotoKey != "reviews/both.png" {
 			t.Errorf("updated PhotoKey = %v, want reviews/both.png", updated.PhotoKey)
 		}
-		// commit された行は content と key の「両方」を持つ（1 つの
-		// トランザクションなので、key を伴わない content だけになることは
+		// commit された行は content・実食日・key の「すべて」を持つ（1 つの
+		// トランザクションなので、key や visited_at を伴わない content だけになることは
 		// 決してない）。
 		stored := readReviewRow(ctx, t, conn, created.ID)
 		if stored.Rating != 5 || stored.Comment == nil || *stored.Comment != "Even better" ||
@@ -350,15 +402,27 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 			t.Errorf("stored = rating %d, comment %v, key %v, want 5, Even better and reviews/both.png",
 				stored.Rating, stored.Comment, stored.PhotoKey)
 		}
+		if stored.VisitedAt == nil || !stored.VisitedAt.Equal(visitedAt) {
+			t.Errorf("stored VisitedAt = %v, want %v", stored.VisitedAt, visitedAt)
+		}
 	})
 
-	t.Run("key なしの create は NULL のままになる", func(t *testing.T) {
+	t.Run("key と実食日なしの create は両方 NULL のままになる", func(t *testing.T) {
+		// domain.Review{} のゼロ値どおり VisitedAt を指定しない create。
 		plain, err := repo.CreateReview(ctx, domain.Review{Rating: 3, Comment: &comment, AuthorID: alice, BurgerID: burger})
 		if err != nil {
 			t.Fatalf("CreateReview returned error: %v", err)
 		}
 		if plain.PhotoKey != nil {
 			t.Errorf("PhotoKey = %v, want nil", plain.PhotoKey)
+		}
+		if plain.VisitedAt != nil {
+			t.Errorf("VisitedAt = %v, want nil", plain.VisitedAt)
+		}
+		// SQL で直接読み取った行も、visited_at が NULL のままである。
+		stored := readReviewRow(ctx, t, conn, plain.ID)
+		if stored.PhotoKey != nil || stored.VisitedAt != nil {
+			t.Errorf("stored = %+v, want photo_key and visited_at both NULL", stored)
 		}
 	})
 
@@ -367,7 +431,7 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}
 		// 結合した書き込みは rollback される：content の変更は何も残らない。
-		if _, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 1, "ghost", strPtr("reviews/ghost.jpg")); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 1, "ghost", nil, strPtr("reviews/ghost.jpg")); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("UpdateReviewContentAndPhotoKey error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 		var rating int16

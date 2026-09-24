@@ -104,7 +104,7 @@ func TestGetReviewShopAndCanReview(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &object); err != nil {
 			t.Fatalf("body = %s (%v)", rec.Body, err)
 		}
-		wantKeys := []string{"burger", "can_edit", "can_review", "comment", "created_at", "id", "photo_url", "rating", "shop", "user"}
+		wantKeys := []string{"burger", "can_edit", "can_review", "comment", "created_at", "id", "photo_url", "rating", "shop", "user", "visited_at"}
 		if got := slices.Sorted(maps.Keys(object)); !slices.Equal(got, wantKeys) {
 			t.Errorf("詳細のキー = %v, want %v", got, wantKeys)
 		}

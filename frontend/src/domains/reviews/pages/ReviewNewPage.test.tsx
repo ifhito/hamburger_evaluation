@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "../../../lib/i18n";
 import { byText, cleanup, click, mount, need, type as typeInto } from "../../../test/dom";
+import { todayDateOnly } from "../../../lib/date";
 import ReviewNewPage from "./ReviewNewPage";
 
 // R6: 評価は開いた直後は未選択で、選ばずに送信すると API を呼ばず、評価の近くにエラーを出し、評価の入力へ
@@ -60,5 +61,35 @@ describe("ReviewNewPage の評価(R6)", () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0]).toMatchObject({ rating: 3, burgerName: "Cheeseburger", shopId: "9" });
+  });
+
+  it("実食日(visitedAt)に触れずに送信しても、従来どおり投稿できる(既定は空文字)", async () => {
+    const page = await show();
+    await click(need(byText<HTMLButtonElement>(page, "button", "3"), "rating 3"));
+    await click(need(byText<HTMLButtonElement>(page, "button", "Post review"), "Post review"));
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0]).toMatchObject({ visitedAt: "" });
+  });
+});
+
+describe("ReviewNewPage の実食日(visitedAt)", () => {
+  it("today を上限にした日付の入力欄を出す", async () => {
+    const page = await show();
+    const input = need(page.querySelector<HTMLInputElement>("#visitedAt"), "#visitedAt");
+    expect(input.type).toBe("date");
+    expect(input.max).toBe(todayDateOnly());
+    expect(page.querySelector('label[for="visitedAt"]')?.textContent).toContain("Visited on");
+  });
+
+  it("入力すると、送信時に visitedAt として渡る", async () => {
+    const page = await show();
+    await typeInto(need(page.querySelector<HTMLInputElement>("#burgerName"), "#burgerName"), "Cheeseburger");
+    await typeInto(need(page.querySelector<HTMLInputElement>("#visitedAt"), "#visitedAt"), "2026-09-10");
+    await click(need(byText<HTMLButtonElement>(page, "button", "3"), "rating 3"));
+    await click(need(byText<HTMLButtonElement>(page, "button", "Post review"), "Post review"));
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0]).toMatchObject({ visitedAt: "2026-09-10" });
   });
 });

@@ -8,11 +8,15 @@ export type CreateReviewFormData = {
   comment: string;
   shopId: string;
   burgerName: string;
+  // 実食日(任意)。空文字は「指定なし」。
+  visitedAt: string;
 };
 
 export type UpdateReviewFormData = {
   rating: number;
   comment: string;
+  // 実食日(任意)。空文字は「指定なし」で、送ると既存の値を消す(全置換)。
+  visitedAt: string;
 };
 
 export function useCreateReviewForm(defaults?: Partial<CreateReviewFormData>) {
@@ -22,6 +26,7 @@ export function useCreateReviewForm(defaults?: Partial<CreateReviewFormData>) {
       comment: "",
       shopId: "",
       burgerName: "",
+      visitedAt: "",
       ...defaults,
     },
   });
@@ -32,6 +37,7 @@ export function useUpdateReviewForm(defaults?: Partial<UpdateReviewFormData>) {
     defaultValues: {
       rating: 3,
       comment: "",
+      visitedAt: "",
       ...defaults,
     },
   });

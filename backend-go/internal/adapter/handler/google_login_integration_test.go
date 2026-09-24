@@ -225,7 +225,7 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(pool, usecase.NewAuth(userQuery, hasherFake{}, codec, codec), unusedSignups(),
 		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)), nil,
-		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{}),
 		usecase.NewUsers(userQuery, domain.NewUsers(repository.NewUserRepository(pool)), unitOfWork, recalc, shopRecalc, hasherFake{}),
 		nil, nil, nil, handler.WithGoogleLogin(google))
 
