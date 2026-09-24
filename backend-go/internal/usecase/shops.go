@@ -115,9 +115,10 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id string) (domain
 
 // Create は viewer に代わって新しい shop を投稿する。shop は pending で
 // 始まり（後で moderator が activate する）、viewer が creator として
-// 記録される。空白の name は、domain の *ValidationError をそのまま返す。
-func (s *Shops) Create(ctx context.Context, viewer domain.User, name string) (domain.ShopDetail, error) {
-	shop, err := domain.NewShopSubmission(name, viewer.ID)
+// 記録される。空白の name は、domain の *ValidationError をそのまま返す。mapURL は
+// 任意の地図リンクで、domain.ValidateMapURL の規則に従う。
+func (s *Shops) Create(ctx context.Context, viewer domain.User, name string, mapURL string) (domain.ShopDetail, error) {
+	shop, err := domain.NewShopSubmission(name, viewer.ID, mapURL)
 	if err != nil {
 		return domain.ShopDetail{}, err
 	}
@@ -157,25 +158,29 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 	return shops, nil
 }
 
-// AdminUpdateName は shop の名前を変更する（唯一の moderation 編集、Rails
+// AdminUpdateName は shop の名前(と地図リンク)を変更する（唯一の moderation 編集、Rails
 // parity）。admin でない viewer には、どの id が存在するかを探れないよう、
 // lookup の前に domain.ErrForbidden を返す。空白の name は
-// *ValidationError である。
-func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id string, name string) (domain.ShopDetail, error) {
+// *ValidationError であり、mapURL は domain.ValidateMapURL の規則に従う。
+func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id string, name string, mapURL string) (domain.ShopDetail, error) {
 	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
 	}
 	if err := domain.ValidateShopName(name); err != nil {
 		return domain.ShopDetail{}, err
 	}
+	normalizedMapURL, err := domain.ValidateMapURL(mapURL)
+	if err != nil {
+		return domain.ShopDetail{}, err
+	}
 	// fetch はレスポンス用の creator（と、未知の id に対する 404）を
-	// 供給する。書き込み自体は name のカラムにしか触れないので、並行する
+	// 供給する。書き込み自体は name と map_url のカラムにしか触れないので、並行する
 	// status の変更を元に戻すことはない。
 	detail, err := s.query.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}
-	updated, err := s.shops.UpdateName(ctx, id, name)
+	updated, err := s.shops.UpdateName(ctx, id, name, normalizedMapURL)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}

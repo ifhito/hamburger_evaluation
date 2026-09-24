@@ -23,6 +23,7 @@ type shopRow struct {
 	Name      string
 	Status    int16
 	Note      *string
+	MapURL    *string
 	CreatorID *string
 	ClosedAt  *time.Time
 }
@@ -32,8 +33,8 @@ func readShopRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id string) s
 	t.Helper()
 	var r shopRow
 	if err := conn.QueryRow(ctx,
-		`SELECT name, status, moderation_note, creator_id, closed_at FROM shops WHERE id = $1`, id,
-	).Scan(&r.Name, &r.Status, &r.Note, &r.CreatorID, &r.ClosedAt); err != nil {
+		`SELECT name, status, moderation_note, map_url, creator_id, closed_at FROM shops WHERE id = $1`, id,
+	).Scan(&r.Name, &r.Status, &r.Note, &r.MapURL, &r.CreatorID, &r.ClosedAt); err != nil {
 		t.Fatalf("select shop %s: %v", id, err)
 	}
 	return r
@@ -62,7 +63,7 @@ func TestShopModerationRepository(t *testing.T) {
 	newest := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
 
 	t.Run("CreateShop は creator 付きの pending な shop を永続化する", func(t *testing.T) {
-		submission, err := domain.NewShopSubmission("Fresh Shack", alice)
+		submission, err := domain.NewShopSubmission("Fresh Shack", alice, "https://maps.example.com/fresh-shack")
 		if err != nil {
 			t.Fatalf("NewShopSubmission returned error: %v", err)
 		}
@@ -73,10 +74,16 @@ func TestShopModerationRepository(t *testing.T) {
 		if created.ID == "" || created.Status != domain.ShopStatusPending || created.ModerationNote != nil {
 			t.Errorf("created = %+v, want generated id, pending, nil note", created)
 		}
-		// 保存された行：pending（0）・note なし・creator は alice。
+		if created.MapURL == nil || *created.MapURL != "https://maps.example.com/fresh-shack" {
+			t.Errorf("created.MapURL = %v, want https://maps.example.com/fresh-shack", created.MapURL)
+		}
+		// 保存された行：pending（0）・note なし・map_url あり・creator は alice。
 		stored := readShopRow(ctx, t, conn, created.ID)
 		if stored.Name != "Fresh Shack" || stored.Status != 0 || stored.Note != nil {
 			t.Errorf("stored = %+v, want Fresh Shack, pending (0), nil note", stored)
+		}
+		if stored.MapURL == nil || *stored.MapURL != "https://maps.example.com/fresh-shack" {
+			t.Errorf("stored.MapURL = %v, want https://maps.example.com/fresh-shack", stored.MapURL)
 		}
 		if stored.CreatorID == nil || *stored.CreatorID != alice {
 			t.Errorf("stored creator_id = %v, want alice %s", stored.CreatorID, alice)
@@ -130,7 +137,7 @@ func TestShopModerationRepository(t *testing.T) {
 		if _, err := repo.UpdateShopStatus(ctx, shop, next.Status, next.ModerationNote); err != nil {
 			t.Fatalf("UpdateShopStatus returned error: %v", err)
 		}
-		renamed, err := repo.UpdateShopName(ctx, shop, "Race Shack Renamed") // 古い rename 側が書き込む
+		renamed, err := repo.UpdateShopName(ctx, shop, "Race Shack Renamed", nil) // 古い rename 側が書き込む
 		if err != nil {
 			t.Fatalf("UpdateShopName returned error: %v", err)
 		}
@@ -172,7 +179,7 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 
 		// 並行する rename は、closed_at には触れない。
-		renamed, err := repo.UpdateShopName(ctx, shop, "Closable Shack Renamed")
+		renamed, err := repo.UpdateShopName(ctx, shop, "Closable Shack Renamed", nil)
 		if err != nil {
 			t.Fatalf("UpdateShopName returned error: %v", err)
 		}
@@ -192,8 +199,41 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("UpdateShopName は map_url を設定・変更・削除できる", func(t *testing.T) {
+		shop := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Map Shack", 0, nil, alice, tNew)
+
+		mapURL := "https://maps.example.com/one"
+		set, err := repo.UpdateShopName(ctx, shop, "Map Shack", &mapURL)
+		if err != nil {
+			t.Fatalf("UpdateShopName returned error: %v", err)
+		}
+		if set.MapURL == nil || *set.MapURL != mapURL {
+			t.Errorf("set.MapURL = %v, want %s", set.MapURL, mapURL)
+		}
+
+		changed := "https://maps.example.com/two"
+		got, err := repo.UpdateShopName(ctx, shop, "Map Shack", &changed)
+		if err != nil {
+			t.Fatalf("UpdateShopName returned error: %v", err)
+		}
+		if got.MapURL == nil || *got.MapURL != changed {
+			t.Errorf("changed.MapURL = %v, want %s", got.MapURL, changed)
+		}
+
+		cleared, err := repo.UpdateShopName(ctx, shop, "Map Shack", nil)
+		if err != nil {
+			t.Fatalf("UpdateShopName returned error: %v", err)
+		}
+		if cleared.MapURL != nil {
+			t.Errorf("cleared.MapURL = %v, want nil", *cleared.MapURL)
+		}
+		if stored := readShopRow(ctx, t, conn, shop); stored.MapURL != nil {
+			t.Errorf("stored.MapURL = %v, want nil", stored.MapURL)
+		}
+	})
+
 	t.Run("UpdateShopName に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
-		_, err := repo.UpdateShopName(ctx, uid.N(99999), "x")
+		_, err := repo.UpdateShopName(ctx, uid.N(99999), "x", nil)
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}

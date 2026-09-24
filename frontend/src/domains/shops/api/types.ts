@@ -11,6 +11,8 @@ export interface Shop {
   // 評価の平均(小数 1 桁)。レビューがなければ null。バーガーの平均(reviews[].burger.averageRating)とは別の値。
   averageRating: number | null;
   reviewCount: number;
+  // 地図へのリンク(Google マップの共有リンクなど)。未設定なら null。
+  mapUrl: string | null;
   // 閉業した日時(ISO8601)。閉業していなければ null。status(審査の状態)とは独立した値。
   closedAt: string | null;
 }
@@ -40,8 +42,10 @@ export interface AdminShop extends Shop {
 
 export interface ShopCreateInput {
   name: string;
+  mapUrl: string;
 }
 
 export interface ShopUpdateInput {
   name: string;
+  mapUrl: string;
 }

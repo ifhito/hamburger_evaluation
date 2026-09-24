@@ -230,6 +230,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 			"burgers_name_max_length":          domain.MaxBurgerNameChars,
 			"shops_name_max_length":            domain.MaxShopNameChars,
 			"shops_moderation_note_max_length": domain.MaxModerationNoteChars,
+			"shops_map_url_max_length":         domain.MaxMapURLChars,
 			"users_username_max_length":        domain.MaxUsernameChars,
 			"users_bio_max_length":             domain.MaxBioChars,
 			"users_email_max_length":           domain.MaxEmailChars,
@@ -528,6 +529,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/closed_at/timestamp with time zone/YES",
 		"shops/created_at/timestamp with time zone/NO",
 		"shops/updated_at/timestamp with time zone/NO",
+		// map_url は 000018 で追加されたので、ordinal position では最後に来る。
+		"shops/map_url/text/YES",
 		"shops_burgers/shop_id/uuid/NO",
 		"shops_burgers/burger_id/uuid/NO",
 		// signup_verifications は 000008 で追加された。
@@ -599,6 +602,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"burgers/burgers_name_max_length/c",
 		"shops/shops_name_max_length/c",
 		"shops/shops_moderation_note_max_length/c",
+		"shops/shops_map_url_max_length/c",
 		"users/users_username_max_length/c",
 		"users/users_bio_max_length/c",
 		"users/users_email_max_length/c",
@@ -736,6 +740,8 @@ var textLimitCases = []textLimitCase{
 		"INSERT INTO shops (name, status) VALUES ($1, 0)"},
 	{"shops.moderation_note", domain.MaxModerationNoteChars, "shops_moderation_note_max_length",
 		"INSERT INTO shops (name, status, moderation_note) VALUES ('note-shop', 2, $1)"},
+	{"shops.map_url", domain.MaxMapURLChars, "shops_map_url_max_length",
+		"INSERT INTO shops (name, status, map_url) VALUES ('map-shop', 0, $1)"},
 	{"users.username", domain.MaxUsernameChars, "users_username_max_length",
 		"INSERT INTO users (email, username, password_digest) VALUES ('u' || md5(random()::text) || '@example.com', $1, 'digest')"},
 	{"users.bio", domain.MaxBioChars, "users_bio_max_length",

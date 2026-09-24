@@ -25,6 +25,7 @@ function page(hasMore: boolean, count = 1): Page<Shop> {
       photoUrl: null,
       averageRating: null,
       reviewCount: 0,
+      mapUrl: null,
       closedAt: null,
     })),
     hasMore,

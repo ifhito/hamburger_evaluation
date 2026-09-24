@@ -53,6 +53,14 @@ export default function ShopNewPage() {
             counter={{ value: watch("name"), max: meta?.text.shopNameMaxChars }}
             {...register("name")}
           />
+          <TextField
+            id="mapUrl"
+            type="url"
+            label={t("shops.new.mapUrl")}
+            optional={t("shops.admin.optional")}
+            placeholder={t("shops.new.mapUrlPlaceholder")}
+            {...register("mapUrl")}
+          />
           <div className={styles.actionsRow}>
             <Button type="submit" wide isLoading={isSubmitting}>
               {t("shops.new.submit")}

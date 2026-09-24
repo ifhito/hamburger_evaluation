@@ -25,6 +25,7 @@ type shopResponse struct {
 	ID       string  `json:"id"`
 	Name     string  `json:"name"`
 	Status   string  `json:"status"`
+	MapURL   *string `json:"map_url"`
 	ClosedAt *string `json:"closed_at"`
 	shopSummaryResponse
 }
@@ -50,6 +51,7 @@ func newShopResponse(listing domain.ShopListing) shopResponse {
 		ID:                  listing.ID,
 		Name:                listing.Name,
 		Status:              string(listing.Status),
+		MapURL:              listing.MapURL,
 		ClosedAt:            formatClosedAt(listing.ClosedAt),
 		shopSummaryResponse: newShopSummaryResponse(listing.Summary),
 	}
@@ -64,6 +66,7 @@ type shopDetailResponse struct {
 	Name                string               `json:"name"`
 	Status              string               `json:"status"`
 	ModerationNote      *string              `json:"moderation_note"`
+	MapURL              *string              `json:"map_url"`
 	ClosedAt            *string              `json:"closed_at"`
 	Creator             *userRefResponse     `json:"creator"`
 	Reviews             []shopReviewResponse `json:"reviews"`
@@ -201,6 +204,7 @@ func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 		Name:                detail.Name,
 		Status:              string(detail.Status),
 		ModerationNote:      detail.ModerationNote,
+		MapURL:              detail.MapURL,
 		ClosedAt:            formatClosedAt(detail.ClosedAt),
 		Creator:             newUserRefResponse(detail.Creator),
 		Reviews:             make([]shopReviewResponse, 0, len(detail.Reviews)),

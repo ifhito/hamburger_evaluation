@@ -30,6 +30,7 @@ const shop = (over: Partial<AdminShop>): AdminShop => ({
   photoUrl: null,
   averageRating: null,
   reviewCount: 0,
+  mapUrl: null,
   closedAt: null,
   moderationNote: null,
   creator: { id: "u1", username: "alice" },

@@ -104,6 +104,7 @@ type Shop struct {
 	ClosedAt       pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	MapURL         pgtype.Text
 }
 
 type ShopStat struct {

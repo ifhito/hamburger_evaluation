@@ -17,6 +17,8 @@ const (
 	keyModerationNote    = "moderation_note.too_long"
 	keyShopCannotClose   = "shop.cannot_close"
 	keyShopCannotReopen  = "shop.cannot_reopen"
+	keyMapURLTooLong     = "map_url.too_long"
+	keyMapURLInvalid     = "map_url.invalid"
 	keyBioTooLong        = "bio.too_long"
 	keyUsernameBlank     = "username.blank"
 	keyUsernameTooLong   = "username.too_long"
@@ -43,6 +45,8 @@ var catalog = map[string]Entry{
 	keyModerationNote:    {EN: "Moderation note is too long (maximum is %d characters)", JA: "却下の理由が長すぎます(最大 %d 文字)"},
 	keyShopCannotClose:   {EN: "Shop cannot be closed", JA: "このショップは閉業にできません"},
 	keyShopCannotReopen:  {EN: "Shop is not closed", JA: "このショップは閉業していません"},
+	keyMapURLTooLong:     {EN: "Map url is too long (maximum is %d characters)", JA: "地図リンクが長すぎます(最大 %d 文字)"},
+	keyMapURLInvalid:     {EN: "Map url must be a valid http or https URL", JA: "地図リンクは http または https の URL にしてください"},
 	keyBioTooLong:        {EN: "Bio is too long (maximum is %d characters)", JA: "自己紹介が長すぎます(最大 %d 文字)"},
 	keyUsernameBlank:     {EN: "Username can't be blank", JA: "ユーザー名を入力してください"},
 	keyUsernameTooLong:   {EN: "Username is too long (maximum is %d characters)", JA: "ユーザー名が長すぎます(最大 %d 文字)"},

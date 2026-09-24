@@ -13,12 +13,14 @@ import (
 var msgForbidden = apiMsg(keyForbidden)
 
 // shopParamsRequest は POST /shops と PUT /admin/shops/{id} の
-// {"shop":{"name":...}} ラッパーである。wrapper や name が欠けている場合は
+// {"shop":{"name":...,"map_url":...}} ラッパーである。wrapper や name が欠けている場合は
 // "" にデコードされ、domain はそれを blank として拒否する。400 ではなく
-// Rails-parity の 422 になる。
+// Rails-parity の 422 になる。map_url も同様に、欠けていれば "" になり、
+// domain.ValidateMapURL がそれを「リンクなし」として扱う。
 type shopParamsRequest struct {
 	Shop struct {
-		Name string `json:"name"`
+		Name   string `json:"name"`
+		MapURL string `json:"map_url"`
 	} `json:"shop"`
 }
 
@@ -36,6 +38,7 @@ type adminShopResponse struct {
 	Name           string           `json:"name"`
 	Status         string           `json:"status"`
 	ModerationNote *string          `json:"moderation_note"`
+	MapURL         *string          `json:"map_url"`
 	ClosedAt       *string          `json:"closed_at"`
 	Creator        *userRefResponse `json:"creator"`
 	// CanApprove・CanReject は、承認・却下の操作を画面が提示してよいか（domain が判断する）。
@@ -53,6 +56,7 @@ func newAdminShopResponse(detail domain.ShopDetail) adminShopResponse {
 		Name:           detail.Name,
 		Status:         string(detail.Status),
 		ModerationNote: detail.ModerationNote,
+		MapURL:         detail.MapURL,
 		ClosedAt:       formatClosedAt(detail.ClosedAt),
 		Creator:        newUserRefResponse(detail.Creator),
 		CanApprove:     detail.Shop.CanBeApproved(),
@@ -118,7 +122,7 @@ func handleCreateShop(shops *usecase.Shops) http.HandlerFunc {
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		detail, err := shops.Create(r.Context(), viewer, req.Shop.Name)
+		detail, err := shops.Create(r.Context(), viewer, req.Shop.Name, req.Shop.MapURL)
 		if err != nil {
 			writeShopModerationError(w, r, "create", err)
 			return
@@ -148,8 +152,7 @@ func handleAdminListShops(shops *usecase.Shops) http.HandlerFunc {
 	}
 }
 
-// handleAdminUpdateShop は PUT /admin/shops/{id} を処理する：shop の名前を
-// 変更する（編集できる属性は name だけ、Rails parity）。
+// handleAdminUpdateShop は PUT /admin/shops/{id} を処理し、shop の名前と任意の地図リンクを変更する。
 func handleAdminUpdateShop(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		viewer, ok := requireViewer(w, r)
@@ -164,7 +167,7 @@ func handleAdminUpdateShop(shops *usecase.Shops) http.HandlerFunc {
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		detail, err := shops.AdminUpdateName(r.Context(), viewer, id, req.Shop.Name)
+		detail, err := shops.AdminUpdateName(r.Context(), viewer, id, req.Shop.Name, req.Shop.MapURL)
 		if err != nil {
 			writeShopModerationError(w, r, "admin update", err)
 			return

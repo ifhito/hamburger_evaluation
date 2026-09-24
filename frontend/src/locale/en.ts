@@ -339,6 +339,7 @@ const en = {
       pendingNoticeBody: "Only you and moderators can see it, and you can already write reviews for it.",
       rejectedNoticeTitle: "This shop was rejected",
       rejectedNoticeReason: "Reason: {{reason}}",
+      viewOnMap: "View on map",
     },
     new: {
       backToShops: "← Back to shops",
@@ -346,6 +347,8 @@ const en = {
       lead: "Can't find the shop you visited? Add it here.",
       name: "Shop name",
       namePlaceholder: "e.g. Shake Shack Shibuya",
+      mapUrl: "Map link",
+      mapUrlPlaceholder: "e.g. a Google Maps share link",
       pendingNotice:
         "New shops are reviewed by our team before becoming public. You can review your own shop while it is pending.",
       submit: "Submit for review",

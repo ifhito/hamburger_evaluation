@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -23,7 +24,9 @@ type Shop struct {
 	Name           string
 	Status         ShopStatus
 	ModerationNote *string
-	CreatorID      *string
+	// MapURL は、地図へのリンク(Google Maps の共有 URL など)である。任意で、設定されていなければ nil。
+	MapURL    *string
+	CreatorID *string
 	// ClosedAt は閉業のフラグである（nil = 営業中、非 nil = 閉業した時刻）。moderation の
 	// status（pending/active/rejected）とは独立の状態で、閉業した shop は、status や
 	// viewer に関わらず review を受け付けない（CanBeReviewedBy）。
@@ -64,14 +67,42 @@ func ValidateModerationNote(note *string) error {
 	return nil
 }
 
+// MaxMapURLChars は地図リンクの文字数の上限(Unicode のコードポイント数)である。
+// DB の CHECK 制約 shops_map_url_max_length(000018_add_shop_map_url)と同じ値でなければならない。
+const MaxMapURLChars = 2048
+
+// ValidateMapURL は、任意の地図リンクを検証する。空(または空白だけ)は「リンクなし」として有効で (nil, nil) を
+// 返す。値があるときは、MaxMapURLChars 文字以内で、scheme が http か https でなければならない(許可リストで
+// あり、禁止リストではない:http・https だけを許可し、javascript:・data: など、それ以外の scheme はすべて
+// 拒否する)。host も空であってはならない。有効なら、前後の空白を取り除いた値へのポインタを返す。
+func ValidateMapURL(raw string) (*string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if exceedsChars(trimmed, MaxMapURLChars) {
+		return nil, NewValidationError(Msg(keyMapURLTooLong, MaxMapURLChars))
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Host == "" || !(strings.EqualFold(u.Scheme, "http") || strings.EqualFold(u.Scheme, "https")) {
+		return nil, NewValidationError(Msg(keyMapURLInvalid))
+	}
+	return &trimmed, nil
+}
+
 // NewShopSubmission は、ユーザーが投稿した shop を組み立てる。名前は validate
 // され、status は pending で始まり（Rails ShopStatus.initial）、moderation
-// note はまだなく、投稿したユーザーが creator として記録される。
-func NewShopSubmission(name string, creatorID string) (Shop, error) {
+// note はまだなく、投稿したユーザーが creator として記録される。mapURL は任意の
+// 地図リンクで、ValidateMapURL で検証される。
+func NewShopSubmission(name string, creatorID string, mapURL string) (Shop, error) {
 	if err := ValidateShopName(name); err != nil {
 		return Shop{}, err
 	}
-	return Shop{Name: name, Status: ShopStatusPending, CreatorID: &creatorID}, nil
+	normalizedMapURL, err := ValidateMapURL(mapURL)
+	if err != nil {
+		return Shop{}, err
+	}
+	return Shop{Name: name, Status: ShopStatusPending, MapURL: normalizedMapURL, CreatorID: &creatorID}, nil
 }
 
 // Approve は active への moderation 遷移である。Rails ShopStatus と同様に、
@@ -252,10 +283,10 @@ type ShopReviewBurger struct {
 type ShopRepository interface {
 	// CreateShop は新しい shop を永続化し、生成された id つきで返す。
 	CreateShop(ctx context.Context, shop Shop) (Shop, error)
-	// UpdateShopName は、id の shop の name だけを永続化し、保存された行を
+	// UpdateShopName は、id の shop の name と map_url だけを永続化し、保存された行を
 	// 返す。カラム限定なので、並行する status の変更が古いスナップショットで
 	// 元に戻されることは決してない。
-	UpdateShopName(ctx context.Context, id string, name string) (Shop, error)
+	UpdateShopName(ctx context.Context, id string, name string, mapURL *string) (Shop, error)
 	// UpdateShopStatus は、id の shop の status と moderation note だけを
 	// 永続化し、保存された行を返す。カラム限定なので、並行する rename が
 	// 古いスナップショットで元に戻されることは決してない。
@@ -288,9 +319,9 @@ func (s *Shops) Create(ctx context.Context, shop Shop) (Shop, error) {
 	return s.repo.CreateShop(ctx, shop)
 }
 
-// UpdateName は、id の shop の name だけを永続化し、保存された行を返す。
-func (s *Shops) UpdateName(ctx context.Context, id string, name string) (Shop, error) {
-	return s.repo.UpdateShopName(ctx, id, name)
+// UpdateName は、id の shop の name と map_url だけを永続化し、保存された行を返す。
+func (s *Shops) UpdateName(ctx context.Context, id string, name string, mapURL *string) (Shop, error) {
+	return s.repo.UpdateShopName(ctx, id, name, mapURL)
 }
 
 // UpdateStatus は、id の shop の status と moderation note だけを永続化し、

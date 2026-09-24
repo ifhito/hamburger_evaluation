@@ -387,6 +387,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 | レビューのコメント(`POST /reviews`、`PUT /reviews/:id`) | 2,000 |
 | バーガー名(`burger_name` の経路) | 100 |
 | ショップ名(`POST /shops`、`PUT /admin/shops/:id`) | 100 |
+| 地図リンク(`POST /shops`、`PUT /admin/shops/:id` の `map_url`) | 2,048 |
 | ユーザー名(`POST /signup`、`PUT /users/:id`) | 50 |
 | メールアドレス(`POST /signup`、`PUT /users/:id`) | 254 |
 | 自己紹介文(`PUT /users/:id` の `bio`。送ったときだけ判定) | 500 |
@@ -402,7 +403,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 `backend-go/db/migrations/` のマイグレーションで定義された 8 つのテーブル:
 
 - **users** — id (uuid), email, username, bio (自己紹介文。書かれていなければ空文字), password_digest, admin フラグ, 論理削除 (discarded_at)
-- **shops** — id (uuid), name, モデレーション状態 (pending / active / rejected), moderation_note, 申請者への FK
+- **shops** — id (uuid), name, モデレーション状態 (pending / active / rejected), moderation_note, map_url (任意の地図リンク), 申請者への FK
 - **burgers** — id (uuid), 中間テーブル経由でショップに紐づくバーガー
 - **shops_burgers** *(中間テーブル)* — shop_id (FK, uuid), burger_id (FK, uuid)
 - **reviews** — id (uuid), rating, comment, user への FK, burger への FK, photo_key (写真の保存キー。任意), 論理削除 (discarded_at)

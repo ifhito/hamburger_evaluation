@@ -46,7 +46,7 @@ describe("AdminShopEditPage(ショップの名前の編集)", () => {
       need(page.querySelector("form"), "form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
-    await eventually(() => expect(update).toHaveBeenCalledWith({ name: "New name" }));
+    await eventually(() => expect(update).toHaveBeenCalledWith({ name: "New name", mapUrl: "" }));
     await eventually(() => expect(page.textContent).toBe("moderation list"));
   });
 

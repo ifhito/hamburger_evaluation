@@ -98,7 +98,7 @@ func (r *ReviewQuery) GetShop(ctx context.Context, id string) (domain.Shop, erro
 		}
 		return domain.Shop{}, fmt.Errorf("get shop: %w", err)
 	}
-	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
+	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("get shop: %w", err)
 	}
@@ -115,7 +115,7 @@ func (r *ReviewQuery) ListReviewShops(ctx context.Context, reviewID string) ([]d
 	}
 	shops := make([]domain.Shop, 0, len(rows))
 	for _, row := range rows {
-		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
+		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
 		if err != nil {
 			return nil, fmt.Errorf("list review shops: %w", err)
 		}

@@ -712,6 +712,7 @@ func TestMCPEveryToolRequiresItsOwnScope(t *testing.T) {
 
 func TestMCPReadTools(t *testing.T) {
 	k := newMCPKit(t)
+	k.shops.shops[0].Shop.MapURL = shopPtr("https://maps.example/active")
 	aliceRead := k.connect(t, k.token(k.alice, readScope))
 	bobRead := k.connect(t, k.token(k.bob, readScope))
 
@@ -756,6 +757,9 @@ func TestMCPReadTools(t *testing.T) {
 		if !has(forBob.Items, "Active Diner") || has(forBob.Items, "Rejected Grill") {
 			t.Errorf("bob's list = %s, want active shops only", bobText)
 		}
+		if !strings.Contains(aliceText, `"map_url":"https://maps.example/active"`) || !strings.Contains(bobText, `"map_url":"https://maps.example/active"`) {
+			t.Errorf("list_shops must include the configured map_url: alice=%s bob=%s", aliceText, bobText)
+		}
 	})
 
 	t.Run("get_shop は GET /shops/{id} と同じ詳細を返し、存在しない ID と UUID でない ID は同じ「見つからない」になる", func(t *testing.T) {
@@ -765,6 +769,9 @@ func TestMCPReadTools(t *testing.T) {
 		}
 		if want := k.get(t, "/shops/"+activeShopID, k.aliceJWT); text != want {
 			t.Errorf("get_shop = %s, want the same as the API: %s", text, want)
+		}
+		if !strings.Contains(text, `"map_url":"https://maps.example/active"`) {
+			t.Errorf("get_shop = %s, want the configured map_url", text)
 		}
 		for _, id := range []string{uidMissing, "not-a-uuid"} {
 			text, isErr := call(t, aliceRead, "get_shop", map[string]any{"shop_id": id})
@@ -954,10 +961,13 @@ func TestMCPWriteTools(t *testing.T) {
 		}
 	})
 
-	t.Run("submit_shop は審査待ちのショップを申請者の名前で作り、名前が空なら失敗にする", func(t *testing.T) {
-		text, isErr := call(t, bob, "submit_shop", map[string]any{"name": "新しいバーガー店"})
-		if isErr || !strings.Contains(text, `"status":"pending"`) || !strings.Contains(text, "新しいバーガー店") {
+	t.Run("submit_shop は地図リンク付きの審査待ちショップを作り、不正なリンクと空の名前を拒否する", func(t *testing.T) {
+		text, isErr := call(t, bob, "submit_shop", map[string]any{"name": "新しいバーガー店", "map_url": "https://maps.example/new"})
+		if isErr || !strings.Contains(text, `"status":"pending"`) || !strings.Contains(text, "新しいバーガー店") || !strings.Contains(text, `"map_url":"https://maps.example/new"`) {
 			t.Errorf("submit_shop = %q (isError=%v), want a pending shop", text, isErr)
+		}
+		if text, isErr := call(t, bob, "submit_shop", map[string]any{"name": "危険なリンク", "map_url": "javascript:alert(1)"}); !isErr || !strings.Contains(text, "http or https") {
+			t.Errorf("submit_shop(invalid map_url) = %q (isError=%v), want a validation failure", text, isErr)
 		}
 		if text, isErr := call(t, bob, "submit_shop", map[string]any{"name": "   "}); !isErr || text == "" {
 			t.Errorf("submit_shop(blank) = %q (isError=%v), want a validation failure", text, isErr)
@@ -983,6 +993,7 @@ func TestMCPWriteTools(t *testing.T) {
 
 func TestMCPAdminTools(t *testing.T) {
 	k := newMCPKit(t)
+	k.shops.shops[1].Shop.MapURL = shopPtr("https://maps.example/pending")
 	admin := k.connect(t, k.token(k.admin, adminScope))
 
 	t.Run("list_admin_shops は、status で絞り込んだ、審査待ちのショップだけを返す(管理者だけ)", func(t *testing.T) {
@@ -990,9 +1001,12 @@ func TestMCPAdminTools(t *testing.T) {
 		if isErr {
 			t.Fatalf("list_admin_shops failed: %s", text)
 		}
-		var items []struct{ ID, Name, Status string }
+		var items []struct {
+			ID, Name, Status string
+			MapURL           *string `json:"map_url"`
+		}
 		mustJSON(t, text, &items)
-		if len(items) != 1 || items[0].ID != uid.N(2) || items[0].Name != "Alice Pending" || items[0].Status != "pending" {
+		if len(items) != 1 || items[0].ID != uid.N(2) || items[0].Name != "Alice Pending" || items[0].Status != "pending" || items[0].MapURL == nil || *items[0].MapURL != "https://maps.example/pending" {
 			t.Errorf("list_admin_shops(status=pending) = %s, want only alice's seeded pending shop", text)
 		}
 	})
