@@ -1,7 +1,20 @@
-import { describe, it, expect } from "vitest";
-import { getKey, shopDetailKey } from "./useShops";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { getKey, shopDetailKey, useShops } from "./useShops";
+import { useInfinitePages } from "../../../api/useInfinitePages";
 import type { Page } from "../../../api/page";
 import type { Shop } from "../api/types";
+
+vi.mock("../../../api/useInfinitePages", () => ({
+  useInfinitePages: vi.fn(() => ({
+    data: undefined,
+    error: undefined,
+    isLoading: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    refresh: vi.fn(),
+    fetchNextPage: vi.fn(),
+  })),
+}));
 
 function page(hasMore: boolean, count = 1): Page<Shop> {
   return {
@@ -73,5 +86,31 @@ describe("shopDetailKey", () => {
     expect(shopDetailKey(shop2, viewer3, false)).toBeNull();
     expect(shopDetailKey(undefined, viewer3)).toBeNull();
     expect(shopDetailKey("", viewer3)).toBeNull();
+  });
+});
+
+describe("useShops", () => {
+  beforeEach(() => {
+    vi.mocked(useInfinitePages).mockClear();
+  });
+
+  it("閲覧者の id を useInfinitePages の scope として渡す(閲覧者ごとにキャッシュを分けるため)", () => {
+    useShops(undefined, viewer3);
+
+    expect(vi.mocked(useInfinitePages)).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      { scope: viewer3 },
+    );
+  });
+
+  it("匿名(viewerId が null)のときは scope を付けない(未ログインの誰とも重ならない素のキーになる)", () => {
+    useShops(undefined, null);
+
+    expect(vi.mocked(useInfinitePages)).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      { scope: undefined },
+    );
   });
 });
