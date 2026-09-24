@@ -95,7 +95,10 @@ func NewMCPServer(tokens *usecase.OAuthAccessTokens, shops *usecase.Shops, revie
 	})
 	// 状態を持たない動かし方(セッションを作らない)にする。要求ごとに、認証した利用者のための
 	// サーバーを組み立てる(下の serverFor)ので、利用者ごとの状態をセッションに持つ必要がない。
-	m.mcp = mcp.NewStreamableHTTPHandler(m.serverFor, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	// SDK 側にも本文の上限があるので、写真を送れる外側の middleware と揃える。
+	m.mcp = mcp.NewStreamableHTTPHandler(m.serverFor, &mcp.StreamableHTTPOptions{
+		Stateless: true, JSONResponse: true, MaxRequestBodyBytes: maxMCPRequestBodyBytes,
+	})
 	return m, nil
 }
 

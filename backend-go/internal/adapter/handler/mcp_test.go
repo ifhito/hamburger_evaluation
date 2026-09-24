@@ -66,6 +66,7 @@ type mcpKit struct {
 	shops      *shopStoreFake
 	alice, bob domain.User
 	admin      domain.User
+	photoDir   string
 	aliceJWT   string
 	seq        int
 }
@@ -97,7 +98,8 @@ func newMCPKit(t *testing.T) *mcpKit {
 	k.issuer = k.url
 
 	shops := shopsUsecase(shopRepo, shopRepo)
-	reviews := reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos"))
+	k.photoDir = t.TempDir()
+	reviews := reviewsUsecase(reviewRepo, storage.NewDisk(k.photoDir, "/photos"))
 	usersUC := usersUsecase(users, hasherFake{})
 	mcpServer, err := handler.NewMCPServer(usecase.NewOAuthAccessTokens(k.introspect, users, k.resource), shops, reviews, usersUC,
 		handler.MCPConfig{Resource: k.resource, Issuer: k.issuer, AllowedOrigins: []string{k.url, trustedOrigin, portedOrigin}})
@@ -402,7 +404,7 @@ func TestMCPAuthentication(t *testing.T) {
 	t.Run("上限を超える大きさの本文は、トークンを確かめる前に 413 になる", func(t *testing.T) {
 		k := newMCPKit(t)
 		token := k.token(k.alice, readScope)
-		big := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"pad":"` + strings.Repeat("a", 2<<20) + `"}}`
+		big := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"pad":"` + strings.Repeat("a", 8<<20) + `"}}`
 		if resp, _ := k.rpc(t, token, big); resp.StatusCode != http.StatusRequestEntityTooLarge {
 			t.Fatalf("status = %d, want 413", resp.StatusCode)
 		}

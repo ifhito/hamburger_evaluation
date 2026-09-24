@@ -21,12 +21,15 @@ const maxRequestBodyBytes int64 = 1 << 20
 // のはそちらである。この cap は暴走した body を 413 で止めるだけである。
 const maxReviewRequestBodyBytes int64 = domain.MaxPhotoBytes + 1<<20
 
-// bodyLimit は request の body の上限を返す：より大きな上限を得るのは、
-// review の書き込み endpoint（POST /reviews、PUT /reviews/{id}）に対する
-// multipart/form-data の request（写真を含みうる）だけである。JSON を含む
-// それ以外の Content-Type は、review の書き込みでも 1 MiB のままである
-// （コメントの上限が 2,000 文字なので、JSON に 6 MiB は要らない）。
+// maxMCPRequestBodyBytes は Base64 の増分と JSON のフィールド分を含む上限である。
+const maxMCPRequestBodyBytes int64 = ((domain.MaxPhotoBytes + 2) / 3 * 4) + 1<<20
+
+// bodyLimit は、写真を送れる MCP と multipart のレビュー投稿だけ上限を広げる。
+// 通常の JSON API は引き続き 1 MiB に制限する。
 func bodyLimit(r *http.Request) int64 {
+	if r.Method == http.MethodPost && r.URL.Path == "/mcp" {
+		return maxMCPRequestBodyBytes
+	}
 	isReviewWrite := (r.Method == http.MethodPost && r.URL.Path == "/reviews") ||
 		(r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/reviews/"))
 	if isReviewWrite && isMultipart(r) {
