@@ -401,6 +401,23 @@ Region を `auto` に固定しているコードも、4 社ともそのまま通
 
 写真の列は、API を直接叩いて原寸(2,400 万画素)を送った結果です。ブラウザ経由なら送信前に 1600px に縮小されるので、無料プランでも通ります。ただし縮小に失敗すると原寸が飛ぶので、守りとしては弱いです。
 
+### 公開時のセキュリティ制限
+
+API をインターネットへ公開するなら、動くか、速いか、安いかだけでは決められません。HTTPS、未認証アクセスの遮断、接続元やパスの制限、レート制限をどこまで簡単に設定できるかも比べました。
+
+このアプリは React の SPA から API を直接呼びます。利用者の IP アドレスは固定できず、ブラウザへ共通の秘密鍵を置くこともできません。そのため、**一般利用者向けの API はアプリの JWT 認証と認可で守る**のが前提です。CORS も、ブラウザが別オリジンの応答を読み取れるかを制御する仕組みで、curl などからの直接アクセスは防ぎません。基盤の制限は、管理用パスを追加で守る、短時間の大量アクセスを抑える、API を通らない経路を閉じる、といった多層防御として評価しました。
+
+| 候補 | 基盤だけで設定できる主な制限 | 設定しやすさ | 今回の SPA で残る対応 |
+|---|---|---|---|
+| **Cloud Run** | IAM による呼び出し制御、内部通信だけにする ingress、ロードバランサー経由だけにする ingress | **機能は最も多い**。ただし WAF やレート制限にはロードバランサーと Cloud Armor の追加構成が要る | 一般利用者向け API の JWT 認証。公開 URL の迂回を防ぐ設定と、必要なら Cloud Armor のルール |
+| **Northflank** | IP の許可・拒否、Basic 認証、SSO、特定ヘッダー、パス単位のポリシー、project 内だけの private port | **4 社で最も画面から追加制限を付けやすい** | 一般利用者向け API の JWT 認証。IP を固定できない利用者向けパスはアプリ側でレート制限 |
+| **Render** | 自動 TLS、自動 DDoS 対策、インターネットから到達できない Private Service | **最低限は自動**。公開 Web Service のパス・IP・回数の制限はアプリ側が中心 | JWT 認証、ログインや重い API のレート制限、必要なら `X-Forwarded-For` を使った遮断 |
+| **Back4App** | カスタムドメインの SSL、環境変数。Containers の公式資料ではパス・IP・回数を制限する機能を確認できなかった | **アプリ側の実装が最も多い** | JWT 認証、レート制限、アクセスログ。必要なら Cloudflare などを前段に置く |
+
+この軸だけなら、組み込みの制限をすぐ足せる Northflank が扱いやすく、細かく構成できる Cloud Run が最も強力です。Render は TLS と DDoS 対策を意識せず始められますが、アプリらしいアクセスに見える攻撃は Go 側で抑える必要があります。Back4App は今回使った Containers では基盤側の選択肢を確認できず、アプリ側の責任が大きくなります。
+
+ここは負荷をかける実測ではなく、2026 年 9 月時点の公式資料で比較しました。Cloud Run は [security overview](https://docs.cloud.google.com/run/docs/securing/security) と [ingress の制限](https://docs.cloud.google.com/run/docs/securing/ingress)、Northflank は [network security](https://northflank.com/docs/v1/application/network/networking-on-northflank) と [path-based security policies](https://northflank.com/docs/v1/application/network/create-path-based-security-policies)、Render は [Web Services](https://render.com/docs/web-services) と [DDoS protection](https://render.com/docs/ddos-protection)、Back4App は [Containers の custom domain](https://www.back4app.com/docs-containers/custom-domain) を参照しています。
+
 ### 今回の構成で確認した注意点
 
 以下は、検証時点の無料プランと今回のリポジトリ構成で確認した内容です。リージョン、プラン、設定によって条件は変わります。
