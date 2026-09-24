@@ -197,14 +197,6 @@ func (g *GoogleLogins) signIn(ctx context.Context, ident domain.ExternalIdentity
 		return outcome, userID
 	}
 
-	// 結び付きがない: 同じメールの利用者がいれば、自動では結び付けない(他人のアカウントへの侵入を防ぐ)。
-	if _, err := g.users.GetActiveUserByEmailIgnoreCase(ctx, ident.Email); err == nil {
-		return domain.OutcomeAccountExists, ""
-	} else if !errors.Is(err, domain.ErrUserNotFound) {
-		log.Printf("google login: get user by email: %v", err)
-		return domain.OutcomeFailed, ""
-	}
-
 	var user domain.User
 	err := g.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		var err error
