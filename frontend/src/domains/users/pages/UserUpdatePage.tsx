@@ -50,6 +50,10 @@ function UserUpdateForm({
   const { destroy } = useDeleteUser();
   const meta = useMeta().data;
 
+  // 変更したかどうかの比較の基準は、マウント時点の値で固定する(props の initialUsername/initialBio/initialEmail は、
+  // SWR の裏での再取得で、マウント後に新しい値へ変わることがある。基準が動くと、触っていない項目まで
+  // 「変更あり」と判定して、フォームの古い値で上書き送信してしまう)。
+  const [initial] = useState({ username: initialUsername, bio: initialBio, email: initialEmail });
   const [username, setUsername] = useState(initialUsername);
   const [bio, setBio] = useState(initialBio);
   const [email, setEmail] = useState(initialEmail);
@@ -64,11 +68,11 @@ function UserUpdateForm({
     e.preventDefault();
     setServerError(null);
     const data: Record<string, string> = {};
-    if (username !== initialUsername) data.username = username;
+    if (username !== initial.username) data.username = username;
     // 自己紹介文の上限などの規則は backend だけが判定し、違反はサーバーの 422 のメッセージで表示する。
     // 空文字も「書いた内容を消す」操作なので、そのまま送る
-    if (bio !== initialBio) data.bio = bio;
-    if (email !== initialEmail) data.email = email;
+    if (bio !== initial.bio) data.bio = bio;
+    if (email !== initial.email) data.email = email;
     if (password) {
       // 空のときは変更しない。規則の判定は backend だけが持ち、違反はサーバーの 422 のメッセージで表示する
       data.password = password;
