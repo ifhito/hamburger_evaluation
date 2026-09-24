@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useCreateReview } from "../hooks/useReviewMutations";
 import { useCreateReviewForm } from "../hooks/useReviewForm";
 import { useShopDetail } from "../../shops/hooks/useShops";
+import { todayDateOnly } from "../../../lib/date";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { useMeta } from "../../../api/meta";
 import { Alert } from "../../../components/ui/Alert";
@@ -109,6 +110,14 @@ export default function ReviewNewPage() {
                 counter={{ value: watch("comment"), max: meta?.text.reviewCommentMaxChars }}
                 rows={6}
                 {...register("comment")}
+              />
+              <TextField
+                id="visitedAt"
+                type="date"
+                label={t("reviews.new.visitedAt")}
+                optional={t("reviews.new.visitedAtOptional")}
+                max={todayDateOnly()}
+                {...register("visitedAt")}
               />
             </div>
             <div className={styles.column}>

@@ -38,6 +38,7 @@ const (
 	keyUserIDInvalid      = "param.user_id_invalid"
 	keyPageNotInteger     = "param.page_not_integer"
 	keyPerPageNotInteger  = "param.per_page_not_integer"
+	keyVisitedAtInvalid   = "param.visited_at_invalid"
 
 	keyOAuthApproveRequired = "oauth.approve_required"
 	keyOAuthRequestInvalid  = "oauth.request_invalid"
@@ -79,6 +80,7 @@ var catalog = map[string]domain.Entry{
 	keyUserIDInvalid:      {EN: "User id must be a valid UUID", JA: "ユーザーの ID の形式が正しくありません"},
 	keyPageNotInteger:     {EN: "Page must be an integer", JA: "ページは、整数で指定してください"},
 	keyPerPageNotInteger:  {EN: "Per page must be an integer", JA: "1 ページの件数は、整数で指定してください"},
+	keyVisitedAtInvalid:   {EN: "Visited at must be in YYYY-MM-DD format", JA: "実食日は YYYY-MM-DD の形式で指定してください"},
 
 	keyOAuthApproveRequired: {EN: "Approve is required", JA: "許可するか、許可しないかを指定してください"},
 	// 要求が不正な理由は、OAuth の仕様に沿った診断の文(英語。アプリの作り手が読む)なので、日本語の文言には、

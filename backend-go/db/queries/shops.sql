@@ -76,7 +76,7 @@ WHERE s.id = $1;
 -- その shop の、discard されていない user の、discard されていない review。
 -- 新しい順。u.discarded_at フィルタは、discard 済みの user の（まだ kept な）
 -- review を shop 詳細から隠す。
-SELECT r.id, r.rating, r.comment, r.created_at,
+SELECT r.id, r.rating, r.comment, r.created_at, r.visited_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence

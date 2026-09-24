@@ -5,7 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
 import { useDeleteReview } from "../hooks/useReviewMutations";
 import { useRatingRange } from "../hooks/useRatingRange";
-import { formatDate } from "../../../lib/date";
+import { formatDate, formatVisitedAt } from "../../../lib/date";
 import { Button } from "../../../components/ui/Button";
 import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
@@ -91,6 +91,9 @@ export default function ReviewDetailPage() {
               <div className={styles.grow}>
                 <b>{review.user?.username ?? t("shops.detail.unknown")}</b>
                 <time dateTime={review.createdAt}>{formatDate(review.createdAt)}</time>
+                {review.visitedAt && (
+                  <time dateTime={review.visitedAt}>{t("reviews.detail.visitedOn", { date: formatVisitedAt(review.visitedAt) })}</time>
+                )}
               </div>
             </div>
             {ratingRange === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingRange.max} size="md" variant="stepped" />}

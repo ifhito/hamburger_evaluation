@@ -89,20 +89,22 @@ type Reviews struct {
 	recalc    *BurgerStatsRecalculator
 	shopStats *ShopStatsRecalculator
 	photos    PhotoStorage
+	clock     Clock
 }
 
 // NewReviews は review の use case を配線する。photos は non-nil でなければ
 // ならない（本番では disk か S3、テストでは fake）。どのリクエスト経路も
 // それを dereference しうる（photoURL、deletePhotoBestEffort）ので、nil の
 // storage は、リクエストの途中で panic するのではなく、ここで fail-loud する。
-func NewReviews(query ReviewQuery, uow UnitOfWork, recalc *BurgerStatsRecalculator, shopStats *ShopStatsRecalculator, photos PhotoStorage) *Reviews {
+// clock は、実食日(visited_at)が未来日でないことを検証する基準の現在時刻を提供する。
+func NewReviews(query ReviewQuery, uow UnitOfWork, recalc *BurgerStatsRecalculator, shopStats *ShopStatsRecalculator, photos PhotoStorage, clock Clock) *Reviews {
 	if photos == nil {
 		panic("usecase.NewReviews: nil PhotoStorage")
 	}
 	if shopStats == nil {
 		panic("usecase.NewReviews: nil ShopStatsRecalculator")
 	}
-	return &Reviews{query: query, uow: uow, recalc: recalc, shopStats: shopStats, photos: photos}
+	return &Reviews{query: query, uow: uow, recalc: recalc, shopStats: shopStats, photos: photos, clock: clock}
 }
 
 // List は、filter で絞り込んだ公開 review フィードを返す。ページネーションは
@@ -159,7 +161,7 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (doma
 // ランダムな key で保存される。その後 insert が失敗した場合は、アップロード
 // したばかりの blob を best-effort で削除するので、リクエストより長く残る
 // 孤立ファイルはない。
-func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burgerID string, burgerName string, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
+func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burgerID string, burgerName string, rating int, comment string, visitedAt *time.Time, upload *photo.Processed) (domain.ReviewDetail, error) {
 	shop, err := s.query.GetShop(ctx, shopID)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
@@ -177,7 +179,7 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	}
 	// burgerID が空のとき（burger_name の経路）は、この BurgerID は
 	// 使われない。永続化の実装が transaction 内で burger を解決して上書きする。
-	review, err := domain.NewReview(rating, comment, viewer.ID, burgerID)
+	review, err := domain.NewReview(rating, comment, viewer.ID, burgerID, visitedAt, s.clock.Now())
 	if err != nil {
 		return domain.ReviewDetail{}, err
 	}
@@ -232,7 +234,7 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 // 後にはじめて古い blob を best-effort で削除する。
 // nil の upload は content だけの書き込みを行い、photo_key には触れない
 // （写真を削除する経路はない）。
-func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rating int, comment string, upload *photo.Processed) (domain.ReviewDetail, error) {
+func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rating int, comment string, visitedAt *time.Time, upload *photo.Processed) (domain.ReviewDetail, error) {
 	detail, err := s.query.GetReview(ctx, id)
 	if err != nil {
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
@@ -240,7 +242,7 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rat
 	if !detail.CanBeModifiedBy(viewer) {
 		return domain.ReviewDetail{}, domain.ErrForbidden
 	}
-	if err := domain.ValidateReviewContent(rating, comment); err != nil {
+	if err := domain.ValidateReviewContent(rating, comment, visitedAt, s.clock.Now()); err != nil {
 		return domain.ReviewDetail{}, err
 	}
 	newKey, err := s.putPhoto(ctx, upload)
@@ -251,9 +253,9 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rat
 	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		var err error
 		if newKey != nil {
-			updated, err = tx.Reviews.UpdateContentAndPhotoKey(ctx, id, rating, comment, newKey)
+			updated, err = tx.Reviews.UpdateContentAndPhotoKey(ctx, id, rating, comment, visitedAt, newKey)
 		} else {
-			updated, err = tx.Reviews.UpdateContent(ctx, id, rating, comment)
+			updated, err = tx.Reviews.UpdateContent(ctx, id, rating, comment, visitedAt)
 		}
 		if err != nil {
 			return err

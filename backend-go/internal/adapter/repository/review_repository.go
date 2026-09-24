@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -40,11 +41,12 @@ var _ domain.ReviewRepository = (*ReviewRepository)(nil)
 // CreateReview は、検証済みのレビューを登録し、採番された ID と作成日時を持つレビューを返す。
 func (r *ReviewRepository) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
 	row, err := r.q.CreateReview(ctx, sqlcgen.CreateReviewParams{
-		Rating:   int16(review.Rating),
-		Comment:  textOrNull(review.Comment),
-		UserID:   review.AuthorID,
-		BurgerID: review.BurgerID,
-		PhotoKey: textOrNull(review.PhotoKey),
+		Rating:    int16(review.Rating),
+		Comment:   textOrNull(review.Comment),
+		UserID:    review.AuthorID,
+		BurgerID:  review.BurgerID,
+		PhotoKey:  textOrNull(review.PhotoKey),
+		VisitedAt: dateOrNull(review.VisitedAt),
 	})
 	if err != nil {
 		return domain.Review{}, fmt.Errorf("create review: %w", err)
@@ -99,11 +101,12 @@ func (r *ReviewRepository) CreateShopBurger(ctx context.Context, shopID string, 
 // 返す。レビューが存在しない、または論理削除済みなら domain.ErrReviewNotFound を返す。更新する
 // 列を絞っているので、編集が、論理削除の目印(discarded_at)を消して削除を取り消したり、同時に
 // 行われた論理削除と食い違ったりすることはない。
-func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id string, rating int, comment string) (domain.Review, error) {
+func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time) (domain.Review, error) {
 	row, err := r.q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
-		ID:      id,
-		Rating:  int16(rating),
-		Comment: pgtype.Text{String: comment, Valid: true},
+		ID:        id,
+		Rating:    int16(rating),
+		Comment:   pgtype.Text{String: comment, Valid: true},
+		VisitedAt: dateOrNull(visitedAt),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -119,13 +122,14 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id string, r
 // 評価とコメントの更新と、写真のキーの更新は、1 つのトランザクションで行う。途中で失敗しても、
 // 写真のキーが付かないままコメントだけが確定することはない。写真のキーの更新が返す行には、
 // 直前の更新(評価とコメント)がすでに反映されている。
-func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error) {
+func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, error) {
 	var row sqlcgen.Review
 	err := withTx(ctx, r.db, "update review content and photo key", func(q *sqlcgen.Queries) error {
 		if _, err := q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
-			ID:      id,
-			Rating:  int16(rating),
-			Comment: pgtype.Text{String: comment, Valid: true},
+			ID:        id,
+			Rating:    int16(rating),
+			Comment:   pgtype.Text{String: comment, Valid: true},
+			VisitedAt: dateOrNull(visitedAt),
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("update review content and photo key: %w", domain.ErrReviewNotFound)
@@ -180,5 +184,14 @@ func toDomainReview(row sqlcgen.Review) domain.Review {
 		key := row.PhotoKey.String
 		review.PhotoKey = &key
 	}
+	review.VisitedAt = rowmap.VisitedAt(row.VisitedAt)
 	return review
+}
+
+// dateOrNull は、省略可能な日付(*time.Time)を、null 許容な pgx の date 形式に変換する。
+func dateOrNull(t *time.Time) pgtype.Date {
+	if t == nil {
+		return pgtype.Date{}
+	}
+	return pgtype.Date{Time: *t, Valid: true}
 }

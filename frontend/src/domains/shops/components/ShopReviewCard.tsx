@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { formatDate } from "../../../lib/date";
+import { formatDate, formatVisitedAt } from "../../../lib/date";
 import { RatingBurger } from "../../../components/ui/RatingBurger";
 import { shopReviewAriaLabel } from "../../../components/reviewCardAriaLabel";
 import type { Review } from "../../reviews/api/types";
@@ -27,6 +27,11 @@ export function ShopReviewCard({ review, ratingMax }: { review: Review; ratingMa
             {formatDate(review.createdAt)}
           </time>
         </div>
+        {review.visitedAt && (
+          <time className={styles.date} dateTime={review.visitedAt}>
+            {t("reviews.detail.visitedOn", { date: formatVisitedAt(review.visitedAt) })}
+          </time>
+        )}
         {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} variant="stepped" />}
         {review.comment && <p className={styles.comment}>{review.comment}</p>}
         <div className={styles.foot}>

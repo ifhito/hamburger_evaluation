@@ -92,6 +92,7 @@ type Review struct {
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	PhotoKey    pgtype.Text
+	VisitedAt   pgtype.Date
 }
 
 type Shop struct {

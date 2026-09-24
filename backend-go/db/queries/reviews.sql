@@ -1,6 +1,6 @@
 -- name: CreateReview :one
-INSERT INTO reviews (rating, comment, user_id, burger_id, photo_key)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO reviews (rating, comment, user_id, burger_id, photo_key, visited_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: ListPublicReviews :many
@@ -30,7 +30,7 @@ RETURNING *;
 -- filter_burger_id も、その burger の review だけを残す（本 API の拡張で、
 -- Rails の ReviewQuery にはない）。公開ルールはそのまま維持され、絞り込みだけを行う
 -- （fail-loud に、既存の filter_user_id と同じ形で足す）。
-SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
+SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at, r.visited_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
@@ -64,7 +64,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- burger、統計付き）。公開の詳細 endpoint と、編集・削除の認可のための
 -- 読み込み（user_id が所有者チェックを担う）の両方に使われる。author が
 -- discard 済みの review は、存在しない review と区別がつかなくなる。
-SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at,
+SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at, r.visited_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
@@ -86,12 +86,13 @@ WHERE user_id = $1 AND discarded_at IS NULL
 ORDER BY burger_id;
 
 -- name: UpdateReviewContent :one
--- 列を限定した編集：rating と comment だけを更新し（discarded_at は決して
+-- 列を限定した編集：rating・comment・visited_at だけを更新し（discarded_at は決して
 -- 更新しない）、review がまだ kept な間だけ更新するので、編集が並行する
 -- soft delete を復活させることも、それと競合することもない。
 UPDATE reviews
 SET rating = $2,
     comment = $3,
+    visited_at = $4,
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
 RETURNING *;

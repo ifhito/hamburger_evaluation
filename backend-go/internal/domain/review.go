@@ -21,6 +21,9 @@ type Review struct {
 	// BurgerID は burger の UUID の正規形である。
 	BurgerID  string
 	CreatedAt time.Time
+	// VisitedAt は、利用者が実際に食べに行った日(実食日)であり、日付だけを持つ(時刻の部分は意味を
+	// 持たず、UTC の深夜 0 時で表す)。未指定なら nil で、created_at(投稿日時)とは独立である。
+	VisitedAt *time.Time
 }
 
 // rating の範囲（両端を含む）。ルールを持つのはこの domain だけで、frontend には
@@ -39,15 +42,27 @@ const MaxCommentChars = 2000
 
 // ValidateReviewContent は、書き込み可能な review の属性を検証する。rating は
 // MinRating..MaxRating の整数でなければならず、comment は空でもよいが MaxCommentChars 文字を
-// 超えてはならない。失敗した場合は、文言(キー + 引数)を *ValidationError に入れて返し、
-// rating のメッセージが先に来る。
-func ValidateReviewContent(rating int, comment string) error {
+// 超えてはならない。visitedAt(実食日。nil なら未指定で常に有効)は、now より未来の日付を
+// 指定できない。失敗した場合は、文言(キー + 引数)を *ValidationError に入れて返し、
+// rating・comment・visitedAt の順にメッセージが並ぶ。
+//
+// 未来日かどうかの判定は、UTC の暦日で比較する。JST など UTC より進んだタイムゾーンの利用者が、
+// 現地時間の未明に「今日」を選ぶと、UTC ではまだ前日で、日付をまたいだ直後の入力が未来日と
+// 判定されうる。backend には利用者ごとのタイムゾーンの概念がなく(CreatedAt も UTC)、この story
+// もタイムゾーンの扱いを求めていないため、既知の簡略化として直さない。
+func ValidateReviewContent(rating int, comment string, visitedAt *time.Time, now time.Time) error {
 	var issues []Message
 	if rating < MinRating || rating > MaxRating {
 		issues = append(issues, Msg(keyReviewRatingRange, MinRating, MaxRating))
 	}
 	if exceedsChars(comment, MaxCommentChars) {
 		issues = append(issues, Msg(keyCommentTooLong, MaxCommentChars))
+	}
+	if visitedAt != nil {
+		today := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC)
+		if visitedAt.After(today) {
+			issues = append(issues, Msg(keyVisitedAtFuture))
+		}
 	}
 	if len(issues) > 0 {
 		return NewValidationError(issues...)
@@ -77,14 +92,15 @@ func ValidateBurgerName(name string) error {
 }
 
 // NewReview は、author が burger に対して投稿する validation 済みの新しい
-// review を組み立てる。comment は渡された値のまま保存され（空でもよく、
-// trim もしない）、文字数の上限だけが validate される。
-func NewReview(rating int, comment string, authorID string, burgerID string) (Review, error) {
-	if err := ValidateReviewContent(rating, comment); err != nil {
+// review を組み立てる。comment は渡された値のまま保存され（空でもよく、trim もしない）、
+// 文字数の上限だけが validate される。visitedAt(実食日。nil なら未指定)は now を基準に
+// 未来日でないことを検証する。
+func NewReview(rating int, comment string, authorID string, burgerID string, visitedAt *time.Time, now time.Time) (Review, error) {
+	if err := ValidateReviewContent(rating, comment, visitedAt, now); err != nil {
 		return Review{}, err
 	}
 	c := comment
-	return Review{Rating: rating, Comment: &c, AuthorID: authorID, BurgerID: burgerID}, nil
+	return Review{Rating: rating, Comment: &c, AuthorID: authorID, BurgerID: burgerID, VisitedAt: visitedAt}, nil
 }
 
 // CanBeModifiedBy は review の所有権ルールの唯一の置き場である。author だけが
@@ -173,15 +189,15 @@ type ReviewRepository interface {
 	// バーガーと結び付けの作成は、呼び出し側のトランザクションに含まれる。レビューの登録に失敗したとき、
 	// 作りかけのバーガーが残らないよう、呼び出し側は同じトランザクションでレビューの登録まで行う。
 	CreateShopBurger(ctx context.Context, shopID string, burgerName string) (ShopReviewBurger, error)
-	// UpdateReviewContent は、削除されていないレビューの評価とコメントだけを更新し、更新後のレビューを
-	// 返す。レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す。
-	// 更新する列を評価とコメントに絞っているので、削除の目印(discarded_at)を書き換えることはない。
-	UpdateReviewContent(ctx context.Context, id string, rating int, comment string) (Review, error)
-	// UpdateReviewContentAndPhotoKey は、削除されていないレビューの評価・コメント・写真のキーを
-	// まとめて更新し、更新後のレビューを返す。評価とコメントの更新と、写真のキーの更新は 1 つの
+	// UpdateReviewContent は、削除されていないレビューの評価・コメント・実食日だけを更新し、更新後の
+	// レビューを返す。レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す。
+	// 更新する列を絞っているので、削除の目印(discarded_at)を書き換えることはない。
+	UpdateReviewContent(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time) (Review, error)
+	// UpdateReviewContentAndPhotoKey は、削除されていないレビューの評価・コメント・実食日・写真のキーを
+	// まとめて更新し、更新後のレビューを返す。評価・コメント・実食日の更新と、写真のキーの更新は 1 つの
 	// トランザクションで行うので、写真のキーが付かないままコメントだけが確定することはない。
 	// レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す(何も確定しない)。
-	UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (Review, error)
+	UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (Review, error)
 	// DiscardReview はレビューを論理削除する(削除日時を記録するだけで、行は消さない)。レビューが
 	// 存在しない、またはすでに論理削除済みなら、包んだ ErrReviewNotFound を返す。
 	DiscardReview(ctx context.Context, id string) error
@@ -219,16 +235,16 @@ func (s *Reviews) CreateShopBurger(ctx context.Context, shopID string, burgerNam
 	return s.repo.CreateShopBurger(ctx, shopID, burgerName)
 }
 
-// UpdateContent は、id の、まだ kept な review の rating と comment だけを永続化し、
+// UpdateContent は、id の、まだ kept な review の rating、comment、visitedAt だけを永続化し、
 // 保存された行を返す。
-func (s *Reviews) UpdateContent(ctx context.Context, id string, rating int, comment string) (Review, error) {
-	return s.repo.UpdateReviewContent(ctx, id, rating, comment)
+func (s *Reviews) UpdateContent(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time) (Review, error) {
+	return s.repo.UpdateReviewContent(ctx, id, rating, comment, visitedAt)
 }
 
-// UpdateContentAndPhotoKey は、id の、まだ kept な review の rating、comment、
+// UpdateContentAndPhotoKey は、id の、まだ kept な review の rating、comment、visitedAt、
 // および photo_key を atomic に永続化し、保存された行を返す。
-func (s *Reviews) UpdateContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (Review, error) {
-	return s.repo.UpdateReviewContentAndPhotoKey(ctx, id, rating, comment, photoKey)
+func (s *Reviews) UpdateContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (Review, error) {
+	return s.repo.UpdateReviewContentAndPhotoKey(ctx, id, rating, comment, visitedAt, photoKey)
 }
 
 // Discard は review を soft delete する。

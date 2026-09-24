@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func errMessages(err error) []string {
@@ -35,7 +36,7 @@ var (
 )
 
 var limitCases = []limitCase{
-	{"コメント", "Comment", MaxCommentChars, func(s string) []string { return errMessages(ValidateReviewContent(3, s)) }, repeatUnit, allUnits},
+	{"コメント", "Comment", MaxCommentChars, func(s string) []string { return errMessages(ValidateReviewContent(3, s, nil, time.Now())) }, repeatUnit, allUnits},
 	{"バーガー名", "Burger name", MaxBurgerNameChars, func(s string) []string { return errMessages(ValidateBurgerName(s)) }, repeatUnit, allUnits},
 	{"ショップ名", "Name", MaxShopNameChars, func(s string) []string { return errMessages(ValidateShopName(s)) }, repeatUnit, allUnits},
 	{"ユーザー名", "Username", MaxUsernameChars, ValidateUsername, repeatUnit, allUnits},
@@ -90,9 +91,9 @@ func TestTextLimitsKeepExistingRules(t *testing.T) {
 		got  []string
 		want []string
 	}{
-		{"rating の違反はコメントの上限超過より先に並ぶ", errMessages(ValidateReviewContent(6, tooLongComment)),
+		{"rating の違反はコメントの上限超過より先に並ぶ", errMessages(ValidateReviewContent(6, tooLongComment, nil, time.Now())),
 			[]string{"Rating must be in 1..5", "Comment is too long (maximum is 2000 characters)"}},
-		{"空白のみのコメントは有効(空欄のレビューを許す)", errMessages(ValidateReviewContent(3, " ")), nil},
+		{"空白のみのコメントは有効(空欄のレビューを許す)", errMessages(ValidateReviewContent(3, " ", nil, time.Now())), nil},
 		{"空のユーザー名は blank だけ", ValidateUsername(""), []string{"Username can't be blank"}},
 		{"空の email は blank だけ", ValidateEmail(""), []string{"Email can't be blank"}},
 		{"note なしの reject は有効", errMessages(ValidateModerationNote(nil)), nil},

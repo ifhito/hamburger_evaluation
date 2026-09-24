@@ -639,7 +639,7 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	router := handler.NewRouter(conn, auth, signups,
 		shopsUsecase(query.NewShopQuery(conn), repository.NewShopRepository(conn)), nil,
-		usecase.NewReviews(query.NewReviewQuery(conn), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos")),
+		usecase.NewReviews(query.NewReviewQuery(conn), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{}),
 		usecase.NewUsers(userQuery, domain.NewUsers(userRepo), unitOfWork, recalc, shopRecalc, hasher), nil, nil, nil)
 	return conn, &mailedRouter{Handler: router, mailer: mailer}
 }

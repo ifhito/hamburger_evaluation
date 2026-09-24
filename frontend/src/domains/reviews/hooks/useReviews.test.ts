@@ -23,6 +23,7 @@ function review(id: string): ReviewView {
     comment: null,
     photoUrl: null,
     createdAt: "2026-01-01T00:00:00Z",
+    visitedAt: null,
     user: null,
     burger: null,
     canEdit: false,

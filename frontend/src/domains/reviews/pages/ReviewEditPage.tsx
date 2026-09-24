@@ -6,14 +6,14 @@ import { useReview } from "../hooks/useReview";
 import { useUpdateReview } from "../hooks/useReviewMutations";
 import { useUpdateReviewForm } from "../hooks/useReviewForm";
 import { useRatingRange } from "../hooks/useRatingRange";
-import { formatDate } from "../../../lib/date";
+import { formatDate, todayDateOnly } from "../../../lib/date";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { useMeta } from "../../../api/meta";
 import { Alert } from "../../../components/ui/Alert";
 import { Button } from "../../../components/ui/Button";
 import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
-import { TextArea } from "../../../components/ui/TextField";
+import { TextArea, TextField } from "../../../components/ui/TextField";
 import { RatingInput } from "../../../components/ui/RatingInput";
 import { Loading, NotFound } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
@@ -41,7 +41,7 @@ export default function ReviewEditPage() {
   const [photoShrinking, setPhotoShrinking] = useState(false);
 
   useEffect(() => {
-    if (review) reset({ rating: review.rating, comment: review.comment ?? "" });
+    if (review) reset({ rating: review.rating, comment: review.comment ?? "", visitedAt: review.visitedAt ?? "" });
   }, [review, reset]);
 
   if (isLoading) {
@@ -110,6 +110,7 @@ export default function ReviewEditPage() {
                   rows={6}
                   {...register("comment")}
                 />
+                <TextField id="visitedAt" type="date" label={t("reviews.edit.visitedAt")} max={todayDateOnly()} {...register("visitedAt")} />
               </div>
               <div className={styles.column}>
                 <PhotoField

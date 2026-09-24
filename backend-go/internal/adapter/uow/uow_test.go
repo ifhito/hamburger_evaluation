@@ -70,7 +70,7 @@ func newWorld(t *testing.T) *world {
 	photos := storage.NewDisk(t.TempDir(), "/photos")
 	w.queries.review = query.NewReviewQuery(conn)
 	w.queries.shop = query.NewShopQuery(conn)
-	w.reviews = usecase.NewReviews(w.queries.review, w.unit, w.recalc, w.shopRecalc, photos)
+	w.reviews = usecase.NewReviews(w.queries.review, w.unit, w.recalc, w.shopRecalc, photos, infra.SystemClock{})
 	w.users = usecase.NewUsers(query.NewUserQuery(conn), domain.NewUsers(repository.NewUserRepository(conn)), w.unit, w.recalc, w.shopRecalc, infra.BcryptPasswordHasher{})
 	w.shop = dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
@@ -104,7 +104,7 @@ func (w *world) settle(t *testing.T) {
 // review は、usecase を通してレビューを投稿する(統計の再計算の依頼が、同じトランザクションで登録される)。
 func (w *world) review(t *testing.T, viewer domain.User, burgerID string, rating int, comment string) domain.ReviewDetail {
 	t.Helper()
-	detail, err := w.reviews.Create(w.ctx, viewer, w.shop, burgerID, "", rating, comment, nil)
+	detail, err := w.reviews.Create(w.ctx, viewer, w.shop, burgerID, "", rating, comment, nil, nil)
 	if err != nil {
 		t.Fatalf("レビューの投稿に失敗した: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 
 	t.Run("レビューの評価を 5 から 1 に編集してワーカーが動くと、そのバーガーの統計(平均と加重スコア)が編集後の値に更新される", func(t *testing.T) {
 		before := dbtest.RequireConsistentStats(ctx, t, conn, burger)
-		if _, err := w.reviews.Update(ctx, alice, aliceReview.ID, 1, "changed my mind", nil); err != nil {
+		if _, err := w.reviews.Update(ctx, alice, aliceReview.ID, 1, "changed my mind", nil, nil); err != nil {
 			t.Fatalf("レビューの編集に失敗した: %v", err)
 		}
 		w.settle(t)
@@ -195,7 +195,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 			t.Fatalf("ユーザーの論理削除に失敗した: %v", err)
 		}
 		// 削除されていないユーザーの書き込み(編集)で、統計の再計算の依頼を出し、ワーカーを動かす。
-		if _, err := w.reviews.Update(ctx, alice, aliceKept.ID, 4, "still here", nil); err != nil {
+		if _, err := w.reviews.Update(ctx, alice, aliceKept.ID, 4, "still here", nil, nil); err != nil {
 			t.Fatalf("レビューの編集に失敗した: %v", err)
 		}
 		w.settle(t)
@@ -227,7 +227,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 			t.Fatalf("接続プールを開けなかった: %v", err)
 		}
 		t.Cleanup(pool.Close)
-		poolReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
+		poolReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{})
 
 		dave := w.user(t, "dave")
 		erin := w.user(t, "erin")
@@ -246,7 +246,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 				c := c
 				go func() {
 					<-start
-					_, err := poolReviews.Create(ctx, c.viewer, w.shop, raceBurger, "", c.rating, "race", nil)
+					_, err := poolReviews.Create(ctx, c.viewer, w.shop, raceBurger, "", c.rating, "race", nil, nil)
 					errs <- err
 				}()
 			}
@@ -286,13 +286,13 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 			})
 		}
 		if err := fail(func(tx usecase.Tx) error {
-			_, err := tx.Reviews.UpdateContent(ctx, victim.ID, 1, "x")
+			_, err := tx.Reviews.UpdateContent(ctx, victim.ID, 1, "x", nil)
 			return err
 		}); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("削除済みのレビューの編集 = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 		if err := fail(func(tx usecase.Tx) error {
-			_, err := tx.Reviews.UpdateContent(ctx, uid.N(99999), 1, "x")
+			_, err := tx.Reviews.UpdateContent(ctx, uid.N(99999), 1, "x", nil)
 			return err
 		}); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("存在しないレビューの編集 = %v, want %v", err, domain.ErrReviewNotFound)
@@ -324,7 +324,7 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 
 		boom := errors.New("boom")
 		err := w.unit.Do(ctx, func(ctx context.Context, tx usecase.Tx) error {
-			review, err := domain.NewReview(1, "doomed", bob.ID, rbBurger)
+			review, err := domain.NewReview(1, "doomed", bob.ID, rbBurger, nil, time.Now())
 			if err != nil {
 				return err
 			}
@@ -395,7 +395,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 	}
 	named := func(t *testing.T, viewer domain.User, shopID string, name string) domain.ReviewDetail {
 		t.Helper()
-		detail, err := w.reviews.Create(ctx, viewer, shopID, "", name, 4, "via name", nil)
+		detail, err := w.reviews.Create(ctx, viewer, shopID, "", name, 4, "via name", nil, nil)
 		if err != nil {
 			t.Fatalf("投稿に失敗した: %v", err)
 		}
@@ -463,7 +463,7 @@ func TestUnitOfWorkNamedBurger(t *testing.T) {
 		// 存在しないユーザーの投稿は、バーガーとショップとの結び付けを作ったあと、レビューの登録で
 		// 外部キー(reviews.user_id)に違反して失敗する。そのとき、作ったバーガーも巻き戻る必要がある。
 		ghost := domain.User{ID: uid.N(99999), Username: "ghost"}
-		if _, err := w.reviews.Create(ctx, ghost, w.shop, "", "Ghost", 4, "ok", nil); err == nil {
+		if _, err := w.reviews.Create(ctx, ghost, w.shop, "", "Ghost", 4, "ok", nil, nil); err == nil {
 			t.Fatal("投稿が成功した。外部キー違反で失敗するはず")
 		}
 		if got := burgersNamed(t, "Ghost"); got != 0 {

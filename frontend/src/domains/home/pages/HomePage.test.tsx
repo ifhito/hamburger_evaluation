@@ -63,6 +63,7 @@ function review(over: Partial<ReviewView>): ReviewView {
     comment: "Tasty",
     photoUrl: null,
     createdAt: "2026-09-21T00:00:00Z",
+    visitedAt: null,
     user: { id: "u1", username: "alice" },
     burger: { id: "b1", name: "Burger", averageRating: 4, reviewCount: 1, weightedScore: 4, confidence: 0.5 },
     canEdit: false,

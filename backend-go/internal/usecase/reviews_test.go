@@ -69,8 +69,8 @@ func (f *fakeReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID st
 type fakeReviewRepo struct {
 	createReview              func(ctx context.Context, review domain.Review) (domain.Review, error)
 	createShopBurger          func(ctx context.Context, shopID string, burgerName string) (domain.ShopReviewBurger, error)
-	updateReviewContent       func(ctx context.Context, id string, rating int, comment string) (domain.Review, error)
-	updateReviewContentAndKey func(ctx context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error)
+	updateReviewContent       func(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time) (domain.Review, error)
+	updateReviewContentAndKey func(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, error)
 	discardReview             func(ctx context.Context, id string) error
 }
 
@@ -88,18 +88,18 @@ func (f *fakeReviewRepo) CreateShopBurger(ctx context.Context, shopID string, bu
 	return f.createShopBurger(ctx, shopID, burgerName)
 }
 
-func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id string, rating int, comment string) (domain.Review, error) {
+func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time) (domain.Review, error) {
 	if f.updateReviewContent == nil {
 		panic("unexpected UpdateReviewContent call")
 	}
-	return f.updateReviewContent(ctx, id, rating, comment)
+	return f.updateReviewContent(ctx, id, rating, comment, visitedAt)
 }
 
-func (f *fakeReviewRepo) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error) {
+func (f *fakeReviewRepo) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, error) {
 	if f.updateReviewContentAndKey == nil {
 		panic("unexpected UpdateReviewContentAndPhotoKey call")
 	}
-	return f.updateReviewContentAndKey(ctx, id, rating, comment, photoKey)
+	return f.updateReviewContentAndKey(ctx, id, rating, comment, visitedAt, photoKey)
 }
 
 func (f *fakeReviewRepo) DiscardReview(ctx context.Context, id string) error {
@@ -252,7 +252,7 @@ func TestReviewsCreate(t *testing.T) {
 				return review, nil
 			},
 		}
-		got, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", nil)
+		got, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", nil, nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -272,7 +272,7 @@ func TestReviewsCreate(t *testing.T) {
 
 	t.Run("未知の shop は他の何より先に ErrShopNotFound を返す", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop}
-		if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Create(ctx, bob, uid.N(999), cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrShopNotFound) {
+		if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Create(ctx, bob, uid.N(999), cheese.ID, "", 4, "ok", nil, nil); !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
@@ -280,7 +280,7 @@ func TestReviewsCreate(t *testing.T) {
 	t.Run("却下済みのショップへの投稿は、バーガーを探す前に、誰であっても ErrForbidden になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop} // getShopBurger は未設定：lookup があれば panic する
 		for _, viewer := range []domain.User{alice, bob, admin} {
-			if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Create(ctx, viewer, rejectedShop.ID, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrForbidden) {
+			if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Create(ctx, viewer, rejectedShop.ID, cheese.ID, "", 4, "ok", nil, nil); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
 			}
 		}
@@ -295,13 +295,13 @@ func TestReviewsCreate(t *testing.T) {
 			},
 		}
 		reviews := newReviews(query, repo, &fakePhotoStorage{})
-		if _, err := reviews.Create(ctx, alice, pendingShop.ID, cheese.ID, "", 4, "ok", nil); err != nil {
+		if _, err := reviews.Create(ctx, alice, pendingShop.ID, cheese.ID, "", 4, "ok", nil, nil); err != nil {
 			t.Errorf("creator: Create returned error: %v", err)
 		}
-		if _, err := reviews.Create(ctx, admin, pendingShop.ID, cheese.ID, "", 4, "ok", nil); err != nil {
+		if _, err := reviews.Create(ctx, admin, pendingShop.ID, cheese.ID, "", 4, "ok", nil, nil); err != nil {
 			t.Errorf("admin: Create returned error: %v", err)
 		}
-		if _, err := newReviews(&fakeReviewQuery{getShop: getShop}, &fakeReviewRepo{}, &fakePhotoStorage{}).Create(ctx, bob, pendingShop.ID, cheese.ID, "", 4, "ok", nil); !errors.Is(err, domain.ErrForbidden) {
+		if _, err := newReviews(&fakeReviewQuery{getShop: getShop}, &fakeReviewRepo{}, &fakePhotoStorage{}).Create(ctx, bob, pendingShop.ID, cheese.ID, "", 4, "ok", nil, nil); !errors.Is(err, domain.ErrForbidden) {
 			t.Errorf("other user: error = %v, want %v", err, domain.ErrForbidden)
 		}
 	})
@@ -309,7 +309,7 @@ func TestReviewsCreate(t *testing.T) {
 	t.Run("shop に紐付かない burger は insert せずに ErrBurgerNotFound を返す", func(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		repo := &fakeReviewRepo{} // createReview は未設定
-		if _, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, uid.N(999), "", 4, "ok", nil); !errors.Is(err, domain.ErrBurgerNotFound) {
+		if _, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, uid.N(999), "", 4, "ok", nil, nil); !errors.Is(err, domain.ErrBurgerNotFound) {
 			t.Fatalf("Create error = %v, want %v", err, domain.ErrBurgerNotFound)
 		}
 	})
@@ -318,7 +318,7 @@ func TestReviewsCreate(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		repo := &fakeReviewRepo{} // createReview は未設定
 		tooLongComment := strings.Repeat("a", domain.MaxCommentChars+1)
-		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, tooLongComment, nil)
+		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "", 0, tooLongComment, nil, nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -347,7 +347,7 @@ func TestReviewsCreate(t *testing.T) {
 			},
 		}
 		// バーガー名は、前後の空白を取り除かれないまま、そのまま書き込み側に渡る。
-		got, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", " Smash ", 4, "Juicy", nil)
+		got, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", " Smash ", 4, "Juicy", nil, nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -375,7 +375,7 @@ func TestReviewsCreate(t *testing.T) {
 				return review, nil
 			},
 		}
-		got, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "Ignored", 4, "ok", nil)
+		got, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, cheese.ID, "Ignored", 4, "ok", nil, nil)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -389,7 +389,7 @@ func TestReviewsCreate(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				query := &fakeReviewQuery{getShop: getShop}
 				repo := &fakeReviewRepo{} // すべての書き込みは未設定：呼び出しは panic する
-				_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", burgerName, 4, "ok", nil)
+				_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", burgerName, 4, "ok", nil, nil)
 				var vErr *domain.ValidationError
 				if !errors.As(err, &vErr) {
 					t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -405,7 +405,7 @@ func TestReviewsCreate(t *testing.T) {
 		query := &fakeReviewQuery{getShop: getShop}
 		repo := &fakeReviewRepo{} // バーガー名の解決(createShopBurger)は代役に設定していない。書き込みの前に検証で失敗するので、呼ばれない
 		tooLongComment := strings.Repeat("a", domain.MaxCommentChars+1)
-		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", "Smash", 0, tooLongComment, nil)
+		_, err := newReviews(query, repo, &fakePhotoStorage{}).Create(ctx, bob, activeShop.ID, "", "Smash", 0, tooLongComment, nil, nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -452,7 +452,7 @@ func TestReviewsUpdate(t *testing.T) {
 		var gotComment string
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{
-			updateReviewContent: func(_ context.Context, id string, rating int, comment string) (domain.Review, error) {
+			updateReviewContent: func(_ context.Context, id string, rating int, comment string, _ *time.Time) (domain.Review, error) {
 				gotID, gotRating, gotComment = id, rating, comment
 				updated := stored.Review
 				updated.Rating = rating
@@ -461,7 +461,7 @@ func TestReviewsUpdate(t *testing.T) {
 				return updated, nil
 			},
 		}
-		got, err := newReviews(query, repo, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 5, "Better", nil)
+		got, err := newReviews(query, repo, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 5, "Better", nil, nil)
 		if err != nil {
 			t.Fatalf("Update returned error: %v", err)
 		}
@@ -480,7 +480,7 @@ func TestReviewsUpdate(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{}                          // updateReviewContent は未設定
 		for _, viewer := range []domain.User{bob, admin} { // admin でも通さない
-			if _, err := newReviews(query, repo, &fakePhotoStorage{}).Update(ctx, viewer, stored.ID, 5, "x", nil); !errors.Is(err, domain.ErrForbidden) {
+			if _, err := newReviews(query, repo, &fakePhotoStorage{}).Update(ctx, viewer, stored.ID, 5, "x", nil, nil); !errors.Is(err, domain.ErrForbidden) {
 				t.Errorf("viewer %s: error = %v, want %v", viewer.Username, err, domain.ErrForbidden)
 			}
 		}
@@ -488,7 +488,7 @@ func TestReviewsUpdate(t *testing.T) {
 
 	t.Run("不正な内容での編集は、何も書き込まずに ValidationError になる", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
-		_, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 6, "ok", nil)
+		_, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Update(ctx, alice, stored.ID, 6, "ok", nil, nil)
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -500,7 +500,7 @@ func TestReviewsUpdate(t *testing.T) {
 
 	t.Run("未知の id は ErrReviewNotFound を返す", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
-		if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Update(ctx, alice, uid.N(999), 5, "x", nil); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := newReviews(query, &fakeReviewRepo{}, &fakePhotoStorage{}).Update(ctx, alice, uid.N(999), 5, "x", nil, nil); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Update error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
@@ -629,7 +629,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 				return review, nil
 			},
 		}
-		got, err := newReviews(query, repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", upload)
+		got, err := newReviews(query, repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", nil, upload)
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -656,7 +656,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 				return domain.Review{}, io.ErrUnexpectedEOF
 			},
 		}
-		_, err := newReviews(query, repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", upload)
+		_, err := newReviews(query, repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", nil, upload)
 		if !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("Create error = %v, want the DB error", err)
 		}
@@ -669,7 +669,7 @@ func TestReviewsCreatePhoto(t *testing.T) {
 		photos := &fakePhotoStorage{putErr: io.ErrUnexpectedEOF}
 		query := &fakeReviewQuery{getShop: getShop, getShopBurger: getShopBurger}
 		repo := &fakeReviewRepo{} // createReview は未設定：insert があれば panic する
-		if _, err := newReviews(query, repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", upload); !errors.Is(err, io.ErrUnexpectedEOF) {
+		if _, err := newReviews(query, repo, photos).Create(ctx, bob, activeShop.ID, cheese.ID, "", 4, "Tasty", nil, upload); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("Create error = %v, want the storage error", err)
 		}
 	})
@@ -701,7 +701,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 			// updateReviewContent は未設定のままである。写真の経路で
 			// content だけの別の文を実行すれば panic する（書き込みは
 			// 単一の atomic な repository の呼び出しでなければならない）。
-			updateReviewContentAndKey: func(_ context.Context, id string, rating int, comment string, photoKey *string) (domain.Review, error) {
+			updateReviewContentAndKey: func(_ context.Context, id string, rating int, comment string, _ *time.Time, photoKey *string) (domain.Review, error) {
 				gotRating, gotComment = rating, comment
 				review := stored.Review
 				review.Rating = rating
@@ -711,7 +711,7 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 				return review, nil
 			},
 		}
-		got, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", upload)
+		got, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", nil, upload)
 		if err != nil {
 			t.Fatalf("Update returned error: %v", err)
 		}
@@ -737,11 +737,11 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 			// 失敗したということは content の文が「一切」実行されていない
 			// ので、あとから content の変更が見えることはありえない。
 			// 紛れ込んだ content だけの呼び出しは panic する。
-			updateReviewContentAndKey: func(_ context.Context, _ string, _ int, _ string, _ *string) (domain.Review, error) {
+			updateReviewContentAndKey: func(_ context.Context, _ string, _ int, _ string, _ *time.Time, _ *string) (domain.Review, error) {
 				return domain.Review{}, domain.ErrReviewNotFound // load から書き込みまでの間に discard された
 			},
 		}
-		_, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", upload)
+		_, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", nil, upload)
 		if !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("Update error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
@@ -756,11 +756,11 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 		repo := &fakeReviewRepo{
 			// updateReviewContentAndKey は未設定：photo_key のどんな書き込みも
 			// panic する。
-			updateReviewContent: func(_ context.Context, _ string, _ int, _ string) (domain.Review, error) {
+			updateReviewContent: func(_ context.Context, _ string, _ int, _ string, _ *time.Time) (domain.Review, error) {
 				return stored.Review, nil
 			},
 		}
-		got, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", nil)
+		got, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", nil, nil)
 		if err != nil {
 			t.Fatalf("Update returned error: %v", err)
 		}

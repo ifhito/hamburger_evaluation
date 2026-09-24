@@ -214,7 +214,7 @@ func TestStatsWorkerConcurrentWrite(t *testing.T) {
 	w := newWorld(t)
 	ctx, conn := w.ctx, w.conn
 	pool := w.pool(t)
-	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
+	otherReviews := usecase.NewReviews(query.NewReviewQuery(pool), uow.New(pool), w.recalc, w.shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{})
 
 	t.Run("再計算の最中に新しい投稿が確定すると、依頼は消えずに残り、次の再計算で最新になる。投稿は再計算に待たされない", func(t *testing.T) {
 		alice, bob := w.user(t, "alice"), w.user(t, "bob")
@@ -233,7 +233,7 @@ func TestStatsWorkerConcurrentWrite(t *testing.T) {
 			// 待たされない(待たされるなら、この呼び出しは期限切れで失敗する)。
 			writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			_, err := otherReviews.Create(writeCtx, bob, w.shop, burger, "", 3, "during recalculation", nil)
+			_, err := otherReviews.Create(writeCtx, bob, w.shop, burger, "", 3, "during recalculation", nil, nil)
 			return err
 		})
 		if n, err := worker.RunOnce(ctx); err != nil || n != 1 {
@@ -280,7 +280,7 @@ func TestStatsWorkerConcurrentWrite(t *testing.T) {
 			// 先に最新の統計を保存して依頼を消し、そのあとに 1 つ目が古い元データの統計で上書きしてしまう。
 			writeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			if _, err := otherReviews.Create(writeCtx, bob, w.shop, burger, "", 3, "second", nil); err != nil {
+			if _, err := otherReviews.Create(writeCtx, bob, w.shop, burger, "", 3, "second", nil, nil); err != nil {
 				return err
 			}
 			secondStarted = true

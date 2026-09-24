@@ -19,6 +19,7 @@ export function toCreateFormData(data: ReviewCreateInput, photo: File): FormData
       comment: data.comment,
       shop_id: data.shopId,
       burger_name: data.burgerName,
+      visited_at: data.visitedAt,
     },
     photo
   );
@@ -26,7 +27,7 @@ export function toCreateFormData(data: ReviewCreateInput, photo: File): FormData
 
 // 更新の multipart。shop_id / burger_name は更新では送らない。
 export function toUpdateFormData(data: ReviewUpdateInput, photo: File): FormData {
-  return toFormData({ rating: data.rating, comment: data.comment }, photo);
+  return toFormData({ rating: data.rating, comment: data.comment, visited_at: data.visitedAt }, photo);
 }
 
 // 一覧のキー(文字列 "/reviews?…")と、詳細のキー(["/reviews", id, viewerId])の両方に一致する

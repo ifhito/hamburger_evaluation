@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
@@ -18,7 +19,7 @@ import (
 // 使った usecase.Reviews と、その UnitOfWork を返す。
 func uowReviews(query usecase.ReviewQuery, repo domain.ReviewRepository, uow *uowtest.UoW) *usecase.Reviews {
 	uow.Reviews = repo
-	return usecase.NewReviews(query, uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), &fakePhotoStorage{})
+	return usecase.NewReviews(query, uow, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), &fakePhotoStorage{}, uowtest.Clock{})
 }
 
 // processedIf は、写真つきの経路を試すための処理済みの upload（upload が false なら nil）を返す。
@@ -105,7 +106,7 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 			review.ID = uid.N(44)
 			return review, nil
 		}}
-		if _, err := uowReviews(createQuery, repo, uow).Create(ctx, alice, activeShop.ID, cheese.ID, "", 4, "ok", nil); err != nil {
+		if _, err := uowReviews(createQuery, repo, uow).Create(ctx, alice, activeShop.ID, cheese.ID, "", 4, "ok", nil, nil); err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
 		// 書き込みは burger の行をロックしない(ロックは、ワーカーが再計算するときだけ取る)。
@@ -133,7 +134,7 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 			},
 		}
 		query := &fakeReviewQuery{getShop: createQuery.getShop}
-		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, "", "Smash", 4, "ok", nil); err != nil {
+		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, "", "Smash", 4, "ok", nil, nil); err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
 		want := []string{"find-or-create", "insert", "request:" + uid.N(7)}
@@ -153,7 +154,7 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 			createReview: func(context.Context, domain.Review) (domain.Review, error) { return domain.Review{}, insertErr },
 		}
 		query := &fakeReviewQuery{getShop: createQuery.getShop}
-		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, "", "Ghost", 4, "ok", nil); !errors.Is(err, insertErr) {
+		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, "", "Ghost", 4, "ok", nil, nil); !errors.Is(err, insertErr) {
 			t.Fatalf("Create error = %v, want wrapped %v", err, insertErr)
 		}
 		if uow.Commits != 0 || uow.Rollbacks != 1 {
@@ -176,15 +177,15 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 					return review
 				}
 				repo := &fakeReviewRepo{
-					updateReviewContent: func(_ context.Context, _ string, rating int, comment string) (domain.Review, error) {
+					updateReviewContent: func(_ context.Context, _ string, rating int, comment string, _ *time.Time) (domain.Review, error) {
 						return updated(stored.Review, rating, comment), nil
 					},
-					updateReviewContentAndKey: func(_ context.Context, _ string, rating int, comment string, _ *string) (domain.Review, error) {
+					updateReviewContentAndKey: func(_ context.Context, _ string, rating int, comment string, _ *time.Time, _ *string) (domain.Review, error) {
 						return updated(stored.Review, rating, comment), nil
 					},
 				}
 				reviews := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow)
-				if _, err := reviews.Update(ctx, alice, stored.ID, 5, "Better", processedIf(upload)); err != nil {
+				if _, err := reviews.Update(ctx, alice, stored.ID, 5, "Better", nil, processedIf(upload)); err != nil {
 					t.Fatalf("Update returned error: %v", err)
 				}
 				want := []string{"request:" + uid.N(5)}
@@ -311,7 +312,7 @@ func TestReviewsAndUsersRegisterShopRecalcRequestInSameTransaction(t *testing.T)
 			review.ID = uid.N(44)
 			return review, nil
 		}}
-		if _, err := uowReviews(createQuery, repo, uow).Create(ctx, alice, activeShop.ID, cheese.ID, "", 4, "ok", nil); err != nil {
+		if _, err := uowReviews(createQuery, repo, uow).Create(ctx, alice, activeShop.ID, cheese.ID, "", 4, "ok", nil, nil); err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
 		if want := []string{"request:" + uid.N(5)}; !reflect.DeepEqual(stats.Ops, want) {
@@ -328,8 +329,10 @@ func TestReviewsAndUsersRegisterShopRecalcRequestInSameTransaction(t *testing.T)
 	t.Run("編集・削除も、同じ形でショップの依頼を登録する", func(t *testing.T) {
 		shopStats := &uowtest.ShopStats{BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(2)}, nil }}
 		uow := &uowtest.UoW{Stats: &uowtest.Stats{}, ShopStats: shopStats}
-		repo := &fakeReviewRepo{updateReviewContent: func(context.Context, string, int, string) (domain.Review, error) { return stored.Review, nil }}
-		if _, err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Update(ctx, alice, stored.ID, 5, "changed", nil); err != nil {
+		repo := &fakeReviewRepo{updateReviewContent: func(context.Context, string, int, string, *time.Time) (domain.Review, error) {
+			return stored.Review, nil
+		}}
+		if _, err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Update(ctx, alice, stored.ID, 5, "changed", nil, nil); err != nil {
 			t.Fatalf("Update returned error: %v", err)
 		}
 		if want := []string{"burger-shops:" + uid.N(5), "request:" + uid.N(2)}; !reflect.DeepEqual(shopStats.Ops, want) {

@@ -117,7 +117,7 @@ func (q *Queries) GetShopWithCreator(ctx context.Context, id string) (GetShopWit
 }
 
 const listShopReviews = `-- name: ListShopReviews :many
-SELECT r.id, r.rating, r.comment, r.created_at,
+SELECT r.id, r.rating, r.comment, r.created_at, r.visited_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
@@ -135,6 +135,7 @@ type ListShopReviewsRow struct {
 	Rating        int16
 	Comment       pgtype.Text
 	CreatedAt     pgtype.Timestamptz
+	VisitedAt     pgtype.Date
 	UserID        string
 	UserUsername  string
 	BurgerID      string
@@ -162,6 +163,7 @@ func (q *Queries) ListShopReviews(ctx context.Context, shopID string) ([]ListSho
 			&i.Rating,
 			&i.Comment,
 			&i.CreatedAt,
+			&i.VisitedAt,
 			&i.UserID,
 			&i.UserUsername,
 			&i.BurgerID,

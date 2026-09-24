@@ -135,7 +135,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	// 登録する(ShopStatsRecalculator のコメントに、ワーカーからではなく書き込みから呼ぶ理由がある)。
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
-	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, photos)
+	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, photos, infra.SystemClock{})
 	users := usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, shopRecalc, infra.BcryptPasswordHasher{})
 
 	// 統計の再計算は、書き込みの応答を待たせないよう、バックグラウンドのワーカー(goroutine 1 本)が

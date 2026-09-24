@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { formatDate } from "../../../lib/date";
+import { formatDate, formatVisitedAt } from "../../../lib/date";
 import { RatingBurger } from "../../../components/ui/RatingBurger";
 import type { Review } from "../../reviews/api/types";
 import styles from "./profileReviewCard.module.css";
@@ -30,6 +30,11 @@ export function ProfileReviewCard({ review, ratingMax }: { review: Review; ratin
             {dateLabel}
           </time>
         </div>
+        {review.visitedAt && (
+          <time className={styles.date} dateTime={review.visitedAt}>
+            {t("reviews.detail.visitedOn", { date: formatVisitedAt(review.visitedAt) })}
+          </time>
+        )}
         {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} variant="stepped" />}
         {review.comment && <p className={styles.comment}>{review.comment}</p>}
       </div>

@@ -11,6 +11,7 @@ const review: Review = {
   comment: "Great patty",
   photoUrl: null,
   createdAt: "2026-09-21T00:00:00Z",
+  visitedAt: null,
   user: { id: "u1", username: "alice" },
   burger: { id: "b1", name: "Teriyaki", averageRating: 4, reviewCount: 3, weightedScore: 4, confidence: 1 },
 };
@@ -54,5 +55,17 @@ describe("ReviewListCard(レビュー一覧のカード)", () => {
     const markup = html({ ...review, comment: "" });
 
     expect(markup).not.toMatch(/<p[^>]*class="[^"]*comment[^"]*"[^>]*>/);
+  });
+});
+
+describe("ReviewListCard の実食日(visitedAt)", () => {
+  it("visitedAt があるときは、実食日を出す", () => {
+    const markup = html({ ...review, visitedAt: "2026-09-10" });
+    expect(markup).toContain("Visited Sep 10, 2026");
+  });
+
+  it("visitedAt が null のときは、実食日を出さない", () => {
+    const markup = html(review);
+    expect(markup).not.toContain("Visited ");
   });
 });

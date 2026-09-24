@@ -62,7 +62,7 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 	reviews := make([]domain.ReviewDetail, 0, len(rows))
 	for _, row := range rows {
 		reviews = append(reviews, toReviewDetail(
-			row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt,
+			row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt, row.VisitedAt,
 			row.UserID, row.UserUsername, row.BurgerID, row.BurgerName,
 			row.ReviewCount, row.AverageRating, row.WeightedScore, row.Confidence,
 		))
@@ -83,7 +83,7 @@ func (r *ReviewQuery) GetReview(ctx context.Context, id string) (domain.ReviewDe
 		return domain.ReviewDetail{}, fmt.Errorf("get review: %w", err)
 	}
 	return toReviewDetail(
-		row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt,
+		row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt, row.VisitedAt,
 		row.UserID, row.UserUsername, row.BurgerID, row.BurgerName,
 		row.ReviewCount, row.AverageRating, row.WeightedScore, row.Confidence,
 	), nil
@@ -145,7 +145,7 @@ func (r *ReviewQuery) GetShopBurger(ctx context.Context, shopID, burgerID string
 // 共有される）を domain のペイロードに変換する。存在しない stats はゼロに
 // なる。
 func toReviewDetail(
-	id string, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz,
+	id string, rating int16, comment, photoKey pgtype.Text, createdAt pgtype.Timestamptz, visitedAt pgtype.Date,
 	userID string, username string, burgerID string, burgerName string,
 	reviewCount pgtype.Int8, averageRating, weightedScore, confidence pgtype.Float8,
 ) domain.ReviewDetail {
@@ -157,6 +157,7 @@ func toReviewDetail(
 			AuthorID:  userID,
 			BurgerID:  burgerID,
 			CreatedAt: createdAt.Time,
+			VisitedAt: rowmap.VisitedAt(visitedAt),
 		},
 		User:   &domain.UserRef{ID: userID, Username: username},
 		Burger: &burger,

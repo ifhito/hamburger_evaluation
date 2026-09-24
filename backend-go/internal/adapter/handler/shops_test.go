@@ -301,9 +301,9 @@ func TestGetShopDetail(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
 	want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"creator":null,"reviews":[` +
-		`{"id":"` + uid.N(9) + `","rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
+		`{"id":"` + uid.N(9) + `","rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
 		`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
-		`{"id":"` + uid.N(8) + `","rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
+		`{"id":"` + uid.N(8) + `","rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
 		`"burger":{"id":"` + uid.N(6) + `","name":"Plain","average_rating":0,"review_count":0,"weighted_score":0,"confidence":0}}],"can_review":false,"photo_url":null,"average_rating":null,"review_count":0}`
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want %s", got, want)

@@ -9,6 +9,7 @@ package domain
 const (
 	keyReviewRatingRange = "review.rating_range"
 	keyCommentTooLong    = "review.comment_too_long"
+	keyVisitedAtFuture   = "review.visited_at_future"
 	keyBurgerNameBlank   = "burger_name.blank"
 	keyBurgerNameTooLong = "burger_name.too_long"
 	keyShopNameBlank     = "shop_name.blank"
@@ -32,6 +33,7 @@ const (
 var catalog = map[string]Entry{
 	keyReviewRatingRange: {EN: "Rating must be in %d..%d", JA: "評価は %d〜%d の整数で指定してください"},
 	keyCommentTooLong:    {EN: "Comment is too long (maximum is %d characters)", JA: "コメントが長すぎます(最大 %d 文字)"},
+	keyVisitedAtFuture:   {EN: "Visited at can't be in the future", JA: "実食日には、未来の日付を指定できません"},
 	keyBurgerNameBlank:   {EN: "Burger name can't be blank", JA: "バーガーの名前を入力してください"},
 	keyBurgerNameTooLong: {EN: "Burger name is too long (maximum is %d characters)", JA: "バーガーの名前が長すぎます(最大 %d 文字)"},
 	keyShopNameBlank:     {EN: "Name can't be blank", JA: "ショップの名前を入力してください"},

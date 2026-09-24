@@ -47,6 +47,7 @@ function review(id: string): ReviewView {
     comment: "Tasty",
     photoUrl: null,
     createdAt: "2026-09-21T00:00:00Z",
+    visitedAt: null,
     user: { id: "2", username: "alice" },
     burger: { id: "3", name: "Cheeseburger", averageRating: 4.2, reviewCount: 2, weightedScore: 4.1, confidence: 0.8 },
     canEdit: false,

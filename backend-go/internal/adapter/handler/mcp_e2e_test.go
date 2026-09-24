@@ -68,7 +68,7 @@ func newMCPE2E(t *testing.T) *mcpE2E {
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	shops := shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool))
-	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos"))
+	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{})
 	users := usecase.NewUsers(userQuery, domain.NewUsers(repository.NewUserRepository(pool)), unitOfWork, recalc, shopRecalc, hasher)
 
 	e.oauth, err = oauthserver.New(oauthserver.Config{
@@ -225,16 +225,26 @@ func TestMCPWithARealAuthorizationServer(t *testing.T) {
 		var shop struct{ ID string }
 		mustJSON(t, text, &shop)
 
-		text, isErr = call(t, ws, "create_review", map[string]any{"shop_id": shop.ID, "burger_name": "テリヤキ", "rating": 4, "comment": "たれが濃くておいしい"})
+		text, isErr = call(t, ws, "create_review", map[string]any{"shop_id": shop.ID, "burger_name": "テリヤキ", "rating": 4, "comment": "たれが濃くておいしい", "visited_at": "2024-05-01"})
 		if isErr {
 			t.Fatalf("create_review = %q", text)
 		}
+		if !strings.Contains(text, `"visited_at":"2024-05-01"`) {
+			t.Errorf("create_review with a visited_at = %q, want it to include \"visited_at\":\"2024-05-01\" (same shape as REST)", text)
+		}
 		var review struct{ ID string }
 		mustJSON(t, text, &review)
-		if text, isErr = call(t, ws, "update_review", map[string]any{"review_id": review.ID, "rating": 5, "comment": "二回目に食べて、もっと好きになった"}); isErr || !strings.Contains(text, "もっと好きになった") {
+
+		// 実食日が YYYY-MM-DD の形式で読めないときは、REST と同じ文言のツールの失敗になり、レビューは
+		// 変わらない(usecase を呼ぶ前に、ツールの入口で弾く)。
+		if text, isErr = call(t, ws, "update_review", map[string]any{"review_id": review.ID, "rating": 5, "comment": "不正な日付", "visited_at": "not-a-date"}); !isErr || !strings.Contains(text, "Visited at must be in YYYY-MM-DD format") {
+			t.Errorf("update_review with a malformed visited_at = %q (isError=%v), want a visited_at format failure", text, isErr)
+		}
+
+		if text, isErr = call(t, ws, "update_review", map[string]any{"review_id": review.ID, "rating": 5, "comment": "二回目に食べて、もっと好きになった", "visited_at": "2024-06-15"}); isErr || !strings.Contains(text, "もっと好きになった") || !strings.Contains(text, `"visited_at":"2024-06-15"`) {
 			t.Errorf("update_review = %q (isError=%v)", text, isErr)
 		}
-		if text, isErr = call(t, ws, "get_review", map[string]any{"review_id": review.ID}); isErr || !strings.Contains(text, `"rating":5`) || !strings.Contains(text, `"can_edit":true`) {
+		if text, isErr = call(t, ws, "get_review", map[string]any{"review_id": review.ID}); isErr || !strings.Contains(text, `"rating":5`) || !strings.Contains(text, `"can_edit":true`) || !strings.Contains(text, `"visited_at":"2024-06-15"`) {
 			t.Errorf("get_review = %q (isError=%v)", text, isErr)
 		}
 		if text, isErr = call(t, ws, "delete_review", map[string]any{"review_id": review.ID}); isErr {

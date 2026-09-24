@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
@@ -30,7 +31,45 @@ func TestValidateReviewContent(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := domain.ValidateReviewContent(tt.rating, tt.comment)
+			err := domain.ValidateReviewContent(tt.rating, tt.comment, nil, time.Now())
+			if tt.want == nil {
+				if err != nil {
+					t.Fatalf("ValidateReviewContent returned error: %v", err)
+				}
+				return
+			}
+			var vErr *domain.ValidationError
+			if !errors.As(err, &vErr) {
+				t.Fatalf("error = %v, want *domain.ValidationError", err)
+			}
+			if !reflect.DeepEqual(vErr.Texts(domain.LangEN), tt.want) {
+				t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), tt.want)
+			}
+		})
+	}
+}
+
+// TestValidateReviewContentVisitedAt は、実食日(visited_at)の検証を固定する: 過去日・当日は有効、
+// 未来日は拒否、未指定(nil)は now に関わらず常に有効である。
+func TestValidateReviewContentVisitedAt(t *testing.T) {
+	now := time.Date(2024, 6, 15, 9, 0, 0, 0, time.UTC)
+	today := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	yesterday := today.AddDate(0, 0, -1)
+	tomorrow := today.AddDate(0, 0, 1)
+
+	tests := []struct {
+		name      string
+		visitedAt *time.Time
+		want      []string // nil = 有効
+	}{
+		{name: "過去の日付は有効", visitedAt: &yesterday},
+		{name: "当日の日付は有効", visitedAt: &today},
+		{name: "未来の日付は拒否される", visitedAt: &tomorrow, want: []string{"Visited at can't be in the future"}},
+		{name: "未指定(nil)は常に有効", visitedAt: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := domain.ValidateReviewContent(4, "ok", tt.visitedAt, now)
 			if tt.want == nil {
 				if err != nil {
 					t.Fatalf("ValidateReviewContent returned error: %v", err)
@@ -55,13 +94,13 @@ func TestRatingRange(t *testing.T) {
 		t.Fatalf("MinRating %d > MaxRating %d", domain.MinRating, domain.MaxRating)
 	}
 	for _, r := range []int{domain.MinRating, domain.MaxRating} {
-		if err := domain.ValidateReviewContent(r, "ok"); err != nil {
+		if err := domain.ValidateReviewContent(r, "ok", nil, time.Now()); err != nil {
 			t.Errorf("rating %d(範囲の端)は有効なはず: %v", r, err)
 		}
 	}
 	for _, r := range []int{domain.MinRating - 1, domain.MaxRating + 1} {
 		var vErr *domain.ValidationError
-		err := domain.ValidateReviewContent(r, "ok")
+		err := domain.ValidateReviewContent(r, "ok", nil, time.Now())
 		if !errors.As(err, &vErr) {
 			t.Fatalf("rating %d(範囲の外)は検証エラーのはず: %v", r, err)
 		}
@@ -77,7 +116,7 @@ func TestRatingRange(t *testing.T) {
 // 無効な入力は review を返さずに ValidationError を表に出す。
 func TestNewReview(t *testing.T) {
 	t.Run("有効な入力から review を作る", func(t *testing.T) {
-		review, err := domain.NewReview(4, " Tasty ", uid.N(7), uid.N(9))
+		review, err := domain.NewReview(4, " Tasty ", uid.N(7), uid.N(9), nil, time.Now())
 		if err != nil {
 			t.Fatalf("NewReview returned error: %v", err)
 		}
@@ -90,7 +129,7 @@ func TestNewReview(t *testing.T) {
 	})
 
 	t.Run("空の comment でも評価だけの review を作れる", func(t *testing.T) {
-		review, err := domain.NewReview(4, "", uid.N(7), uid.N(9))
+		review, err := domain.NewReview(4, "", uid.N(7), uid.N(9), nil, time.Now())
 		if err != nil {
 			t.Fatalf("NewReview returned error: %v", err)
 		}
@@ -100,7 +139,7 @@ func TestNewReview(t *testing.T) {
 	})
 
 	t.Run("無効な入力は検証エラーになる", func(t *testing.T) {
-		_, err := domain.NewReview(0, "", uid.N(7), uid.N(9))
+		_, err := domain.NewReview(0, "", uid.N(7), uid.N(9), nil, time.Now())
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
