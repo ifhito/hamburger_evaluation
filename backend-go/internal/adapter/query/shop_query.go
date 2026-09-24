@@ -118,6 +118,10 @@ func (r *ShopQuery) ListShopReviews(ctx context.Context, shopID string) ([]domai
 			comment := row.Comment.String
 			review.Comment = &comment
 		}
+		if row.PhotoKey.Valid {
+			key := row.PhotoKey.String
+			review.PhotoKey = &key
+		}
 		reviews = append(reviews, review)
 	}
 	return reviews, nil

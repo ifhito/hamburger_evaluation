@@ -719,3 +719,54 @@ func TestShopsListHasMore(t *testing.T) {
 		t.Errorf("List = (hasMore %v, err %v), want (false, %v)", hasMore, err, io.ErrUnexpectedEOF)
 	}
 }
+
+func TestShopsGetReviewPhotos(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		status     domain.ShopStatus
+		wantHidden bool
+	}{
+		{name: "公開店舗では各レビューの写真を返し、写真なしは未設定のままにする", status: domain.ShopStatusActive},
+		{name: "非公開店舗ではレビューと写真を取得せずに拒否する", status: domain.ShopStatusPending, wantHidden: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			query := &fakeShopQuery{
+				getShopWithCreator: func(context.Context, string) (domain.ShopDetail, error) {
+					return domain.ShopDetail{Shop: domain.Shop{ID: uid.N(1), Status: tt.status}, Summary: domain.ShopSummary{PhotoKey: strPtr("reviews/cover.jpg")}}, nil
+				},
+				listShopReviews: func(context.Context, string) ([]domain.ShopReview, error) {
+					if tt.wantHidden {
+						t.Fatal("非公開店舗のレビューが取得された")
+					}
+					return []domain.ShopReview{
+						{ID: uid.N(2), PhotoKey: strPtr("reviews/a.jpg")},
+						{ID: uid.N(3)},
+						{ID: uid.N(4), PhotoKey: strPtr("reviews/b.png")},
+					}, nil
+				},
+			}
+			got, err := newShops(query, &fakeShopRepo{}).Get(context.Background(), nil, uid.N(1))
+			if tt.wantHidden {
+				if !errors.Is(err, domain.ErrShopNotFound) {
+					t.Fatalf("error = %v", err)
+				}
+				if len(got.Reviews) != 0 {
+					t.Fatal("非公開店舗のレビューが返された")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []*string{strPtr("https://photos.test/reviews/a.jpg"), nil, strPtr("https://photos.test/reviews/b.png")}
+			if len(got.Reviews) != len(want) {
+				t.Fatalf("reviews = %v", got.Reviews)
+			}
+			for i, photo := range want {
+				if !reflect.DeepEqual(got.Reviews[i].PhotoURL, photo) {
+					t.Errorf("review[%d].PhotoURL = %v, want %v", i, got.Reviews[i].PhotoURL, photo)
+				}
+			}
+		})
+	}
+}

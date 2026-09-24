@@ -296,6 +296,13 @@ func TestShopQuery(t *testing.T) {
 			t.Fatalf("insert burger stats: %v", err)
 		}
 
+		photo1, photo3 := "reviews/cheese.jpg", "reviews/plain.png"
+		for id, key := range map[string]string{r1: photo1, r3: photo3} {
+			if _, err := conn.Exec(ctx, `UPDATE reviews SET photo_key = $1 WHERE id = $2`, key, id); err != nil {
+				t.Fatalf("写真キーの設定に失敗: %v", err)
+			}
+		}
+
 		reviews, err := shopQuery.ListShopReviews(ctx, deltaDiner)
 		if err != nil {
 			t.Fatalf("ListShopReviews returned error: %v", err)
@@ -303,7 +310,7 @@ func TestShopQuery(t *testing.T) {
 		comment := "Tasty"
 		want := []domain.ShopReview{
 			{
-				ID: r3, Rating: 4, CreatedAt: t2,
+				ID: r3, Rating: 4, CreatedAt: t2, PhotoKey: &photo3,
 				User:   &domain.UserRef{ID: alice, Username: "alice"},
 				Burger: &domain.ShopReviewBurger{ID: plain, Name: "Plain"}, // stats 行なし：ゼロ
 			},
@@ -313,7 +320,7 @@ func TestShopQuery(t *testing.T) {
 				Burger: &domain.ShopReviewBurger{ID: cheese, Name: "Cheese", AverageRating: 4.0, ReviewCount: 2, WeightedScore: 3.9, Confidence: 0.7},
 			},
 			{
-				ID: r1, Rating: 5, Comment: &comment, CreatedAt: t1,
+				ID: r1, Rating: 5, Comment: &comment, CreatedAt: t1, PhotoKey: &photo1,
 				User:   &domain.UserRef{ID: alice, Username: "alice"},
 				Burger: &domain.ShopReviewBurger{ID: cheese, Name: "Cheese", AverageRating: 4.0, ReviewCount: 2, WeightedScore: 3.9, Confidence: 0.7},
 			},

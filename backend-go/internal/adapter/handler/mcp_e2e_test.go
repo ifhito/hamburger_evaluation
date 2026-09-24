@@ -241,11 +241,32 @@ func TestMCPWithARealAuthorizationServer(t *testing.T) {
 			t.Errorf("update_review with a malformed visited_at = %q (isError=%v), want a visited_at format failure", text, isErr)
 		}
 
-		if text, isErr = call(t, ws, "update_review", map[string]any{"review_id": review.ID, "rating": 5, "comment": "二回目に食べて、もっと好きになった", "visited_at": "2024-06-15"}); isErr || !strings.Contains(text, "もっと好きになった") || !strings.Contains(text, `"visited_at":"2024-06-15"`) {
+		if text, isErr = call(t, ws, "update_review", map[string]any{"review_id": review.ID, "rating": 5, "comment": "二回目に食べて、もっと好きになった", "visited_at": "2024-06-15", "photo_base64": base64.StdEncoding.EncodeToString(pngBytes(t))}); isErr || !strings.Contains(text, "もっと好きになった") || !strings.Contains(text, `"visited_at":"2024-06-15"`) {
 			t.Errorf("update_review = %q (isError=%v)", text, isErr)
 		}
 		if text, isErr = call(t, ws, "get_review", map[string]any{"review_id": review.ID}); isErr || !strings.Contains(text, `"rating":5`) || !strings.Contains(text, `"can_edit":true`) || !strings.Contains(text, `"visited_at":"2024-06-15"`) {
 			t.Errorf("get_review = %q (isError=%v)", text, isErr)
+		}
+		var saved struct {
+			PhotoURL *string `json:"photo_url"`
+		}
+		mustJSON(t, text, &saved)
+		if saved.PhotoURL == nil {
+			t.Fatal("写真付きレビューの取得結果に写真URLがない")
+		}
+		text, isErr = call(t, ws, "get_shop", map[string]any{"shop_id": shop.ID})
+		if isErr {
+			t.Fatalf("get_shop = %q", text)
+		}
+		var detail struct {
+			Reviews []struct {
+				ID       string  `json:"id"`
+				PhotoURL *string `json:"photo_url"`
+			} `json:"reviews"`
+		}
+		mustJSON(t, text, &detail)
+		if len(detail.Reviews) != 1 || detail.Reviews[0].ID != review.ID || detail.Reviews[0].PhotoURL == nil || *detail.Reviews[0].PhotoURL != *saved.PhotoURL {
+			t.Fatalf("店舗詳細のレビュー写真が単体取得と一致しない: %s", text)
 		}
 		if text, isErr = call(t, ws, "delete_review", map[string]any{"review_id": review.ID}); isErr {
 			t.Errorf("delete_review = %q", text)

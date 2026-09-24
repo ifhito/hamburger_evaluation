@@ -218,6 +218,7 @@ func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 			Comment:   review.Comment,
 			CreatedAt: review.CreatedAt.UTC().Format(time.RFC3339),
 			VisitedAt: formatVisitedAt(review.VisitedAt),
+			PhotoURL:  review.PhotoURL,
 			User:      newUserRefResponse(review.User),
 		}
 		if review.Burger != nil {
