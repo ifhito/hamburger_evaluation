@@ -14,7 +14,7 @@ import (
 const createShop = `-- name: CreateShop :one
 INSERT INTO shops (name, status, moderation_note, map_url, creator_id)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at, map_url
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
 `
 
 type CreateShopParams struct {
@@ -40,10 +40,10 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
-		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MapURL,
+		&i.ClosedAt,
 	)
 	return i, err
 }
@@ -59,7 +59,7 @@ func (q *Queries) DeleteShop(ctx context.Context, id string) error {
 }
 
 const getShop = `-- name: GetShop :one
-SELECT id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at, map_url FROM shops
+SELECT id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at FROM shops
 WHERE id = $1
 `
 
@@ -72,10 +72,10 @@ func (q *Queries) GetShop(ctx context.Context, id string) (Shop, error) {
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
-		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MapURL,
+		&i.ClosedAt,
 	)
 	return i, err
 }
@@ -419,7 +419,7 @@ SET name = $2,
     moderation_note = $4,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at, map_url
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
 `
 
 type UpdateShopParams struct {
@@ -443,10 +443,10 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
-		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MapURL,
+		&i.ClosedAt,
 	)
 	return i, err
 }
@@ -456,7 +456,7 @@ UPDATE shops
 SET closed_at = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at, map_url
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
 `
 
 type UpdateShopClosedAtParams struct {
@@ -476,10 +476,10 @@ func (q *Queries) UpdateShopClosedAt(ctx context.Context, arg UpdateShopClosedAt
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
-		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MapURL,
+		&i.ClosedAt,
 	)
 	return i, err
 }
@@ -490,7 +490,7 @@ SET name = $2,
     map_url = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at, map_url
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
 `
 
 type UpdateShopNameParams struct {
@@ -510,10 +510,10 @@ func (q *Queries) UpdateShopName(ctx context.Context, arg UpdateShopNameParams) 
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
-		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MapURL,
+		&i.ClosedAt,
 	)
 	return i, err
 }
@@ -524,7 +524,7 @@ SET status = $2,
     moderation_note = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at, map_url
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
 `
 
 type UpdateShopStatusParams struct {
@@ -545,10 +545,10 @@ func (q *Queries) UpdateShopStatus(ctx context.Context, arg UpdateShopStatusPara
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
-		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MapURL,
+		&i.ClosedAt,
 	)
 	return i, err
 }
