@@ -54,7 +54,7 @@ jobs:
         run: npx --yes wrangler@4.136.3 deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
       # 配信の確認。HTTP の 200 だけでは足りない。基盤の仮ページも 200 を返すし、
       # /api/* の転送が壊れていても index.html が 200 で返る(検証で 2 回とも

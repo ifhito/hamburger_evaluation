@@ -49,23 +49,22 @@ API のワークフローは、マイグレーションを当ててから、新�
 | 名前 | 中身 |
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。範囲は `hamburger-frontend` だけ、役割は Editor |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID |
 | `PROD_DATABASE_URL` | Neon の接続 URL。**pooler ではなく直結のほう** |
 
 **Neon の URL は、pooler ではなく直結のものにします。** pooler 経由だと、マイグレーションが `unnamed prepared statement does not exist` で落ちることがあります(検証中に 2 回発生。再実行で通るが、当たり外れがある)。
 
 ### Variables(秘密ではない)
 
-GCP の 3 つは必須です。「2. GCP に、鍵を持たない入り口を作る」の最後に表示されます。秘密ではないので Variables に置きます(ログで伏せ字にならず、失敗したときに追いやすい)。
+次の 4 つは必須です。秘密ではないので Variables に置きます(ログで伏せ字にならず、失敗したときに追いやすい)。GCP の 3 つは「2. GCP に、鍵を持たない入り口を作る」の最後に表示されます。
 
 | 名前 | 中身 |
 |---|---|
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID。単体では何もできず、R2 のエンドポイントや画面の URL にも出る値 |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/<番号>/locations/global/workloadIdentityPools/github/providers/github` |
 | `GCP_SERVICE_ACCOUNT` | `github-deployer@<プロジェクト ID>.iam.gserviceaccount.com` |
 | `GCP_PROJECT_ID` | Google Cloud のプロジェクト ID |
 
 次の 4 つは任意で、未設定なら既定値で動きます。
-
 
 | 名前 | 既定値 |
 |---|---|
@@ -93,7 +92,7 @@ GCP の 3 つは必須です。「2. GCP に、鍵を持たない入り口を作
 
 3. ほかの権限と Zone の範囲は付けません(独自ドメインのルートを使っていないため)。
 4. 出てきたトークンを、GitHub の `CLOUDFLARE_API_TOKEN` に入れます(**この画面を閉じると二度と見られません**)。
-5. アカウント ID は、Cloudflare のダッシュボードの右側にあります。`CLOUDFLARE_ACCOUNT_ID` に入れます。
+5. アカウント ID は、Cloudflare のダッシュボードの右側にあります。GitHub の **Variables** の `CLOUDFLARE_ACCOUNT_ID` に入れます。
 
 - 独自ドメインを当てたら、Zone の **Workers Routes: Edit** を足します。
 - Editor は既存の Worker しか扱えません。Worker を作り直すときは、手元から `wrangler deploy` で一度作ってから CD に任せます。
