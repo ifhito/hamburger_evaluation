@@ -48,7 +48,7 @@ API のワークフローは、マイグレーションを当ててから、新�
 
 | 名前 | 中身 |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。権限は「Edit Cloudflare Workers」 |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。権限は Workers Scripts の Edit と Account Settings の Read だけ |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID |
 | `PROD_DATABASE_URL` | Neon の接続 URL。**pooler ではなく直結のほう** |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/<番号>/locations/global/workloadIdentityPools/github/providers/github` |
@@ -72,11 +72,23 @@ API のワークフローは、マイグレーションを当ててから、新�
 
 ### 1. Cloudflare のトークンを作る
 
-1. <https://dash.cloudflare.com/profile/api-tokens> を開きます。
-2. **Create Token** → テンプレートの **Edit Cloudflare Workers** を選びます。
-3. アカウントとゾーンの範囲を、このアプリのものに絞って作成します。
+テンプレートの「Edit Cloudflare Workers」は使わず、**権限を絞ったカスタムトークン**を作ります。テンプレートには R2 の書き込み権限も入っていて、トークンが漏れると写真のバケットまで触れてしまうためです。
+
+1. <https://dash.cloudflare.com/profile/api-tokens> を開き、**Create Token** → **Custom token** を選びます。
+2. 権限を次の 2 つだけにします。
+
+   | 種類 | 権限 | レベル | 用途 |
+   |---|---|---|---|
+   | Account | Workers Scripts | Edit | Worker と静的ファイルのアップロード |
+   | Account | Account Settings | Read | wrangler がアカウントの情報を読む |
+
+3. **Account Resources** は、このアプリのアカウントだけに絞ります。**Zone Resources** は要りません(独自ドメインのルートを使っていないため)。
 4. 出てきたトークンを、GitHub の `CLOUDFLARE_API_TOKEN` に入れます(**この画面を閉じると二度と見られません**)。
 5. アカウント ID は、Cloudflare のダッシュボードの右側にあります。`CLOUDFLARE_ACCOUNT_ID` に入れます。
+
+- 独自ドメインを当てたら、Zone の **Workers Routes: Edit** を足します。
+- デプロイが認証エラーで落ちたら、User の **Memberships: Read** を足します(アカウント ID を渡していれば、通常は要りません)。
+- IP アドレスでの制限は付けません。GitHub Actions の実行環境は IP が毎回変わります。
 
 ### 2. GCP に、鍵を持たない入り口を作る
 
