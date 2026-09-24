@@ -48,7 +48,7 @@ API のワークフローは、マイグレーションを当ててから、新�
 
 | 名前 | 中身 |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。権限は Workers Scripts の Edit と Account Settings の Read だけ |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。範囲は `hamburger-frontend` だけ、役割は Editor |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID |
 | `PROD_DATABASE_URL` | Neon の接続 URL。**pooler ではなく直結のほう** |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/<番号>/locations/global/workloadIdentityPools/github/providers/github` |
@@ -75,19 +75,21 @@ API のワークフローは、マイグレーションを当ててから、新�
 テンプレートの「Edit Cloudflare Workers」は使わず、**権限を絞ったカスタムトークン**を作ります。テンプレートには R2 の書き込み権限も入っていて、トークンが漏れると写真のバケットまで触れてしまうためです。
 
 1. <https://dash.cloudflare.com/profile/api-tokens> を開き、**Create Token** → **Custom token** を選びます。
-2. 権限を次の 2 つだけにします。
+2. Workers の権限で、範囲を **Specified Workers**(特定の Worker)にして `hamburger-frontend` を選び、役割を **Editor** にします。
 
-   | 種類 | 権限 | レベル | 用途 |
-   |---|---|---|---|
-   | Account | Workers Scripts | Edit | Worker と静的ファイルのアップロード |
-   | Account | Account Settings | Read | wrangler がアカウントの情報を読む |
+   | 範囲 | 役割 | できること |
+   |---|---|---|
+   | Specified Workers: `hamburger-frontend` | Editor | 既存の Worker の更新とデプロイ(静的ファイルを含む)。削除と、ほかの Worker への操作はできない |
 
-3. **Account Resources** は、このアプリのアカウントだけに絞ります。**Zone Resources** は要りません(独自ドメインのルートを使っていないため)。
+   Cloudflare は 2026-09-15 に Workers の権限を役割ベースに変えました。以前の「Workers Scripts: Edit」は画面に出なくなっています([変更の告知](https://developers.cloudflare.com/changelog/post/2026-09-15-granular-worker-permissions/)、[役割の一覧](https://developers.cloudflare.com/workers/authorization/workers/))。
+
+3. ほかの権限と Zone の範囲は付けません(独自ドメインのルートを使っていないため)。
 4. 出てきたトークンを、GitHub の `CLOUDFLARE_API_TOKEN` に入れます(**この画面を閉じると二度と見られません**)。
 5. アカウント ID は、Cloudflare のダッシュボードの右側にあります。`CLOUDFLARE_ACCOUNT_ID` に入れます。
 
 - 独自ドメインを当てたら、Zone の **Workers Routes: Edit** を足します。
-- デプロイが認証エラーで落ちたら、User の **Memberships: Read** を足します(アカウント ID を渡していれば、通常は要りません)。
+- Editor は既存の Worker しか扱えません。Worker を作り直すときは、手元から `wrangler deploy` で一度作ってから CD に任せます。
+- デプロイが認証エラーで落ちたら、Account の **Account Settings: Read** を足して試します。
 - IP アドレスでの制限は付けません。GitHub Actions の実行環境は IP が毎回変わります。
 
 ### 2. GCP に、鍵を持たない入り口を作る
