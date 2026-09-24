@@ -79,10 +79,13 @@ var validArguments = func() map[string]map[string]any {
 	return map[string]map[string]any{
 		"get_meta": {}, "list_shops": {}, "list_reviews": {},
 		"get_shop": {"shop_id": id}, "get_review": {"review_id": id}, "get_user": {"user_id": id},
-		"create_review": {"shop_id": id, "rating": 4, "comment": "x"},
-		"update_review": {"review_id": id, "rating": 4, "comment": "x"},
-		"delete_review": {"review_id": id},
-		"submit_shop":   {"name": "x"},
+		"create_review":    {"shop_id": id, "rating": 4, "comment": "x"},
+		"update_review":    {"review_id": id, "rating": 4, "comment": "x"},
+		"delete_review":    {"review_id": id},
+		"submit_shop":      {"name": "x"},
+		"list_admin_shops": {},
+		"approve_shop":     {"shop_id": id},
+		"reject_shop":      {"shop_id": id},
 	}
 }()
 

@@ -726,7 +726,7 @@ func TestMetadata(t *testing.T) {
 			"grant_types_supported":                 {"authorization_code", "refresh_token"},
 			"code_challenge_methods_supported":      {"S256"},
 			"token_endpoint_auth_methods_supported": {"none"},
-			"scopes_supported":                      {domain.OAuthScopeRead, domain.OAuthScopeWrite},
+			"scopes_supported":                      {domain.OAuthScopeRead, domain.OAuthScopeWrite, domain.OAuthScopeAdmin},
 		} {
 			got, _ := body[k].([]string)
 			if strings.Join(got, ",") != strings.Join(want, ",") {

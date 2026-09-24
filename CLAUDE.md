@@ -224,16 +224,16 @@ AI アプリ(MCP のクライアントなど)が、利用者のログインと�
 
 **窓口**
 
-- `GET /.well-known/oauth-authorization-server` — 認可サーバーの情報(RFC 8414)。対応するのは、`code` と `refresh_token`、PKCE は `S256` だけ、アプリの認証は `none`(秘密の鍵を持たない公開クライアントだけ)、範囲は `hamburger:read` / `hamburger:write`。
+- `GET /.well-known/oauth-authorization-server` — 認可サーバーの情報(RFC 8414)。対応するのは、`code` と `refresh_token`、PKCE は `S256` だけ、アプリの認証は `none`(秘密の鍵を持たない公開クライアントだけ)、範囲は `hamburger:read` / `hamburger:write` / `hamburger:admin`。
 - `GET /oauth/authorize` — 認可の入口(上記 1)。
 - `POST /oauth/token` — トークンの発行(認可コードの交換・更新)。
 - `POST /oauth/revoke` — 取り消し(RFC 7009)。更新トークンを取り消すと、その認可から発行されたトークンがすべて使えなくなる。
-- `GET /oauth/authorize/request`・`POST /oauth/authorize/decision` — 許可の画面が使う API(要ログイン。上記 2)。要求がアプリへ結果を戻せない形で不正なときは 422 `{"error":"…"}`。`GET /oauth/authorize/request` の応答の `scopes` は、範囲ごとに、書き込みを伴うか(`writes`。値の元は domain の `OAuthScope.Writes` で、`hamburger:write` だけ `true`。定義にない範囲の名前は `false`)を含む(`POST /oauth/authorize/decision` の応答には範囲がない)。frontend は、範囲の名前を比べず、この値で書き込みの範囲を強調すること。
+- `GET /oauth/authorize/request`・`POST /oauth/authorize/decision` — 許可の画面が使う API(要ログイン。上記 2)。要求がアプリへ結果を戻せない形で不正なときは 422 `{"error":"…"}`。`GET /oauth/authorize/request` の応答の `scopes` は、範囲ごとに、書き込みを伴うか(`writes`。値の元は domain の `OAuthScope.Writes` で、`hamburger:write` と `hamburger:admin` が `true`。定義にない範囲の名前は `false`)を含む(`POST /oauth/authorize/decision` の応答には範囲がない)。frontend は、範囲の名前を比べず、この値で書き込みの範囲を強調すること。
 - `GET /oauth/grants`・`DELETE /oauth/grants/{id}` — 利用者本人が許可したアプリの一覧(`id`・`client_id`・`client_name`・範囲と説明と `writes`・`created_at`・`updated_at`。最近使ったものから順)と、取り消し(204)。**一覧は、既存の一覧(`GET /shops`・`GET /reviews`)と同じ契約でページ送りする**: `page` / `per_page`(整数でなければ 422、範囲外は補正。1 ページの件数は backend が決める。既定 20 件・上限 100 件。既定値・上限・範囲外の丸めは、業務の規則として `domain/page.go`(`DefaultPerPage`・`MaxPerPage`・`NormalizePage`)にあり、ショップ・レビュー・接続済みアプリの一覧が、すべて同じ規則に従う。`page` / `per_page` の文字列を整数に読む処理は handler の `pageParams`、DB の limit/offset への変換は usecase の `clampPage`、続きを知るために 1 件多く取り出して切り詰める処理は adapter の `trimPage` が持つ)、続きがあるかはレスポンスヘッダー `X-Has-More`(`true` / `false`)で返す。取り消すと、そのアプリのトークンはすぐ使えなくなる。別の利用者の許可・存在しない許可・正規の形でない id は、区別できない同一の 404。プロフィール画面の「接続済みのアプリ」が使う。
 
 **ルール**(判断は `internal/domain/oauth*.go` だけが持つ)
 
-- 範囲: 読み取り(`hamburger:read`)と書き込み(`hamburger:write`)。指定がなければ読み取りだけ。要求が、すでに許可した範囲を超えたときだけ、許可を尋ね直す(`domain.OAuthConsentRequired`)。許可の記録(`oauth_grants`)は、利用者とアプリの組ごとに 1 行で、範囲は広がる方向にだけ更新する。
+- 範囲: 読み取り(`hamburger:read`)と書き込み(`hamburger:write`)、ショップの審査(`hamburger:admin`。MCP の管理用のツールが使う)。指定がなければ読み取りだけで、`hamburger:admin` は既定の範囲に含まれず、アプリが明示して要求したときだけ求める。要求が、すでに許可した範囲を超えたときだけ、許可を尋ね直す(`domain.OAuthConsentRequired`)。許可の記録(`oauth_grants`)は、利用者とアプリの組ごとに 1 行で、範囲は広がる方向にだけ更新する。
 - 有効期間: 認可コード 2 分、アクセストークン 15 分、更新トークン 30 日(業務のルールで、環境変数では変えない)。
 - トークンは不透明な文字列で、DB(`oauth_token_sessions`)には署名だけを保存し、文字列そのものは保存しない。取り消しは、記録を消す・無効にするので、すぐ効く。
 - 認可コードは 1 回だけ使える。再利用(並行した 2 回の使用を含む)を検知したら、その認可から発行されたトークンをすべて使えなくする。更新トークンは使うたびに入れ替え、入れ替え済みのものの再利用を検知したら、同じくその系列を全部使えなくする。判定と更新は 1 つの SQL 文で行う。 **認可コードを使用済みにしてから、トークンを保存するまで(更新トークンの入れ替えから、新しいトークンを保存するまでも同じ)は、1 つの DB トランザクション**にまとめる(認可ライブラリの `Transactional` の口。`usecase.OAuthTokenSessionStore`、実装は `adapter/uow`)。まとめないと、再利用を検知した別の要求が系列を取り消したあとに、先の交換が、まだ保存していなかったトークンを保存して、取り消したはずのトークンが有効なまま残る。まとめれば、認可コードの行のロックで、あとから来た要求は、先の交換が確定するまで待たされ、そのあとで取り消すので、保存されたトークンも取り消される。系列の取り消し(アクセストークンの削除と更新トークンの無効化)も、1 つの SQL 文で行い、失敗しても片方だけが反映されることはない。
@@ -298,7 +298,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
   - 範囲が足りない → `403` と `WWW-Authenticate: Bearer error="insufficient_scope", scope="hamburger:write", …`(クライアントは、範囲を広げる許可を求め直せる)。
   - 保護されたリソースの情報(RFC 9728)は、トークンなしで `GET /.well-known/oauth-protected-resource`(と、リソースの path を足した `/.well-known/oauth-protected-resource/mcp`)。宛先・認可サーバーの場所・使える範囲を返す。
 - **Origin の検証**(DNS の付け替え攻撃への対策): MCP の仕様は、Streamable HTTP のサーバーに、すべての接続で `Origin` を検証すること、不正なら `403` を返すことを求めている(2025-06-18 は MUST。最新の 2026-07-28 は「Origin が存在して不正なら 403」まで明記)。`POST /mcp` は、**認証より前**に検証する(トークンの確認にも、本文の読み取りにも進ませない)。`Origin` がなければ通す(Claude Code などブラウザ以外のクライアント)。あれば、`MCP_ALLOWED_ORIGINS` の一覧と、scheme・host・port の**完全一致**で比べる(`domain.NormalizeOrigin`。scheme と host の大文字小文字は区別せず、既定のポートは省いて比べる。部分一致はしない)。一覧にない・`null`・空・複数・path や末尾のスラッシュを持つ不正な形は、理由を返さず、固定の本文(`{"error":"Forbidden"}`)で `403`。CORS のヘッダーは返さない(別の Origin のブラウザから直接使うクライアントには、対応しない。事前確認(preflight)は承認されないので、ブラウザは本要求を送らない)。
-- **範囲はツールごと**: 読み取りのツール(`get_meta`・`list_shops`・`get_shop`・`list_reviews`・`get_review`・`get_user`)は `hamburger:read`、書き込みのツール(`create_review`・`update_review`・`delete_review`・`submit_shop`)は `hamburger:write`。対応表は `mcpToolScopes` の 1 か所で、入口(本文から読み取った範囲の確認。範囲を広げる許可を求め直せる 403 を返すため)と、ツールを実行する直前の確認(`guarded`。SDK が本文を別の読み方で解釈しても、書き込みが通らないようにする二重の防御)の両方が使う。ツールを足すときは、この表に足す(足し忘れると、テストが落ちる)。初期化・ツールの一覧は、範囲を要求しない。
+- **範囲はツールごと**: 読み取りのツール(`get_meta`・`list_shops`・`get_shop`・`list_reviews`・`get_review`・`get_user`)は `hamburger:read`、書き込みのツール(`create_review`・`update_review`・`delete_review`・`submit_shop`)は `hamburger:write`、ショップの審査のツール(`list_admin_shops`・`approve_shop`・`reject_shop`)は `hamburger:admin` を要求する。対応表は `mcpToolScopes` の 1 か所で、入口(本文から読み取った範囲の確認。範囲を広げる許可を求め直せる 403 を返すため)と、ツールを実行する直前の確認(`guarded`。SDK が本文を別の読み方で解釈しても、書き込みが通らないようにする二重の防御)の両方が使う。ツールを足すときは、この表に足す(足し忘れると、テストが落ちる)。初期化・ツールの一覧は、範囲を要求しない。
 - **ツールの実体**: 既存の usecase を呼ぶだけ。権限(投稿者本人だけが編集・削除、審査待ちのショップの見え方)は usecase と domain にあり、ここに複製しない。返す JSON は、REST の API と同じ形(`newReviewResponse` などを共有)。エラーの文言も REST と同じで、知らないエラーは、詳細をログにだけ残し、利用者には `internal server error` だけを返す。
 - **プロンプトインジェクションへの注意**: レビューの本文・店名・自己紹介は、他の利用者が書いた文字列である。ツールの説明と、接続時の説明(`instructions`)で、内容として扱い、その中の命令には従わないよう伝えている。書き込みのツールの説明には、実際にデータを変えること、実行前に利用者へ確認することを書いている。防げる保証はない(AI の判断による)ので、書き込みは、必要なときだけ許可する。
 - **結果の大きさ**: 1 回のツールの結果は 64 KiB まで。超える一覧は、途中で切らずに、`per_page` を小さくするよう伝えるエラーにする。
