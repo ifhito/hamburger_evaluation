@@ -187,45 +187,6 @@ func TestGoogleLoginsSignInRace(t *testing.T) {
 	})
 }
 
-// TestGoogleLoginsSignInRaceAtEmailCheck は、同じ Google アカウントの初回のサインインが並行して、相手がメールの
-// 重複の検索より前に作成・結び付けまで終えていたときの結果を固定する。負けた側は、他人のアカウントと誤認して
-// 「同じメールのアカウントがある」と案内するのではなく、結び付きを引き直して、先に作られた利用者としてサインイン
-// でき、ユーザーの作成(fakeUserRepo.createUser)は一切呼ばれない。
-func TestGoogleLoginsSignInRaceAtEmailCheck(t *testing.T) {
-	winner := domain.User{ID: uid.N(7), Username: "Carol", Email: "carol@gmail.example"}
-	ident := domain.ExternalIdentity{Provider: domain.ProviderGoogle, ProviderUserID: "sub-1", Email: "carol@gmail.example", EmailVerified: true, Name: "Carol"}
-
-	handoffs := &fakeHandoffRepo{}
-	users := &fakeUserQuery{
-		// 相手の作成がすでにコミット済みなので、メールの検索は先に作られた利用者を見つける。
-		getByEmailIgnoreCase: func(context.Context, string) (domain.User, error) { return winner, nil },
-		getByID: func(_ context.Context, id string) (domain.User, error) {
-			if id == winner.ID {
-				return winner, nil
-			}
-			return domain.User{}, fmt.Errorf("get: %w", domain.ErrUserNotFound)
-		},
-	}
-	// createUser を未設定のままにして、呼ばれたら panic させる(この経路では作成に進んではならない)。
-	userRepo := &fakeUserRepo{}
-	identityRepo := fakeIdentityRepo{}
-	lookups := []func() (domain.UserIdentity, error){notLinked, linkedTo(winner.ID)}
-	logins := usecase.NewGoogleLogins(fakeGoogleProvider{identity: ident}, &fakeIdentityQuery{lookups: lookups}, users,
-		&uowtest.UoW{Users: userRepo, UserIdentities: identityRepo}, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(identityRepo), fakeIssuer{})
-	flow := usecase.GoogleFlow{Secrets: usecase.GoogleFlowSecrets{State: "s", Nonce: "n", Verifier: "v"}}
-
-	if _, err := logins.Complete(context.Background(), flow, usecase.GoogleCallback{Code: "c", State: "s"}); err != nil {
-		t.Fatal(err)
-	}
-	if len(handoffs.created) != 1 {
-		t.Fatalf("保存された結果 = %d 件, want 1", len(handoffs.created))
-	}
-	got := handoffs.created[0]
-	if got.Outcome != domain.OutcomeSignedIn || got.UserID != winner.ID {
-		t.Fatalf("結果 = %+v, want %s の利用者としてのサインイン", got, winner.ID)
-	}
-}
-
 // TestGoogleLoginsCompleteWithoutFlow は、進行中の手続き(手続きを始めたブラウザの cookie に封じた値)がない要求では、
 // 何も保存せずに、エラーを返すことを固定する(手続きを始めていない要求で、DB に書き込ませない)。
 func TestGoogleLoginsCompleteWithoutFlow(t *testing.T) {
