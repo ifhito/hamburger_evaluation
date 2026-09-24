@@ -1,25 +1,132 @@
 .content {
-  max-width: 44rem;
-  display: grid;
-  gap: 2rem;
-  line-height: 1.8;
+  --about-gold: #916c0a;
+  --about-paper: #fff8e5;
+  padding-bottom: 3rem;
+  line-height: 2;
 }
 
-.content h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.25rem;
-}
-
+.content h1,
+.content h2,
+.content h3,
 .content p {
   margin: 0;
 }
 
-.lead {
-  font-size: 1.125rem;
+.hero {
+  padding: clamp(3rem, 7vw, 6rem) 1.25rem;
+  background: var(--about-paper);
+  text-align: center;
+}
+
+.eyebrow {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--about-gold);
+}
+
+.brand {
+  display: flex;
+  justify-content: center;
+  margin: 2rem 0;
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  line-height: 1;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3.75rem);
+  line-height: 1.5;
+  letter-spacing: 0.025em;
+  white-space: pre-line;
+  text-wrap: balance;
+}
+
+.hero .lead {
+  margin-top: 1.75rem;
+  white-space: pre-line;
+}
+
+.message,
+.values,
+.invitation {
+  width: min(44rem, 100%);
+  margin: clamp(4rem, 9vw, 7rem) auto 0;
+}
+
+.message h2,
+.valuesTitle,
+.invitation h2 {
+  font-size: clamp(1.375rem, 3vw, 1.875rem);
+  line-height: 1.6;
+}
+
+.message p {
+  margin-top: 1.75rem;
+}
+
+.message .emphasis {
+  margin-top: 3rem;
+  color: var(--about-gold);
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-weight: 700;
+  white-space: pre-line;
+}
+
+.valuesTitle {
+  padding-bottom: 1.5rem;
+}
+
+.value {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  gap: 1.5rem;
+  padding: 2rem 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.number {
+  color: var(--about-gold);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.value h3 {
+  font-size: 1.25rem;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.invitation {
+  text-align: center;
+  padding-top: 3rem;
+  border-top: 2px solid var(--about-gold);
+}
+
+.invitation p {
+  margin: 1.5rem 0 2rem;
 }
 
 .actions {
   display: flex;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+@media (max-width: 40rem) {
+  .value {
+    grid-template-columns: 2.5rem 1fr;
+    gap: 0.75rem;
+  }
+
+  .message,
+  .values,
+  .invitation {
+    width: calc(100% - 1rem);
+  }
+
+  .brand svg {
+    width: 3rem;
+    height: auto;
+  }
 }
