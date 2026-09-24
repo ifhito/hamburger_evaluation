@@ -197,7 +197,7 @@ Neon は普段の API であれば pooler 用 URL で動きました。ただ、
 
 **Amazon S3**(AWS・米)は、S3 API の本家です。2025 年 7 月以降の新規は「6 か月・最大 $200 のクレジット」方式で、以降は保存 $0.0265/GB 月、インターネットへの転送 $0.09/GB です。実績と周辺エコシステムを最優先する人であれば、候補の一つになりそうですが、転送の単価が重いです。
 
-**Google Cloud Storage**(Google)は、XML API が S3 互換ツールと相互運用できます。Always Free は米国リージョン限定で保存 5GB、北米からの転送 100GB/月です。米国リージョンでよく、転送 100GB/月に収まる小規模な用途なら実質無料にできます。
+**Google Cloud Storage**(Google)は、XML API が S3 互換ツールと相互運用できます。Always Free は米国リージョン限定で保存 5GB、北米からの転送 100GB/月です。日本向けの配信では無料転送の条件から外れるため、転送量を最も重く見た今回の4社には入れませんでした。
 
 **Azure Blob Storage**(Microsoft)は、Azure のオブジェクトストレージで、独自 REST API です。無料アカウントは $200 クレジット(30 日)+ 12 か月の無料枠で、カードが必須です。すでに Azure に寄せていて、Azure SDK で書くことに抵抗がない人とは相性がよさそうです。
 
@@ -313,7 +313,7 @@ Scaleway は利用地域、Elastic Email は到達率に関する評価、Loops 
 
 **Scaleway Transactional Email**(Scaleway・仏)は、欧州クラウドのトランザクションメールです。300 通が無料で以降 0.25 ユーロ/1,000 通ですが、支払い方法の登録とドメイン設定が必要です。EU 内にデータを置きたい人であれば、候補の一つになりそうです。
 
-**Elastic Email**(Elastic Email Inc.)は、API と SMTP リレーの両方を提供します。無料枠は 3,000 通/月・100 通/日でカード不要、有料は $19/月からです。到達率の評判が割れるので外しましたが、無料枠の通数を多めに取りたい人には選択肢になりそうです。
+**Elastic Email**(Elastic Email Inc.)は、API と SMTP リレーの両方を提供します。無料枠は 3,000 通/月・100 通/日でカード不要、有料は $19/月からです。無料枠は今回の用途に十分ですが、到達率について評価が分かれており、4社へ絞る段階で外しました。
 
 **Loops**(Astrodon・米)は、SaaS 向けのマーケティング + トランザクションメールで、送信は API のみで SMTP はありません。無料は直近 30 日で 4,000 通まででカード不要です。ニュースレターとトランザクションを 1 つの管理画面でまとめたい SaaS とは相性がよさそうです。
 
@@ -392,7 +392,7 @@ Resend の共有ドメインは送信先が限られていました。開発中�
 
 **Amazon ECS(Fargate)**(AWS・米)は、コンテナイメージをサーバーレスの Fargate で動かすオーケストレーションです。Fargate に無料枠はなく、新規アカウントのクレジット(最大 $200、6 か月)を使います。登録に支払い方法が必須です。将来 RDS・S3・IAM と組む前提で、ALB 込みの月額と IAM 設計を受け入れられる人であれば、候補の一つになりそうです。
 
-**Azure Container Apps**(Microsoft・米)は、コンテナイメージを KEDA でゼロまでスケールするサーバーレスで動かします。Japan East があります。常時無料枠は毎月 18 万 vCPU 秒・36 万 GiB 秒・200 万リクエストと Cloud Run と同規模ですが、登録にカード(プリペイド不可)と電話番号が必須です。カード登録に抵抗がなく、東日本でゼロスケール前提の小規模 API を実質無料で動かしたい人とは相性がよさそうです。Cloud Run と比較する候補としては、かなり有力だと思います。
+**Azure Container Apps**(Microsoft・米)は、コンテナイメージを KEDA でゼロまでスケールするサーバーレスで動かします。Japan East があります。常時無料枠は毎月 18 万 vCPU 秒・36 万 GiB 秒・200 万リクエストと Cloud Run と同規模ですが、登録にカード(プリペイド不可)と電話番号が必須です。今回の構成でも有力な候補ですが、東京でゼロスケールするコンテナ基盤という比較軸が Cloud Run と重なるため、4社には入れませんでした。
 
 ### その中から選んだ 4 つ
 
@@ -476,8 +476,9 @@ Cloud Run を scale-to-zero にすると、API と同じプロセスで動かし
 | 区分 | サービス |
 |---|---|
 | **選んだ 4 つ** | **Cloudflare Workers、Render Static、Netlify、Vercel** |
-| `/api` のリライトができない | GitHub Pages、Firebase Hosting(Cloud Functions 先限定)、Surge、GitLab / Codeberg Pages、Azure Static Web Apps |
-| 無料枠がない、または期限付き | S3 + CloudFront、Amplify、Bunny、DigitalOcean App Platform(帯域 1GB/月) |
+| `/api` のリライトができない | GitHub Pages、Surge、GitLab / Codeberg Pages、Azure Static Web Apps |
+| 条件付きで今回の構成が成立する | Firebase Hosting(転送先が Cloud Run の場合) |
+| 無料枠がない、期限付き、または構成が重い | S3 + CloudFront、Amplify、Bunny、DigitalOcean App Platform(帯域 1GB/月) |
 | 静的配信にコンテナは過剰 | Fly.io / Railway に nginx、Koyeb / Zeabur |
 | 目的が違う | Coolify / Dokploy(セルフホスト)、IPFS |
 
@@ -489,7 +490,11 @@ Cloud Run を scale-to-zero にすると、API と同じプロセスで動かし
 
 **GitHub Pages**(GitHub・米)は、リポジトリから静的サイトを公開するホスティングです。リライト機能はなく、静的配信だけです。無料でサイト 1GB、帯域 100GB/月のソフト上限があり、EC や SaaS の商用ホスティングは禁止されています。OSS のドキュメントやポートフォリオで使いやすそうです。
 
-**Firebase Hosting**(Google・米)は、CDN 付きの静的 / SPA ホスティングです。rewrites の宛先はローカルファイル・Cloud Functions・Cloud Run に限られます。Spark は保存 10GB、転送 360MB/日でカード不要です。API も Cloud Run に置くなら、`/api/**` を同一オリジンで rewrite できます。今回の構成なら実は成立する選択肢です。
+**条件付きで今回の構成が成立する**
+
+**Firebase Hosting**(Google・米)は、CDN 付きの静的 / SPA ホスティングです。rewrites の宛先はローカルファイル・Cloud Functions・Cloud Run に限られます。Spark は保存 10GB、転送 360MB/日でカード不要です。最終的に API は Cloud Run を選んだため、`/api/**` を同一オリジンで rewrite でき、今回の構成でも成立します。任意の外部 API へ転送できる4社を先に選んだため検証対象から外れていましたが、最終構成を基準にするなら候補へ入れるべきでした。
+
+**外部 URL へのリライトができない（続き）**
 
 **Surge.sh**(Chloi Inc.)は、CLI 1 コマンドで公開する静的ホスティングです。外部へのプロキシはドキュメントに記載がなく確認できませんでした。無料プランは公開無制限・カスタムドメイン可で、Professional は $30/月です。とにかく速く試作を公開したい人であれば、候補の一つになりそうです。
 
@@ -503,7 +508,7 @@ Cloud Run を scale-to-zero にすると、API と同じプロセスで動かし
 
 **リライトはできるが、無料枠がないか期限付き**
 
-機能上は今回の構成を実現できます。ただし、一定期間後の課金や決済手段の登録が前提になるため、長期間無料という条件では4社に入りませんでした。
+機能上は今回の構成を実現できます。Amplify と Bunny は一定期間後に有料になり、DigitalOcean は無料転送量が小さいため外しました。S3 + CloudFront は無料枠でも成立しますが、S3、CloudFront、ルーティングを別々に設定する必要があり、今回選んだ Cloudflare Workers より構成が重くなるため4社には入れませんでした。
 
 **Amazon S3 + CloudFront**(AWS・米)は、S3 の静的ファイルを CloudFront で配信する構成です。CloudFront は任意の HTTP(S) サーバーをオリジンにでき、パス別に振り分けられるので、`/api/*` のプロキシはできます。CloudFront の Free プランは転送 100GB・S3 5GB で超過課金なしですが、AWS アカウント自体に決済手段の登録が要ります。AWS に慣れていて、IaC で CDN・WAF まで自分で組みたい人であれば、候補の一つになりそうです。
 
