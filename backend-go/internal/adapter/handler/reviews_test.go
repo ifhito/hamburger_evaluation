@@ -379,6 +379,24 @@ func TestCreateReview(t *testing.T) {
 		}
 	})
 
+	t.Run("comment を省略しても 201 が返り、評価だけのレビューになる", func(t *testing.T) {
+		router, aliceAuth, _, _ := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
+		body := fmt.Sprintf(`{"review":{"rating":4,"comment":"","shop_id":%q,"burger_id":%q}}`, activeShopID, cheeseBurgerID)
+		rec := do(router, http.MethodPost, "/reviews", body, aliceAuth)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusCreated, rec.Body)
+		}
+		var got struct {
+			Comment *string `json:"comment"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("response を読めない: %v", err)
+		}
+		if got.Comment == nil || *got.Comment != "" {
+			t.Errorf("comment = %v, want 空文字", got.Comment)
+		}
+	})
+
 	t.Run("投稿できるかのルール: 却下済みのショップは全員 403、承認待ちのショップは作成者と管理者だけが投稿できる", func(t *testing.T) {
 		router, aliceAuth, bobAuth, adminAuth := newReviewsRouter(t, seedReviewWorld(uid.N(1)))
 		post := func(auth string, shopID string) *doResult {
@@ -518,9 +536,10 @@ func TestCreateReview(t *testing.T) {
 		}{
 			{name: "rating が 0 だと検証エラーになる", rating: 0, comment: "ok", wantBody: `{"errors":["Rating must be in 1..5"]}`},
 			{name: "rating が 6 だと検証エラーになる", rating: 6, comment: "ok", wantBody: `{"errors":["Rating must be in 1..5"]}`},
-			{name: "comment が空だと検証エラーになる", rating: 3, comment: "", wantBody: `{"errors":["Comment can't be blank"]}`},
-			{name: "両方不正な場合は rating のメッセージが先に来る", rating: 0, comment: "",
-				wantBody: `{"errors":["Rating must be in 1..5","Comment can't be blank"]}`},
+			{name: "comment が長すぎると検証エラーになる", rating: 3, comment: strings.Repeat("a", domain.MaxCommentChars+1),
+				wantBody: `{"errors":["Comment is too long (maximum is 2000 characters)"]}`},
+			{name: "両方不正な場合は rating のメッセージが先に来る", rating: 0, comment: strings.Repeat("a", domain.MaxCommentChars+1),
+				wantBody: `{"errors":["Rating must be in 1..5","Comment is too long (maximum is 2000 characters)"]}`},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -884,12 +903,12 @@ func TestUpdateReview(t *testing.T) {
 		}
 	})
 
-	t.Run("不正な内容での編集は 422 になる", func(t *testing.T) {
+	t.Run("不正な内容での編集は 422 になる(comment は空でもよい)", func(t *testing.T) {
 		rec := do(router, http.MethodPut, path, `{"review":{"rating":6,"comment":""}}`, aliceAuth)
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
 		}
-		if got, want := rec.Body.String(), `{"errors":["Rating must be in 1..5","Comment can't be blank"]}`; got != want {
+		if got, want := rec.Body.String(), `{"errors":["Rating must be in 1..5"]}`; got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
 	})

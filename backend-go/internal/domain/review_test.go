@@ -10,9 +10,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 )
 
-// TestValidateReviewContent は Rails parity の validation メッセージを固定する。
-// 1..5 の範囲外の rating と空の comment は full message
-// そのままで失敗し、両方が失敗する場合は rating のメッセージが先に来る。
+// TestValidateReviewContent は validation メッセージを固定する。1..5 の範囲外の rating は
+// full message そのままで失敗し、comment は評価だけのレビューを許すため、空・空白のみでも有効である。
 func TestValidateReviewContent(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -26,12 +25,8 @@ func TestValidateReviewContent(t *testing.T) {
 		{name: "rating 0 は検証エラーになる", rating: 0, comment: "ok", want: []string{"Rating must be in 1..5"}},
 		{name: "rating 6 は検証エラーになる", rating: 6, comment: "ok", want: []string{"Rating must be in 1..5"}},
 		{name: "負の rating は検証エラーになる", rating: -1, comment: "ok", want: []string{"Rating must be in 1..5"}},
-		{name: "空の comment は検証エラーになる", rating: 3, comment: "", want: []string{"Comment can't be blank"}},
-		{name: "空白のみの comment は検証エラーになる", rating: 3, comment: " \t\n", want: []string{"Comment can't be blank"}},
-		{
-			name: "両方が不正なら rating のメッセージが先に来る", rating: 0, comment: "",
-			want: []string{"Rating must be in 1..5", "Comment can't be blank"},
-		},
+		{name: "空の comment は評価だけのレビューとして有効", rating: 3, comment: ""},
+		{name: "空白のみの comment も有効(trim して blank 判定しない)", rating: 3, comment: " \t\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -91,6 +86,16 @@ func TestNewReview(t *testing.T) {
 		}
 		if review.Comment == nil || *review.Comment != " Tasty " {
 			t.Errorf("comment = %v, want verbatim \" Tasty \"", review.Comment)
+		}
+	})
+
+	t.Run("空の comment でも評価だけの review を作れる", func(t *testing.T) {
+		review, err := domain.NewReview(4, "", uid.N(7), uid.N(9))
+		if err != nil {
+			t.Fatalf("NewReview returned error: %v", err)
+		}
+		if review.Comment == nil || *review.Comment != "" {
+			t.Errorf("comment = %v, want empty string", review.Comment)
 		}
 	})
 

@@ -37,18 +37,16 @@ const (
 // （実運用に入ったあとは、新しいマイグレーションで直す）。
 const MaxCommentChars = 2000
 
-// ValidateReviewContent は、書き込み可能な review の属性に対して Rails の
-// validation を強制する。rating は MinRating..MaxRating の整数でなければならず、comment は
-// 存在しなければならない。失敗した場合は、文言(キー + 引数。英語は Rails の full message そのまま)を
-// *ValidationError に入れて返し、rating のメッセージが先に来る。
+// ValidateReviewContent は、書き込み可能な review の属性を検証する。rating は
+// MinRating..MaxRating の整数でなければならず、comment は空でもよいが MaxCommentChars 文字を
+// 超えてはならない。失敗した場合は、文言(キー + 引数)を *ValidationError に入れて返し、
+// rating のメッセージが先に来る。
 func ValidateReviewContent(rating int, comment string) error {
 	var issues []Message
 	if rating < MinRating || rating > MaxRating {
 		issues = append(issues, Msg(keyReviewRatingRange, MinRating, MaxRating))
 	}
-	if strings.TrimSpace(comment) == "" {
-		issues = append(issues, Msg(keyCommentBlank))
-	} else if exceedsChars(comment, MaxCommentChars) {
+	if exceedsChars(comment, MaxCommentChars) {
 		issues = append(issues, Msg(keyCommentTooLong, MaxCommentChars))
 	}
 	if len(issues) > 0 {
@@ -79,9 +77,8 @@ func ValidateBurgerName(name string) error {
 }
 
 // NewReview は、author が burger に対して投稿する validation 済みの新しい
-// review を組み立てる。comment は渡された値のまま保存され（存在のみが
-// validate される）、ユーザーのテキストを決して trim しない Rails に合わせて
-// いる。
+// review を組み立てる。comment は渡された値のまま保存され（空でもよく、
+// trim もしない）、文字数の上限だけが validate される。
 func NewReview(rating int, comment string, authorID string, burgerID string) (Review, error) {
 	if err := ValidateReviewContent(rating, comment); err != nil {
 		return Review{}, err

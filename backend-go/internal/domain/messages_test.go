@@ -41,14 +41,14 @@ func TestMessageTextFollowsTheLanguage(t *testing.T) {
 }
 
 func TestValidationErrorTextsFollowTheLanguage(t *testing.T) {
-	err := NewValidationError(Msg(keyReviewRatingRange, MinRating, MaxRating), Msg(keyCommentBlank))
-	if want := []string{"Rating must be in 1..5", "Comment can't be blank"}; !reflect.DeepEqual(err.Texts(LangEN), want) {
+	err := NewValidationError(Msg(keyReviewRatingRange, MinRating, MaxRating), Msg(keyCommentTooLong, 2000))
+	if want := []string{"Rating must be in 1..5", "Comment is too long (maximum is 2000 characters)"}; !reflect.DeepEqual(err.Texts(LangEN), want) {
 		t.Errorf("Texts(en) = %v, want %v", err.Texts(LangEN), want)
 	}
-	if want := []string{"評価は 1〜5 の整数で指定してください", "コメントを入力してください"}; !reflect.DeepEqual(err.Texts(LangJA), want) {
+	if want := []string{"評価は 1〜5 の整数で指定してください", "コメントが長すぎます(最大 2000 文字)"}; !reflect.DeepEqual(err.Texts(LangJA), want) {
 		t.Errorf("Texts(ja) = %v, want %v", err.Texts(LangJA), want)
 	}
-	if want := "validation failed: Rating must be in 1..5, Comment can't be blank"; err.Error() != want {
+	if want := "validation failed: Rating must be in 1..5, Comment is too long (maximum is 2000 characters)"; err.Error() != want {
 		t.Errorf("Error() = %q, want %q", err.Error(), want)
 	}
 }

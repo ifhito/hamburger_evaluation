@@ -81,7 +81,8 @@ func TestTextLimitsCountCodePoints(t *testing.T) {
 	}
 }
 
-// TestTextLimitsKeepExistingRules は、上限の追加が、空・空白のみ・複数の違反の並びを変えないことを固定する。
+// TestTextLimitsKeepExistingRules は、上限の追加が、空・複数の違反の並びを変えないこと(コメントは
+// 空・空白のみでも有効であること)を固定する。
 func TestTextLimitsKeepExistingRules(t *testing.T) {
 	tooLongComment := strings.Repeat("a", MaxCommentChars+1)
 	tests := []struct {
@@ -91,7 +92,7 @@ func TestTextLimitsKeepExistingRules(t *testing.T) {
 	}{
 		{"rating の違反はコメントの上限超過より先に並ぶ", errMessages(ValidateReviewContent(6, tooLongComment)),
 			[]string{"Rating must be in 1..5", "Comment is too long (maximum is 2000 characters)"}},
-		{"空白のコメントは blank だけ(上限は見ない)", errMessages(ValidateReviewContent(3, " ")), []string{"Comment can't be blank"}},
+		{"空白のみのコメントは有効(空欄のレビューを許す)", errMessages(ValidateReviewContent(3, " ")), nil},
 		{"空のユーザー名は blank だけ", ValidateUsername(""), []string{"Username can't be blank"}},
 		{"空の email は blank だけ", ValidateEmail(""), []string{"Email can't be blank"}},
 		{"note なしの reject は有効", errMessages(ValidateModerationNote(nil)), nil},

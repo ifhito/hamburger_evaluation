@@ -94,7 +94,7 @@ export default function ReviewDetailPage() {
               </div>
             </div>
             {ratingRange === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingRange.max} size="md" variant="stepped" />}
-            <p className={styles.comment}>{review.comment}</p>
+            {review.comment && <p className={styles.comment}>{review.comment}</p>}
             {review.canEdit && (
               <div className={styles.actions}>
                 <LinkButton to={`/reviews/${review.id}/edit`}>{t("reviews.detail.edit")}</LinkButton>

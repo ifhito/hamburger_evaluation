@@ -69,6 +69,12 @@ describe("ReviewDetailPage の状態の表示", () => {
     expect(link?.textContent).toBe("Cheeseburger");
     expect(link?.getAttribute("href")).toBe("/burgers/3");
   });
+
+  it("comment が空のときは、空のコメント欄を出さない(評価だけのレビュー)", async () => {
+    state.review = { ...baseReview, comment: "" };
+    const page = await show();
+    expect(page.querySelector('[class*="comment"]')).toBeNull();
+  });
 });
 
 describe("ReviewDetailPage の「編集」「削除」(can_edit)", () => {

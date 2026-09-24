@@ -27,7 +27,7 @@ export function ReviewListCard({ review, ratingMax }: { review: Review; ratingMa
             {formatDate(review.createdAt)}
           </time>
         </div>
-        <p className={styles.comment}>{review.comment}</p>
+        {review.comment && <p className={styles.comment}>{review.comment}</p>}
         {review.burger && <p className={styles.target}>{review.burger.name}</p>}
         <div className={styles.foot}>
           <span>{username}</span>
