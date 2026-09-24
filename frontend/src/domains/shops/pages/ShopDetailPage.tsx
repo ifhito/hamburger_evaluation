@@ -12,6 +12,7 @@ import { EmptyState, Loading, NotFound } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
 import { ShopReviewCard } from "../components/ShopReviewCard";
 import styles from "./shopDetail.module.css";
+import textLinkStyles from "../../../components/ui/textLink.module.css";
 
 // ショップ詳細(design/redesign/shop-detail.html)。「レビューを書く」を出すかは backend が返す can_review だけで
 // 決める(閲覧者が誰かを frontend が判断しない)。審査待ち・却下の札と理由は、返された状態をそのまま出す。
@@ -65,6 +66,11 @@ export default function ShopDetailPage() {
           {shop.status !== "active" && <Badge>{t(`shops.statusBadge.${shop.status}`)}</Badge>}
           {shop.closedAt && <Badge>{t("shops.closedBadge")}</Badge>}
           <h1 className={styles.name}>{shop.name}</h1>
+          {shop.mapUrl && (
+            <a href={shop.mapUrl} target="_blank" rel="noopener noreferrer" className={textLinkStyles.textLink}>
+              {t("shops.detail.viewOnMap")}
+            </a>
+          )}
         </section>
 
         {shop.status === "pending" && (

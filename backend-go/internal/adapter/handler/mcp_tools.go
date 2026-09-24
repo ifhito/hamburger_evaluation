@@ -342,11 +342,12 @@ func (t *mcpTools) deleteReview(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 type submitShopInput struct {
-	Name string `json:"name" jsonschema:"申請するショップの名前(必須)"`
+	Name   string `json:"name" jsonschema:"申請するショップの名前(必須)"`
+	MapURL string `json:"map_url,omitempty" jsonschema:"地図へのリンク(任意。http または https の URL)"`
 }
 
 func (t *mcpTools) submitShop(ctx context.Context, _ *mcp.CallToolRequest, in submitShopInput) (*mcp.CallToolResult, any, error) {
-	detail, err := t.shops.Create(ctx, t.viewer, in.Name)
+	detail, err := t.shops.Create(ctx, t.viewer, in.Name, in.MapURL)
 	if err != nil {
 		return t.toolError("submit_shop", err)
 	}

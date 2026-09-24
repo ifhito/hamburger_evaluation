@@ -13,6 +13,7 @@ const shop = (over: Partial<Shop>): Shop => ({
   photoUrl: null,
   averageRating: null,
   reviewCount: 0,
+  mapUrl: null,
   closedAt: null,
   ...over,
 });

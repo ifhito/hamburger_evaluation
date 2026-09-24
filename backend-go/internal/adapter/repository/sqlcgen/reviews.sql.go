@@ -253,7 +253,7 @@ func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsPa
 }
 
 const listReviewShops = `-- name: ListReviewShops :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at
 FROM reviews r
 JOIN shops_burgers sb ON sb.burger_id = r.burger_id
 JOIN shops s ON s.id = sb.shop_id
@@ -266,6 +266,7 @@ type ListReviewShopsRow struct {
 	Name           string
 	Status         int16
 	ModerationNote pgtype.Text
+	MapURL         pgtype.Text
 	CreatorID      *string
 	ClosedAt       pgtype.Timestamptz
 }
@@ -288,6 +289,7 @@ func (q *Queries) ListReviewShops(ctx context.Context, id string) ([]ListReviewS
 			&i.Name,
 			&i.Status,
 			&i.ModerationNote,
+			&i.MapURL,
 			&i.CreatorID,
 			&i.ClosedAt,
 		); err != nil {

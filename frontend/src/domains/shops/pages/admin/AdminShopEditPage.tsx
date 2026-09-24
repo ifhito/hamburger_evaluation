@@ -31,7 +31,7 @@ export default function AdminShopEditPage() {
   // 参照が変わる。依存を shop?.id(変わらない識別子)にして、同じショップの再取得では reset せず、入力中の
   // 内容(打ちかけの新しい名前)を、無言で消さないようにする。
   useEffect(() => {
-    if (shop) reset({ name: shop.name });
+    if (shop) reset({ name: shop.name, mapUrl: shop.mapUrl ?? "" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shop?.id, reset]);
 
@@ -67,6 +67,14 @@ export default function AdminShopEditPage() {
               type="text"
               counter={{ value: watch("name"), max: textLimits?.shopNameMaxChars }}
               {...register("name")}
+            />
+            <TextField
+              id="mapUrl"
+              label={t("shops.new.mapUrl")}
+              type="url"
+              optional={t("shops.admin.optional")}
+              placeholder={t("shops.new.mapUrlPlaceholder")}
+              {...register("mapUrl")}
             />
             <div className={styles.actions}>
               <Button type="submit" wide isLoading={isSubmitting}>

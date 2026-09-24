@@ -25,6 +25,7 @@ const baseShop: ShopDetail = {
   photoUrl: null,
   averageRating: null,
   reviewCount: 0,
+  mapUrl: null,
   closedAt: null,
   moderationNote: null,
   creator: null,
@@ -86,6 +87,24 @@ describe("ShopDetailPage の状態の表示", () => {
   it("closedAt が null のときは「Closed」の札を出さない", async () => {
     const page = await show();
     expect(page.textContent).not.toContain("Closed");
+  });
+});
+
+describe("ShopDetailPage の地図リンク(map_url)", () => {
+  it("map_url があるときは、新しいタブで安全に開くリンクを出す", async () => {
+    state.shop = { ...baseShop, mapUrl: "https://maps.example.com/shop" };
+    const page = await show();
+    const link = page.querySelector<HTMLAnchorElement>('a[href="https://maps.example.com/shop"]');
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toBe("View on map");
+    expect(link?.target).toBe("_blank");
+    expect(link?.rel).toBe("noopener noreferrer");
+  });
+
+  it("map_url が null のときは、リンクを出さない", async () => {
+    state.shop = { ...baseShop, mapUrl: null };
+    const page = await show();
+    expect(page.textContent).not.toContain("View on map");
   });
 });
 

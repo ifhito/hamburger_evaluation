@@ -3,6 +3,7 @@ package domain_test
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,7 +94,7 @@ func TestShopCanBeReviewedBy(t *testing.T) {
 // ホワイトスペースのみの名前は、Rails のメッセージそのままで失敗する。
 func TestNewShopSubmission(t *testing.T) {
 	t.Run("有効な名前なら creator 付きの pending な shop になる", func(t *testing.T) {
-		shop, err := domain.NewShopSubmission("New Shack", uid.N(7))
+		shop, err := domain.NewShopSubmission("New Shack", uid.N(7), "")
 		if err != nil {
 			t.Fatalf("NewShopSubmission returned error: %v", err)
 		}
@@ -110,7 +111,7 @@ func TestNewShopSubmission(t *testing.T) {
 
 	for _, name := range []string{"", "   ", "\t\n"} {
 		t.Run("空または空白のみの名前 "+name+" は検証エラーになる", func(t *testing.T) {
-			_, err := domain.NewShopSubmission(name, uid.N(7))
+			_, err := domain.NewShopSubmission(name, uid.N(7), "")
 			var vErr *domain.ValidationError
 			if !errors.As(err, &vErr) {
 				t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -118,6 +119,44 @@ func TestNewShopSubmission(t *testing.T) {
 			want := []string{"Name can't be blank"}
 			if !reflect.DeepEqual(vErr.Texts(domain.LangEN), want) {
 				t.Errorf("messages = %v, want %v", vErr.Texts(domain.LangEN), want)
+			}
+		})
+	}
+}
+
+func TestValidateMapURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		want    *string
+		wantErr string
+	}{
+		{name: "空文字は地図リンクなしとして受け付ける", raw: ""},
+		{name: "空白だけなら地図リンクなしとして受け付ける", raw: "  \t"},
+		{name: "http の地図リンクを受け付ける", raw: "http://example.com/map", want: ptr("http://example.com/map")},
+		{name: "https の地図リンクは前後の空白を除いて受け付ける", raw: "  https://maps.example/place  ", want: ptr("https://maps.example/place")},
+		{name: "javascript scheme は拒否する", raw: "javascript:alert(1)", wantErr: "Map url must be a valid http or https URL"},
+		{name: "host のない URL は拒否する", raw: "https:///place", wantErr: "Map url must be a valid http or https URL"},
+		{name: "上限を超える URL は拒否する", raw: "https://example.com/" + strings.Repeat("a", domain.MaxMapURLChars), wantErr: "Map url is too long (maximum is 2048 characters)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := domain.ValidateMapURL(tt.raw)
+			if tt.wantErr != "" {
+				var vErr *domain.ValidationError
+				if !errors.As(err, &vErr) {
+					t.Fatalf("error = %v, want *domain.ValidationError", err)
+				}
+				if texts := vErr.Texts(domain.LangEN); len(texts) != 1 || texts[0] != tt.wantErr {
+					t.Fatalf("messages = %v, want [%q]", texts, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidateMapURL returned error: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("MapURL = %v, want %v", got, tt.want)
 			}
 		})
 	}

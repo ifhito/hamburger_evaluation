@@ -31,6 +31,7 @@ var notExposedInMeta = map[string]string{
 	"MaxOAuthURILength":           "外部のアプリが自分で知らせる URL の長さの検査で、利用者の入力欄ではない",
 	"MaxClientMetadataBytes":      "外部のアプリの説明ファイルを取り込むときの大きさの検査で、利用者の入力欄ではない",
 	"MaxPerPage":                  "一覧の 1 ページの件数の上限。frontend は per_page を送らず、続きがあるかを X-Has-More で知るだけなので、値を知る必要がない",
+	"MaxMapURLChars":              "地図リンクの入力欄には文字数のカウンターを付けない。長すぎるときは、backend の 422 の文言で伝える",
 }
 
 // domainLimitConstants は、domain パッケージ(テストを除く)で宣言された、Max / Min で始まる

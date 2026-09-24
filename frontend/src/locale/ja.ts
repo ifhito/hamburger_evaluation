@@ -325,6 +325,7 @@ const ja = {
       pendingNoticeBody: "いまは、あなたと管理者だけが見られます。審査中でも、レビューを書けます。",
       rejectedNoticeTitle: "このショップは、却下されました",
       rejectedNoticeReason: "理由: {{reason}}",
+      viewOnMap: "地図で見る",
     },
     new: {
       backToShops: "← ショップ一覧に戻る",
@@ -332,6 +333,8 @@ const ja = {
       lead: "行ったお店が見つからないときは、ここから追加できます。",
       name: "ショップの名前",
       namePlaceholder: "例: Shake Shack 渋谷",
+      mapUrl: "地図リンク",
+      mapUrlPlaceholder: "例: Google マップの共有リンク",
       pendingNotice:
         "新しいショップは、運営が確認してから、公開されます。審査中でも、自分で追加したショップには、レビューを書けます。",
       submit: "審査に出す",

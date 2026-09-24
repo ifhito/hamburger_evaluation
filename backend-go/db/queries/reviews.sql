@@ -124,7 +124,7 @@ RETURNING burger_id;
 -- review の詳細で、閲覧者にとってのショップと、そこにレビューを書けるか(can_review)を、domain.ReviewShopFor が
 -- 決めるために使う。どの shop を代表にするかは、ここでは決めない。存在しない review・削除済みの review・
 -- shop に紐づかない burger の review は、空の結果になる。
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at
 FROM reviews r
 JOIN shops_burgers sb ON sb.burger_id = r.burger_id
 JOIN shops s ON s.id = sb.shop_id

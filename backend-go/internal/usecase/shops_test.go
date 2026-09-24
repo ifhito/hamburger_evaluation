@@ -57,7 +57,7 @@ func (f *fakeShopQuery) ListShopsForModeration(ctx context.Context, status *doma
 // fail-loud する。
 type fakeShopRepo struct {
 	createShop         func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
-	updateShopName     func(ctx context.Context, id string, name string) (domain.Shop, error)
+	updateShopName     func(ctx context.Context, id string, name string, mapURL *string) (domain.Shop, error)
 	updateShopStatus   func(ctx context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error)
 	updateShopClosedAt func(ctx context.Context, id string, closedAt *time.Time) (domain.Shop, error)
 }
@@ -69,11 +69,11 @@ func (f *fakeShopRepo) CreateShop(ctx context.Context, shop domain.Shop) (domain
 	return f.createShop(ctx, shop)
 }
 
-func (f *fakeShopRepo) UpdateShopName(ctx context.Context, id string, name string) (domain.Shop, error) {
+func (f *fakeShopRepo) UpdateShopName(ctx context.Context, id string, name string, mapURL *string) (domain.Shop, error) {
 	if f.updateShopName == nil {
 		panic("unexpected UpdateShopName call")
 	}
-	return f.updateShopName(ctx, id, name)
+	return f.updateShopName(ctx, id, name, mapURL)
 }
 
 func (f *fakeShopRepo) UpdateShopStatus(ctx context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error) {
@@ -228,7 +228,7 @@ func TestShopsCreate(t *testing.T) {
 				return shop, nil
 			},
 		}
-		got, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack")
+		got, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", "")
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -243,8 +243,32 @@ func TestShopsCreate(t *testing.T) {
 		}
 	})
 
+	t.Run("有効な map_url を渡すと、trim された値が保存される", func(t *testing.T) {
+		repo := &fakeShopRepo{
+			createShop: func(_ context.Context, shop domain.Shop) (domain.Shop, error) {
+				shop.ID = uid.N(42)
+				return shop, nil
+			},
+		}
+		got, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", "  https://maps.example.com/shack  ")
+		if err != nil {
+			t.Fatalf("Create returned error: %v", err)
+		}
+		if got.MapURL == nil || *got.MapURL != "https://maps.example.com/shack" {
+			t.Errorf("MapURL = %v, want https://maps.example.com/shack", got.MapURL)
+		}
+	})
+
 	t.Run("空白の name は repository を呼ばずに ValidationError を返す", func(t *testing.T) {
-		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).Create(context.Background(), alice, "   ")
+		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).Create(context.Background(), alice, "   ", "")
+		var vErr *domain.ValidationError
+		if !errors.As(err, &vErr) {
+			t.Fatalf("error = %v, want *domain.ValidationError", err)
+		}
+	})
+
+	t.Run("http/https でない map_url は repository を呼ばずに ValidationError を返す", func(t *testing.T) {
+		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).Create(context.Background(), alice, "New Shack", "javascript:alert(1)")
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -257,7 +281,7 @@ func TestShopsCreate(t *testing.T) {
 				return domain.Shop{}, io.ErrUnexpectedEOF
 			},
 		}
-		if _, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack"); !errors.Is(err, io.ErrUnexpectedEOF) {
+		if _, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", ""); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("Create error = %v, want %v", err, io.ErrUnexpectedEOF)
 		}
 	})
@@ -276,7 +300,7 @@ func TestShopsAdminForbidden(t *testing.T) {
 		call func() error
 	}{
 		{name: "AdminList は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminList(ctx, alice, ""); return err }},
-		{name: "AdminUpdateName は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminUpdateName(ctx, alice, uid.N(1), "x"); return err }},
+		{name: "AdminUpdateName は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminUpdateName(ctx, alice, uid.N(1), "x", ""); return err }},
 		{name: "Approve は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Approve(ctx, alice, uid.N(1)); return err }},
 		{name: "Reject は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Reject(ctx, alice, uid.N(1), nil); return err }},
 		{name: "Close は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Close(ctx, alice, uid.N(1)); return err }},
@@ -413,34 +437,64 @@ func TestShopsModeration(t *testing.T) {
 		}
 	})
 
-	t.Run("AdminUpdateName は name だけを永続化する", func(t *testing.T) {
+	t.Run("AdminUpdateName は name と map_url を永続化する", func(t *testing.T) {
 		var gotID string
 		var gotName string
+		var gotMapURL *string
 		// updateShopStatus は未設定のままなので、status/note に触れる rename が
 		// あればテストが panic する。
 		repo := &fakeShopRepo{
-			updateShopName: func(_ context.Context, id string, name string) (domain.Shop, error) {
-				gotID, gotName = id, name
+			updateShopName: func(_ context.Context, id string, name string, mapURL *string) (domain.Shop, error) {
+				gotID, gotName, gotMapURL = id, name, mapURL
 				stored := rejected.Shop
 				stored.Name = name
+				stored.MapURL = mapURL
 				return stored, nil
 			},
 		}
-		got, err := newShops(rejectedQuery, repo).AdminUpdateName(ctx, admin, rejected.ID, "Renamed")
+		got, err := newShops(rejectedQuery, repo).AdminUpdateName(ctx, admin, rejected.ID, "Renamed", "https://maps.example.com/renamed")
 		if err != nil {
 			t.Fatalf("AdminUpdateName returned error: %v", err)
 		}
-		if gotID != rejected.ID || gotName != "Renamed" {
-			t.Errorf("name write = (%s, %q), want (%s, Renamed)", gotID, gotName, rejected.ID)
+		if gotID != rejected.ID || gotName != "Renamed" || gotMapURL == nil || *gotMapURL != "https://maps.example.com/renamed" {
+			t.Errorf("name/map_url write = (%s, %q, %v), want (%s, Renamed, https://maps.example.com/renamed)", gotID, gotName, gotMapURL, rejected.ID)
 		}
-		if got.Name != "Renamed" || got.Status != rejected.Status {
-			t.Errorf("detail = %+v, want renamed with status unchanged", got)
+		if got.Name != "Renamed" || got.Status != rejected.Status || got.MapURL == nil || *got.MapURL != "https://maps.example.com/renamed" {
+			t.Errorf("detail = %+v, want renamed with status unchanged and the new map_url", got)
+		}
+	})
+
+	t.Run("AdminUpdateName は空文字の map_url を渡すと nil にクリアする", func(t *testing.T) {
+		var gotMapURL *string
+		gotMapURLSet := false
+		repo := &fakeShopRepo{
+			updateShopName: func(_ context.Context, id string, name string, mapURL *string) (domain.Shop, error) {
+				gotMapURL, gotMapURLSet = mapURL, true
+				stored := rejected.Shop
+				stored.Name = name
+				stored.MapURL = mapURL
+				return stored, nil
+			},
+		}
+		if _, err := newShops(rejectedQuery, repo).AdminUpdateName(ctx, admin, rejected.ID, "Renamed", ""); err != nil {
+			t.Fatalf("AdminUpdateName returned error: %v", err)
+		}
+		if !gotMapURLSet || gotMapURL != nil {
+			t.Errorf("map_url write = %v (set=%v), want nil", gotMapURL, gotMapURLSet)
 		}
 	})
 
 	t.Run("AdminUpdateName は lookup の前に空白の name を拒否する", func(t *testing.T) {
 		var err error
-		_, err = newShops(&fakeShopQuery{}, &fakeShopRepo{}).AdminUpdateName(ctx, admin, rejected.ID, " ")
+		_, err = newShops(&fakeShopQuery{}, &fakeShopRepo{}).AdminUpdateName(ctx, admin, rejected.ID, " ", "")
+		var vErr *domain.ValidationError
+		if !errors.As(err, &vErr) {
+			t.Fatalf("error = %v, want *domain.ValidationError", err)
+		}
+	})
+
+	t.Run("AdminUpdateName は lookup の前に http/https でない map_url を拒否する", func(t *testing.T) {
+		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).AdminUpdateName(ctx, admin, rejected.ID, "Renamed", "ftp://example.com")
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -454,7 +508,7 @@ func TestShopsModeration(t *testing.T) {
 		for name, call := range map[string]func() error{
 			"Approve":         func() error { _, err := shops.Approve(ctx, admin, uid.N(999)); return err },
 			"Reject":          func() error { _, err := shops.Reject(ctx, admin, uid.N(999), nil); return err },
-			"AdminUpdateName": func() error { _, err := shops.AdminUpdateName(ctx, admin, uid.N(999), "x"); return err },
+			"AdminUpdateName": func() error { _, err := shops.AdminUpdateName(ctx, admin, uid.N(999), "x", ""); return err },
 			"Close":           func() error { _, err := shops.Close(ctx, admin, uid.N(999)); return err },
 			"Reopen":          func() error { _, err := shops.Reopen(ctx, admin, uid.N(999)); return err },
 		} {
