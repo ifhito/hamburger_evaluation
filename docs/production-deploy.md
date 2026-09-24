@@ -252,5 +252,7 @@ Cloudflare の Static Assets は、`not_found_handling = "single-page-applicatio
 
 ## 関連する文書
 
+- `docs/infrastructure.md` — 本番の構成の全体像(サービス・ドメイン・設定の置き場所・既知の課題)
+- `docs/adr/` — 各サービスを選んだ理由
 - `docs/google-login-setup.md` — Google でのサインインの準備
 - `backend-go/Dockerfile` — 本番用(多段ビルド + distroless)。開発用は `Dockerfile.dev`
