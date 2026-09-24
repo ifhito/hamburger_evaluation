@@ -371,6 +371,7 @@ func TestOAuthScopeWrites(t *testing.T) {
 	want := map[string]bool{
 		domain.OAuthScopeRead:  false,
 		domain.OAuthScopeWrite: true,
+		domain.OAuthScopeAdmin: true,
 	}
 	for _, scope := range domain.OAuthScopes() {
 		writes, decided := want[scope.Name]

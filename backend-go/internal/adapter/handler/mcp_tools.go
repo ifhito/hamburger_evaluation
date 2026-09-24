@@ -19,16 +19,19 @@ import (
 // 読み取り、書き込みのツールは書き込みを要求する。要求の入口(HandleMCP)がツールを呼ぶ前に範囲を確かめるのと、
 // ここでのツールの登録の両方が、この表を見る(範囲を 2 か所に書かない)。
 var mcpToolScopes = map[string]string{
-	"get_meta":      domain.OAuthScopeRead,
-	"list_shops":    domain.OAuthScopeRead,
-	"get_shop":      domain.OAuthScopeRead,
-	"list_reviews":  domain.OAuthScopeRead,
-	"get_review":    domain.OAuthScopeRead,
-	"get_user":      domain.OAuthScopeRead,
-	"create_review": domain.OAuthScopeWrite,
-	"update_review": domain.OAuthScopeWrite,
-	"delete_review": domain.OAuthScopeWrite,
-	"submit_shop":   domain.OAuthScopeWrite,
+	"get_meta":         domain.OAuthScopeRead,
+	"list_shops":       domain.OAuthScopeRead,
+	"get_shop":         domain.OAuthScopeRead,
+	"list_reviews":     domain.OAuthScopeRead,
+	"get_review":       domain.OAuthScopeRead,
+	"get_user":         domain.OAuthScopeRead,
+	"create_review":    domain.OAuthScopeWrite,
+	"update_review":    domain.OAuthScopeWrite,
+	"delete_review":    domain.OAuthScopeWrite,
+	"submit_shop":      domain.OAuthScopeWrite,
+	"list_admin_shops": domain.OAuthScopeAdmin,
+	"approve_shop":     domain.OAuthScopeAdmin,
+	"reject_shop":      domain.OAuthScopeAdmin,
 }
 
 // toolResultTooLargeMessage は、結果が大きすぎるときの案内である。MCP のツールの説明・指示文と同じく、AI に渡す
@@ -91,6 +94,9 @@ func (m *MCPServer) newToolServer(viewer domain.User, scopes []string, lang doma
 	mcp.AddTool(s, tool("update_review", "自分のレビューの、評価と本文を書き換える。他人のレビューは編集できない。"+writesNote, destructive), guarded(t, "update_review", t.updateReview))
 	mcp.AddTool(s, tool("delete_review", "自分のレビューを削除する。他人のレビューは削除できない。"+writesNote, destructive), guarded(t, "delete_review", t.deleteReview))
 	mcp.AddTool(s, tool("submit_shop", "新しいショップを申請する。申請したショップは、管理者が承認するまで、審査待ちになる。"+writesNote, additive), guarded(t, "submit_shop", t.submitShop))
+	mcp.AddTool(s, tool("list_admin_shops", "審査用に、すべての状態のショップの一覧を返す(管理者だけ)。status を省略すると、すべての状態を返す。"+untrustedNote, readOnly), guarded(t, "list_admin_shops", t.listAdminShops))
+	mcp.AddTool(s, tool("approve_shop", "審査待ちのショップを承認する(管理者だけ)。"+writesNote, destructive), guarded(t, "approve_shop", t.approveShop))
+	mcp.AddTool(s, tool("reject_shop", "審査待ちのショップを却下する(管理者だけ)。理由は moderation_note に任意で書ける。"+writesNote, destructive), guarded(t, "reject_shop", t.rejectShop))
 	return s
 }
 
@@ -329,6 +335,59 @@ func (t *mcpTools) submitShop(ctx context.Context, _ *mcp.CallToolRequest, in su
 	detail, err := t.shops.Create(ctx, t.viewer, in.Name)
 	if err != nil {
 		return t.toolError("submit_shop", err)
+	}
+	return success(newAdminShopResponse(detail))
+}
+
+// ---- 管理者のツール(ショップの審査) ----
+
+type listAdminShopsInput struct {
+	Status string `json:"status,omitempty" jsonschema:"審査の状態(pending / active / rejected)で絞り込む。省略するとすべての状態を返す"`
+}
+
+func (t *mcpTools) listAdminShops(ctx context.Context, _ *mcp.CallToolRequest, in listAdminShopsInput) (*mcp.CallToolResult, any, error) {
+	list, err := t.shops.AdminList(ctx, t.viewer, in.Status)
+	if err != nil {
+		return t.toolError("list_admin_shops", err)
+	}
+	items := make([]adminShopResponse, 0, len(list))
+	for _, detail := range list {
+		items = append(items, newAdminShopResponse(detail))
+	}
+	return success(items)
+}
+
+type approveShopInput struct {
+	ShopID string `json:"shop_id" jsonschema:"承認するショップの ID(UUID)。list_admin_shops で分かる"`
+}
+
+func (t *mcpTools) approveShop(ctx context.Context, _ *mcp.CallToolRequest, in approveShopInput) (*mcp.CallToolResult, any, error) {
+	if !domain.IsUUID(in.ShopID) {
+		return t.failMessage(msgShopNotFound)
+	}
+	detail, err := t.shops.Approve(ctx, t.viewer, in.ShopID)
+	if err != nil {
+		return t.toolError("approve_shop", err)
+	}
+	return success(newAdminShopResponse(detail))
+}
+
+type rejectShopInput struct {
+	ShopID         string `json:"shop_id" jsonschema:"却下するショップの ID(UUID)。list_admin_shops で分かる"`
+	ModerationNote string `json:"moderation_note,omitempty" jsonschema:"却下の理由(任意)"`
+}
+
+func (t *mcpTools) rejectShop(ctx context.Context, _ *mcp.CallToolRequest, in rejectShopInput) (*mcp.CallToolResult, any, error) {
+	if !domain.IsUUID(in.ShopID) {
+		return t.failMessage(msgShopNotFound)
+	}
+	var note *string
+	if in.ModerationNote != "" {
+		note = &in.ModerationNote
+	}
+	detail, err := t.shops.Reject(ctx, t.viewer, in.ShopID, note)
+	if err != nil {
+		return t.toolError("reject_shop", err)
 	}
 	return success(newAdminShopResponse(detail))
 }
