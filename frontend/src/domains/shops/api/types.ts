@@ -11,6 +11,8 @@ export interface Shop {
   // 評価の平均(小数 1 桁)。レビューがなければ null。バーガーの平均(reviews[].burger.averageRating)とは別の値。
   averageRating: number | null;
   reviewCount: number;
+  // 閉業した日時(ISO8601)。閉業していなければ null。status(審査の状態)とは独立した値。
+  closedAt: string | null;
 }
 
 export interface ShopCreator {
@@ -29,9 +31,11 @@ export interface ShopDetail extends Shop {
 export interface AdminShop extends Shop {
   moderationNote: string | null;
   creator: ShopCreator | null;
-  // 承認・却下の操作を出してよいか。backend の domain が status から判断して返す(frontend は status を比較しない)。
+  // 承認・却下・閉業・再開の操作を出してよいか。backend の domain が判断して返す(frontend は status・closedAt を比較しない)。
   canApprove: boolean;
   canReject: boolean;
+  canClose: boolean;
+  canReopen: boolean;
 }
 
 export interface ShopCreateInput {

@@ -24,6 +24,7 @@ type shopRow struct {
 	Status    int16
 	Note      *string
 	CreatorID *string
+	ClosedAt  *time.Time
 }
 
 // readShopRow は shops の行を直接読み取る。
@@ -31,8 +32,8 @@ func readShopRow(ctx context.Context, t *testing.T, conn *pgx.Conn, id string) s
 	t.Helper()
 	var r shopRow
 	if err := conn.QueryRow(ctx,
-		`SELECT name, status, moderation_note, creator_id FROM shops WHERE id = $1`, id,
-	).Scan(&r.Name, &r.Status, &r.Note, &r.CreatorID); err != nil {
+		`SELECT name, status, moderation_note, creator_id, closed_at FROM shops WHERE id = $1`, id,
+	).Scan(&r.Name, &r.Status, &r.Note, &r.CreatorID, &r.ClosedAt); err != nil {
 		t.Fatalf("select shop %s: %v", id, err)
 	}
 	return r
@@ -155,6 +156,42 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("UpdateShopClosedAt は closed_at だけを永続化し、並行する rename を巻き戻さない", func(t *testing.T) {
+		shop := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Closable Shack", 1, nil, alice, tNew)
+
+		closedAt := time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC)
+		closed, err := repo.UpdateShopClosedAt(ctx, shop, &closedAt)
+		if err != nil {
+			t.Fatalf("UpdateShopClosedAt returned error: %v", err)
+		}
+		if closed.ClosedAt == nil || !closed.ClosedAt.Equal(closedAt) {
+			t.Errorf("closed = %+v, want ClosedAt %v", closed, closedAt)
+		}
+		if got := readShopRow(ctx, t, conn, shop); got.ClosedAt == nil || !got.ClosedAt.Equal(closedAt) {
+			t.Errorf("stored after close = %+v, want ClosedAt %v", got, closedAt)
+		}
+
+		// 並行する rename は、closed_at には触れない。
+		renamed, err := repo.UpdateShopName(ctx, shop, "Closable Shack Renamed")
+		if err != nil {
+			t.Fatalf("UpdateShopName returned error: %v", err)
+		}
+		if renamed.ClosedAt == nil || !renamed.ClosedAt.Equal(closedAt) {
+			t.Errorf("renamed = %+v, want ClosedAt still %v", renamed, closedAt)
+		}
+
+		reopened, err := repo.UpdateShopClosedAt(ctx, shop, nil)
+		if err != nil {
+			t.Fatalf("UpdateShopClosedAt(nil) returned error: %v", err)
+		}
+		if reopened.ClosedAt != nil {
+			t.Errorf("reopened = %+v, want ClosedAt nil", reopened)
+		}
+		if got := readShopRow(ctx, t, conn, shop); got.ClosedAt != nil {
+			t.Errorf("stored after reopen = %+v, want ClosedAt nil", got)
+		}
+	})
+
 	t.Run("UpdateShopName に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
 		_, err := repo.UpdateShopName(ctx, uid.N(99999), "x")
 		if !errors.Is(err, domain.ErrShopNotFound) {
@@ -164,6 +201,13 @@ func TestShopModerationRepository(t *testing.T) {
 
 	t.Run("UpdateShopStatus に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
 		_, err := repo.UpdateShopStatus(ctx, uid.N(99999), domain.ShopStatusActive, nil)
+		if !errors.Is(err, domain.ErrShopNotFound) {
+			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
+		}
+	})
+
+	t.Run("UpdateShopClosedAt に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
+		_, err := repo.UpdateShopClosedAt(ctx, uid.N(99999), nil)
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}

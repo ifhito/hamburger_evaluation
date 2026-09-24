@@ -2,11 +2,13 @@ package handler_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
@@ -74,6 +76,19 @@ func (f *shopStoreFake) UpdateShopStatus(_ context.Context, id string, status do
 	return domain.Shop{}, domain.ErrShopNotFound
 }
 
+func (f *shopStoreFake) UpdateShopClosedAt(_ context.Context, id string, closedAt *time.Time) (domain.Shop, error) {
+	if f.err != nil {
+		return domain.Shop{}, f.err
+	}
+	for i, d := range f.shops {
+		if d.ID == id {
+			f.shops[i].Shop.ClosedAt = closedAt
+			return f.shops[i].Shop, nil
+		}
+	}
+	return domain.Shop{}, domain.ErrShopNotFound
+}
+
 // TestCreateShop は POST /shops を扱う：RequireAuth がこれをゲートし、空または
 // 欠落した name は Rails parity の 422 であり、成功時は viewer を creator
 // として持つ admin shop の形で 201 を返す。
@@ -117,7 +132,7 @@ func TestCreateShop(t *testing.T) {
 			body:       `{"shop":{"name":"New Shack"}}`,
 			auth:       true,
 			wantStatus: http.StatusCreated,
-			wantBody:   `{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true}`,
+			wantBody:   `{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","moderation_note":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}`,
 		},
 	}
 	for _, tt := range tests {
@@ -147,7 +162,7 @@ func TestCreateShop(t *testing.T) {
 			t.Errorf("anonymous list = %s, want []", anon)
 		}
 		own := do(router, http.MethodGet, "/shops?keyword=New+Shack", "", aliceAuth).Body.String()
-		if want := `[{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","photo_url":null,"average_rating":null,"review_count":0}]`; own != want {
+		if want := `[{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`; own != want {
 			t.Errorf("creator list = %s, want %s", own, want)
 		}
 	})
@@ -166,6 +181,8 @@ func TestAdminShopsForbidden(t *testing.T) {
 		{method: http.MethodPut, path: "/admin/shops/" + uid.N(1), body: `{"shop":{"name":"x"}}`},
 		{method: http.MethodPost, path: "/admin/shops/" + uid.N(1) + "/approve"},
 		{method: http.MethodPost, path: "/admin/shops/" + uid.N(1) + "/reject"},
+		{method: http.MethodPost, path: "/admin/shops/" + uid.N(1) + "/close"},
+		{method: http.MethodPost, path: "/admin/shops/" + uid.N(1) + "/reopen"},
 	}
 	router, aliceAuth, _, _ := newShopsRouter(t, seedShops(uid.N(1)))
 	for _, ep := range endpoints {
@@ -212,14 +229,14 @@ func TestAdminListShops(t *testing.T) {
 		{
 			name:  "すべての shop を新しい順に返す",
 			query: "",
-			wantBody: `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","creator":null,"can_approve":true,"can_reject":false},` +
-				`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true},` +
-				`{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"creator":null,"can_approve":false,"can_reject":true}]`,
+			wantBody: `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","closed_at":null,"creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false},` +
+				`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false},` +
+				`{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"closed_at":null,"creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}]`,
 		},
 		{
 			name:     "status=pending で絞り込む",
 			query:    "?status=pending",
-			wantBody: `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true}]`,
+			wantBody: `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}]`,
 		},
 		{
 			name:     "未知の status は空配列になる",
@@ -229,9 +246,9 @@ func TestAdminListShops(t *testing.T) {
 		{
 			name:  "status が空ならすべての shop を返す",
 			query: "?status=",
-			wantBody: `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","creator":null,"can_approve":true,"can_reject":false},` +
-				`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true},` +
-				`{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"creator":null,"can_approve":false,"can_reject":true}]`,
+			wantBody: `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","closed_at":null,"creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false},` +
+				`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false},` +
+				`{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"closed_at":null,"creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}]`,
 		},
 	}
 	for _, tt := range tests {
@@ -263,7 +280,7 @@ func TestAdminUpdateShop(t *testing.T) {
 			path:       "/admin/shops/" + uid.N(2),
 			body:       `{"shop":{"name":"Renamed Shack"}}`,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"id":"` + uid.N(2) + `","name":"Renamed Shack","status":"pending","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true}`,
+			wantBody:   `{"id":"` + uid.N(2) + `","name":"Renamed Shack","status":"pending","moderation_note":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}`,
 		},
 		{
 			name:       "空の name は 422 を返す",
@@ -315,7 +332,7 @@ func TestAdminApproveShop(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","moderation_note":null,"creator":null,"can_approve":false,"can_reject":true}`
+		want := `{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","moderation_note":null,"closed_at":null,"creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -323,7 +340,7 @@ func TestAdminApproveShop(t *testing.T) {
 
 	t.Run("approve された shop は匿名の一覧に出る", func(t *testing.T) {
 		got := do(router, http.MethodGet, "/shops?keyword=Rejected+Grill", "", "").Body.String()
-		if want := `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`; got != want {
+		if want := `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`; got != want {
 			t.Errorf("anonymous list = %s, want %s", got, want)
 		}
 	})
@@ -367,7 +384,7 @@ func TestAdminRejectShop(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"rejected","moderation_note":"spam","creator":null,"can_approve":true,"can_reject":false}`
+		want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"rejected","moderation_note":"spam","closed_at":null,"creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -385,7 +402,7 @@ func TestAdminRejectShop(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"rejected","moderation_note":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":false}`
+		want := `{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"rejected","moderation_note":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -402,6 +419,86 @@ func TestAdminRejectShop(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(999)+"/reject", "", adminAuth)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusNotFound, rec.Body)
+		}
+	})
+}
+
+// TestAdminCloseAndReopenShop は POST /admin/shops/{id}/close・/reopen を扱う：営業中の
+// shop を閉業にして closed_at を設定する 200、閉業できない遷移(pending・rejected・すでに閉業した
+// shop)に対する 422、閉業した shop を再開して closed_at を null に戻す 200、再開できない遷移(閉業して
+// いない shop)に対する 422、body は無視されること、そして未知の id には 404。
+func TestAdminCloseAndReopenShop(t *testing.T) {
+	router, _, adminAuth, _ := newShopsRouter(t, seedShops(uid.N(1)))
+
+	t.Run("営業中の shop を閉業にすると closed_at が設定される", func(t *testing.T) {
+		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(1)+"/close", `ignored body`, adminAuth)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
+		}
+		var body struct {
+			ClosedAt  *string `json:"closed_at"`
+			CanClose  bool    `json:"can_close"`
+			CanReopen bool    `json:"can_reopen"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.ClosedAt == nil || body.CanClose || !body.CanReopen {
+			t.Errorf("body = %+v, want non-nil closed_at, can_close=false, can_reopen=true", body)
+		}
+	})
+
+	t.Run("すでに閉業した shop への close は 422 を返す", func(t *testing.T) {
+		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(1)+"/close", "", adminAuth)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
+		}
+		if got := rec.Body.String(); got != `{"errors":["Shop cannot be closed"]}` {
+			t.Errorf("body = %s, want the cannot-close validation message", got)
+		}
+	})
+
+	t.Run("一度も active になっていない pending な shop への close は 422 を返す", func(t *testing.T) {
+		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(2)+"/close", "", adminAuth)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
+		}
+	})
+
+	t.Run("rejected な shop への close は 422 を返す", func(t *testing.T) {
+		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(3)+"/close", "", adminAuth)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
+		}
+	})
+
+	t.Run("閉業した shop を再開すると closed_at が null に戻る", func(t *testing.T) {
+		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(1)+"/reopen", `ignored body`, adminAuth)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
+		}
+		want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"closed_at":null,"creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}`
+		if got := rec.Body.String(); got != want {
+			t.Errorf("body = %s, want %s", got, want)
+		}
+	})
+
+	t.Run("閉業していない shop への reopen は 422 を返す", func(t *testing.T) {
+		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(1)+"/reopen", "", adminAuth)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
+		}
+		if got := rec.Body.String(); got != `{"errors":["Shop is not closed"]}` {
+			t.Errorf("body = %s, want the not-closed validation message", got)
+		}
+	})
+
+	t.Run("未知の id は close・reopen のどちらも 404 を返す", func(t *testing.T) {
+		for _, action := range []string{"close", "reopen"} {
+			rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(999)+"/"+action, "", adminAuth)
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("%s: status = %d, want %d (body %s)", action, rec.Code, http.StatusNotFound, rec.Body)
+			}
 		}
 	})
 }

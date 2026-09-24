@@ -19,10 +19,13 @@ var msgShopNotFound = apiMsg(keyShopNotFound)
 
 // shopResponse は GET /shops のトップレベル配列の要素 1 つである
 // （frontend の Shop、domains/shops/api/types.ts。ワイヤ上は snake_case）。
+// ClosedAt は、閉業した時刻(RFC3339)で、閉業していなければ null。moderation の status とは
+// 独立の状態で、閉業した shop も一覧・詳細から隠れない(frontend はバッジの表示にこの値を使う)。
 type shopResponse struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Status   string  `json:"status"`
+	ClosedAt *string `json:"closed_at"`
 	shopSummaryResponse
 }
 
@@ -47,6 +50,7 @@ func newShopResponse(listing domain.ShopListing) shopResponse {
 		ID:                  listing.ID,
 		Name:                listing.Name,
 		Status:              string(listing.Status),
+		ClosedAt:            formatClosedAt(listing.ClosedAt),
 		shopSummaryResponse: newShopSummaryResponse(listing.Summary),
 	}
 }
@@ -60,6 +64,7 @@ type shopDetailResponse struct {
 	Name                string               `json:"name"`
 	Status              string               `json:"status"`
 	ModerationNote      *string              `json:"moderation_note"`
+	ClosedAt            *string              `json:"closed_at"`
 	Creator             *userRefResponse     `json:"creator"`
 	Reviews             []shopReviewResponse `json:"reviews"`
 	CanReview           bool                 `json:"can_review"`
@@ -196,6 +201,7 @@ func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 		Name:                detail.Name,
 		Status:              string(detail.Status),
 		ModerationNote:      detail.ModerationNote,
+		ClosedAt:            formatClosedAt(detail.ClosedAt),
 		Creator:             newUserRefResponse(detail.Creator),
 		Reviews:             make([]shopReviewResponse, 0, len(detail.Reviews)),
 		CanReview:           detail.CanReview,
@@ -230,4 +236,14 @@ func newUserRefResponse(ref *domain.UserRef) *userRefResponse {
 		return nil
 	}
 	return &userRefResponse{ID: ref.ID, Username: ref.Username}
+}
+
+// formatClosedAt は、domain の閉業した時刻(*time.Time。nil = 営業中)を、通信の形(RFC3339 または
+// null)に変換する。GET /shops・GET /shops/{id}・管理者の shop の応答が共有する。
+func formatClosedAt(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
 }

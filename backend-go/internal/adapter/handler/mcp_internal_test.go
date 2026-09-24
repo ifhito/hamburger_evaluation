@@ -86,6 +86,8 @@ var validArguments = func() map[string]map[string]any {
 		"list_admin_shops": {},
 		"approve_shop":     {"shop_id": id},
 		"reject_shop":      {"shop_id": id},
+		"close_shop":       {"shop_id": id},
+		"reopen_shop":      {"shop_id": id},
 	}
 }()
 

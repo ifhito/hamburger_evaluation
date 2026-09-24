@@ -19,7 +19,7 @@ export default function AdminShopListPage() {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<ShopStatus | "all">("all");
   const { data: shops, isLoading } = useAdminShops(filter === "all" ? undefined : filter);
-  const { approve, reject } = useShopModeration();
+  const { approve, reject, close, reopen } = useShopModeration();
   const textLimits = useMeta().data?.text;
 
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -29,6 +29,8 @@ export default function AdminShopListPage() {
   // 却下の失敗(例: note が長すぎる 422)は、サーバーのメッセージをそのまま表示する
   const [rejectError, setRejectError] = useState<string | string[] | null>(null);
   const [approveError, setApproveError] = useState<string | string[] | null>(null);
+  const [closeError, setCloseError] = useState<string | string[] | null>(null);
+  const [reopenError, setReopenError] = useState<string | string[] | null>(null);
 
   // 絞り込みを変えると、開いていた却下の理由の欄(とその失敗の表示)は、対象のショップが一覧から消えることがあるので閉じる。
   const changeFilter = (s: ShopStatus | "all") => {
@@ -36,6 +38,8 @@ export default function AdminShopListPage() {
     setRejectingId(null);
     setRejectError(null);
     setApproveError(null);
+    setCloseError(null);
+    setReopenError(null);
   };
 
   const addBusy = (id: string) => setBusyIds((prev) => new Set(prev).add(id));
@@ -72,6 +76,30 @@ export default function AdminShopListPage() {
     }
   };
 
+  const handleClose = async (id: string) => {
+    addBusy(id);
+    setCloseError(null);
+    try {
+      await close(id);
+    } catch (e) {
+      setCloseError(e instanceof ApiError ? e.messages : t("shops.admin.closeError"));
+    } finally {
+      removeBusy(id);
+    }
+  };
+
+  const handleReopen = async (id: string) => {
+    addBusy(id);
+    setReopenError(null);
+    try {
+      await reopen(id);
+    } catch (e) {
+      setReopenError(e instanceof ApiError ? e.messages : t("shops.admin.reopenError"));
+    } finally {
+      removeBusy(id);
+    }
+  };
+
   return (
     <Layout>
       <div className={styles.container}>
@@ -95,6 +123,8 @@ export default function AdminShopListPage() {
 
         {rejectError && <Alert title={t("shops.admin.rejectErrorTitle")} message={rejectError} />}
         {approveError && <Alert title={t("shops.admin.approveErrorTitle")} message={approveError} />}
+        {closeError && <Alert title={t("shops.admin.closeErrorTitle")} message={closeError} />}
+        {reopenError && <Alert title={t("shops.admin.reopenErrorTitle")} message={reopenError} />}
         {isLoading && <Loading />}
         {shops && shops.length === 0 &&
           (filter === "pending" ? (
@@ -109,6 +139,7 @@ export default function AdminShopListPage() {
               <div className={styles.rowHead}>
                 <h2 className={styles.name}>{shop.name}</h2>
                 <Badge tone={shop.status === "active" ? "accent" : "outline"}>{t(`shops.status.${shop.status}`)}</Badge>
+                {shop.closedAt && <Badge>{t("shops.closedBadge")}</Badge>}
               </div>
               <p className={styles.meta}>
                 {t("shops.admin.creator")}: {shop.creator?.username ?? "—"}
@@ -149,7 +180,7 @@ export default function AdminShopListPage() {
               ) : (
                 <div className={styles.actions}>
                   <LinkButton to={`/admin/shops/${shop.id}/edit`}>{t("shops.admin.edit")}</LinkButton>
-                  {/* 承認・却下を出すかは、ショップごとに backend が返す(canApprove・canReject)。状態からは決めない */}
+                  {/* 承認・却下・閉業・再開を出すかは、ショップごとに backend が返す(canApprove・canReject・canClose・canReopen)。状態からは決めない */}
                   {shop.canApprove && (
                     <Button type="button" onClick={() => void handleApprove(shop.id)} isLoading={busyIds.has(shop.id)}>
                       {t("shops.admin.approve")}
@@ -166,6 +197,21 @@ export default function AdminShopListPage() {
                       }}
                     >
                       {t("shops.admin.reject")}
+                    </Button>
+                  )}
+                  {shop.canClose && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void handleClose(shop.id)}
+                      isLoading={busyIds.has(shop.id)}
+                    >
+                      {t("shops.admin.close")}
+                    </Button>
+                  )}
+                  {shop.canReopen && (
+                    <Button type="button" onClick={() => void handleReopen(shop.id)} isLoading={busyIds.has(shop.id)}>
+                      {t("shops.admin.reopen")}
                     </Button>
                   )}
                 </div>

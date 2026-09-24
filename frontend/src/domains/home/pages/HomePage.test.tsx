@@ -79,6 +79,7 @@ function shop(over: Partial<Shop>): Shop {
     photoUrl: null,
     averageRating: 4,
     reviewCount: 1,
+    closedAt: null,
     ...over,
   };
 }

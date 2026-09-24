@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -44,7 +45,7 @@ func (r *ShopRepository) CreateShop(ctx context.Context, shop domain.Shop) (doma
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("create shop: %w", err)
 	}
-	created, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+	created, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("create shop: %w", err)
 	}
@@ -63,7 +64,7 @@ func (r *ShopRepository) UpdateShopName(ctx context.Context, id string, name str
 		}
 		return domain.Shop{}, fmt.Errorf("update shop name: %w", err)
 	}
-	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("update shop name: %w", err)
 	}
@@ -90,9 +91,28 @@ func (r *ShopRepository) UpdateShopStatus(ctx context.Context, id string, status
 		}
 		return domain.Shop{}, fmt.Errorf("update shop status: %w", err)
 	}
-	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("update shop status: %w", err)
+	}
+	return updated, nil
+}
+
+// UpdateShopClosedAt は、id の shop の closed_at だけを永続化し、保存された行を返す。
+// 読み取りから書き込みまでの間に shop が消えた場合は domain.ErrShopNotFound を返す。
+// 単一のカラムだけを書くことで、同時に行われた name/status の変更が古いスナップショットに
+// よって元に戻されるのを防ぐ。
+func (r *ShopRepository) UpdateShopClosedAt(ctx context.Context, id string, closedAt *time.Time) (domain.Shop, error) {
+	row, err := r.q.UpdateShopClosedAt(ctx, sqlcgen.UpdateShopClosedAtParams{ID: id, ClosedAt: timestamptzOrNull(closedAt)})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Shop{}, fmt.Errorf("update shop closed_at: %w", domain.ErrShopNotFound)
+		}
+		return domain.Shop{}, fmt.Errorf("update shop closed_at: %w", err)
+	}
+	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
+	if err != nil {
+		return domain.Shop{}, fmt.Errorf("update shop closed_at: %w", err)
 	}
 	return updated, nil
 }
@@ -103,4 +123,12 @@ func textOrNull(s *string) pgtype.Text {
 		return pgtype.Text{}
 	}
 	return pgtype.Text{String: *s, Valid: true}
+}
+
+// timestamptzOrNull は、省略可能な time.Time を null 許容な pgx の形式に変換する。
+func timestamptzOrNull(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *t, Valid: true}
 }

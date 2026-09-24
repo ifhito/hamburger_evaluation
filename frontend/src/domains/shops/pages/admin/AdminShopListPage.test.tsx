@@ -11,12 +11,14 @@ import AdminShopListPage from "./AdminShopListPage";
 const state = vi.hoisted(() => ({ shops: [] as AdminShop[], isLoading: false, statusAsked: [] as (string | undefined)[] }));
 const approve = vi.hoisted(() => vi.fn());
 const reject = vi.hoisted(() => vi.fn());
+const close = vi.hoisted(() => vi.fn());
+const reopen = vi.hoisted(() => vi.fn());
 vi.mock("../../hooks/useShopMutations", () => ({
   useAdminShops: (status?: string) => {
     state.statusAsked.push(status);
     return { data: state.isLoading ? undefined : state.shops, isLoading: state.isLoading };
   },
-  useShopModeration: () => ({ approve, reject }),
+  useShopModeration: () => ({ approve, reject, close, reopen }),
 }));
 vi.mock("../../../../api/meta", () => ({ useMeta: () => ({ data: { text: { moderationNoteMaxChars: 500 } } }) }));
 vi.mock("../../../auth/AuthProvider", () => ({ useAuth: () => ({ user: { id: "1", username: "admin", canModerate: true }, isLoading: false }) }));
@@ -28,10 +30,13 @@ const shop = (over: Partial<AdminShop>): AdminShop => ({
   photoUrl: null,
   averageRating: null,
   reviewCount: 0,
+  closedAt: null,
   moderationNote: null,
   creator: { id: "u1", username: "alice" },
   canApprove: true,
   canReject: true,
+  canClose: false,
+  canReopen: false,
   ...over,
 });
 const show = () =>
@@ -64,6 +69,123 @@ describe("AdminShopListPage(ショップの管理の一覧)", () => {
     expect(labels(rows[0])).toEqual(["Edit", "Approve", "Reject"]);
     expect(labels(rows[1])).toEqual(["Edit", "Approve"]);
     expect(labels(rows[2])).toEqual(["Edit"]);
+  });
+
+  it("閉業・再開のボタンは、ショップごとに backend が返す canClose・canReopen だけで出し分ける(closedAt・status からは決めない)", async () => {
+    state.shops = [
+      shop({ id: "a", name: "Open", status: "active", canApprove: false, canReject: false, canClose: true, canReopen: false }),
+      // 閉業しているのに canReopen が false・canClose が true の、作り物の組み合わせ(closedAt で決めていれば、逆になる)
+      shop({
+        id: "b",
+        name: "Odd",
+        status: "active",
+        closedAt: "2026-01-01T00:00:00Z",
+        canApprove: false,
+        canReject: false,
+        canClose: true,
+        canReopen: false,
+      }),
+    ];
+    const page = await show();
+
+    const rows = [...page.querySelectorAll("article")];
+    const labels = (row: Element) => [...row.querySelectorAll("button, a")].map((el) => el.textContent);
+    expect(labels(rows[0])).toEqual(["Edit", "Close"]);
+    expect(labels(rows[1])).toEqual(["Edit", "Close"]);
+  });
+
+  it("closedAt があるショップには「Closed」の札を出す(status の札とは独立)", async () => {
+    state.shops = [shop({ status: "active", closedAt: "2026-01-01T00:00:00Z" })];
+    const page = await show();
+
+    expect(page.textContent).toContain("Closed");
+  });
+
+  it("closedAt が null のショップには「Closed」の札を出さない", async () => {
+    state.shops = [shop({ status: "active", closedAt: null })];
+    const page = await show();
+
+    expect(page.textContent).not.toContain("Closed");
+  });
+
+  it("「Close」を押すと、そのショップの閉業を送る", async () => {
+    state.shops = [shop({ id: "a", canApprove: false, canReject: false, canClose: true })];
+    close.mockResolvedValue(undefined);
+    const page = await show();
+
+    await click(need(byText(page, "button", "Close"), "Close"));
+
+    expect(close).toHaveBeenCalledWith("a");
+  });
+
+  it("閉業に失敗したとき(API の文言)は、画面の見出しと、その文言を出す", async () => {
+    state.shops = [shop({ id: "a", canApprove: false, canReject: false, canClose: true })];
+    close.mockRejectedValue(new ApiError(["Shop is already closed"], 422));
+    const page = await show();
+
+    await click(need(byText(page, "button", "Close"), "Close"));
+
+    await eventually(() => expect(page.querySelector('[role="alert"]')?.textContent).toContain("Shop is already closed"));
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("Could not close the shop");
+  });
+
+  it("「Reopen」を押すと、そのショップの再開を送る", async () => {
+    state.shops = [
+      shop({ id: "a", canApprove: false, canReject: false, canReopen: true, closedAt: "2026-01-01T00:00:00Z" }),
+    ];
+    reopen.mockResolvedValue(undefined);
+    const page = await show();
+
+    await click(need(byText(page, "button", "Reopen"), "Reopen"));
+
+    expect(reopen).toHaveBeenCalledWith("a");
+  });
+
+  it("再開に失敗したとき(API の文言)は、画面の見出しと、その文言を出す", async () => {
+    state.shops = [
+      shop({ id: "a", canApprove: false, canReject: false, canReopen: true, closedAt: "2026-01-01T00:00:00Z" }),
+    ];
+    reopen.mockRejectedValue(new ApiError(["Shop is not closed"], 422));
+    const page = await show();
+
+    await click(need(byText(page, "button", "Reopen"), "Reopen"));
+
+    await eventually(() => expect(page.querySelector('[role="alert"]')?.textContent).toContain("Shop is not closed"));
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("Could not reopen the shop");
+  });
+
+  it("閉業・再開の処理中も、行ごとに独立している: A の閉業が進行中でも、B の再開を始めたことで A の読み込み中の表示は消えない", async () => {
+    state.shops = [
+      shop({ id: "a", name: "Shop A", canApprove: false, canReject: false, canClose: true }),
+      shop({ id: "b", name: "Shop B", canApprove: false, canReject: false, canReopen: true, closedAt: "2026-01-01T00:00:00Z" }),
+    ];
+    let resolveClose: (() => void) | undefined;
+    close.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveClose = resolve;
+        }),
+    );
+    reopen.mockResolvedValue(undefined);
+    const page = await show();
+    const rows = [...page.querySelectorAll("article")];
+
+    const closeButton = need(byText<HTMLButtonElement>(rows[0], "button", "Close"), "Close(A)");
+    await click(closeButton);
+    expect(closeButton.disabled).toBe(true);
+    expect(closeButton.getAttribute("aria-busy")).toBe("true");
+
+    // B の再開を始めても、A の閉業の読み込み中の表示が消えてはいけない(別の行の busy 状態を巻き込んで消さない)。
+    await click(need(byText(rows[1], "button", "Reopen"), "Reopen(B)"));
+
+    expect(closeButton.disabled).toBe(true);
+    expect(closeButton.getAttribute("aria-busy")).toBe("true");
+    expect(reopen).toHaveBeenCalledWith("b");
+
+    await act(async () => {
+      resolveClose?.();
+    });
+    await eventually(() => expect(closeButton.disabled).toBe(false));
   });
 
   it("状態は文字の札で出し(公開中だけ黄色の札)、作った人と、却下の理由(あれば)を出す", async () => {

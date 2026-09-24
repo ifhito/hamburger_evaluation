@@ -525,6 +525,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/status/smallint/NO",
 		"shops/moderation_note/text/YES",
 		"shops/creator_id/uuid/YES",
+		"shops/closed_at/timestamp with time zone/YES",
 		"shops/created_at/timestamp with time zone/NO",
 		"shops/updated_at/timestamp with time zone/NO",
 		"shops_burgers/shop_id/uuid/NO",

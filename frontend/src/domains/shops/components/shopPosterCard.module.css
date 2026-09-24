@@ -32,6 +32,9 @@
   position: absolute;
   top: 16px;
   left: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .info {

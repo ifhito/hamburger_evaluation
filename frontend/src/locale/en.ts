@@ -321,6 +321,8 @@ const en = {
       pending: "Pending review",
       rejected: "Rejected",
     },
+    // 閉業(closedAt)の札。status とは独立で、closedAt があれば常に出す。
+    closedBadge: "Closed",
     detail: {
       backToShops: "\u2190 Back to shops",
       backToShopsAction: "Back to shops",
@@ -383,6 +385,12 @@ const en = {
       rejectErrorTitle: "Could not reject the shop",
       approveError: "Failed to approve the shop.",
       approveErrorTitle: "Could not approve the shop",
+      close: "Close",
+      reopen: "Reopen",
+      closeError: "Failed to close the shop.",
+      closeErrorTitle: "Could not close the shop",
+      reopenError: "Failed to reopen the shop.",
+      reopenErrorTitle: "Could not reopen the shop",
       filter: {
         all: "All",
         pending: "Pending",

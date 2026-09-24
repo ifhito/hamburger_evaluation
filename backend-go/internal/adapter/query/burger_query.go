@@ -56,7 +56,7 @@ func (r *BurgerQuery) ListBurgerShops(ctx context.Context, burgerID string) ([]d
 	}
 	shops := make([]domain.Shop, 0, len(rows))
 	for _, row := range rows {
-		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
 		if err != nil {
 			return nil, fmt.Errorf("list burger shops: %w", err)
 		}

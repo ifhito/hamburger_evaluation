@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
@@ -205,6 +206,53 @@ func (s *Shops) Reject(ctx context.Context, viewer domain.User, id string, note 
 	return s.moderate(ctx, id, func(shop domain.Shop) domain.Shop {
 		return shop.Reject(note)
 	})
+}
+
+// Close は active でまだ閉業していない shop を閉業にする（closed_at を今にする）。閉業した
+// shop は、status に関わらず review を受け付けなくなる（domain.Shop.CanBeReviewedBy）。
+// admin でない viewer には、lookup の前に domain.ErrForbidden を返す。閉業できない遷移
+// （pending・rejected、またはすでに閉業した shop）は *domain.ValidationError（422）を返す。
+func (s *Shops) Close(ctx context.Context, viewer domain.User, id string) (domain.ShopDetail, error) {
+	if !viewer.CanModerate() {
+		return domain.ShopDetail{}, domain.ErrForbidden
+	}
+	detail, err := s.query.GetShopWithCreator(ctx, id)
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("close shop: %w", err)
+	}
+	if !detail.Shop.CanBeClosed() {
+		return domain.ShopDetail{}, domain.NewValidationError(domain.MsgShopCannotClose)
+	}
+	closed := detail.Shop.Close(time.Now().UTC())
+	updated, err := s.shops.UpdateClosedAt(ctx, id, closed.ClosedAt)
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("close shop: %w", err)
+	}
+	detail.Shop = updated
+	return detail, nil
+}
+
+// Reopen は閉業した shop の閉業を解く（closed_at を null に戻す）。admin でない viewer には、
+// lookup の前に domain.ErrForbidden を返す。閉業していない shop への再開は
+// *domain.ValidationError（422）を返す。
+func (s *Shops) Reopen(ctx context.Context, viewer domain.User, id string) (domain.ShopDetail, error) {
+	if !viewer.CanModerate() {
+		return domain.ShopDetail{}, domain.ErrForbidden
+	}
+	detail, err := s.query.GetShopWithCreator(ctx, id)
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("reopen shop: %w", err)
+	}
+	if !detail.Shop.CanBeReopened() {
+		return domain.ShopDetail{}, domain.NewValidationError(domain.MsgShopCannotReopen)
+	}
+	reopened := detail.Shop.Reopen()
+	updated, err := s.shops.UpdateClosedAt(ctx, id, reopened.ClosedAt)
+	if err != nil {
+		return domain.ShopDetail{}, fmt.Errorf("reopen shop: %w", err)
+	}
+	detail.Shop = updated
+	return detail, nil
 }
 
 // moderate は status 遷移に共通のフローである。shop を creator とともに

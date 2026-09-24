@@ -24,9 +24,10 @@ export function ShopPosterCard({
   return (
     <article className={styles.poster}>
       <div className={styles.photoWrap}>
-        {shop.status !== "active" && (
+        {(shop.status !== "active" || shop.closedAt) && (
           <div className={styles.chip}>
-            <Badge>{t(`shops.statusBadge.${shop.status}`)}</Badge>
+            {shop.status !== "active" && <Badge>{t(`shops.statusBadge.${shop.status}`)}</Badge>}
+            {shop.closedAt && <Badge>{t("shops.closedBadge")}</Badge>}
           </div>
         )}
         {shop.photoUrl ? (

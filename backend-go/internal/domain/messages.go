@@ -15,6 +15,8 @@ const (
 	keyShopNameBlank     = "shop_name.blank"
 	keyShopNameTooLong   = "shop_name.too_long"
 	keyModerationNote    = "moderation_note.too_long"
+	keyShopCannotClose   = "shop.cannot_close"
+	keyShopCannotReopen  = "shop.cannot_reopen"
 	keyBioTooLong        = "bio.too_long"
 	keyUsernameBlank     = "username.blank"
 	keyUsernameTooLong   = "username.too_long"
@@ -39,6 +41,8 @@ var catalog = map[string]Entry{
 	keyShopNameBlank:     {EN: "Name can't be blank", JA: "ショップの名前を入力してください"},
 	keyShopNameTooLong:   {EN: "Name is too long (maximum is %d characters)", JA: "ショップの名前が長すぎます(最大 %d 文字)"},
 	keyModerationNote:    {EN: "Moderation note is too long (maximum is %d characters)", JA: "却下の理由が長すぎます(最大 %d 文字)"},
+	keyShopCannotClose:   {EN: "Shop cannot be closed", JA: "このショップは閉業にできません"},
+	keyShopCannotReopen:  {EN: "Shop is not closed", JA: "このショップは閉業していません"},
 	keyBioTooLong:        {EN: "Bio is too long (maximum is %d characters)", JA: "自己紹介が長すぎます(最大 %d 文字)"},
 	keyUsernameBlank:     {EN: "Username can't be blank", JA: "ユーザー名を入力してください"},
 	keyUsernameTooLong:   {EN: "Username is too long (maximum is %d characters)", JA: "ユーザー名が長すぎます(最大 %d 文字)"},
@@ -63,3 +67,12 @@ var MsgEmailTaken = Msg(keyEmailTaken)
 // 整合の確認(フォームの都合)で、サービスの規則ではないので、判定は use case に置くが、検証の失敗の文言は、
 // ほかの検証の文言と同じカタログに置く。
 var MsgPasswordConfirmationMismatch = Msg(keyPasswordConfirm)
+
+// MsgShopCannotClose は、閉業できない shop(pending・rejected、またはすでに閉業した shop)を
+// 閉業しようとしたときの文言である。遷移の可否(Shop.CanBeClosed)は domain が判断するが、
+// usecase が使うので、カタログの文言として公開する。
+var MsgShopCannotClose = Msg(keyShopCannotClose)
+
+// MsgShopCannotReopen は、閉業していない shop を再開しようとしたときの文言である。遷移の可否
+// (Shop.CanBeReopened)は domain が判断するが、usecase が使うので、カタログの文言として公開する。
+var MsgShopCannotReopen = Msg(keyShopCannotReopen)
