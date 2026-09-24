@@ -24,28 +24,42 @@ export default function AdminShopListPage() {
 
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
+  // 行ごとの処理中を、行の id の集合で持つ(単一の id だと、別の行の処理が、その行の処理中を消してしまう)
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   // 却下の失敗(例: note が長すぎる 422)は、サーバーのメッセージをそのまま表示する
   const [rejectError, setRejectError] = useState<string | string[] | null>(null);
+  const [approveError, setApproveError] = useState<string | string[] | null>(null);
 
   // 絞り込みを変えると、開いていた却下の理由の欄(とその失敗の表示)は、対象のショップが一覧から消えることがあるので閉じる。
   const changeFilter = (s: ShopStatus | "all") => {
     setFilter(s);
     setRejectingId(null);
     setRejectError(null);
+    setApproveError(null);
   };
 
+  const addBusy = (id: string) => setBusyIds((prev) => new Set(prev).add(id));
+  const removeBusy = (id: string) =>
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+
   const handleApprove = async (id: string) => {
-    setBusyId(id);
+    addBusy(id);
+    setApproveError(null);
     try {
       await approve(id);
+    } catch (e) {
+      setApproveError(e instanceof ApiError ? e.messages : t("shops.admin.approveError"));
     } finally {
-      setBusyId(null);
+      removeBusy(id);
     }
   };
 
   const handleReject = async (id: string) => {
-    setBusyId(id);
+    addBusy(id);
     setRejectError(null);
     try {
       await reject(id, note);
@@ -54,7 +68,7 @@ export default function AdminShopListPage() {
     } catch (e) {
       setRejectError(e instanceof ApiError ? e.messages : t("shops.admin.rejectError"));
     } finally {
-      setBusyId(null);
+      removeBusy(id);
     }
   };
 
@@ -80,6 +94,7 @@ export default function AdminShopListPage() {
         </div>
 
         {rejectError && <Alert title={t("shops.admin.rejectErrorTitle")} message={rejectError} />}
+        {approveError && <Alert title={t("shops.admin.approveErrorTitle")} message={approveError} />}
         {isLoading && <Loading />}
         {shops && shops.length === 0 &&
           (filter === "pending" ? (
@@ -116,7 +131,7 @@ export default function AdminShopListPage() {
                     placeholder={t("shops.admin.notePlaceholder")}
                   />
                   <div className={styles.actions}>
-                    <Button type="button" variant="dark" onClick={() => void handleReject(shop.id)} isLoading={busyId === shop.id}>
+                    <Button type="button" variant="dark" onClick={() => void handleReject(shop.id)} isLoading={busyIds.has(shop.id)}>
                       {t("shops.admin.confirmReject")}
                     </Button>
                     <Button
@@ -136,7 +151,7 @@ export default function AdminShopListPage() {
                   <LinkButton to={`/admin/shops/${shop.id}/edit`}>{t("shops.admin.edit")}</LinkButton>
                   {/* 承認・却下を出すかは、ショップごとに backend が返す(canApprove・canReject)。状態からは決めない */}
                   {shop.canApprove && (
-                    <Button type="button" onClick={() => void handleApprove(shop.id)} isLoading={busyId === shop.id}>
+                    <Button type="button" onClick={() => void handleApprove(shop.id)} isLoading={busyIds.has(shop.id)}>
                       {t("shops.admin.approve")}
                     </Button>
                   )}
