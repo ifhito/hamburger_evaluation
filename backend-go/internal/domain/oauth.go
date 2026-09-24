@@ -23,9 +23,9 @@ const (
 	OAuthScopeRead = "hamburger:read"
 	// OAuthScopeWrite は、利用者の名前でレビューやショップの申請を書き込む範囲である。
 	OAuthScopeWrite = "hamburger:write"
-	// OAuthScopeAdmin は、ショップの申請を審査する(一覧・承認・却下)ための範囲である。MCP の
-	// 管理用のツールが使う。アプリが明示して要求しない限り、既定の範囲(DefaultOAuthScopes)には
-	// 含めない。
+	// OAuthScopeAdmin は、ショップの申請を審査し、閉業・再開を行う(一覧・承認・却下・閉業・再開)ための
+	// 範囲である。MCP の管理用のツールが使う。アプリが明示して要求しない限り、既定の範囲
+	// (DefaultOAuthScopes)には含めない。
 	OAuthScopeAdmin = "hamburger:admin"
 )
 
@@ -112,7 +112,7 @@ type OAuthScope struct {
 var oauthScopes = []OAuthScope{
 	{Name: OAuthScopeRead, Description: "View shops, reviews and profiles"},
 	{Name: OAuthScopeWrite, Description: "Post, edit and delete reviews, and submit shops, on your behalf", Writes: true},
-	{Name: OAuthScopeAdmin, Description: "Moderate shop submissions: list, approve and reject them", Writes: true},
+	{Name: OAuthScopeAdmin, Description: "Moderate shop submissions: list, approve, reject, close and reopen them", Writes: true},
 }
 
 // OAuthScopes は、許可できる範囲の一覧を、同意画面に出す順番で返す。

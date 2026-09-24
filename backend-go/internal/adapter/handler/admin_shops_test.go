@@ -424,8 +424,8 @@ func TestAdminRejectShop(t *testing.T) {
 }
 
 // TestAdminCloseAndReopenShop は POST /admin/shops/{id}/close・/reopen を扱う：営業中の
-// shop を閉業にして closed_at を設定する 200、閉業できない遷移(pending・すでに閉業した shop)に
-// 対する 422、閉業した shop を再開して closed_at を null に戻す 200、再開できない遷移(閉業して
+// shop を閉業にして closed_at を設定する 200、閉業できない遷移(pending・rejected・すでに閉業した
+// shop)に対する 422、閉業した shop を再開して closed_at を null に戻す 200、再開できない遷移(閉業して
 // いない shop)に対する 422、body は無視されること、そして未知の id には 404。
 func TestAdminCloseAndReopenShop(t *testing.T) {
 	router, _, adminAuth, _ := newShopsRouter(t, seedShops(uid.N(1)))
@@ -460,6 +460,13 @@ func TestAdminCloseAndReopenShop(t *testing.T) {
 
 	t.Run("一度も active になっていない pending な shop への close は 422 を返す", func(t *testing.T) {
 		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(2)+"/close", "", adminAuth)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
+		}
+	})
+
+	t.Run("rejected な shop への close は 422 を返す", func(t *testing.T) {
+		rec := do(router, http.MethodPost, "/admin/shops/"+uid.N(3)+"/close", "", adminAuth)
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusUnprocessableEntity, rec.Body)
 		}

@@ -300,7 +300,7 @@ func TestShopCloseAndReopen(t *testing.T) {
 	}
 }
 
-// TestShopCanBeReviewedByIgnoresClosedShop は、閉業した shop が、status や viewer(admin・
+// TestShopCanBeReviewedByClosedShop は、閉業した shop が、status や viewer(admin・
 // creator を含む)に関わらず、決して reviewable でないことを固定する。
 func TestShopCanBeReviewedByClosedShop(t *testing.T) {
 	alice := domain.User{ID: uid.N(1), Username: "alice"}

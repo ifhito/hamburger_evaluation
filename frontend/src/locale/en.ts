@@ -321,7 +321,7 @@ const en = {
       pending: "Pending review",
       rejected: "Rejected",
     },
-    // Independent of status: shown whenever closedAt is set.
+    // 閉業(closedAt)の札。status とは独立で、closedAt があれば常に出す。
     closedBadge: "Closed",
     detail: {
       backToShops: "\u2190 Back to shops",
