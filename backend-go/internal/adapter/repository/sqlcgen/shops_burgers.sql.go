@@ -127,7 +127,7 @@ func (q *Queries) GetShopBurgerWithStats(ctx context.Context, arg GetShopBurgerW
 }
 
 const listBurgerShops = `-- name: ListBurgerShops :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at
 FROM shops_burgers sb
 JOIN shops s ON s.id = sb.shop_id
 WHERE sb.burger_id = $1
@@ -140,6 +140,7 @@ type ListBurgerShopsRow struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	CreatorID      *string
+	ClosedAt       pgtype.Timestamptz
 }
 
 // burger に紐づく shop(shops_burgers 経由)を、作成の古い順に返す。viewer ごとの可視性フィルタ
@@ -160,6 +161,7 @@ func (q *Queries) ListBurgerShops(ctx context.Context, burgerID string) ([]ListB
 			&i.Status,
 			&i.ModerationNote,
 			&i.CreatorID,
+			&i.ClosedAt,
 		); err != nil {
 			return nil, err
 		}

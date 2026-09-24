@@ -5,6 +5,9 @@ CREATE TABLE shops (
     status smallint NOT NULL CHECK (status IN (0, 1, 2)),
     moderation_note text,
     creator_id uuid REFERENCES users (id),
+    -- closed_at は moderation の status とは独立の閉業のフラグである(NULL = 営業中、
+    -- 非 NULL = 閉業した時刻)。閉業した shop は、status に関わらず review を受け付けない。
+    closed_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     -- 文字数の上限(Unicode のコードポイント数。char_length と同じ数え方)。

@@ -63,7 +63,7 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 	rows, hasMore := trimPage(rows, limit)
 	listings := make([]domain.ShopListing, 0, len(rows))
 	for _, row := range rows {
-		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
 		if err != nil {
 			return nil, false, fmt.Errorf("list shops: %w", err)
 		}
@@ -82,7 +82,7 @@ func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.S
 		}
 		return domain.ShopDetail{}, fmt.Errorf("get shop with creator: %w", err)
 	}
-	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("get shop with creator: %w", err)
 	}
@@ -140,7 +140,7 @@ func (r *ShopQuery) ListShopsForModeration(ctx context.Context, status *domain.S
 	}
 	details := make([]domain.ShopDetail, 0, len(rows))
 	for _, row := range rows {
-		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID)
+		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.CreatorID, row.ClosedAt)
 		if err != nil {
 			return nil, fmt.Errorf("list shops for moderation: %w", err)
 		}

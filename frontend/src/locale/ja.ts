@@ -307,6 +307,8 @@ const ja = {
       pending: "審査待ち",
       rejected: "却下",
     },
+    // 閉業(closedAt)の札。status とは独立で、closedAt があれば常に出す。
+    closedBadge: "閉業",
     detail: {
       backToShops: "← ショップ一覧に戻る",
       backToShopsAction: "ショップ一覧へ戻る",
@@ -369,6 +371,12 @@ const ja = {
       rejectErrorTitle: "却下できませんでした",
       approveError: "ショップを承認できませんでした。",
       approveErrorTitle: "承認できませんでした",
+      close: "閉業にする",
+      reopen: "再開する",
+      closeError: "ショップを閉業にできませんでした。",
+      closeErrorTitle: "閉業にできませんでした",
+      reopenError: "ショップを再開できませんでした。",
+      reopenErrorTitle: "再開できませんでした",
       filter: {
         all: "すべて",
         pending: "審査待ち",

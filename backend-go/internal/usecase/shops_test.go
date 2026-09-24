@@ -56,9 +56,10 @@ func (f *fakeShopQuery) ListShopsForModeration(ctx context.Context, status *doma
 // である。未設定の振る舞いは panic するので、想定外の呼び出しに対してテストは
 // fail-loud する。
 type fakeShopRepo struct {
-	createShop       func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
-	updateShopName   func(ctx context.Context, id string, name string) (domain.Shop, error)
-	updateShopStatus func(ctx context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error)
+	createShop         func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
+	updateShopName     func(ctx context.Context, id string, name string) (domain.Shop, error)
+	updateShopStatus   func(ctx context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error)
+	updateShopClosedAt func(ctx context.Context, id string, closedAt *time.Time) (domain.Shop, error)
 }
 
 func (f *fakeShopRepo) CreateShop(ctx context.Context, shop domain.Shop) (domain.Shop, error) {
@@ -80,6 +81,13 @@ func (f *fakeShopRepo) UpdateShopStatus(ctx context.Context, id string, status d
 		panic("unexpected UpdateShopStatus call")
 	}
 	return f.updateShopStatus(ctx, id, status, note)
+}
+
+func (f *fakeShopRepo) UpdateShopClosedAt(ctx context.Context, id string, closedAt *time.Time) (domain.Shop, error) {
+	if f.updateShopClosedAt == nil {
+		panic("unexpected UpdateShopClosedAt call")
+	}
+	return f.updateShopClosedAt(ctx, id, closedAt)
 }
 
 // TestShopsListPagination は、フォールバック規則を固定する。page の
@@ -271,6 +279,8 @@ func TestShopsAdminForbidden(t *testing.T) {
 		{name: "AdminUpdateName は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.AdminUpdateName(ctx, alice, uid.N(1), "x"); return err }},
 		{name: "Approve は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Approve(ctx, alice, uid.N(1)); return err }},
 		{name: "Reject は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Reject(ctx, alice, uid.N(1), nil); return err }},
+		{name: "Close は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Close(ctx, alice, uid.N(1)); return err }},
+		{name: "Reopen は admin でない viewer に ErrForbidden を返す", call: func() error { _, err := shops.Reopen(ctx, alice, uid.N(1)); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -445,10 +455,107 @@ func TestShopsModeration(t *testing.T) {
 			"Approve":         func() error { _, err := shops.Approve(ctx, admin, uid.N(999)); return err },
 			"Reject":          func() error { _, err := shops.Reject(ctx, admin, uid.N(999), nil); return err },
 			"AdminUpdateName": func() error { _, err := shops.AdminUpdateName(ctx, admin, uid.N(999), "x"); return err },
+			"Close":           func() error { _, err := shops.Close(ctx, admin, uid.N(999)); return err },
+			"Reopen":          func() error { _, err := shops.Reopen(ctx, admin, uid.N(999)); return err },
 		} {
 			if err := call(); !errors.Is(err, domain.ErrShopNotFound) {
 				t.Errorf("%s error = %v, want %v", name, err, domain.ErrShopNotFound)
 			}
+		}
+	})
+}
+
+// TestShopsCloseAndReopen は、閉業・再開の use case を扱う。active でまだ閉業していない shop の
+// 閉業は closed_at だけを永続化し、閉業した shop の再開は closed_at を null に戻す。遷移できない
+// 状態(pending・rejected・すでに閉業/再開済み)への要求は、書き込みの前に *domain.ValidationError
+// (422)を返す(承認・却下と違い、無条件の値遷移ではない)。
+func TestShopsCloseAndReopen(t *testing.T) {
+	admin := domain.User{ID: uid.N(2), Admin: true}
+	ctx := context.Background()
+	active := domain.ShopDetail{Shop: domain.Shop{ID: uid.N(10), Name: "Shack", Status: domain.ShopStatusActive}}
+	closedAt := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	closed := domain.ShopDetail{Shop: domain.Shop{ID: uid.N(11), Name: "Closed Shack", Status: domain.ShopStatusActive, ClosedAt: &closedAt}}
+	pending := domain.ShopDetail{Shop: domain.Shop{ID: uid.N(12), Name: "Pending Shack", Status: domain.ShopStatusPending}}
+	byID := map[string]domain.ShopDetail{active.ID: active, closed.ID: closed, pending.ID: pending}
+	query := &fakeShopQuery{
+		getShopWithCreator: func(_ context.Context, id string) (domain.ShopDetail, error) {
+			d, ok := byID[id]
+			if !ok {
+				return domain.ShopDetail{}, domain.ErrShopNotFound
+			}
+			return d, nil
+		},
+	}
+
+	t.Run("Close は active でまだ閉業していない shop の closed_at だけを永続化する", func(t *testing.T) {
+		var gotID string
+		var gotClosedAt *time.Time
+		repo := &fakeShopRepo{
+			updateShopClosedAt: func(_ context.Context, id string, closedAt *time.Time) (domain.Shop, error) {
+				gotID, gotClosedAt = id, closedAt
+				stored := active.Shop
+				stored.ClosedAt = closedAt
+				return stored, nil
+			},
+		}
+		got, err := newShops(query, repo).Close(ctx, admin, active.ID)
+		if err != nil {
+			t.Fatalf("Close returned error: %v", err)
+		}
+		if gotID != active.ID || gotClosedAt == nil {
+			t.Errorf("closed_at write = (%s, %v), want (%s, non-nil)", gotID, gotClosedAt, active.ID)
+		}
+		if got.ClosedAt == nil {
+			t.Errorf("detail.ClosedAt = nil, want non-nil")
+		}
+	})
+
+	t.Run("Close は pending な shop を拒否する(一度も active になっていない)", func(t *testing.T) {
+		_, err := newShops(query, &fakeShopRepo{}).Close(ctx, admin, pending.ID)
+		var vErr *domain.ValidationError
+		if !errors.As(err, &vErr) {
+			t.Fatalf("error = %v, want *domain.ValidationError", err)
+		}
+	})
+
+	t.Run("Close はすでに閉業した shop を拒否する", func(t *testing.T) {
+		_, err := newShops(query, &fakeShopRepo{}).Close(ctx, admin, closed.ID)
+		var vErr *domain.ValidationError
+		if !errors.As(err, &vErr) {
+			t.Fatalf("error = %v, want *domain.ValidationError", err)
+		}
+	})
+
+	t.Run("Reopen は閉業した shop の closed_at を null に戻す", func(t *testing.T) {
+		var gotID string
+		var gotClosedAt *time.Time
+		called := false
+		repo := &fakeShopRepo{
+			updateShopClosedAt: func(_ context.Context, id string, closedAt *time.Time) (domain.Shop, error) {
+				called = true
+				gotID, gotClosedAt = id, closedAt
+				stored := closed.Shop
+				stored.ClosedAt = closedAt
+				return stored, nil
+			},
+		}
+		got, err := newShops(query, repo).Reopen(ctx, admin, closed.ID)
+		if err != nil {
+			t.Fatalf("Reopen returned error: %v", err)
+		}
+		if !called || gotID != closed.ID || gotClosedAt != nil {
+			t.Errorf("closed_at write = (called %v, id %s, closedAt %v), want (true, %s, nil)", called, gotID, gotClosedAt, closed.ID)
+		}
+		if got.ClosedAt != nil {
+			t.Errorf("detail.ClosedAt = %v, want nil", *got.ClosedAt)
+		}
+	})
+
+	t.Run("Reopen は閉業していない shop を拒否する", func(t *testing.T) {
+		_, err := newShops(query, &fakeShopRepo{}).Reopen(ctx, admin, active.ID)
+		var vErr *domain.ValidationError
+		if !errors.As(err, &vErr) {
+			t.Fatalf("error = %v, want *domain.ValidationError", err)
 		}
 	})
 }

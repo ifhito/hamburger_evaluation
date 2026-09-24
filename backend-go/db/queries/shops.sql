@@ -16,7 +16,7 @@ WHERE id = $1;
 -- ならず、これがまさに匿名の場合である。
 -- 集計(件数・平均・写真)は、shop_stats の保存された値を LEFT JOIN で添える(1 回のクエリ)。集計は非同期に
 -- 計算されるので、行がないショップ(未集計)は、件数 0・平均と写真なしになる。
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -34,7 +34,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- 同一で、ORDER BY だけが違う(name 昇順+id 昇順 → created_at 降順+id 降順)。列ごとに向きが違う
 -- 並び替えを 1 つの動的な ORDER BY に詰め込むより、クエリを分けた方が読みやすく安全なので、
 -- そうしている。
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -52,7 +52,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- （id desc が created_at の同値を解消し、順序を決定的にする）。
 -- status_code は smallint の status フィルタで、すべての status なら NULL
 -- である。文字列から smallint への対応付けは repository にある。
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at,
        u.username AS creator_username
 FROM shops s
 LEFT JOIN users u ON u.id = s.creator_id
@@ -62,7 +62,7 @@ ORDER BY s.created_at DESC, s.id DESC;
 
 -- name: GetShopWithCreator :one
 -- 集計(件数・平均・写真)は、shop_stats の保存された値を添える(未集計のショップは、件数 0・平均と写真なし)。
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at,
        u.username AS creator_username,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
@@ -113,6 +113,16 @@ RETURNING *;
 UPDATE shops
 SET status = $2,
     moderation_note = $3,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateShopClosedAt :one
+-- 列を限定した閉業/再開の遷移：closed_at だけを更新するため、並行する
+-- 名前変更や moderation の status の変更が古いスナップショットによって
+-- 元に戻されることはない。
+UPDATE shops
+SET closed_at = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING *;

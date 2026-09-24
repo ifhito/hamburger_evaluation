@@ -63,6 +63,7 @@ export default function ShopDetailPage() {
 
         <section className={styles.titleSection}>
           {shop.status !== "active" && <Badge>{t(`shops.statusBadge.${shop.status}`)}</Badge>}
+          {shop.closedAt && <Badge>{t("shops.closedBadge")}</Badge>}
           <h1 className={styles.name}>{shop.name}</h1>
         </section>
 

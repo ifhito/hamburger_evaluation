@@ -14,7 +14,7 @@ import (
 const createShop = `-- name: CreateShop :one
 INSERT INTO shops (name, status, moderation_note, creator_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
+RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at
 `
 
 type CreateShopParams struct {
@@ -38,6 +38,7 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
+		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -55,7 +56,7 @@ func (q *Queries) DeleteShop(ctx context.Context, id string) error {
 }
 
 const getShop = `-- name: GetShop :one
-SELECT id, name, status, moderation_note, creator_id, created_at, updated_at FROM shops
+SELECT id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at FROM shops
 WHERE id = $1
 `
 
@@ -68,6 +69,7 @@ func (q *Queries) GetShop(ctx context.Context, id string) (Shop, error) {
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
+		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -75,7 +77,7 @@ func (q *Queries) GetShop(ctx context.Context, id string) (Shop, error) {
 }
 
 const getShopWithCreator = `-- name: GetShopWithCreator :one
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at,
        u.username AS creator_username,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
@@ -92,6 +94,7 @@ type GetShopWithCreatorRow struct {
 	Status          int16
 	ModerationNote  pgtype.Text
 	CreatorID       *string
+	ClosedAt        pgtype.Timestamptz
 	CreatorUsername pgtype.Text
 	ReviewCount     int64
 	AverageRating   pgtype.Float8
@@ -108,6 +111,7 @@ func (q *Queries) GetShopWithCreator(ctx context.Context, id string) (GetShopWit
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
+		&i.ClosedAt,
 		&i.CreatorUsername,
 		&i.ReviewCount,
 		&i.AverageRating,
@@ -184,7 +188,7 @@ func (q *Queries) ListShopReviews(ctx context.Context, shopID string) ([]ListSho
 }
 
 const listShops = `-- name: ListShops :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -212,6 +216,7 @@ type ListShopsRow struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	CreatorID      *string
+	ClosedAt       pgtype.Timestamptz
 	ReviewCount    int64
 	AverageRating  pgtype.Float8
 	PhotoKey       pgtype.Text
@@ -246,6 +251,7 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 			&i.Status,
 			&i.ModerationNote,
 			&i.CreatorID,
+			&i.ClosedAt,
 			&i.ReviewCount,
 			&i.AverageRating,
 			&i.PhotoKey,
@@ -261,7 +267,7 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 }
 
 const listShopsByNewest = `-- name: ListShopsByNewest :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -289,6 +295,7 @@ type ListShopsByNewestRow struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	CreatorID      *string
+	ClosedAt       pgtype.Timestamptz
 	ReviewCount    int64
 	AverageRating  pgtype.Float8
 	PhotoKey       pgtype.Text
@@ -319,6 +326,7 @@ func (q *Queries) ListShopsByNewest(ctx context.Context, arg ListShopsByNewestPa
 			&i.Status,
 			&i.ModerationNote,
 			&i.CreatorID,
+			&i.ClosedAt,
 			&i.ReviewCount,
 			&i.AverageRating,
 			&i.PhotoKey,
@@ -334,7 +342,7 @@ func (q *Queries) ListShopsByNewest(ctx context.Context, arg ListShopsByNewestPa
 }
 
 const listShopsForModeration = `-- name: ListShopsForModeration :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id,
+SELECT s.id, s.name, s.status, s.moderation_note, s.creator_id, s.closed_at,
        u.username AS creator_username
 FROM shops s
 LEFT JOIN users u ON u.id = s.creator_id
@@ -349,6 +357,7 @@ type ListShopsForModerationRow struct {
 	Status          int16
 	ModerationNote  pgtype.Text
 	CreatorID       *string
+	ClosedAt        pgtype.Timestamptz
 	CreatorUsername pgtype.Text
 }
 
@@ -371,6 +380,7 @@ func (q *Queries) ListShopsForModeration(ctx context.Context, statusCode pgtype.
 			&i.Status,
 			&i.ModerationNote,
 			&i.CreatorID,
+			&i.ClosedAt,
 			&i.CreatorUsername,
 		); err != nil {
 			return nil, err
@@ -390,7 +400,7 @@ SET name = $2,
     moderation_note = $4,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
+RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at
 `
 
 type UpdateShopParams struct {
@@ -414,6 +424,39 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
+		&i.ClosedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateShopClosedAt = `-- name: UpdateShopClosedAt :one
+UPDATE shops
+SET closed_at = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at
+`
+
+type UpdateShopClosedAtParams struct {
+	ID       string
+	ClosedAt pgtype.Timestamptz
+}
+
+// 列を限定した閉業/再開の遷移：closed_at だけを更新するため、並行する
+// 名前変更や moderation の status の変更が古いスナップショットによって
+// 元に戻されることはない。
+func (q *Queries) UpdateShopClosedAt(ctx context.Context, arg UpdateShopClosedAtParams) (Shop, error) {
+	row := q.db.QueryRow(ctx, updateShopClosedAt, arg.ID, arg.ClosedAt)
+	var i Shop
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ModerationNote,
+		&i.CreatorID,
+		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -425,7 +468,7 @@ UPDATE shops
 SET name = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
+RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at
 `
 
 type UpdateShopNameParams struct {
@@ -444,6 +487,7 @@ func (q *Queries) UpdateShopName(ctx context.Context, arg UpdateShopNameParams) 
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
+		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -456,7 +500,7 @@ SET status = $2,
     moderation_note = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at
+RETURNING id, name, status, moderation_note, creator_id, closed_at, created_at, updated_at
 `
 
 type UpdateShopStatusParams struct {
@@ -477,6 +521,7 @@ func (q *Queries) UpdateShopStatus(ctx context.Context, arg UpdateShopStatusPara
 		&i.Status,
 		&i.ModerationNote,
 		&i.CreatorID,
+		&i.ClosedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

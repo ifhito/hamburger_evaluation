@@ -25,6 +25,7 @@ const baseShop: ShopDetail = {
   photoUrl: null,
   averageRating: null,
   reviewCount: 0,
+  closedAt: null,
   moderationNote: null,
   creator: null,
   reviews: [],
@@ -74,6 +75,17 @@ describe("ShopDetailPage の状態の表示", () => {
   it("レビューが 0 件のときは、遊びの文言の画面を出す", async () => {
     const page = await show();
     expect(page.textContent).toContain("Nobody's eaten here yet");
+  });
+
+  it("closedAt があるときは「Closed」の札を出す(status の札とは独立)", async () => {
+    state.shop = { ...baseShop, closedAt: "2026-01-01T00:00:00Z" };
+    const page = await show();
+    expect(page.textContent).toContain("Closed");
+  });
+
+  it("closedAt が null のときは「Closed」の札を出さない", async () => {
+    const page = await show();
+    expect(page.textContent).not.toContain("Closed");
   });
 });
 

@@ -149,17 +149,17 @@ func TestListShops(t *testing.T) {
 	}{
 		{
 			name:     "匿名の閲覧者には、承認済みのショップだけが見える",
-			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:       "作成者には、自分の承認待ちのショップも、状態つきで見える",
 			authHeader: aliceAuth,
-			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","photo_url":null,"average_rating":null,"review_count":0}]`,
+			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:       "管理者には、すべての状態のショップが見える",
 			authHeader: adminAuth,
-			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","photo_url":null,"average_rating":null,"review_count":0}]`,
+			wantBody:   `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0},{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 	}
 	for _, tt := range tests {
@@ -191,7 +191,7 @@ func TestListShopsParams(t *testing.T) {
 		{
 			name:     "keyword は部分文字列で絞り込む",
 			query:    "?keyword=diner",
-			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:     "keyword に一致するものがなければ空配列になる",
@@ -202,12 +202,12 @@ func TestListShopsParams(t *testing.T) {
 			name:       "per_page=1 page=2 は 2 番目の shop を返す",
 			query:      "?per_page=1&page=2",
 			authHeader: adminAuth,
-			wantBody:   `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","photo_url":null,"average_rating":null,"review_count":0}]`,
+			wantBody:   `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:     "範囲外の page と per_page はデフォルト値に fallback する",
 			query:    "?page=0&per_page=0",
-			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`,
+			wantBody: `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`,
 		},
 		{
 			name:     "データの範囲外の page は空配列になる",
@@ -300,7 +300,7 @@ func TestGetShopDetail(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 	}
-	want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"creator":null,"reviews":[` +
+	want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"closed_at":null,"creator":null,"reviews":[` +
 		`{"id":"` + uid.N(9) + `","rating":4,"comment":"Tasty","created_at":"2024-05-01T12:00:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +
 		`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8}},` +
 		`{"id":"` + uid.N(8) + `","rating":2,"comment":null,"created_at":"2024-04-01T12:00:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(3) + `","username":"bob"},` +

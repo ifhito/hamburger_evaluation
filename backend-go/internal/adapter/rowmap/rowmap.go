@@ -35,8 +35,8 @@ func ShopStatusCode(status domain.ShopStatus) (int16, error) {
 
 // Shop は sqlc の shop のカラムを domain のエンティティに変換し、
 // smallint の status をデコードする（0=pending、1=active、2=rejected）。
-func Shop(id string, name string, status int16, note pgtype.Text, creatorID *string) (domain.Shop, error) {
-	shop := domain.Shop{ID: id, Name: name}
+func Shop(id string, name string, status int16, note pgtype.Text, creatorID *string, closedAt pgtype.Timestamptz) (domain.Shop, error) {
+	shop := domain.Shop{ID: id, Name: name, ClosedAt: ClosedAt(closedAt)}
 	switch status {
 	case 0:
 		shop.Status = domain.ShopStatusPending
@@ -103,6 +103,16 @@ func VisitedAt(d pgtype.Date) *time.Time {
 	}
 	t := d.Time
 	return &t
+}
+
+// ClosedAt は sqlc の timestamptz 列(NULL 許容)を、domain の閉業した時刻(*time.Time。
+// nil = 営業中)に変換する。query と repository の両方が使う。
+func ClosedAt(t pgtype.Timestamptz) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+	v := t.Time
+	return &v
 }
 
 // ShopSummary は、ショップに LEFT JOIN した集計の列(shop_stats。まだ集計されていないショップは、件数 0・

@@ -36,10 +36,15 @@ type adminShopResponse struct {
 	Name           string           `json:"name"`
 	Status         string           `json:"status"`
 	ModerationNote *string          `json:"moderation_note"`
+	ClosedAt       *string          `json:"closed_at"`
 	Creator        *userRefResponse `json:"creator"`
 	// CanApprove・CanReject は、承認・却下の操作を画面が提示してよいか（domain が判断する）。
 	CanApprove bool `json:"can_approve"`
 	CanReject  bool `json:"can_reject"`
+	// CanClose・CanReopen は、閉業・再開の操作を画面が提示してよいか（domain が判断する。
+	// approve/reject と違い、usecase がこの遷移を実際に強制する）。
+	CanClose  bool `json:"can_close"`
+	CanReopen bool `json:"can_reopen"`
 }
 
 func newAdminShopResponse(detail domain.ShopDetail) adminShopResponse {
@@ -48,9 +53,12 @@ func newAdminShopResponse(detail domain.ShopDetail) adminShopResponse {
 		Name:           detail.Name,
 		Status:         string(detail.Status),
 		ModerationNote: detail.ModerationNote,
+		ClosedAt:       formatClosedAt(detail.ClosedAt),
 		Creator:        newUserRefResponse(detail.Creator),
 		CanApprove:     detail.Shop.CanBeApproved(),
 		CanReject:      detail.Shop.CanBeRejected(),
+		CanClose:       detail.Shop.CanBeClosed(),
+		CanReopen:      detail.Shop.CanBeReopened(),
 	}
 }
 
@@ -206,6 +214,49 @@ func handleRejectShop(shops *usecase.Shops) http.HandlerFunc {
 		detail, err := shops.Reject(r.Context(), viewer, id, req.ModerationNote)
 		if err != nil {
 			writeShopModerationError(w, r, "reject", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, newAdminShopResponse(detail))
+	}
+}
+
+// handleCloseShop は POST /admin/shops/{id}/close を処理する。リクエストの body は
+// 意図的に無視する。この遷移は入力を取らない。active でない、またはすでに閉業した
+// shop への要求は、usecase が 422 を返す。
+func handleCloseShop(shops *usecase.Shops) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		viewer, ok := requireViewer(w, r)
+		if !ok {
+			return
+		}
+		id, ok := shopIDPathValue(w, r)
+		if !ok {
+			return
+		}
+		detail, err := shops.Close(r.Context(), viewer, id)
+		if err != nil {
+			writeShopModerationError(w, r, "close", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, newAdminShopResponse(detail))
+	}
+}
+
+// handleReopenShop は POST /admin/shops/{id}/reopen を処理する。リクエストの body は
+// 意図的に無視する。閉業していない shop への要求は、usecase が 422 を返す。
+func handleReopenShop(shops *usecase.Shops) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		viewer, ok := requireViewer(w, r)
+		if !ok {
+			return
+		}
+		id, ok := shopIDPathValue(w, r)
+		if !ok {
+			return
+		}
+		detail, err := shops.Reopen(r.Context(), viewer, id)
+		if err != nil {
+			writeShopModerationError(w, r, "reopen", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newAdminShopResponse(detail))

@@ -48,8 +48,8 @@ func TestShopSummaryFields(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body)
 		}
-		want := `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","photo_url":"/photos/reviews/latest.jpg","average_rating":4.3,"review_count":3},` +
-			`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","photo_url":null,"average_rating":null,"review_count":0}]`
+		want := `[{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","closed_at":null,"photo_url":"/photos/reviews/latest.jpg","average_rating":4.3,"review_count":3},` +
+			`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -71,7 +71,7 @@ func TestShopSummaryFields(t *testing.T) {
 		if body.PhotoURL == nil || *body.PhotoURL != "/photos/reviews/latest.jpg" || body.AverageRating == nil || *body.AverageRating != 4.3 || body.ReviewCount != 3 {
 			t.Errorf("集計 = %+v, want 写真の URL・4.3・3", body)
 		}
-		wantKeys := []string{"average_rating", "can_review", "creator", "id", "moderation_note", "name", "photo_url", "review_count", "reviews", "status"}
+		wantKeys := []string{"average_rating", "can_review", "closed_at", "creator", "id", "moderation_note", "name", "photo_url", "review_count", "reviews", "status"}
 		if got := jsonKeys(t, rec.Body.Bytes()); !slices.Equal(got, wantKeys) {
 			t.Errorf("詳細のキー = %v, want %v(既存のキー + 集計の 3 つ)", got, wantKeys)
 		}
@@ -89,13 +89,13 @@ func TestShopSummaryFields(t *testing.T) {
 		}
 	})
 
-	t.Run("一覧の 1 件のキーは、既存の 3 つ + 集計の 3 つだけである", func(t *testing.T) {
+	t.Run("一覧の 1 件のキーは、既存の 4 つ + 集計の 3 つだけである", func(t *testing.T) {
 		rec := do(router, http.MethodGet, "/shops", "", "")
 		var items []json.RawMessage
 		if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil || len(items) != 1 {
 			t.Fatalf("body = %s (%v), want 1 item", rec.Body, err)
 		}
-		wantKeys := []string{"average_rating", "id", "name", "photo_url", "review_count", "status"}
+		wantKeys := []string{"average_rating", "closed_at", "id", "name", "photo_url", "review_count", "status"}
 		if got := jsonKeys(t, items[0]); !slices.Equal(got, wantKeys) {
 			t.Errorf("一覧のキー = %v, want %v", got, wantKeys)
 		}
@@ -115,8 +115,8 @@ func TestMCPListShopsCarriesSummary(t *testing.T) {
 		t.Fatalf("list_shops failed: %s", text)
 	}
 	for _, want := range []string{
-		`"name":"Active Diner","status":"active","photo_url":null,"average_rating":4.3,"review_count":3`,
-		`"name":"Alice Pending","status":"pending","photo_url":null,"average_rating":null,"review_count":0`,
+		`"name":"Active Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":4.3,"review_count":3`,
+		`"name":"Alice Pending","status":"pending","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("list_shops = %s, want it to contain %s", text, want)
@@ -169,8 +169,8 @@ func TestShopSummaryThroughRealQuery(t *testing.T) {
 
 	// 集計は、あとからワーカーが計算する(結果整合)。レビューを入れただけの時点では、まだ集計されていない。
 	rec := do(router, http.MethodGet, "/shops", "", "")
-	unstated := `[{"id":"` + quiet + `","name":"Quiet Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},` +
-		`{"id":"` + shop + `","name":"Real Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0}]`
+	unstated := `[{"id":"` + quiet + `","name":"Quiet Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0},` +
+		`{"id":"` + shop + `","name":"Real Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`
 	if rec.Code != http.StatusOK || rec.Body.String() != unstated {
 		t.Errorf("集計の前の一覧 = %d %s, want %s(まだ集計されていないショップは、0・null・null)", rec.Code, rec.Body, unstated)
 	}
@@ -181,8 +181,8 @@ func TestShopSummaryThroughRealQuery(t *testing.T) {
 	statsworkertest.SettleShops(ctx, t, statsworkertest.NewShopWorker(conn, uowtest.Clock{T: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)}))
 
 	rec = do(router, http.MethodGet, "/shops", "", "")
-	want := `[{"id":"` + quiet + `","name":"Quiet Diner","status":"active","photo_url":null,"average_rating":null,"review_count":0},` +
-		`{"id":"` + shop + `","name":"Real Diner","status":"active","photo_url":"/photos/reviews/latest.jpg","average_rating":4.5,"review_count":2}]`
+	want := `[{"id":"` + quiet + `","name":"Quiet Diner","status":"active","closed_at":null,"photo_url":null,"average_rating":null,"review_count":0},` +
+		`{"id":"` + shop + `","name":"Real Diner","status":"active","closed_at":null,"photo_url":"/photos/reviews/latest.jpg","average_rating":4.5,"review_count":2}]`
 	if rec.Code != http.StatusOK || rec.Body.String() != want {
 		t.Errorf("集計のあとの一覧 = %d %s, want %s", rec.Code, rec.Body, want)
 	}

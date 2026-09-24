@@ -24,6 +24,10 @@ type Shop struct {
 	Status         ShopStatus
 	ModerationNote *string
 	CreatorID      *string
+	// ClosedAt は閉業のフラグである（nil = 営業中、非 nil = 閉業した時刻）。moderation の
+	// status（pending/active/rejected）とは独立の状態で、閉業した shop は、status や
+	// viewer に関わらず review を受け付けない（CanBeReviewedBy）。
+	ClosedAt *time.Time
 }
 
 // MaxShopNameChars はショップ名の文字数の上限（Unicode のコードポイント数）である。
@@ -97,13 +101,45 @@ func (s Shop) Reject(note *string) Shop {
 	return s
 }
 
+// CanBeClosed は、閉業の操作を行ってよいかを返す。approve/reject と違い、この遷移は
+// usecase が実際に強制する（無条件の値遷移ではない）：active でまだ閉業していない shop
+// だけが閉業できる。一度も active になっていない shop（pending・rejected）や、
+// すでに閉業した shop は閉業できない。
+func (s Shop) CanBeClosed() bool {
+	return s.Status == ShopStatusActive && s.ClosedAt == nil
+}
+
+// CanBeReopened は、再開の操作を行ってよいかを返す。閉業していない shop は再開できない。
+func (s Shop) CanBeReopened() bool {
+	return s.ClosedAt != nil
+}
+
+// Close は shop を閉業にする（ClosedAt を t にする）。呼び出し側（usecase）は、事前に
+// CanBeClosed で遷移が有効かを確かめる。
+func (s Shop) Close(t time.Time) Shop {
+	s.ClosedAt = &t
+	return s
+}
+
+// Reopen は shop の閉業を解く（ClosedAt を nil に戻す）。呼び出し側（usecase）は、
+// 事前に CanBeReopened で遷移が有効かを確かめる。
+func (s Shop) Reopen() Shop {
+	s.ClosedAt = nil
+	return s
+}
+
 // CanBeReviewedBy は reviewable ルールの唯一の置き場であり、viewer（常に認証
 // 済み。投稿にはログインが必要）がこの shop の burger の review を投稿して
-// よいかどうかを決める。rejected の shop は決して reviewable ではない
+// よいかどうかを決める。閉業した shop（ClosedAt が非 nil）は、status や
+// viewer に関わらず、決して reviewable ではない（creator や admin であっても
+// 同じ）。rejected の shop も決して reviewable ではない
 // （creator や admin であっても同じで、彼らは ShopVisibility.CanView を通じて
 // 閲覧はできる）。active な shop は認証済みの誰でも reviewable であり、
 // pending な shop はその creator か admin のみが reviewable である。
 func (s Shop) CanBeReviewedBy(viewer User) bool {
+	if s.ClosedAt != nil {
+		return false
+	}
 	switch s.Status {
 	case ShopStatusActive:
 		return true
@@ -224,6 +260,10 @@ type ShopRepository interface {
 	// 永続化し、保存された行を返す。カラム限定なので、並行する rename が
 	// 古いスナップショットで元に戻されることは決してない。
 	UpdateShopStatus(ctx context.Context, id string, status ShopStatus, note *string) (Shop, error)
+	// UpdateShopClosedAt は、id の shop の closed_at だけを永続化し、保存された行を
+	// 返す。カラム限定なので、並行する name/status の変更が古いスナップショットで
+	// 元に戻されることは決してない。
+	UpdateShopClosedAt(ctx context.Context, id string, closedAt *time.Time) (Shop, error)
 }
 
 // ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
@@ -257,4 +297,9 @@ func (s *Shops) UpdateName(ctx context.Context, id string, name string) (Shop, e
 // 保存された行を返す。
 func (s *Shops) UpdateStatus(ctx context.Context, id string, status ShopStatus, note *string) (Shop, error) {
 	return s.repo.UpdateShopStatus(ctx, id, status, note)
+}
+
+// UpdateClosedAt は、id の shop の closed_at だけを永続化し、保存された行を返す。
+func (s *Shops) UpdateClosedAt(ctx context.Context, id string, closedAt *time.Time) (Shop, error) {
+	return s.repo.UpdateShopClosedAt(ctx, id, closedAt)
 }

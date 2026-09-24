@@ -217,9 +217,31 @@ func TestShopQuery(t *testing.T) {
 		if detail.ModerationNote != nil {
 			t.Errorf("ModerationNote = %v, want nil", *detail.ModerationNote)
 		}
+		if detail.ClosedAt != nil {
+			t.Errorf("ClosedAt = %v, want nil (営業中)", *detail.ClosedAt)
+		}
 		want := &domain.UserRef{ID: carol, Username: "carol"}
 		if !reflect.DeepEqual(detail.Creator, want) {
 			t.Errorf("creator = %+v, want %+v", detail.Creator, want)
+		}
+	})
+
+	t.Run("GetShopWithCreator は closed_at を、設定されていればそのまま返す", func(t *testing.T) {
+		closedAt := time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC)
+		if _, err := conn.Exec(ctx, `UPDATE shops SET closed_at = $1 WHERE id = $2`, closedAt, deltaDiner); err != nil {
+			t.Fatalf("set closed_at: %v", err)
+		}
+		t.Cleanup(func() {
+			if _, err := conn.Exec(ctx, `UPDATE shops SET closed_at = NULL WHERE id = $1`, deltaDiner); err != nil {
+				t.Fatalf("reset closed_at: %v", err)
+			}
+		})
+		detail, err := shopQuery.GetShopWithCreator(ctx, deltaDiner)
+		if err != nil {
+			t.Fatalf("GetShopWithCreator returned error: %v", err)
+		}
+		if detail.ClosedAt == nil || !detail.ClosedAt.Equal(closedAt) {
+			t.Errorf("ClosedAt = %v, want %v", detail.ClosedAt, closedAt)
 		}
 	})
 
@@ -452,6 +474,32 @@ func TestShopModerationQuery(t *testing.T) {
 		}
 		if len(shops) != 1 || shops[0].ID != old2 {
 			t.Errorf("shops = %+v, want only the rejected one", shops)
+		}
+	})
+
+	t.Run("ListShopsForModeration は closed_at を、設定されていればそのまま返す", func(t *testing.T) {
+		closedAt := time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC)
+		if _, err := conn.Exec(ctx, `UPDATE shops SET closed_at = $1 WHERE id = $2`, closedAt, old1); err != nil {
+			t.Fatalf("set closed_at: %v", err)
+		}
+		t.Cleanup(func() {
+			if _, err := conn.Exec(ctx, `UPDATE shops SET closed_at = NULL WHERE id = $1`, old1); err != nil {
+				t.Fatalf("reset closed_at: %v", err)
+			}
+		})
+		shops, err := shopQuery.ListShopsForModeration(ctx, nil)
+		if err != nil {
+			t.Fatalf("ListShopsForModeration returned error: %v", err)
+		}
+		byID := map[string]domain.ShopDetail{}
+		for _, s := range shops {
+			byID[s.ID] = s
+		}
+		if got := byID[old1].ClosedAt; got == nil || !got.Equal(closedAt) {
+			t.Errorf("ClosedAt(%s) = %v, want %v", old1, got, closedAt)
+		}
+		if got := byID[newest].ClosedAt; got != nil {
+			t.Errorf("ClosedAt(%s) = %v, want nil (営業中)", newest, *got)
 		}
 	})
 }

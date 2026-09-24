@@ -13,6 +13,7 @@ const shop = (over: Partial<Shop>): Shop => ({
   photoUrl: null,
   averageRating: null,
   reviewCount: 0,
+  closedAt: null,
   ...over,
 });
 
@@ -35,6 +36,19 @@ describe("ShopPosterCard の平均評価", () => {
   it("ratingMax が取得済みなら、整数の平均も小数第 1 位まで表示する(RatingBurger 側)", async () => {
     const page = await show(<ShopPosterCard shop={shop({ averageRating: 4, reviewCount: 56 })} ratingMax={5} />);
     expect(page.textContent).toContain("4.0");
+  });
+});
+
+describe("ShopPosterCard の閉業の札", () => {
+  it("closedAt があるときは「Closed」の札を出す(status の札とは独立で、両方出ることもある)", async () => {
+    const page = await show(<ShopPosterCard shop={shop({ status: "pending", closedAt: "2026-01-01T00:00:00Z" })} ratingMax={5} />);
+    expect(page.textContent).toContain("Closed");
+    expect(page.textContent).toContain("Pending review");
+  });
+
+  it("closedAt が null のときは「Closed」の札を出さない", async () => {
+    const page = await show(<ShopPosterCard shop={shop({ status: "active", closedAt: null })} ratingMax={5} />);
+    expect(page.textContent).not.toContain("Closed");
   });
 });
 

@@ -137,6 +137,8 @@ func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *u
 		{path: "/admin/shops/{id}", methods: map[string]http.HandlerFunc{http.MethodPut: handleAdminUpdateShop(shops)}, middleware: RequireAuth(auth)},
 		{path: "/admin/shops/{id}/approve", methods: map[string]http.HandlerFunc{http.MethodPost: handleApproveShop(shops)}, middleware: RequireAuth(auth)},
 		{path: "/admin/shops/{id}/reject", methods: map[string]http.HandlerFunc{http.MethodPost: handleRejectShop(shops)}, middleware: RequireAuth(auth)},
+		{path: "/admin/shops/{id}/close", methods: map[string]http.HandlerFunc{http.MethodPost: handleCloseShop(shops)}, middleware: RequireAuth(auth)},
+		{path: "/admin/shops/{id}/reopen", methods: map[string]http.HandlerFunc{http.MethodPost: handleReopenShop(shops)}, middleware: RequireAuth(auth)},
 	}...))
 	return limitBody(mux)
 }

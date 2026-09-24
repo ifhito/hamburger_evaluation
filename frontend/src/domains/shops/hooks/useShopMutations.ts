@@ -51,6 +51,16 @@ export function useShopModeration() {
       await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
       return res.data;
     },
+    close: async (id: string): Promise<AdminShop> => {
+      const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/close`, {});
+      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
+      return res.data;
+    },
+    reopen: async (id: string): Promise<AdminShop> => {
+      const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/reopen`, {});
+      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
+      return res.data;
+    },
   };
 }
 

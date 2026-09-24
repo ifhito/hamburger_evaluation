@@ -32,6 +32,8 @@ var mcpToolScopes = map[string]string{
 	"list_admin_shops": domain.OAuthScopeAdmin,
 	"approve_shop":     domain.OAuthScopeAdmin,
 	"reject_shop":      domain.OAuthScopeAdmin,
+	"close_shop":       domain.OAuthScopeAdmin,
+	"reopen_shop":      domain.OAuthScopeAdmin,
 }
 
 // toolResultTooLargeMessage は、結果が大きすぎるときの案内である。MCP のツールの説明・指示文と同じく、AI に渡す
@@ -97,6 +99,8 @@ func (m *MCPServer) newToolServer(viewer domain.User, scopes []string, lang doma
 	mcp.AddTool(s, tool("list_admin_shops", "審査用に、すべての状態のショップの一覧を返す(管理者だけ)。status を省略すると、すべての状態を返す。"+untrustedNote, readOnly), guarded(t, "list_admin_shops", t.listAdminShops))
 	mcp.AddTool(s, tool("approve_shop", "審査待ちのショップを承認する(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(t, "approve_shop", t.approveShop))
 	mcp.AddTool(s, tool("reject_shop", "審査待ちのショップを却下する(管理者だけ)。理由は moderation_note に任意で書ける。"+writesNote+untrustedNote, destructive), guarded(t, "reject_shop", t.rejectShop))
+	mcp.AddTool(s, tool("close_shop", "営業中のショップを閉業にする(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(t, "close_shop", t.closeShop))
+	mcp.AddTool(s, tool("reopen_shop", "閉業したショップを再開する(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(t, "reopen_shop", t.reopenShop))
 	return s
 }
 
@@ -394,6 +398,36 @@ func (t *mcpTools) rejectShop(ctx context.Context, _ *mcp.CallToolRequest, in re
 	detail, err := t.shops.Reject(ctx, t.viewer, in.ShopID, in.ModerationNote)
 	if err != nil {
 		return t.toolError("reject_shop", err)
+	}
+	return success(newAdminShopResponse(detail))
+}
+
+type closeShopInput struct {
+	ShopID string `json:"shop_id" jsonschema:"閉業するショップの ID(UUID)。list_admin_shops や list_shops で分かる"`
+}
+
+func (t *mcpTools) closeShop(ctx context.Context, _ *mcp.CallToolRequest, in closeShopInput) (*mcp.CallToolResult, any, error) {
+	if !domain.IsUUID(in.ShopID) {
+		return t.failMessage(msgShopNotFound)
+	}
+	detail, err := t.shops.Close(ctx, t.viewer, in.ShopID)
+	if err != nil {
+		return t.toolError("close_shop", err)
+	}
+	return success(newAdminShopResponse(detail))
+}
+
+type reopenShopInput struct {
+	ShopID string `json:"shop_id" jsonschema:"再開するショップの ID(UUID)。list_admin_shops や list_shops で分かる"`
+}
+
+func (t *mcpTools) reopenShop(ctx context.Context, _ *mcp.CallToolRequest, in reopenShopInput) (*mcp.CallToolResult, any, error) {
+	if !domain.IsUUID(in.ShopID) {
+		return t.failMessage(msgShopNotFound)
+	}
+	detail, err := t.shops.Reopen(ctx, t.viewer, in.ShopID)
+	if err != nil {
+		return t.toolError("reopen_shop", err)
 	}
 	return success(newAdminShopResponse(detail))
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
@@ -243,6 +244,82 @@ func TestShopModerationCapabilities(t *testing.T) {
 			}
 			if got := shop.CanBeRejected(); got != tt.wantReject {
 				t.Errorf("CanBeRejected() = %v, want %v", got, tt.wantReject)
+			}
+		})
+	}
+}
+
+// TestShopCanBeClosedAndReopened は、閉業・再開の操作を行ってよいか(CanBeClosed・
+// CanBeReopened)を固定する。approve/reject と違い、この遷移は usecase が実際に強制するので、
+// pending・rejected(一度も active になっていない)、すでに閉業した shop は閉業できず、
+// 閉業していない shop は再開できない。
+func TestShopCanBeClosedAndReopened(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name          string
+		status        domain.ShopStatus
+		closedAt      *time.Time
+		wantCanClose  bool
+		wantCanReopen bool
+	}{
+		{name: "active でまだ閉業していない shop は閉業できる", status: domain.ShopStatusActive, closedAt: nil, wantCanClose: true, wantCanReopen: false},
+		{name: "pending な shop は閉業できない(一度も active になっていない)", status: domain.ShopStatusPending, closedAt: nil, wantCanClose: false, wantCanReopen: false},
+		{name: "rejected な shop は閉業できない(一度も active になっていない)", status: domain.ShopStatusRejected, closedAt: nil, wantCanClose: false, wantCanReopen: false},
+		{name: "すでに閉業した active な shop は再び閉業できないが再開できる", status: domain.ShopStatusActive, closedAt: &now, wantCanClose: false, wantCanReopen: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shop := domain.Shop{Status: tt.status, ClosedAt: tt.closedAt}
+			if got := shop.CanBeClosed(); got != tt.wantCanClose {
+				t.Errorf("CanBeClosed() = %v, want %v", got, tt.wantCanClose)
+			}
+			if got := shop.CanBeReopened(); got != tt.wantCanReopen {
+				t.Errorf("CanBeReopened() = %v, want %v", got, tt.wantCanReopen)
+			}
+		})
+	}
+}
+
+// TestShopCloseAndReopen は、閉業・再開の値遷移そのもの(Close・Reopen)を固定する。Close は
+// ClosedAt を渡された時刻にし、Reopen は nil に戻す。他のフィールドは変えない。
+func TestShopCloseAndReopen(t *testing.T) {
+	shop := domain.Shop{ID: uid.N(1), Name: "Shack", Status: domain.ShopStatusActive}
+	closedAt := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	closed := shop.Close(closedAt)
+	if closed.ClosedAt == nil || !closed.ClosedAt.Equal(closedAt) {
+		t.Errorf("Close(%v).ClosedAt = %v, want %v", closedAt, closed.ClosedAt, closedAt)
+	}
+	if closed.Name != shop.Name || closed.Status != shop.Status {
+		t.Errorf("Close は他のフィールドを変えてはいけない: %+v", closed)
+	}
+
+	reopened := closed.Reopen()
+	if reopened.ClosedAt != nil {
+		t.Errorf("Reopen().ClosedAt = %v, want nil", *reopened.ClosedAt)
+	}
+}
+
+// TestShopCanBeReviewedByIgnoresClosedShop は、閉業した shop が、status や viewer(admin・
+// creator を含む)に関わらず、決して reviewable でないことを固定する。
+func TestShopCanBeReviewedByClosedShop(t *testing.T) {
+	alice := domain.User{ID: uid.N(1), Username: "alice"}
+	admin := domain.User{ID: uid.N(2), Username: "root", Admin: true}
+	now := time.Now()
+
+	tests := []struct {
+		name   string
+		status domain.ShopStatus
+		viewer domain.User
+	}{
+		{name: "閉業した active な shop は、一般ユーザーにも review できない", status: domain.ShopStatusActive, viewer: alice},
+		{name: "閉業した active な shop は、admin にも review できない", status: domain.ShopStatusActive, viewer: admin},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shop := domain.Shop{ID: uid.N(10), Status: tt.status, ClosedAt: &now, CreatorID: ptr(alice.ID)}
+			if got := shop.CanBeReviewedBy(tt.viewer); got {
+				t.Errorf("CanBeReviewedBy(%+v) = true, want false (shop is closed)", tt.viewer)
 			}
 		})
 	}
