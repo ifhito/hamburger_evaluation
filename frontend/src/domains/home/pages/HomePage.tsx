@@ -94,7 +94,7 @@ export default function HomePage() {
           <h2 className={styles.heading}>{t("home.reviews.heading")}</h2>
           {latestReviews && latestReviews.length > 0 && <span className={styles.count}>{t("reviews.detail.newestFirst")}</span>}
         </div>
-        {reviewsLoading && <Loading />}
+        {(reviewsLoading || authLoading) && <Loading />}
         {reviewsError && <Alert message={t("reviews.list.loadError")} />}
         {latestReviews && latestReviews.length === 0 && <EmptyState />}
         {latestReviews && latestReviews.length > 0 && (
@@ -111,7 +111,7 @@ export default function HomePage() {
           <h2 className={styles.heading}>{t("home.shops.heading")}</h2>
           {newShops && newShops.length > 0 && <span className={styles.count}>{t("reviews.detail.newestFirst")}</span>}
         </div>
-        {shopsLoading && <Loading />}
+        {(shopsLoading || authLoading) && <Loading />}
         {shopsError && <Alert message={t("shops.list.loadError")} />}
         {newShops && newShops.length === 0 && (
           <EmptyState title={t("home.shops.emptyTitle")} description={t("home.shops.emptyDescription")} />

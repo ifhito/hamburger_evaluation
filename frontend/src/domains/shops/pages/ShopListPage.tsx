@@ -52,7 +52,7 @@ export default function ShopListPage() {
         )}
       </div>
 
-      {isLoading && <Loading />}
+      {(isLoading || authLoading) && <Loading />}
       {error && <Alert message={t("shops.list.loadError")} />}
       {shops && shops.length === 0 && <EmptyState />}
 

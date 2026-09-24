@@ -65,7 +65,7 @@ export default function ReviewListPage() {
         )}
       </div>
 
-      {isLoading && <Loading />}
+      {(isLoading || authLoading) && <Loading />}
       {error && <Alert message={t("reviews.list.loadError")} />}
       {reviews && reviews.length === 0 && <EmptyState />}
 

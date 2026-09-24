@@ -40,6 +40,18 @@ describe("getKey", () => {
     expect(getKey(undefined)(1, page(false, 20))).toBeNull();
     expect(getKey(undefined)(1, page(false, 0))).toBeNull();
   });
+
+  it("enabled が false のときは、先頭ページも次ページも null を返して取得を止める", () => {
+    const disabled = getKey({ keyword: "beef" }, false);
+
+    expect(disabled(0, null)).toBeNull();
+    expect(disabled(1, page(true))).toBeNull();
+  });
+
+  it("enabled を省略した場合と true の場合は、これまでどおりキーを返す", () => {
+    expect(getKey({ keyword: "beef" })(0, null)).toBe("/shops?keyword=beef&page=1");
+    expect(getKey({ keyword: "beef" }, true)(0, null)).toBe("/shops?keyword=beef&page=1");
+  });
 });
 
 const viewer3 = "00000000-0000-4000-8000-000000000003";
