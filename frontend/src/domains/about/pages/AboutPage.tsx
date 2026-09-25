@@ -18,25 +18,30 @@ export default function AboutPage() {
 
         <section className={styles.message}>
           <h2>{t("about.messageTitle")}</h2>
-          <p>{t("about.messageFirst")}</p>
-          <p>{t("about.messageSecond")}</p>
-          <p className={styles.emphasis}>{t("about.messageLast")}</p>
+          <p>{t("about.introduction")}</p>
+          <p>{t("about.question")}</p>
+          <p>{t("about.discovery")}</p>
+          <p>{t("about.charm")}</p>
         </section>
 
-        <section className={styles.values}>
-          <h2 className={styles.valuesTitle}>{t("about.valuesTitle")}</h2>
-          <div className={styles.value}>
-            <span className={styles.number} aria-hidden="true">01</span>
-            <div><h3>{t("about.recordTitle")}</h3><p>{t("about.recordBody")}</p></div>
-          </div>
-          <div className={styles.value}>
-            <span className={styles.number} aria-hidden="true">02</span>
-            <div><h3>{t("about.discoverTitle")}</h3><p>{t("about.discoverBody")}</p></div>
-          </div>
-          <div className={styles.value}>
-            <span className={styles.number} aria-hidden="true">03</span>
-            <div><h3>{t("about.shareTitle")}</h3><p>{t("about.shareBody")}</p></div>
-          </div>
+        <section className={styles.message}>
+          <h2>{t("about.wishTitle")}</h2>
+          <p>{t("about.missing")}</p>
+          <p>{t("about.ramen")}</p>
+          <p className={styles.emphasis}>{t("about.wish")}</p>
+          <p>{t("about.motivation")}</p>
+        </section>
+
+        <section className={styles.message}>
+          <h2>{t("about.everydayTitle")}</h2>
+          <p>{t("about.everyday")}</p>
+          <p>{t("about.community")}</p>
+        </section>
+
+        <section className={styles.message}>
+          <h2>{t("about.nameTitle")}</h2>
+          <p>{t("about.nameOrigin")}</p>
+          <p>{t("about.moon")}</p>
         </section>
 
         <section className={styles.invitation}>
