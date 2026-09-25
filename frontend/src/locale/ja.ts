@@ -3,6 +3,7 @@
 // デザインに無いもの(aria-label・フォールバックのエラー文言など)は、同じ調子で自然な日本語にした。
 const ja = {
   nav: {
+    aboutHeader: "Burger Stackについて",
     brand: "BurgerStack",
     about: "BurgerStackとは？",
     shops: "ショップ",

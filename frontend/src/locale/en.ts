@@ -1,5 +1,6 @@
 const en = {
   nav: {
+    aboutHeader: "About Burger Stack",
     brand: "BurgerStack",
     about: "About BurgerStack",
     shops: "Shops",
