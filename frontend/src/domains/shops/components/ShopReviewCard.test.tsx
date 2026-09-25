@@ -23,13 +23,14 @@ const html = (r: Review) =>
   );
 
 describe("ShopReviewCard(ショップ詳細のレビューのカード)", () => {
-  it("「詳しく見る」の文字を出さず、カード全体がレビュー詳細への 1 つのリンクになる", () => {
+  it("写真・バーガー名・投稿者名からそれぞれの詳細へ移動できる", () => {
     const markup = html(review);
 
     expect(markup).not.toContain("詳しく見る");
     expect(markup).not.toContain("Read more");
-    expect(markup.match(/<a /g)?.length).toBe(1);
+    expect(markup).toContain('href="/users/u1"');
     expect(markup).toContain('href="/reviews/r1"');
+    expect(markup).toContain("<article");
   });
 
   it("リンクの aria-label に、バーガー名と投稿者名が入る", () => {
@@ -45,7 +46,7 @@ describe("ShopReviewCard(ショップ詳細のレビューのカード)", () => 
     const markup = html({ ...review, burger: null });
     const ariaLabel = markup.match(/aria-label="([^"]+)"/)?.[1];
 
-    expect(markup.match(/<a /g)?.length).toBe(1);
+    expect(markup).not.toContain('href="/burgers/');
     expect(markup).toContain('href="/reviews/r1"');
     expect(ariaLabel).toContain("alice");
     expect(ariaLabel).not.toContain("{{");

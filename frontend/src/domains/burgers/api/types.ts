@@ -3,6 +3,7 @@
 export interface BurgerDetail {
   id: string;
   name: string;
+  photoUrl: string | null;
   shops: { id: string; name: string }[];
   averageRating: number | null;
   weightedScore: number | null;
@@ -14,6 +15,7 @@ export interface BurgerDetail {
 export interface BurgerRanking {
   id: string;
   name: string;
+  photoUrl: string | null;
   shop: { id: string; name: string };
   averageRating: number;
   weightedScore: number;

@@ -6,6 +6,7 @@ import { useBurger } from "../hooks/useBurger";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
 import { ReviewListCard } from "../../reviews/components/ReviewListCard";
+import { Photo } from "../../../components/ui/Photo";
 import { Alert } from "../../../components/ui/Alert";
 import { Button } from "../../../components/ui/Button";
 import { LinkButton } from "../../../components/ui/LinkButton";
@@ -55,6 +56,8 @@ export default function BurgerDetailPage() {
     <Layout>
       <div className={styles.narrow}>
         <TextLink to="/reviews">{t("reviews.detail.backToReviews")}</TextLink>
+
+        <Photo src={burger.photoUrl} alt={burger.name} className={styles.photo} fallbackClassName={styles.noPhoto} fallback={t("shops.list.noPhoto")} lazy={false} />
 
         <section className={styles.titleSection}>
           <h1 className={styles.name}>{burger.name}</h1>

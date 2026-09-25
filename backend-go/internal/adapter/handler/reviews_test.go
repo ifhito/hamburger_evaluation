@@ -359,7 +359,7 @@ func TestCreateReview(t *testing.T) {
 		want := `{"id":"` + uid.N(1) + `","rating":4,"comment":"Tasty","created_at":"2024-06-01T12:01:00Z","visited_at":null,"photo_url":null,"user":{"id":"` + uid.N(1) + `","username":"alice"},` +
 			`"burger":{"id":"` + uid.N(5) + `","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`
 		wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
-		wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false,"shop":{"id":"` + uid.N(1) + `","name":"Active Diner"}}` // 匿名は、詳細でも can_review が false で、見える先頭のショップが付く(一覧・作成・更新には、この 2 項目がない)
+		wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false,"shop":{"id":"` + uid.N(1) + `","name":"Active Diner"}}` // 匿名は、詳細でも can_review が false で、見える先頭のショップが付く(一覧は can_review を持たず、作成・更新はこの2項目を持たない)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -368,8 +368,9 @@ func TestCreateReview(t *testing.T) {
 		if list.Code != http.StatusOK {
 			t.Fatalf("list status = %d, want %d (body %s)", list.Code, http.StatusOK, list.Body)
 		}
-		if got := list.Body.String(); got != "["+wantAnon+"]" {
-			t.Errorf("list body = %s, want [%s]", got, wantAnon)
+		wantAnonList := strings.TrimSuffix(wantAnon, "}") + `,"shop":null}`
+		if got := list.Body.String(); got != "["+wantAnonList+"]" {
+			t.Errorf("list body = %s, want [%s]", got, wantAnonList)
 		}
 
 		detail := do(router, http.MethodGet, "/reviews/"+uid.N(1), "", "")
@@ -594,7 +595,7 @@ func TestListReviews(t *testing.T) {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
 		want := fmt.Sprintf(`[{"id":%q,"rating":4,"comment":"On cheese","created_at":"2024-06-01T12:01:00Z","visited_at":null,`+
-			`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":false}]`,
+			`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":false,"shop":null}]`,
 			cheeseReviewID)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -896,7 +897,7 @@ func TestUpdateReview(t *testing.T) {
 			`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`,
 			cheeseReviewID)
 		wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
-		wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false,"shop":{"id":"` + uid.N(1) + `","name":"Active Diner"}}` // 匿名は、詳細でも can_review が false で、見える先頭のショップが付く(一覧・作成・更新には、この 2 項目がない)
+		wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false,"shop":{"id":"` + uid.N(1) + `","name":"Active Diner"}}` // 匿名は、詳細でも can_review が false で、見える先頭のショップが付く(一覧は can_review を持たず、作成・更新はこの2項目を持たない)
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -946,7 +947,7 @@ func TestUpdateReviewIgnoresShopAndBurgerID(t *testing.T) {
 		`"photo_url":null,"user":{"id":"`+uid.N(1)+`","username":"alice"},"burger":{"id":"`+uid.N(5)+`","name":"Cheese","average_rating":4.5,"review_count":2,"weighted_score":4.1,"confidence":0.8},"can_edit":true}`,
 		cheeseReviewID)
 	wantAnon := strings.Replace(want, `"can_edit":true`, `"can_edit":false`, 1)
-	wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false,"shop":{"id":"` + uid.N(1) + `","name":"Active Diner"}}` // 匿名は、詳細でも can_review が false で、見える先頭のショップが付く(一覧・作成・更新には、この 2 項目がない)
+	wantAnonDetail := strings.TrimSuffix(wantAnon, "}") + `,"can_review":false,"shop":{"id":"` + uid.N(1) + `","name":"Active Diner"}}` // 匿名は、詳細でも can_review が false で、見える先頭のショップが付く(一覧は can_review を持たず、作成・更新はこの2項目を持たない)
 	if got := rec.Body.String(); got != want {
 		t.Errorf("body = %s, want the original burger with updated content %s", got, want)
 	}

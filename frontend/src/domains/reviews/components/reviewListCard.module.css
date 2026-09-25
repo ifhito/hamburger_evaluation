@@ -2,7 +2,7 @@
    日付・コメント・投稿者の行は components/reviewCard.module.css(ショップ詳細の ShopReviewCard と共有)から借りる。
    この画面だけの見た目は、コメントの下に置く対象のバーガー名(.target)だけ。 */
 .card {
-  composes: cardLink from '../../../components/ui/card.module.css';
+  composes: card from '../../../components/ui/card.module.css';
 }
 
 .photo {
@@ -42,3 +42,22 @@
 .foot {
   composes: foot from '../../../components/reviewCard.module.css';
 }
+
+.photoLink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.photoLink:focus-visible {
+  outline: 2px solid var(--ui-text);
+  outline-offset: -2px;
+}
+
+.shop {
+  font-size: 14px;
+  color: var(--ui-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.card a { color: inherit; }

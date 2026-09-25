@@ -31,6 +31,7 @@ vi.mock("../../reviews/hooks/useRatingRange", () => ({ useRatingRange: () => ({ 
 const baseBurger: BurgerDetail = {
   id: "3",
   name: "Cheeseburger",
+  photoUrl: null,
   shops: [
     { id: "9", name: "Test Shop" },
     { id: "10", name: "Second Shop" },
@@ -72,6 +73,13 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("BurgerDetailPage の状態の表示", () => {
+  it("APIが返した代表写真を、レビュー一覧とは別にバーガーの写真として表示する", async () => {
+    state.burger = { ...baseBurger, photoUrl: "/photos/burger.jpg" };
+    const page = await show();
+    expect(page.querySelector('img[src="/photos/burger.jpg"]')?.getAttribute("alt")).toBe("Cheeseburger");
+    expect(page.querySelector("h1")?.textContent).toBe("Cheeseburger");
+  });
+
   it("バーガー名・お店へのリンク・平均・件数を出す", async () => {
     const page = await show();
 

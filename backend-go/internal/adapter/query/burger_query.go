@@ -37,6 +37,9 @@ func (r *BurgerQuery) GetBurgerWithStats(ctx context.Context, id string) (domain
 		return domain.BurgerDetail{}, fmt.Errorf("get burger: %w", err)
 	}
 	detail := domain.BurgerDetail{ID: row.ID, Name: row.Name}
+	if row.PhotoKey.Valid {
+		detail.PhotoKey = &row.PhotoKey.String
+	}
 	if row.ReviewCount.Valid && row.ReviewCount.Int64 > 0 {
 		count := row.ReviewCount.Int64
 		avg := row.AverageRating.Float64
@@ -80,7 +83,12 @@ func (r *BurgerQuery) ListBurgerRankings(ctx context.Context, limit, offset int3
 	rows, hasMore := trimPage(rows, limit)
 	rankings := make([]domain.BurgerRanking, 0, len(rows))
 	for _, row := range rows {
+		var photoKey *string
+		if row.PhotoKey.Valid {
+			photoKey = &row.PhotoKey.String
+		}
 		rankings = append(rankings, domain.BurgerRanking{
+			PhotoKey:      photoKey,
 			ID:            row.ID,
 			Name:          row.Name,
 			Shop:          domain.ShopRef{ID: row.ShopID, Name: row.ShopName},

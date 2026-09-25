@@ -5,6 +5,8 @@ export interface Review {
   photoUrl: string | null;
   createdAt: string;
   visitedAt: string | null;
+  // 店舗詳細内のレビューにはない。公開一覧では関連する公開店舗を返す。
+  shop?: { id: string; name: string } | null;
   user: { id: string; username: string } | null;
   burger: {
     id: string;
@@ -25,7 +27,7 @@ export interface ReviewView extends Review {
 
 // GET /reviews/{id}(詳細)の応答。shop は、閲覧者に見える、そのレビューのショップ(見えないときは null)で、
 // canReview は、閲覧者がそのショップにレビューを書けるか(匿名は false)。どちらも backend が決めて返す
-// (frontend は、ショップの状態や作成者を比べない)。一覧・作成・更新の応答にはない。
+// (frontend は、ショップの状態や作成者を比べない)。canReview は詳細だけ。shop は公開一覧にもあり、作成・更新にはない。
 export interface ReviewDetailView extends ReviewView {
   canReview: boolean;
   shop: { id: string; name: string } | null;

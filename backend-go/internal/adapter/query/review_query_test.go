@@ -105,6 +105,7 @@ func TestReviewQuery(t *testing.T) {
 
 		comment := "Tasty"
 		wantOld := domain.ReviewDetail{
+			Shop:   &domain.ShopRef{ID: active1, Name: "Active One"},
 			Review: domain.Review{ID: rOld, Rating: 5, Comment: &comment, AuthorID: alice, BurgerID: cheese, CreatedAt: t1},
 			User:   &domain.UserRef{ID: alice, Username: "alice"},
 			Burger: &domain.ShopReviewBurger{ID: cheese, Name: "Cheese", AverageRating: 4.0, ReviewCount: 2, WeightedScore: 3.9, Confidence: 0.7},

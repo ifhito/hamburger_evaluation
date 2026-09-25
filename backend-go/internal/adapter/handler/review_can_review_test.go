@@ -110,10 +110,10 @@ func TestGetReviewShopAndCanReview(t *testing.T) {
 		}
 	})
 
-	t.Run("一覧は can_review も shop も持たない(詳細だけの項目)", func(t *testing.T) {
+	t.Run("一覧には関連店舗を含むが投稿権限は含めない", func(t *testing.T) {
 		rec := do(router, http.MethodGet, "/reviews", "", bobAuth)
-		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "can_review") || strings.Contains(rec.Body.String(), `"shop"`) {
-			t.Errorf("status = %d, body = %s, want 一覧に can_review・shop がない", rec.Code, rec.Body)
+		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "can_review") || !strings.Contains(rec.Body.String(), `"shop"`) {
+			t.Errorf("status = %d, body = %s, want 一覧に shop があり can_review がない", rec.Code, rec.Body)
 		}
 	})
 }

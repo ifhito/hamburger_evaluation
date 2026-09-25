@@ -129,7 +129,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	}
 
 	shops := usecase.NewShops(query.NewShopQuery(pool), domain.NewShops(repository.NewShopRepository(pool)), photos)
-	burgers := usecase.NewBurgers(query.NewBurgerQuery(pool))
+	burgers := usecase.NewBurgers(query.NewBurgerQuery(pool), photos)
 	// 統計の再計算役(BurgerStatsRecalculator・ShopStatsRecalculator)は、その手順を持ち、現在時刻を外から受け取る。
 	// 書き込み(レビュー・退会)は、バーガーの統計とショップの集計、両方の再計算の依頼を、同じトランザクションで
 	// 登録する(ShopStatsRecalculator のコメントに、ワーカーからではなく書き込みから呼ぶ理由がある)。

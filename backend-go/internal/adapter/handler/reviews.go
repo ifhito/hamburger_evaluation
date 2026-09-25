@@ -240,6 +240,20 @@ type reviewResponse struct {
 	CanEdit bool `json:"can_edit"`
 }
 
+// reviewListResponse は公開一覧に、関連する公開店舗を添える。
+type reviewListResponse struct {
+	reviewResponse
+	Shop *shopRefResponse `json:"shop"`
+}
+
+func newReviewListResponse(detail domain.ReviewDetail) reviewListResponse {
+	resp := reviewListResponse{reviewResponse: newReviewResponse(detail)}
+	if detail.Shop != nil {
+		resp.Shop = &shopRefResponse{ID: detail.Shop.ID, Name: detail.Shop.Name}
+	}
+	return resp
+}
+
 // shopRefResponse は、レビュー詳細に埋め込まれる、そのレビューのショップである。
 type shopRefResponse struct {
 	ID   string `json:"id"`
@@ -249,7 +263,7 @@ type shopRefResponse struct {
 // reviewDetailResponse は GET /reviews/{id} の body である。reviewResponse に、そのレビューのショップ(shop。
 // viewer に見えるショップがないときは null)と、viewer がそこにレビューを書けるか(can_review。ショップ詳細の
 // can_review と同じ規則)を足したもの。どのショップを返すかは domain.ReviewShopFor が決め、ここは写すだけである。
-// 一覧・作成・更新の応答には含めない(画面が使うのは詳細だけで、ほかでは意味のない null・false になるため)。
+// can_review は詳細だけで返す。shop は公開一覧にもあり、作成・更新には含めない。
 type reviewDetailResponse struct {
 	reviewResponse
 	CanReview bool             `json:"can_review"`
@@ -387,9 +401,9 @@ func handleListReviews(reviews *usecase.Reviews) http.HandlerFunc {
 			writeInternalError(w)
 			return
 		}
-		resp := make([]reviewResponse, 0, len(list)) // nil ではない：[] として marshal される
+		resp := make([]reviewListResponse, 0, len(list)) // nil ではない：[] として marshal される
 		for _, detail := range list {
-			resp = append(resp, newReviewResponse(detail))
+			resp = append(resp, newReviewListResponse(detail))
 		}
 		setHasMore(w, hasMore)
 		writeJSON(w, http.StatusOK, resp)

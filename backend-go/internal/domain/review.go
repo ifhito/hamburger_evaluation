@@ -134,8 +134,8 @@ type ReviewDetail struct {
 	CanEdit bool
 	// Shop は、viewer にとっての、この review のショップである(ReviewShopFor が決める)。viewer に見える
 	// ショップがないときは nil で、見えないショップの ID・名前は持たない。
-	// Shop と CanReview は、**review の詳細(Reviews.Get)でだけ意味を持つ**。一覧・作成・更新では、
-	// 設定されない(nil と false のままで、「できない」ではなく「求めていない」)。
+	// 詳細では閲覧者ごとの店舗、公開一覧では匿名にも見える代表店舗を持つ。
+	// 作成・更新では設定されない。CanReview は詳細だけで設定する。
 	Shop *ShopRef
 	// CanReview は、viewer が、Shop のショップに review を投稿できるかである(ショップ詳細の CanReview と
 	// 同じ規則。Shop.CanBeReviewedByViewer)。viewer ごとに決まる値。

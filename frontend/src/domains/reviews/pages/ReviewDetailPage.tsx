@@ -6,6 +6,7 @@ import { useReview } from "../hooks/useReview";
 import { useDeleteReview } from "../hooks/useReviewMutations";
 import { useRatingRange } from "../hooks/useRatingRange";
 import { formatDate, formatVisitedAt } from "../../../lib/date";
+import { Photo } from "../../../components/ui/Photo";
 import { Button } from "../../../components/ui/Button";
 import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
@@ -62,11 +63,7 @@ export default function ReviewDetailPage() {
         <TextLink to="/reviews">{t("reviews.detail.backToReviews")}</TextLink>
 
         <div className={styles.hero}>
-          {review.photoUrl ? (
-            <img src={review.photoUrl} alt={t("reviews.photo.alt")} className={styles.heroPhoto} />
-          ) : (
-            <div className={styles.heroNoPhoto}>{t("shops.detail.noPhoto")}</div>
-          )}
+          <Photo src={review.photoUrl} alt={t("reviews.photo.alt")} className={styles.heroPhoto} fallbackClassName={styles.heroNoPhoto} fallback={t("shops.detail.noPhoto")} lazy={false} />
         </div>
 
         <div className={styles.narrow}>
@@ -80,7 +77,7 @@ export default function ReviewDetailPage() {
                 t("shops.detail.unknown")
               )}
             </h1>
-            {review.shop && <p className={styles.shop}>{review.shop.name}</p>}
+            {review.shop && <p className={styles.shop}><TextLink to={`/shops/${review.shop.id}`}>{review.shop.name}</TextLink></p>}
           </section>
 
           <section className={styles.review}>
@@ -89,8 +86,8 @@ export default function ReviewDetailPage() {
                 {review.user ? [...review.user.username][0] : "?"}
               </span>
               <div className={styles.grow}>
-                <b>{review.user?.username ?? t("shops.detail.unknown")}</b>
-                <time dateTime={review.createdAt}>{formatDate(review.createdAt)}</time>
+                <b>{review.user ? <TextLink to={`/users/${review.user.id}`}>{review.user.username}</TextLink> : t("shops.detail.unknown")}</b>
+                <time dateTime={review.createdAt}>{t("reviews.edit.postedOn", { date: formatDate(review.createdAt) })}</time>
                 {review.visitedAt && (
                   <time dateTime={review.visitedAt}>{t("reviews.detail.visitedOn", { date: formatVisitedAt(review.visitedAt) })}</time>
                 )}

@@ -11,6 +11,7 @@ import (
 
 // burgerRankingResponse は GET /burgers のトップレベル配列の要素 1 つである(ワイヤ上は snake_case)。
 type burgerRankingResponse struct {
+	PhotoURL      *string         `json:"photo_url"`
 	ID            string          `json:"id"`
 	Name          string          `json:"name"`
 	Shop          shopRefResponse `json:"shop"`
@@ -22,6 +23,7 @@ type burgerRankingResponse struct {
 func newBurgerRankingResponse(r domain.BurgerRanking) burgerRankingResponse {
 	return burgerRankingResponse{
 		ID:            r.ID,
+		PhotoURL:      r.PhotoURL,
 		Name:          r.Name,
 		Shop:          shopRefResponse{ID: r.Shop.ID, Name: r.Shop.Name},
 		AverageRating: r.AverageRating,
@@ -57,6 +59,7 @@ func handleListBurgers(burgers *usecase.Burgers) http.HandlerFunc {
 
 // burgerDetailResponse は GET /burgers/{id} の body である。
 type burgerDetailResponse struct {
+	PhotoURL      *string           `json:"photo_url"`
 	ID            string            `json:"id"`
 	Name          string            `json:"name"`
 	Shops         []shopRefResponse `json:"shops"`
@@ -71,7 +74,7 @@ func newBurgerDetailResponse(detail domain.BurgerDetail) burgerDetailResponse {
 		shops = append(shops, shopRefResponse{ID: s.ID, Name: s.Name})
 	}
 	return burgerDetailResponse{
-		ID: detail.ID, Name: detail.Name, Shops: shops,
+		ID: detail.ID, Name: detail.Name, Shops: shops, PhotoURL: detail.PhotoURL,
 		AverageRating: detail.AverageRating, WeightedScore: detail.WeightedScore, ReviewCount: detail.ReviewCount,
 	}
 }

@@ -55,12 +55,13 @@ describe("ProfileReviewCard(プロフィールのレビューのカード)", () 
     expect(markup).toContain('dateTime="2026-09-21T00:00:00Z"');
   });
 
-  it("「詳しく見る」「View」の文字を出さず、カード全体がレビュー詳細への 1 つのリンクになる", () => {
+  it("写真からレビュー詳細へ、バーガー名からバーガー詳細へ移動できる", () => {
     const markup = html(review);
 
     expect(markup).not.toContain("詳しく見る");
     expect(markup).not.toContain("View");
-    expect(markup.match(/<a /g)?.length).toBe(1);
+    expect(markup).toContain('href="/reviews/r1"');
+    expect(markup).toContain('href="/burgers/b1"');
   });
 
   it("comment が空のときは、空のコメント欄を出さない(評価だけのレビュー)", () => {
@@ -89,5 +90,19 @@ describe("ProfileReviewCard の実食日(visitedAt)", () => {
   it("visitedAt が null のときは、実食日を出さない", () => {
     const markup = html(review);
     expect(markup).not.toContain("Visited ");
+  });
+});
+
+
+describe("プロフィールの関連店舗", () => {
+  it("レビューの店舗名を、正しい店舗詳細へのリンクとして表示する", () => {
+    const markup = html({ ...review, shop: { id: "shop-b", name: "別のバーガー店" } });
+    expect(markup).toContain('href="/shops/shop-b"');
+    expect(markup).toContain("別のバーガー店");
+  });
+  it("店舗情報がない場合も評価を残し、壊れた店舗リンクを作らない", () => {
+    const markup = html({ ...review, shop: null });
+    expect(markup).not.toContain('href="/shops/');
+    expect(markup).toContain('href="/reviews/r1"');
   });
 });

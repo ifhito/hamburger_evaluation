@@ -12,6 +12,9 @@ type BurgerRanking struct {
 	// 紐づくときは、作成が最も古い(created_at 昇順、同時刻は id 昇順)ものを採る。
 	// これは、匿名の閲覧者に対して ReviewShopFor が選ぶショップ(見えるショップの
 	// 先頭)と同じ選び方である(この一覧には閲覧者がなく、常に匿名と同じ扱いになる)。
+	// PhotoKey は最新の有効な写真付きレビューのキー、PhotoURL は公開 URL。写真なしは nil。
+	PhotoKey      *string
+	PhotoURL      *string
 	Shop          ShopRef
 	AverageRating float64
 	WeightedScore float64

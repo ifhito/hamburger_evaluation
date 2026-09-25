@@ -49,7 +49,7 @@ var _ usecase.BurgerQuery = (*fakeBurgerQuery)(nil)
 // そのまま(wrap されて)伝播することを確かめる。
 func TestBurgersGetNotFound(t *testing.T) {
 	query := &fakeBurgerQuery{detailErr: domain.ErrBurgerNotFound}
-	_, err := usecase.NewBurgers(query).Get(context.Background(), nil, uid.N(1))
+	_, err := usecase.NewBurgers(query, stubPhotoURLs{}).Get(context.Background(), nil, uid.N(1))
 	if !errors.Is(err, domain.ErrBurgerNotFound) {
 		t.Fatalf("error = %v, want %v", err, domain.ErrBurgerNotFound)
 	}
@@ -100,7 +100,7 @@ func TestBurgersGetShopVisibility(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			detail, err := usecase.NewBurgers(newQuery()).Get(context.Background(), tt.viewer, burgerID)
+			detail, err := usecase.NewBurgers(newQuery(), stubPhotoURLs{}).Get(context.Background(), tt.viewer, burgerID)
 			if err != nil {
 				t.Fatalf("Get returned error: %v", err)
 			}
@@ -127,7 +127,7 @@ func TestBurgersListPagination(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			query := &fakeBurgerQuery{}
-			if _, _, err := usecase.NewBurgers(query).List(context.Background(), tt.page, tt.perPage); err != nil {
+			if _, _, err := usecase.NewBurgers(query, stubPhotoURLs{}).List(context.Background(), tt.page, tt.perPage); err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}
 			if query.lastLimit != tt.wantLimit || query.lastOffset != tt.wantOffset {
@@ -140,8 +140,47 @@ func TestBurgersListPagination(t *testing.T) {
 // TestBurgersListError は、query の失敗が wrap されてそのまま伝播することを確かめる。
 func TestBurgersListError(t *testing.T) {
 	query := &fakeBurgerQuery{rankingsErr: io.ErrUnexpectedEOF}
-	_, _, err := usecase.NewBurgers(query).List(context.Background(), 1, 20)
+	_, _, err := usecase.NewBurgers(query, stubPhotoURLs{}).List(context.Background(), 1, 20)
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("error = %v, want wrapping %v", err, io.ErrUnexpectedEOF)
+	}
+}
+
+// TestBurgersPhotos は、代表写真の URL と閲覧できない店舗の写真の非表示を検証する。
+func TestBurgersPhotos(t *testing.T) {
+	key := "reviews/burger.jpg"
+	creator := uid.N(1)
+	for _, tt := range []struct {
+		name   string
+		status domain.ShopStatus
+		viewer *domain.User
+		want   bool
+	}{
+		{"公開店舗の写真は匿名でも表示する", domain.ShopStatusActive, nil, true},
+		{"非公開店舗しかない場合は匿名に写真を返さない", domain.ShopStatusPending, nil, false},
+		{"非公開店舗の申請者には写真を表示する", domain.ShopStatusPending, &domain.User{ID: creator}, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			q := &fakeBurgerQuery{detail: domain.BurgerDetail{ID: uid.N(2), PhotoKey: &key}, shops: []domain.Shop{{ID: uid.N(3), Status: tt.status, CreatorID: &creator}}}
+			got, err := usecase.NewBurgers(q, stubPhotoURLs{}).Get(context.Background(), tt.viewer, uid.N(2))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.want {
+				if got.PhotoURL == nil || *got.PhotoURL != "https://photos.test/reviews/burger.jpg" {
+					t.Fatalf("photo = %v", got.PhotoURL)
+				}
+			} else if got.PhotoURL != nil {
+				t.Fatalf("hidden photo = %v", *got.PhotoURL)
+			}
+		})
+	}
+	q := &fakeBurgerQuery{rankings: []domain.BurgerRanking{{PhotoKey: &key}, {}}}
+	got, _, err := usecase.NewBurgers(q, stubPhotoURLs{}).List(context.Background(), 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].PhotoURL == nil || *got[0].PhotoURL != "https://photos.test/reviews/burger.jpg" || got[1].PhotoURL != nil {
+		t.Fatalf("photos = %+v", got)
 	}
 }
