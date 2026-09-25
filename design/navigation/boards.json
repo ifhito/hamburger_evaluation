@@ -1,0 +1,70 @@
+{
+  "fileId": "001b6a38-fea0-8183-8008-b1972f0a2199",
+  "projectId": "001b6a38-fea0-8183-8008-b179064866fd",
+  "boards": [
+    {
+      "key": "home-pc",
+      "name": "PC / ヘッダー・フッター",
+      "page": "001b6a38-fea0-8183-8008-b1972f0a420c",
+      "frame": "e2e6d6ac-7c82-4ab9-900e-90b4b17f7fc0",
+      "width": 1280,
+      "height": 1372
+    },
+    {
+      "key": "home-mobile",
+      "name": "スマホ / ホーム",
+      "page": "001b6a38-fea0-8183-8008-b1972f0a420c",
+      "frame": "679c2e78-ff08-424a-99e8-8d9af5807f43",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "key": "search-mobile",
+      "name": "スマホ / 探す",
+      "page": "001b6a38-fea0-8183-8008-b1972f0a420c",
+      "frame": "72498c59-bcb0-4d53-82be-5eca3ab28b33",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "key": "record-mobile",
+      "name": "スマホ / 記録する",
+      "page": "001b6a38-fea0-8183-8008-b1972f0a420c",
+      "frame": "c473bd73-e076-451b-9a02-390f3b6354dc",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "key": "profile-mobile",
+      "name": "スマホ / マイページ",
+      "page": "001b6a38-fea0-8183-8008-b1972f0a420c",
+      "frame": "5d0dc5d1-84d1-46b1-8d6c-876a709e3c5f",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "key": "footer-mobile",
+      "name": "スマホ / フッター末尾",
+      "page": "001b6a38-fea0-8183-8008-b1972f0a420c",
+      "frame": "fe5d5f3a-a2ce-4a41-ac0e-dd9c5da8c6be",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "key": "guest-mobile",
+      "name": "スマホ / 未ログイン",
+      "page": "001b6a38-fea0-8183-8008-b1972f0a420c",
+      "frame": "c0294201-b3c6-4376-a53c-a5d448fc28f9",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "key": "compact-mobile",
+      "name": "スマホ / 320px",
+      "page": "001b6a38-fea0-8183-8008-b1972f0a420c",
+      "frame": "065181fa-a575-452c-af79-89108be2ac49",
+      "width": 320,
+      "height": 740
+    }
+  ]
+}
