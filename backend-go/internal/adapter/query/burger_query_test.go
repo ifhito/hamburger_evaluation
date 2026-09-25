@@ -415,3 +415,67 @@ func TestBurgerQuery(t *testing.T) {
 		}
 	})
 }
+
+// TestBurgerRepresentativePhoto は、一覧と詳細が同じ最新の有効な写真を選ぶことを検証する。
+func TestBurgerRepresentativePhoto(t *testing.T) {
+	ctx := context.Background()
+	conn, _ := dbtest.New(t)
+	q := query.NewBurgerQuery(conn)
+	user := dbtest.InsertUserRow(ctx, t, conn, `INSERT INTO users(email,username,password_digest) VALUES ('photos@test.example','photo','x') RETURNING id`)
+	retired := dbtest.InsertUserRow(ctx, t, conn, `INSERT INTO users(email,username,password_digest,discarded_at) VALUES ('retired@test.example','retired','x',now()) RETURNING id`)
+	burger := insertBurger(ctx, t, conn, "写真付きバーガー")
+	shop := insertShopAt(ctx, t, conn, "公開店舗", 1, time.Now())
+	linkShopBurger(ctx, t, conn, shop, burger)
+	insertBurgerStats(ctx, t, conn, burger, 4)
+	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	for _, r := range []struct {
+		id        string
+		user      string
+		key       *string
+		at        time.Time
+		discarded bool
+	}{
+		{uid.N(1), user, photoKeyPtr("old.jpg"), now.Add(-time.Hour), false},
+		{uid.N(2), user, photoKeyPtr("tie-low.jpg"), now, false},
+		{uid.N(3), user, photoKeyPtr("latest.jpg"), now, false},
+		{uid.N(4), user, nil, now.Add(time.Hour), false},
+		{uid.N(5), user, photoKeyPtr("deleted.jpg"), now.Add(time.Hour), true},
+		{uid.N(6), retired, photoKeyPtr("retired.jpg"), now.Add(time.Hour), false},
+	} {
+		_, err := conn.Exec(ctx, `INSERT INTO reviews(id,rating,user_id,burger_id,photo_key,created_at,discarded_at) VALUES ($1,4,$2,$3,$4,$5,CASE WHEN $6 THEN now() END)`, r.id, r.user, burger, r.key, r.at, r.discarded)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, empty := range []bool{false, true} {
+		t.Run(map[bool]string{false: "削除と退会を除外し同時刻はIDで選ぶ", true: "写真がなくなった場合は未設定を返す"}[empty], func(t *testing.T) {
+			if empty {
+				if _, err := conn.Exec(ctx, `UPDATE reviews SET photo_key=NULL WHERE user_id=$1 AND discarded_at IS NULL`, user); err != nil {
+					t.Fatal(err)
+				}
+			}
+			detail, err := q.GetBurgerWithStats(ctx, burger)
+			if err != nil {
+				t.Fatal(err)
+			}
+			list, _, err := q.ListBurgerRankings(ctx, 20, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(list) != 1 {
+				t.Fatalf("list = %+v", list)
+			}
+			for _, key := range []*string{detail.PhotoKey, list[0].PhotoKey} {
+				if empty {
+					if key != nil {
+						t.Fatalf("photo = %s", *key)
+					}
+				} else if key == nil || *key != "latest.jpg" {
+					t.Fatalf("photo = %v", key)
+				}
+			}
+		})
+	}
+}
+
+func photoKeyPtr(key string) *string { return &key }

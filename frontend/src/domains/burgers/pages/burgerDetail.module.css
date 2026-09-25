@@ -35,3 +35,8 @@
 .loadMore {
   composes: loadMore from '../../reviews/pages/reviewList.module.css';
 }
+
+.photo, .noPhoto { width: 100%; height: 360px; border-radius: var(--ui-radius); margin-top: 24px; }
+.photo { display: block; object-fit: cover; }
+.noPhoto { display: grid; place-items: center; color: var(--ui-text-muted); background: var(--ui-surface-2); }
+@media (max-width: 720px) { .photo, .noPhoto { height: 260px; } }

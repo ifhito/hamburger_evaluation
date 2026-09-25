@@ -29,6 +29,7 @@ vi.mock("../../reviews/hooks/useRatingRange", () => ({ useRatingRange: () => ({ 
 const burger = (over: Partial<BurgerRanking> = {}): BurgerRanking => ({
   id: "42",
   name: "テリヤキバーガー",
+  photoUrl: null,
   shop: { id: "7", name: "バーガーラボ 中目黒" },
   averageRating: 4.8,
   weightedScore: 4.7,

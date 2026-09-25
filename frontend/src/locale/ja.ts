@@ -149,7 +149,7 @@ const ja = {
       edit: "編集",
       delete: "削除",
       deleteConfirm: "このレビューを削除しますか?",
-      visitedOn: "実食日: {{date}}",
+      visitedOn: "食べた日: {{date}}",
     },
     new: {
       backToShop: "← ショップに戻る",

@@ -242,11 +242,11 @@ func (t *mcpTools) listReviews(ctx context.Context, _ *mcp.CallToolRequest, in l
 	if err != nil {
 		return t.toolError("list_reviews", err)
 	}
-	items := make([]reviewResponse, 0, len(list))
+	items := make([]reviewListResponse, 0, len(list))
 	for _, detail := range list {
-		items = append(items, newReviewResponse(detail))
+		items = append(items, newReviewListResponse(detail))
 	}
-	return success(mcpList[reviewResponse]{HasMore: hasMore, Items: items})
+	return success(mcpList[reviewListResponse]{HasMore: hasMore, Items: items})
 }
 
 type getReviewInput struct {

@@ -48,6 +48,7 @@ function burger(over: Partial<BurgerRanking>): BurgerRanking {
   return {
     id: "b1",
     name: "Burger",
+    photoUrl: null,
     shop: { id: "s1", name: "Shop" },
     averageRating: 4,
     weightedScore: 4,
@@ -140,7 +141,7 @@ describe("HomePage のバーガーランキング", () => {
     state.ranking = Array.from({ length: 8 }, (_, i) => burger({ id: `b${i + 1}`, name: `Burger ${i + 1}` }));
     const page = await show();
     const grid = page.querySelector('[data-testid="ranking-grid"]');
-    const names = [...(grid?.querySelectorAll("a") ?? [])].map((a) => a.textContent);
+    const names = [...(grid?.querySelectorAll('p a[href^="/burgers/"]') ?? [])].map((a) => a.textContent);
     expect(names).toEqual(["Burger 1", "Burger 2", "Burger 3", "Burger 4", "Burger 5", "Burger 6"]);
   });
 

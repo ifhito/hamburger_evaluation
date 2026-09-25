@@ -12,7 +12,7 @@ vi.mock("../api/burgerApiClient", () => ({ burgerApiClient: { get: vi.fn() } }))
 
 const burgers: BurgerRanking[] = [{
   id: "burger-1", name: "チーズバーガー", shop: { id: "shop-1", name: "バーガー店" },
-  averageRating: 4, weightedScore: 3.9, reviewCount: 5,
+  photoUrl: null, averageRating: 4, weightedScore: 3.9, reviewCount: 5,
 }];
 
 function Ranking() {

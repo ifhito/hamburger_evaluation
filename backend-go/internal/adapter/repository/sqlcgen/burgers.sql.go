@@ -58,6 +58,10 @@ func (q *Queries) GetBurger(ctx context.Context, id string) (Burger, error) {
 
 const getBurgerWithStats = `-- name: GetBurgerWithStats :one
 SELECT b.id, b.name,
+       (SELECT r.photo_key FROM reviews r JOIN users u ON u.id = r.user_id
+        WHERE r.burger_id = b.id AND r.discarded_at IS NULL AND u.discarded_at IS NULL
+          AND r.photo_key IS NOT NULL
+        ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS photo_key,
        bs.review_count, bs.average_rating, bs.weighted_score
 FROM burgers b
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
@@ -67,11 +71,14 @@ WHERE b.id = $1
 type GetBurgerWithStatsRow struct {
 	ID            string
 	Name          string
+	PhotoKey      pgtype.Text
 	ReviewCount   pgtype.Int8
 	AverageRating pgtype.Float8
 	WeightedScore pgtype.Float8
 }
 
+// 写真はショップと同じく、退会していない投稿者による有効な写真付きレビューの最新を採る。
+// 投稿日時が同じときは id の降順で決着する(domain の newerPhoto と同じ規則)。
 // burger 1 件を、保存された統計(burger_stats。LEFT JOIN。まだ計算されていない、または削除で 0 件に戻った
 // burger は review_count/average_rating/weighted_score が NULL または 0)とともに返す。存在しない id は
 // 0 行になる(呼び出し側が domain.ErrBurgerNotFound に対応付ける)。
@@ -81,6 +88,7 @@ func (q *Queries) GetBurgerWithStats(ctx context.Context, id string) (GetBurgerW
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.PhotoKey,
 		&i.ReviewCount,
 		&i.AverageRating,
 		&i.WeightedScore,
@@ -98,6 +106,10 @@ WITH representative_shop AS (
     ORDER BY sb.burger_id, s.created_at, s.id
 )
 SELECT b.id, b.name,
+       (SELECT r.photo_key FROM reviews r JOIN users u ON u.id = r.user_id
+        WHERE r.burger_id = b.id AND r.discarded_at IS NULL AND u.discarded_at IS NULL
+          AND r.photo_key IS NOT NULL
+        ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS photo_key,
        rs.shop_id, rs.shop_name,
        bs.average_rating, bs.weighted_score, bs.review_count
 FROM burgers b
@@ -115,6 +127,7 @@ type ListBurgerRankingsParams struct {
 type ListBurgerRankingsRow struct {
 	ID            string
 	Name          string
+	PhotoKey      pgtype.Text
 	ShopID        string
 	ShopName      string
 	AverageRating float64
@@ -142,6 +155,7 @@ func (q *Queries) ListBurgerRankings(ctx context.Context, arg ListBurgerRankings
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.PhotoKey,
 			&i.ShopID,
 			&i.ShopName,
 			&i.AverageRating,

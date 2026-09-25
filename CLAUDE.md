@@ -353,11 +353,15 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `GET /burgers/:id` — バーガー1件を、紐づくショップ(id・name。閲覧者に見える権限のないショップ(pending/rejected)は除く)と、評価の統計(average_rating・weighted_score・review_count)つきで返す。レビューが1件もないバーガーは、統計の3項目をすべて `null` にする(0件と区別する)。存在しない・UUID の正規形でない id は404(`GET /shops/:id` と同じ判定)
 
 **レビュー**
-- `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリ(ユーザーの UUID。正規形でなければ 422 `User id must be a valid UUID`)と `burger_id` クエリ(バーガーの UUID。正規形でなければ 422 `Burger id must be a valid UUID`)で、それぞれ、そのユーザーの公開レビュー・そのバーガーのレビューだけに絞り込める。同時に指定すると AND で絞り込まれる。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。各レビューに `can_edit` を含む)
-- `GET /reviews/:id` — レビュー 1 件の取得 (`can_edit`: 閲覧者がそのレビューを編集・削除できるか。domain の `CanBeModifiedBy` の結果で、作者だけ `true`(admin も他人は `false`)、匿名は `false`。`POST` / `PUT` の応答にも含み、shop 詳細に埋め込まれるレビューには含まない。frontend は所有者を比較せず、この値で編集・削除ボタンを出し分ける。詳細だけ、そのレビューのショップ `shop`(`{id, name}`。閲覧者に見えるショップがないときは `null`。見えないショップの id・名前は出さない)と、`can_review`(閲覧者が、そのショップにレビューを書けるか。ショップ詳細の `can_review` と同じ規則(`Shop.CanBeReviewedByViewer`)で、匿名は `false`)を含み、一覧・`POST` / `PUT` の応答には含まない。バーガーが複数のショップにあるときは、閲覧者が書けるショップの先頭(作成の古い順)、なければ見えるショップの先頭を、domain の `ReviewShopFor` が選ぶ。ショップに紐づかないバーガーのレビューでも、詳細は成功し、`shop` は `null`・`can_review` は `false`。MCP の `get_review` も同じ)
+- `GET /reviews` — レビュー一覧 (省略可能な `user_id` クエリ(ユーザーの UUID。正規形でなければ 422 `User id must be a valid UUID`)と `burger_id` クエリ(バーガーの UUID。正規形でなければ 422 `Burger id must be a valid UUID`)で、それぞれ、そのユーザーの公開レビュー・そのバーガーのレビューだけに絞り込める。同時に指定すると AND で絞り込まれる。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。各レビューに `can_edit` と関連する公開店舗 `shop`(`{id, name}` または `null`)を含む。店舗は作成の古い順、同時刻は id 昇順で選び、非公開店舗は含まない。MCP の `list_reviews` も同じ)
+- `GET /reviews/:id` — レビュー 1 件の取得 (`can_edit`: 閲覧者がそのレビューを編集・削除できるか。domain の `CanBeModifiedBy` の結果で、作者だけ `true`(admin も他人は `false`)、匿名は `false`。`POST` / `PUT` の応答にも含み、shop 詳細に埋め込まれるレビューには含まない。frontend は所有者を比較せず、この値で編集・削除ボタンを出し分ける。詳細では、そのレビューのショップ `shop`(`{id, name}`。閲覧者に見えるショップがないときは `null`。見えないショップの id・名前は出さない)と、`can_review`(閲覧者が、そのショップにレビューを書けるか。ショップ詳細の `can_review` と同じ規則(`Shop.CanBeReviewedByViewer`)で、匿名は `false`)を含む。`can_review` は一覧に含まれず、`POST` / `PUT` にはこの2項目を含まない。バーガーが複数のショップにあるときは、閲覧者が書けるショップの先頭(作成の古い順)、なければ見えるショップの先頭を、domain の `ReviewShopFor` が選ぶ。ショップに紐づかないバーガーのレビューでも、詳細は成功し、`shop` は `null`・`can_review` は `false`。MCP の `get_review` も同じ)
 - `POST /reviews` — レビューの投稿 (要認証)
 - `PUT /reviews/:id` — レビューの更新 (要認証)
 - `DELETE /reviews/:id` — レビューの削除 (要認証)
+
+- レビューは `burger_id` を保存し、投稿時の `shop_id` は保存しない。複数店舗に紐づくバーガーの店舗表示は関連店舗の代表であり、実際に投稿先として指定した店舗を保証しない。
+- `GET /burgers`・`GET /burgers/:id` は `photo_url`(写真なしは `null`)を返す。写真は、退会していない投稿者の削除されていない写真付きレビューから、`created_at DESC, id DESC` の先頭を採る(ショップ写真と同じ規則)。詳細で閲覧者に見える店舗がない場合は `null` にする。frontend は写真の取得失敗時も代替表示を残す。
+- レビューカード・詳細の `visited_at` は「食べた日」として表示し、投稿日時とは区別する。未設定時は表示せず、投稿日を代用しない。
 
 **写真**
 - レビューに付ける写真(`POST /reviews`・`PUT /reviews/:id` の `photo` パート)は、**JPEG・PNG・WebP** だけを受け付ける。形式は、ファイルの中身で判別する(申告された Content-Type は見ない)。保存は、JPEG は JPEG、PNG は PNG、WebP は JPEG で、長辺を 1,600 px 以下に縮小して再エンコードする(拡大はしない)。向きは、保存する画素が正立するように直す

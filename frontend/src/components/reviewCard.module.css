@@ -1,7 +1,10 @@
-/* ショップ詳細の ShopReviewCard と、レビュー一覧の ReviewListCard が共有する見た目(写真・本文の余白・日付・
-   評価だけの数字・コメント・投稿者の行)。2 つの画面(design/redesign/shop-detail.html の .rcard・reviews.html
-   の .rcard)で、上の行に何を置くか(バーガー名か評価か)だけが違うので、それ以外をここにまとめ、
-   値の複製をしない(呼び出し側は compose で借りる。card.module.css の枠・角丸・背景と同じやり方)。 */
+/* レビューカードの共通表示。枠・縦配置・投稿日位置を各カードから共有する。 */
+.card {
+  composes: card from "./ui/card.module.css";
+  display: flex;
+  flex-direction: column;
+}
+
 .photo,
 .noPhoto {
   display: block;
@@ -23,6 +26,7 @@
 }
 
 .body {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -35,6 +39,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -67,4 +72,12 @@
   .noPhoto {
     height: 200px;
   }
+}
+
+/* 本文の長さが異なるカードも、投稿日を右下に揃える。 */
+.postedDate {
+  composes: date;
+  align-self: flex-end;
+  margin-top: auto;
+  text-align: right;
 }

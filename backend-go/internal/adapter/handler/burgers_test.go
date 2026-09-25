@@ -2,11 +2,13 @@ package handler_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/handler"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
@@ -55,7 +57,7 @@ var _ usecase.BurgerQuery = (*burgerQueryFake)(nil)
 
 // newBurgersRouter は、burger の handler だけを配線する（他の usecase は使わないので nil のまま）。
 func newBurgersRouter(query *burgerQueryFake) http.Handler {
-	return handler.NewRouter(okPinger, nil, unusedSignups(), nil, usecase.NewBurgers(query), nil, nil, nil, nil, nil)
+	return handler.NewRouter(okPinger, nil, unusedSignups(), nil, usecase.NewBurgers(query, storage.NewDisk("", "/photos")), nil, nil, nil, nil, nil)
 }
 
 // TestGetBurger は GET /burgers/{id} を扱う：レビューのある burger は、紐づくショップと統計つきの
@@ -79,7 +81,7 @@ func TestGetBurger(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + burgerID + `","name":"Cheese","shops":[{"id":"` + shopID + `","name":"Active Diner"}],` +
+		want := `{"photo_url":null,"id":"` + burgerID + `","name":"Cheese","shops":[{"id":"` + shopID + `","name":"Active Diner"}],` +
 			`"average_rating":4.2,"weighted_score":4,"review_count":3}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
@@ -95,7 +97,7 @@ func TestGetBurger(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + burgerID + `","name":"Veggie","shops":[],"average_rating":null,"weighted_score":null,"review_count":null}`
+		want := `{"photo_url":null,"id":"` + burgerID + `","name":"Veggie","shops":[],"average_rating":null,"weighted_score":null,"review_count":null}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -144,7 +146,7 @@ func TestListBurgers(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body)
 		}
-		want := `[{"id":"11111111-1111-1111-1111-111111111111","name":"Classic Burger",` +
+		want := `[{"photo_url":null,"id":"11111111-1111-1111-1111-111111111111","name":"Classic Burger",` +
 			`"shop":{"id":"22222222-2222-2222-2222-222222222222","name":"Diner"},` +
 			`"average_rating":4.5,"weighted_score":4.2,"review_count":10}]`
 		if got := rec.Body.String(); got != want {
@@ -196,4 +198,42 @@ func TestListBurgers(t *testing.T) {
 			t.Fatalf("status = %d, want 500 (body %s)", rec.Code, rec.Body)
 		}
 	})
+}
+
+func TestBurgerPhotoResponse(t *testing.T) {
+	key := "reviews/example.jpg"
+	for _, tt := range []struct {
+		name   string
+		status domain.ShopStatus
+		key    *string
+		want   string
+	}{
+		{"公開店舗の写真URLを返す", domain.ShopStatusActive, &key, `"/photos/reviews/example.jpg"`},
+		{"写真がない場合はnull", domain.ShopStatusActive, nil, `null`},
+		{"非公開店舗しかない場合はnull", domain.ShopStatusPending, &key, `null`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			q := newBurgerQueryFake()
+			q.burgers[uid.N(1)] = domain.BurgerDetail{ID: uid.N(1), Name: "バーガー", PhotoKey: tt.key}
+			q.shops[uid.N(1)] = []domain.Shop{{ID: uid.N(2), Status: tt.status}}
+			rec := do(newBurgersRouter(q), http.MethodGet, "/burgers/"+uid.N(1), "", "")
+			var body map[string]json.RawMessage
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != http.StatusOK || string(body["photo_url"]) != tt.want {
+				t.Fatalf("body=%s", rec.Body)
+			}
+		})
+	}
+	q := newBurgerQueryFake()
+	q.rankings = []domain.BurgerRanking{{ID: uid.N(1), PhotoKey: &key}}
+	rec := do(newBurgersRouter(q), http.MethodGet, "/burgers", "", "")
+	var body []map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != 1 || string(body[0]["photo_url"]) != `"/photos/reviews/example.jpg"` {
+		t.Fatalf("body=%s", rec.Body)
+	}
 }

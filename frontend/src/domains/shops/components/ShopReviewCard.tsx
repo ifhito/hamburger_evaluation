@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Photo } from "../../../components/ui/Photo";
 import { Link } from "react-router-dom";
 import { formatDate, formatVisitedAt } from "../../../lib/date";
 import { RatingBurger } from "../../../components/ui/RatingBurger";
@@ -6,27 +7,21 @@ import { shopReviewAriaLabel } from "../../../components/reviewCardAriaLabel";
 import type { Review } from "../../reviews/api/types";
 import styles from "./shopReviewCard.module.css";
 
-// ショップ詳細に並ぶ、レビュー 1 件のカード(design/redesign/shop-detail.html の .rcard)。枠・角丸・背景は
-// Card の CSS を composes で借りる(値の複製をしない)。バーガー名・評価・コメント・投稿者で構成する。
-// カード全体をレビュー詳細への <Link> にする(読み上げでは 1 つのリンクとして aria-label が読まれる)。
+// 写真からレビューへ、名前から各詳細へ移動できるカード。リンクを入れ子にしない。
 export function ShopReviewCard({ review, ratingMax }: { review: Review; ratingMax: number | undefined }) {
   const { t } = useTranslation();
   const username = review.user?.username ?? t("shops.detail.unknown");
   const ariaLabel = shopReviewAriaLabel(review, t);
   return (
-    <Link to={`/reviews/${review.id}`} className={styles.card} aria-label={ariaLabel}>
-      {review.photoUrl ? (
-        <img src={review.photoUrl} alt={t("reviews.photo.alt")} loading="lazy" className={styles.photo} />
-      ) : (
-        <div className={styles.noPhoto}>{t("shops.detail.noPhoto")}</div>
-      )}
+    <article className={styles.card}>
+      <Link to={`/reviews/${review.id}`} className={styles.photoLink} aria-label={ariaLabel}>
+        <Photo src={review.photoUrl} alt={t("reviews.photo.alt")} className={styles.photo} fallbackClassName={styles.noPhoto} fallback={t("shops.detail.noPhoto")} />
+      </Link>
       <div className={styles.body}>
         <div className={styles.row}>
-          {review.burger && <span className={styles.name}>{review.burger.name}</span>}
-          <time className={styles.date} dateTime={review.createdAt}>
-            {formatDate(review.createdAt)}
-          </time>
+          {review.burger && <Link to={`/burgers/${review.burger.id}`} className={styles.name}>{review.burger.name}</Link>}
         </div>
+        {review.shop && <p className={styles.shop}><Link to={`/shops/${review.shop.id}`}>{review.shop.name}</Link></p>}
         {review.visitedAt && (
           <time className={styles.date} dateTime={review.visitedAt}>
             {t("reviews.detail.visitedOn", { date: formatVisitedAt(review.visitedAt) })}
@@ -35,9 +30,12 @@ export function ShopReviewCard({ review, ratingMax }: { review: Review; ratingMa
         {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} variant="stepped" />}
         {review.comment && <p className={styles.comment}>{review.comment}</p>}
         <div className={styles.foot}>
-          <span>{username}</span>
+          {review.user ? <Link to={`/users/${review.user.id}`}>{username}</Link> : <span>{username}</span>}
         </div>
+        <time className={styles.postedDate} dateTime={review.createdAt}>
+          {t("reviews.edit.postedOn", { date: formatDate(review.createdAt) })}
+        </time>
       </div>
-    </Link>
+    </article>
   );
 }

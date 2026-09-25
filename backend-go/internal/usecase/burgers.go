@@ -26,12 +26,16 @@ type BurgerQuery interface {
 // 順のランキング一覧(GET /burgers)。読み取りは query だけを通す(repository には依存しない。
 // burger は非ゴールにより独自の書き込みアグリゲートを持たない)。
 type Burgers struct {
-	query BurgerQuery
+	query  BurgerQuery
+	photos PhotoURLs
 }
 
 // NewBurgers は query を使う Burgers を返す。
-func NewBurgers(query BurgerQuery) *Burgers {
-	return &Burgers{query: query}
+func NewBurgers(query BurgerQuery, photos PhotoURLs) *Burgers {
+	if photos == nil {
+		panic("usecase.NewBurgers: nil PhotoURLs")
+	}
+	return &Burgers{query: query, photos: photos}
 }
 
 // Get は burger の詳細を返す。存在しない id は domain.ErrBurgerNotFound。Shops は、viewer(nil = 匿名)に
@@ -54,6 +58,7 @@ func (b *Burgers) Get(ctx context.Context, viewer *domain.User, id string) (doma
 		}
 	}
 	detail.Shops = visible
+	detail.PhotoURL = b.photoURL(detail.VisiblePhotoKey())
 	return detail, nil
 }
 
@@ -65,5 +70,17 @@ func (b *Burgers) List(ctx context.Context, page, perPage int) ([]domain.BurgerR
 	if err != nil {
 		return nil, false, fmt.Errorf("list burger rankings: %w", err)
 	}
+	for i := range rankings {
+		rankings[i].PhotoURL = b.photoURL(rankings[i].PhotoKey)
+	}
 	return rankings, hasMore, nil
+}
+
+// photoURL は保存キーを公開 URL に変換する。写真がないときは nil。
+func (b *Burgers) photoURL(key *string) *string {
+	if key == nil {
+		return nil
+	}
+	url := b.photos.URL(*key)
+	return &url
 }

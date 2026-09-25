@@ -129,11 +129,18 @@ const listPublicReviews = `-- name: ListPublicReviews :many
 SELECT r.id, r.rating, r.comment, r.photo_key, r.created_at, r.visited_at,
        u.id AS user_id, u.username AS user_username,
        b.id AS burger_id, b.name AS burger_name,
+       rs.shop_id, rs.shop_name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
 FROM reviews r
 JOIN users u ON u.id = r.user_id
 JOIN burgers b ON b.id = r.burger_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
+JOIN LATERAL (
+    SELECT s.id AS shop_id, s.name AS shop_name
+    FROM shops_burgers sb JOIN shops s ON s.id = sb.shop_id
+    WHERE sb.burger_id = r.burger_id AND s.status = 1
+    ORDER BY s.created_at, s.id LIMIT 1
+) rs ON true
 WHERE r.discarded_at IS NULL
   AND u.discarded_at IS NULL
   AND EXISTS (
@@ -177,6 +184,8 @@ type ListPublicReviewsRow struct {
 	UserUsername  string
 	BurgerID      string
 	BurgerName    string
+	ShopID        string
+	ShopName      string
 	ReviewCount   pgtype.Int8
 	AverageRating pgtype.Float8
 	WeightedScore pgtype.Float8
@@ -209,6 +218,7 @@ type ListPublicReviewsRow struct {
 // filter_burger_id も、その burger の review だけを残す（本 API の拡張で、
 // Rails の ReviewQuery にはない）。公開ルールはそのまま維持され、絞り込みだけを行う
 // （fail-loud に、既存の filter_user_id と同じ形で足す）。
+// ReviewShopFor の匿名閲覧者と同じく、公開店舗を作成の古い順から選ぶ。
 func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsParams) ([]ListPublicReviewsRow, error) {
 	rows, err := q.db.Query(ctx, listPublicReviews,
 		arg.FilterRating,
@@ -237,6 +247,8 @@ func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsPa
 			&i.UserUsername,
 			&i.BurgerID,
 			&i.BurgerName,
+			&i.ShopID,
+			&i.ShopName,
 			&i.ReviewCount,
 			&i.AverageRating,
 			&i.WeightedScore,

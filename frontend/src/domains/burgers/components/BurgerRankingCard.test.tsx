@@ -9,6 +9,7 @@ import type { BurgerRanking } from "../api/types";
 const burger = (over: Partial<BurgerRanking> = {}): BurgerRanking => ({
   id: "42",
   name: "テリヤキバーガー",
+  photoUrl: null,
   shop: { id: "7", name: "バーガーラボ 中目黒" },
   averageRating: 4.8,
   weightedScore: 4.7,
@@ -30,12 +31,14 @@ describe("BurgerRankingCard", () => {
     expect(page.querySelector('[aria-label^="Rank"]')).toBeNull();
   });
 
-  it("リンクは 1 つだけで、バーガー名から /burgers/:id へ向かう", async () => {
+  it("写真・バーガー名・店舗名からそれぞれの詳細へ向かう", async () => {
     const page = await show(<BurgerRankingCard burger={burger({ id: "42", name: "テリヤキバーガー" })} rank={1} ratingMax={5} />);
     const links = page.querySelectorAll("a");
-    expect(links.length).toBe(1);
+    expect(links.length).toBe(3);
     expect(links[0].getAttribute("href")).toBe("/burgers/42");
-    expect(links[0].textContent).toBe("テリヤキバーガー");
+    expect(links[1].textContent).toBe("テリヤキバーガー");
+    expect(links[2].getAttribute("href")).toBe("/shops/7");
+    expect(page.querySelector("a a")).toBeNull();
   });
 
   it("ショップ名とレビュー件数を表示する", async () => {

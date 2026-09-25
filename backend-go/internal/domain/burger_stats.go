@@ -218,12 +218,24 @@ func CalculateBurgerStat(burgerID string, facts []ReviewFact, now time.Time) Bur
 // WeightedScore は、レビューが1件もない(統計行がまだ計算されていない、または削除で0件に戻った)バーガーでは
 // すべて nil になり、実際の値 0 と区別できる。
 type BurgerDetail struct {
+	// PhotoKey は最新の有効な写真付きレビューのキー、PhotoURL は公開 URL。写真なしは nil。
+	PhotoKey      *string
+	PhotoURL      *string
 	ID            string
 	Name          string
 	Shops         []ShopRef
 	ReviewCount   *int64
 	AverageRating *float64
 	WeightedScore *float64
+}
+
+// VisiblePhotoKey は、閲覧できる店舗があるときだけ代表写真のキーを返す。
+// Shops は閲覧者の可視性で絞り込み済みでなければならない。
+func (b BurgerDetail) VisiblePhotoKey() *string {
+	if len(b.Shops) == 0 {
+		return nil
+	}
+	return b.PhotoKey
 }
 
 // 統計の再計算は、書き込みと同じトランザクションで「再計算の依頼」を登録しておき、

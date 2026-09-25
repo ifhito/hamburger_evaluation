@@ -61,11 +61,13 @@ func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewList
 	rows, hasMore := trimPage(rows, limit)
 	reviews := make([]domain.ReviewDetail, 0, len(rows))
 	for _, row := range rows {
-		reviews = append(reviews, toReviewDetail(
+		detail := toReviewDetail(
 			row.ID, row.Rating, row.Comment, row.PhotoKey, row.CreatedAt, row.VisitedAt,
 			row.UserID, row.UserUsername, row.BurgerID, row.BurgerName,
 			row.ReviewCount, row.AverageRating, row.WeightedScore, row.Confidence,
-		))
+		)
+		detail.Shop = &domain.ShopRef{ID: row.ShopID, Name: row.ShopName}
+		reviews = append(reviews, detail)
 	}
 	return reviews, hasMore, nil
 }
