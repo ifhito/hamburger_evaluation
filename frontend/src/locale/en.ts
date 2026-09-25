@@ -1,6 +1,8 @@
 const en = {
   nav: {
+    aboutHeader: "About Burger Stack",
     brand: "BurgerStack",
+    about: "About BurgerStack",
     shops: "Shops",
     reviews: "Reviews",
     burgers: "Burgers",
@@ -218,6 +220,7 @@ const en = {
       linkCopied: "Link copied",
       copyLinkManually: "Copying failed. Select the link below and copy it.",
       reviewsHeading: "Reviews",
+      emptyTitle: "No burgers tried yet",
       noReviews: "No reviews yet.",
       reviewAriaLabel: "{{burger}} review, posted {{date}}",
       reviewAriaLabelNoBurger: "Review posted {{date}}",
@@ -245,7 +248,38 @@ const en = {
       backToProfile: "\u2190 Back to profile",
     },
   },
+  about: {
+    title: "About BurgerStack",
+    tagline: "More burgers\nin the world!!!",
+    lead: "Find your favorite bite.\nDiscover more ways to enjoy burgers.",
+    messageTitle: "Hello World!",
+    introduction: "I’m just an engineer who loves burgers.",
+    question: "Let me ask you something: how often do you eat a burger?",
+    discovery: "Walk around town and you will spot burger chains everywhere. Look a little closer, and you will find a surprising number of independent burger shops, too.",
+    charm: "Burgers are familiar, everyday food, yet each shop has its own personality. That is what I love about them.",
+    wishTitle: "Burgers deserve more conversation.",
+    missing: "Still, as a burger lover, I sometimes feel something is missing.",
+    ramen: "With ramen, people swap stories about their favorite shops or travel far for a bowl they want to try. I feel we do not do that quite as much with burgers yet.",
+    wish: "I want to talk more about burgers. Visit more burger shops.\nAnd discover delicious places I have never heard of!",
+    motivation: "“More burgers in the world!!!”\nThat is the feeling that made me build this site.",
+    everydayTitle: "Make burgers an everyday option.",
+    everyday: "When someone asks, “What should we have for lunch?” or “Where shall we go for dinner?”, I would love a neighborhood burger shop to come naturally to mind.",
+    community: "Alongside the familiar chains, I hope the little shop full of its owner’s care becomes an everyday choice. And through favorite shops and memorable bites, I hope more people join in the fun of enjoying burgers.",
+    nameTitle: "Stack up the delicious discoveries.",
+    nameOrigin: "The site is called Burger Stack.\nI named it after the image of burgers piling up.",
+    moon: "Maybe all the “That was delicious!” moments collected here will stack up, one by one, until they reach the moon. I sometimes think about that. Or maybe I don’t.",
+    inviteTitle: "Here’s to a wonderful burger life!!!",
+    inviteBody: "Ready to find your own favorite bite?",
+    start: "Explore shops",
+    browseReviews: "Browse reviews",
+  },
   oauth: {
+    // backend-go/internal/domain/oauth.go の oauthScopes に対応する表示用の翻訳。権限の説明を変えるときは併せて更新する。
+    scopeDescriptions: {
+      read: "View shops, reviews and profiles",
+      write: "Post, edit and delete reviews, and submit shops, on your behalf",
+      admin: "Moderate shop submissions: list, approve, reject, close and reopen them",
+    },
     // 書き込みを伴う範囲(API の writes)の横に出す、目立たせる印。許可の画面と、接続済みのアプリの一覧の、どちらでも使う。
     writeAccess: "Writes",
     consent: {

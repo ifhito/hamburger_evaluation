@@ -1,0 +1,99 @@
+.content {
+  --about-gold: #916c0a;
+  --about-paper: #fff8e5;
+  padding-bottom: 3rem;
+  line-height: 2;
+}
+
+.content h1,
+.content h2,
+.content p {
+  margin: 0;
+}
+
+.hero {
+  padding: clamp(3rem, 7vw, 6rem) 1.25rem;
+  background: var(--about-paper);
+  text-align: center;
+}
+
+.eyebrow {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--about-gold);
+}
+
+.brand {
+  display: flex;
+  justify-content: center;
+  margin: 2rem 0;
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  line-height: 1;
+}
+
+.hero h1 {
+  font-size: clamp(1.75rem, 5vw, 3.75rem);
+  line-height: 1.5;
+  letter-spacing: 0.025em;
+  white-space: pre-line;
+  text-wrap: balance;
+}
+
+.hero .lead {
+  margin-top: 1.75rem;
+  white-space: pre-line;
+}
+
+.message,
+.invitation {
+  width: min(44rem, 100%);
+  margin: clamp(4rem, 9vw, 7rem) auto 0;
+}
+
+.message h2,
+.invitation h2 {
+  font-size: clamp(1.375rem, 3vw, 1.875rem);
+  line-height: 1.6;
+}
+
+.message p {
+  margin-top: 1.75rem;
+  white-space: pre-line;
+}
+
+.message .emphasis {
+  margin-top: 3rem;
+  color: var(--about-gold);
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-weight: 700;
+  white-space: pre-line;
+}
+
+.invitation {
+  text-align: center;
+  padding-top: 3rem;
+  border-top: 2px solid var(--about-gold);
+}
+
+.invitation p {
+  margin: 1.5rem 0 2rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+@media (max-width: 40rem) {
+  .message,
+  .invitation {
+    width: calc(100% - 1rem);
+  }
+
+  .brand svg {
+    width: 3rem;
+    height: auto;
+  }
+}

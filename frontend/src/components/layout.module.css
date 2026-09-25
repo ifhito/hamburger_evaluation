@@ -36,6 +36,7 @@
 
 .navLink {
   color: var(--color-text);
+  white-space: nowrap;
 }
 
 .navLink:hover {
@@ -64,7 +65,7 @@
 }
 
 /* 狭い画面では、ロゴの行とナビの行に折り返す(横に並べると、はみ出して横スクロールが出る) */
-@media (max-width: 40rem) {
+@media (max-width: 60rem) {
   .header {
     height: auto;
     min-height: 3.5rem;
@@ -89,4 +90,11 @@
   .langSlot {
     order: 2;
   }
+}
+
+.footer {
+  width: min(70rem, 100% - 2rem);
+  margin: 0 auto;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--color-border);
 }

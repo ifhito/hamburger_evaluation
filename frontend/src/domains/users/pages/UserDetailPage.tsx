@@ -75,7 +75,7 @@ export default function UserDetailPage() {
           </div>
           {reviewsLoading && <Loading />}
           {reviewsError && <Alert message={t("users.detail.reviewsLoadError")} />}
-          {userReviews && userReviews.length === 0 && (user.canEdit ? <EmptyState /> : <p className={styles.muted}>{t("users.detail.noReviews")}</p>)}
+          {userReviews && userReviews.length === 0 && (user.canEdit ? <EmptyState title={t("users.detail.emptyTitle")} /> : <p className={styles.muted}>{t("users.detail.noReviews")}</p>)}
           <div className={styles.reviewList}>
             {userReviews?.map((review) => (
               <ProfileReviewCard key={review.id} review={review} ratingMax={ratingRange?.max} />

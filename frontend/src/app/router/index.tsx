@@ -3,6 +3,7 @@ import { ProtectedRoute } from './ProtectedRoute'
 import { GuestRoute } from './GuestRoute'
 import { AdminRoute } from './AdminRoute'
 
+import AboutPage from '../../domains/about/pages/AboutPage'
 import HomePage from '../../domains/home/pages/HomePage'
 import ShopListPage from '../../domains/shops/pages/ShopListPage'
 import ShopDetailPage from '../../domains/shops/pages/ShopDetailPage'
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
 
   // 公開ルート
+  { path: '/about', element: <AboutPage /> },
   { path: '/shops', element: <ShopListPage /> },
   { path: '/shops/:id', element: <ShopDetailPage /> },
   { path: '/reviews', element: <ReviewListPage /> },

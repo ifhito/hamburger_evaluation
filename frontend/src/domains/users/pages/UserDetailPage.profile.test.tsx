@@ -74,12 +74,12 @@ describe("UserDetailPage のプロフィール本体", () => {
 
   it("レビューが 0 件のとき: 本人には空の画面(遊びの文言)、他人には「No reviews yet.」だけを出す", async () => {
     let page = await show();
-    expect(page.textContent).toContain("Nobody's eaten here yet");
+    expect(page.textContent).toContain("No burgers tried yet");
     await cleanup();
 
     state.profile = { id: "7", username: "carol", bio: "", canEdit: false };
     page = await show();
-    expect(page.textContent).not.toContain("Nobody's eaten here yet");
+    expect(page.textContent).not.toContain("No burgers tried yet");
     expect(page.textContent).toContain("No reviews yet.");
   });
 

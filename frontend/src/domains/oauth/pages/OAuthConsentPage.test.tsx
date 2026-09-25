@@ -19,8 +19,8 @@ const decide = vi.mocked(oauthApi.decide);
 const view: AuthorizeRequestView = {
   client: { id: "claude-code", name: "Claude Code" },
   scopes: [
-    { name: "hamburger:read", description: "Read shops, reviews and profiles", writes: false },
-    { name: "hamburger:write", description: "Post, edit and delete reviews, on your behalf", writes: true },
+    { name: "hamburger:read", description: "View shops, reviews and profiles", writes: false },
+    { name: "hamburger:write", description: "Post, edit and delete reviews, and submit shops, on your behalf", writes: true },
   ],
   consentRequired: true,
 };
@@ -44,8 +44,8 @@ describe("OAuthConsentPage(アプリの接続の許可)", () => {
 
     await eventually(() => expect(page.textContent).toContain("Claude Code"));
     expect(page.textContent).toContain("App ID: claude-code");
-    expect(page.textContent).toContain("Read shops, reviews and profiles");
-    expect(page.textContent).toContain("Post, edit and delete reviews, on your behalf");
+    expect(page.textContent).toContain("View shops, reviews and profiles");
+    expect(page.textContent).toContain("Post, edit and delete reviews, and submit shops, on your behalf");
     const items = [...page.querySelectorAll('[class*="scopeItem"]')];
     expect(items[0].textContent).not.toContain("Writes");
     expect(items[1].textContent).toContain("Writes");
