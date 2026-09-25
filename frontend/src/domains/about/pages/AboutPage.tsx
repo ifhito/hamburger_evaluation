@@ -50,6 +50,7 @@ export default function AboutPage() {
           <div className={styles.actions}>
             <LinkButton to="/shops" variant="primary">{t("about.start")}</LinkButton>
             <LinkButton to="/reviews">{t("about.browseReviews")}</LinkButton>
+            <LinkButton to="/mcp">{t("mcp.title")}</LinkButton>
           </div>
         </section>
       </article>

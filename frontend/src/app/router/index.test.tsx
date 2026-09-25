@@ -32,3 +32,12 @@ describe("サービス紹介ページ", () => {
     expect(guarded.some((route) => route.path === "/about")).toBe(false);
   });
 });
+
+
+describe("MCPの接続案内", () => {
+  it("未ログインでも案内を開ける", () => {
+    expect(router.routes.find((route) => route.path === "/mcp")).toBeDefined();
+    const guarded = router.routes.filter((route) => route.path === undefined).flatMap((route) => route.children ?? []);
+    expect(guarded.some((route) => route.path === "/mcp")).toBe(false);
+  });
+});

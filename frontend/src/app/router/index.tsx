@@ -3,6 +3,7 @@ import { ProtectedRoute } from './ProtectedRoute'
 import { GuestRoute } from './GuestRoute'
 import { AdminRoute } from './AdminRoute'
 
+import McpGuidePage from '../../domains/mcp/pages/McpGuidePage'
 import AboutPage from '../../domains/about/pages/AboutPage'
 import HomePage from '../../domains/home/pages/HomePage'
 import ShopListPage from '../../domains/shops/pages/ShopListPage'
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
 
   // 公開ルート
   { path: '/about', element: <AboutPage /> },
+  { path: '/mcp', element: <McpGuidePage /> },
   { path: '/shops', element: <ShopListPage /> },
   { path: '/shops/:id', element: <ShopDetailPage /> },
   { path: '/reviews', element: <ReviewListPage /> },

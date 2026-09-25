@@ -1,0 +1,35 @@
+.content { max-width: 52rem; margin: 0 auto; padding-bottom: 3rem; line-height: 1.9; overflow-wrap: anywhere; }
+.hero { background: #fff8e5; padding: clamp(1.5rem, 5vw, 3rem); border-radius: 1rem; }
+.hero h1 { font-size: clamp(1.7rem, 4vw, 2.5rem); line-height: 1.4; margin-top: 0; }
+.content section { margin-top: 3rem; }
+.content h2 { font-size: 1.4rem; line-height: 1.5; }
+.connection { padding: 1.5rem; border: 1px solid #dedbd5; border-radius: 1rem; }
+.connection label { display: block; font-weight: 700; }
+.copyRow { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: .5rem; }
+.copyRow input { flex: 1 1 20rem; min-width: 0; padding: .75rem; font: inherit; border: 1px solid #777; border-radius: .5rem; }
+.examples { padding-left: 1.5rem; }
+.examples li { margin: 1rem 0; }
+.steps { padding-left: 1.5rem; }
+.content pre { padding: 1rem; background: #f4f3f0; border-radius: .5rem; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; }
+.content details { border-bottom: 1px solid #dedbd5; padding: 1rem 0; }
+.content summary { cursor: pointer; font-weight: 700; }
+
+.hero p { margin-top: 1rem; }
+.content h2 { margin-bottom: 1rem; }
+.content section > p + *,
+.content li > p + *,
+.content details > summary + * { margin-top: 1rem; }
+.content section > pre + p { margin-top: 1rem; }
+.content section > p { margin-top: 1rem; }
+.connection p[role="status"]:empty { display: none; }
+.steps li + li { margin-top: 1.5rem; }
+.content details ul { padding-left: 1.5rem; margin-block: 1rem; }
+.copyRow { align-items: center; }
+.copyRow input { height: 44px; padding: 0 .75rem; }
+.content pre { line-height: 1.65; }
+.content section > a { display: inline-flex; margin-top: 1rem; }
+@media (max-width: 40rem) {
+  .connection { padding: 1rem; }
+  .copyRow input { flex-basis: 100%; width: 100%; }
+  .copyRow button { width: 100%; }
+}

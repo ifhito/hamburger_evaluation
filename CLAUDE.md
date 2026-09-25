@@ -308,7 +308,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
   1. API を、OAuth を有効にして起動する(`export OAUTH_ISSUER=http://localhost:8080 OAUTH_TOKEN_SECRET=$(openssl rand -hex 32)`)。Claude Code を固定のアプリとして登録する(`OAUTH_STATIC_CLIENTS='[{"id":"claude-code","name":"Claude Code","redirect_uris":["http://localhost:8788/callback"]}]'`)。
   2. `claude mcp add --transport http hamburger http://localhost:8080/mcp --client-id claude-code --callback-port 8788`
   3. Claude Code の `/mcp` から認可する。ブラウザで、ログインして、許可を選ぶ(許可の画面は frontend の `/oauth/authorize`)。
-- **本番の公開**: 公開の HTTPS の URL・ドメインは未決(この story の外)。`OAUTH_ISSUER` / `OAUTH_RESOURCE_URL` を、その公開の URL に合わせる。
+- **本番の公開**: 接続先は `https://burger-stack.com/api/mcp`。利用者向け案内は frontend の `/mcp`。検証状況・外部ユーザーの確認手順は [MCP接続の検証記録](docs/mcp-client-verification.md) を参照。
 
 ### エンドポイント
 
