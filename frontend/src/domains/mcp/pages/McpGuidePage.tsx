@@ -12,6 +12,10 @@ url = "${connectionUrl}"`;
 const readLogin = "codex mcp login burger_stack --oauth-client-registration cimd --scopes hamburger:read";
 const writeLogin = "codex mcp login burger_stack --oauth-client-registration cimd --scopes hamburger:read,hamburger:write";
 
+const claudeConfig = JSON.stringify({ mcpServers: { burger_stack: {
+  type: "http", url: connectionUrl, oauth: { scopes: "hamburger:read" },
+} } }, null, 2);
+
 export default function McpGuidePage() {
   const { t } = useTranslation();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "manual">("idle");
@@ -42,8 +46,26 @@ export default function McpGuidePage() {
           <p>{t("mcp.writeHint")}</p>
         </section>
         <section>
+          <h2>{t("mcp.claudeTitle")}</h2>
+          <ol className={styles.steps}>
+            <li><p>{t("mcp.claudeOpen")}</p></li>
+            <li><p>{t("mcp.claudeUrl")}</p><pre><code>{connectionUrl}</code></pre></li>
+            <li><p>{t("mcp.claudeConnect")}</p></li>
+          </ol>
+          <p>{t("mcp.claudePlan")}</p>
+          <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp">{t("mcp.claudeOfficial")}</a>
+        </section>
+        <section>
+          <h2>{t("mcp.claudeCodeTitle")}</h2>
+          <ol className={styles.steps}>
+            <li><p>{t("mcp.claudeCodeConfig")}</p><pre><code>{claudeConfig}</code></pre></li>
+            <li><p>{t("mcp.claudeCodeLogin")}</p></li>
+          </ol>
+          <p>{t("mcp.claudeCodeWrite")}</p>
+          <a href="https://code.claude.com/docs/en/mcp">{t("mcp.claudeCodeOfficial")}</a>
+        </section>
+        <section>
           <h2>{t("mcp.setupTitle")}</h2>
-          <p className={styles.notice}>{t("mcp.setupStatus")}</p>
           <ol className={styles.steps}>
             <li><p>{t("mcp.setupConfig")}</p><pre><code>{config}</code></pre></li>
             <li><p>{t("mcp.setupLogin")}</p><pre><code>{readLogin}</code></pre></li>
@@ -51,21 +73,7 @@ export default function McpGuidePage() {
           </ol>
           <p>{t("mcp.setupWrite")}</p>
           <pre><code>{writeLogin}</code></pre>
-          <p>{t("mcp.setupVersion")}</p>
           <a href="https://developers.openai.com/codex/mcp/">{t("mcp.official")}</a>
-        </section>
-        <section>
-          <h2>{t("mcp.statusTitle")}</h2>
-          <p>{t("mcp.checkedOn")}</p>
-          <table className={styles.compatibility}>
-            <thead><tr><th scope="col">{t("mcp.app")}</th><th scope="col">{t("mcp.status")}</th></tr></thead>
-            <tbody>
-              <tr><th scope="row">Codex</th><td>{t("mcp.codexStatus")}</td></tr>
-              <tr><th scope="row">ChatGPT</th><td>{t("mcp.unverified")}</td></tr>
-              <tr><th scope="row">Claude</th><td>{t("mcp.unverified")}</td></tr>
-              <tr><th scope="row">{t("mcp.unsupportedName")}</th><td>{t("mcp.unsupported")}</td></tr>
-            </tbody>
-          </table>
         </section>
         <section>
           <h2>{t("mcp.disconnectTitle")}</h2>

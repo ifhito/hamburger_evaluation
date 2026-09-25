@@ -31,11 +31,14 @@ describe("MCPの接続案内", () => {
     expect(input.value).toBe("https://burger-stack.com/api/mcp");
     expect(page.querySelector('[role="status"]')?.textContent).toContain("Copying failed");
   });
-  it("日本語でも、一般ユーザー用の権限と未検証の範囲を説明する", async () => {
+  it("日本語でも、Claudeの設定と一般ユーザー用の権限を説明する", async () => {
     await i18n.changeLanguage("ja");
     const page = await render();
     expect(page.querySelector("h1")?.textContent).toBe("AIからBurger Stackを使う");
-    expect(page.textContent).toContain("新しい一般アカウントでの接続は未検証");
+    expect(page.textContent).toContain("Claudeでつなぐ");
+    expect(page.textContent).toContain("Claude Codeでつなぐ");
+    expect(page.textContent).not.toContain("未検証");
+    expect(page.textContent).not.toContain("確認済み");
     expect(page.textContent).toContain("hamburger:read,hamburger:write");
     expect(page.textContent).not.toContain("hamburger:admin");
     expect(page.querySelector('footer a[href="/mcp"]')).not.toBeNull();
