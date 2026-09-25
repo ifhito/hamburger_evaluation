@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/repository/sqlcgen"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
@@ -68,14 +69,20 @@ func (r *BurgerQuery) ListBurgerShops(ctx context.Context, burgerID string) ([]d
 	return shops, nil
 }
 
-// ListBurgerRankings は、weighted_score の降順(同値は id の昇順)で burger を返す。
+// ListBurgerRankings は、名前検索と並び順を適用する(既定は加重スコア降順、同値はid昇順)。
 // review が無い(burger_stats がない、または削除で 0 件に戻った)burger と、active な shop に
 // 1 つも紐づかない burger は対象外(SQL 側の JOIN と review_count > 0 の条件で除外する)。
 // 次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて返す。
-func (r *BurgerQuery) ListBurgerRankings(ctx context.Context, limit, offset int32) ([]domain.BurgerRanking, bool, error) {
+func (r *BurgerQuery) ListBurgerRankings(ctx context.Context, filter usecase.BurgerListFilter, limit, offset int32) ([]domain.BurgerRanking, bool, error) {
+	var pattern pgtype.Text
+	if filter.Keyword != "" {
+		pattern = pgtype.Text{String: "%" + likeEscaper.Replace(filter.Keyword) + "%", Valid: true}
+	}
 	rows, err := r.q.ListBurgerRankings(ctx, sqlcgen.ListBurgerRankingsParams{
-		PageLimit:  limit + 1,
-		PageOffset: offset,
+		NamePattern: pattern,
+		SortOrder:   filter.Sort,
+		PageLimit:   limit + 1,
+		PageOffset:  offset,
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("list burger rankings: %w", err)

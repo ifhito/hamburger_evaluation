@@ -47,6 +47,21 @@ WHERE (sqlc.arg(view_all)::boolean
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
+-- name: ListShopsByRating :many
+-- 平均評価の高い順。未評価は最後、同点は店名・IDで順序を確定する。
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+       COALESCE(ss.review_count, 0)::bigint AS review_count,
+       ss.average_rating,
+       ss.photo_key
+FROM shops s
+LEFT JOIN shop_stats ss ON ss.shop_id = s.id
+WHERE (sqlc.arg(view_all)::boolean
+       OR s.status = 1
+       OR s.creator_id = sqlc.narg(viewer_id)::uuid)
+  AND (sqlc.narg(name_pattern)::text IS NULL OR s.name ILIKE sqlc.narg(name_pattern)::text)
+ORDER BY ss.average_rating DESC NULLS LAST, s.name, s.id
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
 -- name: ListShopsForModeration :many
 -- admin の moderation 一覧：creator 付きのすべての shop を、新しい順に
 -- （id desc が created_at の同値を解消し、順序を決定的にする）。

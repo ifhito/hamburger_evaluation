@@ -353,6 +353,80 @@ func (q *Queries) ListShopsByNewest(ctx context.Context, arg ListShopsByNewestPa
 	return items, nil
 }
 
+const listShopsByRating = `-- name: ListShopsByRating :many
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+       COALESCE(ss.review_count, 0)::bigint AS review_count,
+       ss.average_rating,
+       ss.photo_key
+FROM shops s
+LEFT JOIN shop_stats ss ON ss.shop_id = s.id
+WHERE ($1::boolean
+       OR s.status = 1
+       OR s.creator_id = $2::uuid)
+  AND ($3::text IS NULL OR s.name ILIKE $3::text)
+ORDER BY ss.average_rating DESC NULLS LAST, s.name, s.id
+LIMIT $5 OFFSET $4
+`
+
+type ListShopsByRatingParams struct {
+	ViewAll     bool
+	ViewerID    *string
+	NamePattern pgtype.Text
+	PageOffset  int32
+	PageLimit   int32
+}
+
+type ListShopsByRatingRow struct {
+	ID             string
+	Name           string
+	Status         int16
+	ModerationNote pgtype.Text
+	MapURL         pgtype.Text
+	CreatorID      *string
+	ClosedAt       pgtype.Timestamptz
+	ReviewCount    int64
+	AverageRating  pgtype.Float8
+	PhotoKey       pgtype.Text
+}
+
+// 平均評価の高い順。未評価は最後、同点は店名・IDで順序を確定する。
+func (q *Queries) ListShopsByRating(ctx context.Context, arg ListShopsByRatingParams) ([]ListShopsByRatingRow, error) {
+	rows, err := q.db.Query(ctx, listShopsByRating,
+		arg.ViewAll,
+		arg.ViewerID,
+		arg.NamePattern,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListShopsByRatingRow
+	for rows.Next() {
+		var i ListShopsByRatingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
+			&i.ModerationNote,
+			&i.MapURL,
+			&i.CreatorID,
+			&i.ClosedAt,
+			&i.ReviewCount,
+			&i.AverageRating,
+			&i.PhotoKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listShopsForModeration = `-- name: ListShopsForModeration :many
 SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
        u.username AS creator_username

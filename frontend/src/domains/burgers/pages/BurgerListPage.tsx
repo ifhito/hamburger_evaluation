@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useBurgers } from "../hooks/useBurgers";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
@@ -8,17 +9,27 @@ import { Layout } from "../../../components/Layout";
 import { BurgerRankingCard } from "../components/BurgerRankingCard";
 import styles from "./burgerList.module.css";
 
-// バーガー一覧。weighted_score の高い順は backend が返す既定の順で、frontend は並び替え・絞り込みを行わない
-// (#196 の非ゴール)。ランキングの順位バッジ(rank)は、このページでは渡さず出さない(トップページだけの見せ方)。
+// バーガー一覧。条件はAPIへ送り、返された順序で表示する。
 export default function BurgerListPage() {
   const { t } = useTranslation();
   const ratingRange = useRatingRange();
-  const { data: burgers, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useBurgers();
+  const [sort, setSort] = useState("ranking");
+  const [keyword, setKeyword] = useState("");
+  const { data: burgers, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useBurgers({ keyword, sort });
 
   return (
     <Layout>
       <div className={styles.head}>
         <h1 className={styles.heading}>{t("burgers.list.title")}</h1>
+      </div>
+
+      <div className={styles.toolbar}>
+        <input className={styles.search} aria-label={t("lists.burgerSearch")} placeholder={t("lists.burgerSearch")} value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+        <select className={styles.sort} aria-label={t("lists.sortLabel")} value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="ranking">{t("lists.ranking")}</option>
+          <option value="newest">{t("lists.newest")}</option>
+          <option value="name">{t("lists.name")}</option>
+        </select>
       </div>
 
       {isLoading && <Loading />}

@@ -159,8 +159,9 @@ WHERE r.discarded_at IS NULL
   ))
   AND ($4::uuid IS NULL OR r.user_id = $4::uuid)
   AND ($5::uuid IS NULL OR r.burger_id = $5::uuid)
-ORDER BY r.created_at DESC, r.id DESC
-LIMIT $7 OFFSET $6
+ORDER BY CASE WHEN $6::text = 'rating' THEN r.rating END DESC,
+ r.created_at DESC, r.id DESC
+LIMIT $8 OFFSET $7
 `
 
 type ListPublicReviewsParams struct {
@@ -169,6 +170,7 @@ type ListPublicReviewsParams struct {
 	FilterShopID   *string
 	FilterUserID   *string
 	FilterBurgerID *string
+	SortOrder      string
 	PageOffset     int32
 	PageLimit      int32
 }
@@ -226,6 +228,7 @@ func (q *Queries) ListPublicReviews(ctx context.Context, arg ListPublicReviewsPa
 		arg.FilterShopID,
 		arg.FilterUserID,
 		arg.FilterBurgerID,
+		arg.SortOrder,
 		arg.PageOffset,
 		arg.PageLimit,
 	)

@@ -5,7 +5,7 @@ import { toPage, type Page } from "../../../api/page";
 import { useInfinitePages } from "../../../api/useInfinitePages";
 
 // per_page は送らない(1 ページの件数は backend が決める)
-function buildKey(params: { keyword?: string; sort?: "newest" } | undefined, page: number): string {
+function buildKey(params: { keyword?: string; sort?: string } | undefined, page: number): string {
   const qs = new URLSearchParams();
   if (params?.keyword) qs.set("keyword", params.keyword);
   if (params?.sort) qs.set("sort", params.sort);
@@ -15,7 +15,7 @@ function buildKey(params: { keyword?: string; sort?: "newest" } | undefined, pag
 
 // 次のページがあるかは、前のページの hasMore(backend の X-Has-More)で決め、最終ページなら null を返す。
 // enabled が false なら、どのページも null を返して取得を止める(認証状態の復元前に使う)
-export function getKey(params: { keyword?: string; sort?: "newest" } | undefined, enabled = true) {
+export function getKey(params: { keyword?: string; sort?: string } | undefined, enabled = true) {
   return (index: number, previous: Page<Shop> | null): string | null => {
     if (!enabled) return null;
     return previous && !previous.hasMore ? null : buildKey(params, index + 1);
@@ -28,7 +28,7 @@ export function getKey(params: { keyword?: string; sort?: "newest" } | undefined
 // enabled: viewerId がまだ確定していない間(認証状態の復元前)は false にする。token は localStorage にある
 // のに viewerId が null のまま取得すると、閲覧者向けの応答が匿名のキーに入ってしまう。
 export function useShops(
-  params: { keyword?: string; sort?: "newest" } | undefined,
+  params: { keyword?: string; sort?: string } | undefined,
   viewerId: string | null,
   options?: { enabled?: boolean },
 ) {

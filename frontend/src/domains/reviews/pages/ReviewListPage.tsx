@@ -17,10 +17,11 @@ export default function ReviewListPage() {
   const { t } = useTranslation();
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
+  const [sort, setSort] = useState("newest");
   const [keyword, setKeyword] = useState("");
   const [ratingFilter, setRatingFilter] = useState<number | undefined>(undefined);
   const { data: reviews, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useReviews(
-    ratingFilter !== undefined || keyword ? { rating: ratingFilter, keyword: keyword || undefined } : undefined,
+    { rating: ratingFilter, keyword: keyword || undefined, sort },
     user?.id ?? null,
     { enabled: !authLoading },
   );
@@ -32,6 +33,10 @@ export default function ReviewListPage() {
         <h1 className={styles.heading}>{t("reviews.list.title")}</h1>
       </div>
       <div className={styles.toolbar}>
+        <select className={styles.sort} aria-label={t("lists.sortLabel")} value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="newest">{t("lists.newest")}</option>
+          <option value="rating">{t("lists.rating")}</option>
+        </select>
         <input
           aria-label={t("reviews.list.searchLabel")}
           className={styles.search}

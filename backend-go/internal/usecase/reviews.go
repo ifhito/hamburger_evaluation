@@ -52,6 +52,8 @@ type ReviewQuery interface {
 // フィルタとして働く（結果は空のページになる。Rating/ShopID は Rails と
 // まったく同様で、Rails に対応物のない UserID も同様に扱う）。
 type ReviewListFilter struct {
+	// Sort は rating なら評価降順、それ以外は既定の新着順を指定する。
+	Sort string
 	// Rating は rating の完全一致フィルタである（Rails の by_rating）。
 	Rating *int
 	// Keyword は、comment に対するリテラルで大文字小文字を区別しない部分文字列

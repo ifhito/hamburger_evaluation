@@ -64,7 +64,8 @@ WHERE r.discarded_at IS NULL
   ))
   AND (sqlc.narg(filter_user_id)::uuid IS NULL OR r.user_id = sqlc.narg(filter_user_id)::uuid)
   AND (sqlc.narg(filter_burger_id)::uuid IS NULL OR r.burger_id = sqlc.narg(filter_burger_id)::uuid)
-ORDER BY r.created_at DESC, r.id DESC
+ORDER BY CASE WHEN sqlc.arg(sort_order)::text = 'rating' THEN r.rating END DESC,
+ r.created_at DESC, r.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: GetReviewDetail :one

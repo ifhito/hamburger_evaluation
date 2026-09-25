@@ -346,7 +346,7 @@ func writeReviewError(w http.ResponseWriter, r *http.Request, op string, err err
 // fail-loud な乖離であり（Rails はゴミを 0 にキャストして黙って空のリストを返す）、
 // user_id・burger_id は Rails に対応物がないため、同じ fail-loud の形に揃えただけである。
 func reviewListFilter(w http.ResponseWriter, r *http.Request) (usecase.ReviewListFilter, bool) {
-	filter := usecase.ReviewListFilter{Keyword: r.URL.Query().Get("keyword")}
+	filter := usecase.ReviewListFilter{Keyword: r.URL.Query().Get("keyword"), Sort: r.URL.Query().Get("sort")}
 	if raw := r.URL.Query().Get("rating"); raw != "" {
 		rating, err := strconv.Atoi(raw)
 		if err != nil {

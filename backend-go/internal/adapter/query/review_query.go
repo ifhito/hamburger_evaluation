@@ -41,7 +41,7 @@ var _ usecase.ReviewQuery = (*ReviewQuery)(nil)
 // 次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて返す。
 // 2 つ目の戻り値は、offset+limit 件より後ろにも一致する review があるか（has_more）である。
 func (r *ReviewQuery) ListReviews(ctx context.Context, filter usecase.ReviewListFilter, limit, offset int32) ([]domain.ReviewDetail, bool, error) {
-	params := sqlcgen.ListPublicReviewsParams{
+	params := sqlcgen.ListPublicReviewsParams{SortOrder: filter.Sort,
 		PageLimit:  limit + 1,
 		PageOffset: offset,
 	}

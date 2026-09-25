@@ -19,6 +19,7 @@ export default function ShopListPage() {
   const { t } = useTranslation();
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
+  const [sort, setSort] = useState("name");
   const [searchParams] = useSearchParams();
   const [keyword, setKeyword] = useState(() => searchParams.get("keyword") ?? "");
   const {
@@ -28,7 +29,7 @@ export default function ShopListPage() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useShops(keyword ? { keyword } : undefined, user?.id ?? null, { enabled: !authLoading });
+  } = useShops({ keyword, sort }, user?.id ?? null, { enabled: !authLoading });
 
   return (
     <Layout>
@@ -36,6 +37,11 @@ export default function ShopListPage() {
         <h1 className={styles.heading}>{t("shops.list.title")}</h1>
       </div>
       <div className={styles.toolbar}>
+        <select className={styles.sort} aria-label={t("lists.sortLabel")} value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="name">{t("lists.name")}</option>
+          <option value="newest">{t("lists.newest")}</option>
+          <option value="rating">{t("lists.rating")}</option>
+        </select>
         <input
           aria-label={t("shops.list.searchLabel")}
           className={styles.search}

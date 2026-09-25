@@ -35,7 +35,7 @@ func (f *fakeBurgerQuery) ListBurgerShops(context.Context, string) ([]domain.Sho
 	return f.shops, nil
 }
 
-func (f *fakeBurgerQuery) ListBurgerRankings(_ context.Context, limit, offset int32) ([]domain.BurgerRanking, bool, error) {
+func (f *fakeBurgerQuery) ListBurgerRankings(_ context.Context, _ usecase.BurgerListFilter, limit, offset int32) ([]domain.BurgerRanking, bool, error) {
 	f.lastLimit, f.lastOffset = limit, offset
 	if f.rankingsErr != nil {
 		return nil, false, f.rankingsErr
@@ -127,7 +127,7 @@ func TestBurgersListPagination(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			query := &fakeBurgerQuery{}
-			if _, _, err := usecase.NewBurgers(query, stubPhotoURLs{}).List(context.Background(), tt.page, tt.perPage); err != nil {
+			if _, _, err := usecase.NewBurgers(query, stubPhotoURLs{}).List(context.Background(), usecase.BurgerListFilter{}, tt.page, tt.perPage); err != nil {
 				t.Fatalf("List returned error: %v", err)
 			}
 			if query.lastLimit != tt.wantLimit || query.lastOffset != tt.wantOffset {
@@ -140,7 +140,7 @@ func TestBurgersListPagination(t *testing.T) {
 // TestBurgersListError は、query の失敗が wrap されてそのまま伝播することを確かめる。
 func TestBurgersListError(t *testing.T) {
 	query := &fakeBurgerQuery{rankingsErr: io.ErrUnexpectedEOF}
-	_, _, err := usecase.NewBurgers(query, stubPhotoURLs{}).List(context.Background(), 1, 20)
+	_, _, err := usecase.NewBurgers(query, stubPhotoURLs{}).List(context.Background(), usecase.BurgerListFilter{}, 1, 20)
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("error = %v, want wrapping %v", err, io.ErrUnexpectedEOF)
 	}

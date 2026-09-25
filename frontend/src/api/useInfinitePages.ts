@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import useSWRInfinite from "swr/infinite";
 import { mergePages, type Page } from "./page";
 
@@ -52,20 +52,29 @@ export function useInfinitePages<T extends { id: number | string }>(
     { revalidateAll: true, ...(options?.shouldRetryOnError ? { shouldRetryOnError: options.shouldRetryOnError } : {}) },
   );
 
-  const items = useMemo(() => (data ? mergePages(data) : undefined), [data]);
+  // 以前の条件へ戻る場合も、SWR が保存したページ数を復元せず先頭から表示する。
+  const firstPageKey = JSON.stringify(scopedKey(0, null));
+  const previousFirstPageKey = useRef(firstPageKey);
+  useEffect(() => {
+    if (previousFirstPageKey.current === firstPageKey) return;
+    previousFirstPageKey.current = firstPageKey;
+    if (size !== 1) void setSize(1);
+  }, [firstPageKey, setSize, size]);
+  const visiblePages = useMemo(() => data?.slice(0, size), [data, size]);
+  const items = useMemo(() => (visiblePages ? mergePages(visiblePages) : undefined), [visiblePages]);
 
   return {
     data: items,
     error,
     isLoading,
-    hasNextPage: data !== undefined && data.length > 0 && data[data.length - 1].hasMore,
+    hasNextPage: visiblePages !== undefined && visiblePages.length > 0 && visiblePages[visiblePages.length - 1].hasMore,
     // 要求したページがまだ届いていない間
     isFetchingNextPage: !error && size > 1 && data !== undefined && data[size - 1] === undefined,
     // 読み込み済みの全ページを取り直す(書き込みのあとに、一覧を最新にする)
     refresh: () => mutate(),
     fetchNextPage: () => {
       // size は失敗時も n+1 のままなので (s) => s + 1 だと再クリックで n+2 に飛ぶ。読み込み済みページ数から数える
-      void setSize((data?.length ?? 0) + 1);
+      void setSize((visiblePages?.length ?? 0) + 1);
     },
   };
 }

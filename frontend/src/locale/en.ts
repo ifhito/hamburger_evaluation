@@ -1,4 +1,5 @@
 const en = {
+  lists: { sortLabel: "Sort order", name: "Name", newest: "Newest first", rating: "Highest rated", ranking: "Ranking", burgerSearch: "Search by burger name" },
   nav: {
     brand: "BurgerStack",
     about: "About BurgerStack",
