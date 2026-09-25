@@ -27,6 +27,7 @@ type burgerQueryFake struct {
 	rankingErr            error
 	listCalls             int
 	lastLimit, lastOffset int32
+	lastFilter            usecase.BurgerListFilter
 }
 
 func newBurgerQueryFake() *burgerQueryFake {
@@ -44,8 +45,9 @@ func (f *burgerQueryFake) ListBurgerShops(_ context.Context, burgerID string) ([
 	return f.shops[burgerID], nil
 }
 
-func (f *burgerQueryFake) ListBurgerRankings(_ context.Context, limit, offset int32) ([]domain.BurgerRanking, bool, error) {
+func (f *burgerQueryFake) ListBurgerRankings(_ context.Context, filter usecase.BurgerListFilter, limit, offset int32) ([]domain.BurgerRanking, bool, error) {
 	f.listCalls++
+	f.lastFilter = filter
 	f.lastLimit, f.lastOffset = limit, offset
 	if f.rankingErr != nil {
 		return nil, false, f.rankingErr
@@ -118,6 +120,13 @@ func TestGetBurger(t *testing.T) {
 // TestListBurgers は HTTP レベルで、GET /burgers の応答の形と配線(usecase への引数の受け渡し)を
 // 検証する。並び順・除外の正しさは internal/adapter/query の DB 統合テストが担う。
 func TestListBurgers(t *testing.T) {
+	t.Run("検索と並び順をページ番号とともに読み取りへ渡す", func(t *testing.T) {
+		fake := newBurgerQueryFake()
+		rec := do(newBurgersRouter(fake), http.MethodGet, "/burgers?keyword=100%25&sort=name&page=2&per_page=3", "", "")
+		if rec.Code != http.StatusOK || fake.lastFilter != (usecase.BurgerListFilter{Keyword: "100%", Sort: "name"}) || fake.lastOffset != 3 {
+			t.Fatalf("status %d filter %#v offset %d", rec.Code, fake.lastFilter, fake.lastOffset)
+		}
+	})
 	t.Run("バーガーが 1 件もなければ、空配列(null ではない)を返す", func(t *testing.T) {
 		fake := newBurgerQueryFake()
 		rec := do(newBurgersRouter(fake), http.MethodGet, "/burgers", "", "")

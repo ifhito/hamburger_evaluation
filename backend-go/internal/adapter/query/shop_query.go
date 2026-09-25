@@ -54,6 +54,13 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 		for i, row := range newestRows {
 			rows[i] = sqlcgen.ListShopsRow(row)
 		}
+	} else if sort == usecase.ShopSortRating {
+		var ratedRows []sqlcgen.ListShopsByRatingRow
+		ratedRows, err = r.q.ListShopsByRating(ctx, sqlcgen.ListShopsByRatingParams(params))
+		rows = make([]sqlcgen.ListShopsRow, len(ratedRows))
+		for i, row := range ratedRows {
+			rows[i] = sqlcgen.ListShopsRow(row)
+		}
 	} else {
 		rows, err = r.q.ListShops(ctx, params)
 	}

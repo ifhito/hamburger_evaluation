@@ -35,3 +35,27 @@
     gap: 32px;
   }
 }
+
+.sort {
+  width: auto;
+  flex-shrink: 0;
+  composes: input from '../../../components/ui/field.module.css';
+  min-width: 0;
+  max-width: 100%;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.search {
+  composes: input from '../../../components/ui/field.module.css';
+  flex: 1;
+  min-width: 180px;
+}
+
+@media (max-width: 720px) {
+  .sort { width: 100%; }
+}

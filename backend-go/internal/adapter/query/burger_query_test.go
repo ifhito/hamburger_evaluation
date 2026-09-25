@@ -13,6 +13,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
 // このファイルは adapter/query の DB 統合テストである。burger 1 件の読み取り
@@ -88,7 +89,7 @@ func TestBurgerQueryOrdersByWeightedScoreDescending(t *testing.T) {
 		}
 	}
 
-	rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, 100, 0)
+	rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 100, 0)
 	if err != nil {
 		t.Fatalf("ListBurgerRankings returned error: %v", err)
 	}
@@ -143,7 +144,7 @@ func TestBurgerQueryExcludesBurgerWithoutStats(t *testing.T) {
 		t.Fatalf("insert stale burger stats: %v", err)
 	}
 
-	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, 100, 0)
+	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 100, 0)
 	if err != nil {
 		t.Fatalf("ListBurgerRankings returned error: %v", err)
 	}
@@ -168,7 +169,7 @@ func TestBurgerQueryRepresentativeShopIsOldestActive(t *testing.T) {
 	linkShopBurger(ctx, t, conn, older, burger)
 	insertBurgerStats(ctx, t, conn, burger, 1.0)
 
-	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, 100, 0)
+	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 100, 0)
 	if err != nil {
 		t.Fatalf("ListBurgerRankings returned error: %v", err)
 	}
@@ -197,7 +198,7 @@ func TestBurgerQueryRepresentativeShopSkipsPendingShop(t *testing.T) {
 	linkShopBurger(ctx, t, conn, active, burger)
 	insertBurgerStats(ctx, t, conn, burger, 1.0)
 
-	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, 100, 0)
+	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 100, 0)
 	if err != nil {
 		t.Fatalf("ListBurgerRankings returned error: %v", err)
 	}
@@ -226,7 +227,7 @@ func TestBurgerQueryExcludesBurgerWithoutActiveShop(t *testing.T) {
 	// creator や admin によるレビューで、承認前でも burger_stats が計算されていることがある。
 	insertBurgerStats(ctx, t, conn, burger, 1.0)
 
-	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, 100, 0)
+	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 100, 0)
 	if err != nil {
 		t.Fatalf("ListBurgerRankings returned error: %v", err)
 	}
@@ -252,7 +253,7 @@ func TestBurgerQueryPagination(t *testing.T) {
 	}
 
 	t.Run("1 ページ目は limit 件を返し、続きがあれば has_more は true", func(t *testing.T) {
-		rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, 2, 0)
+		rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 2, 0)
 		if err != nil {
 			t.Fatalf("ListBurgerRankings returned error: %v", err)
 		}
@@ -262,7 +263,7 @@ func TestBurgerQueryPagination(t *testing.T) {
 	})
 
 	t.Run("最後のページは残りの件数を返し、has_more は false", func(t *testing.T) {
-		rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, 2, 2)
+		rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 2, 2)
 		if err != nil {
 			t.Fatalf("ListBurgerRankings returned error: %v", err)
 		}
@@ -272,7 +273,7 @@ func TestBurgerQueryPagination(t *testing.T) {
 	})
 
 	t.Run("件数ちょうどの limit は has_more が false になる", func(t *testing.T) {
-		rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, 3, 0)
+		rankings, hasMore, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 3, 0)
 		if err != nil {
 			t.Fatalf("ListBurgerRankings returned error: %v", err)
 		}
@@ -298,7 +299,7 @@ func TestBurgerQueryTieBreaksByIDAscending(t *testing.T) {
 	insertBurgerStats(ctx, t, conn, a, 2.0)
 	insertBurgerStats(ctx, t, conn, b, 2.0)
 
-	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, 100, 0)
+	rankings, _, err := burgerQuery.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 100, 0)
 	if err != nil {
 		t.Fatalf("ListBurgerRankings returned error: %v", err)
 	}
@@ -458,7 +459,7 @@ func TestBurgerRepresentativePhoto(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			list, _, err := q.ListBurgerRankings(ctx, 20, 0)
+			list, _, err := q.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 20, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

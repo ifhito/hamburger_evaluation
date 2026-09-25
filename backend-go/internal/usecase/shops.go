@@ -9,14 +9,16 @@ import (
 )
 
 // ShopSort は GET /shops の並び順を選ぶクエリ整形用の値である。ゼロ値(空文字)は既定の
-// 店名順で、ShopSortNewest だけが新着順を表す。handler が query 文字列から作る。
+// 店名順で、newest は新着順、rating は平均評価順を表す。handler が query 文字列から作る。
 // これは業務の規則ではなく(検証も権限判断もない)、並び方を選ぶだけの値なので domain には
 // 置かない(usecase.ReviewListFilter と同じ位置づけ)。
 type ShopSort string
 
-// ShopSortNewest を指定すると、created_at 降順・id 降順(新着順)になる。それ以外の値
-// (ゼロ値を含む)は、すべて既定の店名順として扱う。
+// ShopSortNewest は作成日時降順・id降順の新着順を指定する。
 const ShopSortNewest ShopSort = "newest"
+
+// ShopSortRating は平均評価降順を指定し、未評価の店舗を最後に並べる。
+const ShopSortRating ShopSort = "rating"
 
 // ShopQuery は shops 向けの consumer 側の読み取りの契約である。
 // 実装は visibility の記述子を SQL のパラメータに変換し（ルール自体は
@@ -27,7 +29,7 @@ const ShopSortNewest ShopSort = "newest"
 type ShopQuery interface {
 	// ListShops は、keyword に一致する見える shop を、集計(件数・評価の平均・ショップの
 	// 写真のキー)つきで返す（keyword は name のリテラルな部分文字列で、大文字小文字を区別しない。空ならすべてに
-	// 一致する）。並び順は sort で選ぶ：ShopSortNewest なら created_at 降順・id 降順（新着順）、それ以外
+	// 一致する）。並び順は sort で選ぶ：newest は新着順、rating は平均評価降順、それ以外
 	// （ゼロ値を含む）は name 昇順・id 昇順（既定の店名順）。集計は、保存された値(shop_stats)を、同じクエリで添える(shop の件数に比例してクエリを増やさない。
 	// まだ集計されていない shop は、空の集計(件数 0・平均と写真は nil))。集計の意味は domain.CalculateShopStat が
 	// 定義し、レビューの書き込みのあとに、バックグラウンドのワーカーが計算し直す(結果整合)。
@@ -76,7 +78,7 @@ func (s *Shops) withPhotoURL(summary domain.ShopSummary) domain.ShopSummary {
 }
 
 // List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
-// ものを、sort の並び順で（ShopSortNewest = 新着順、それ以外 = 既定の店名順）ページネーションして
+// ものを、sort の並び順で（newest = 新着順、rating = 平均評価順、それ以外 = 店名順）ページネーションして
 // 返す。範囲外の page/perPage は、エラーにせず clampPage の規則で補正される（page < 1 は 1、
 // perPage < 1 は 20、perPage の上限は 100）。2 つ目の戻り値は、次のページがあるか（has_more）である。
 func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, sort ShopSort, page, perPage int) ([]domain.ShopListing, bool, error) {

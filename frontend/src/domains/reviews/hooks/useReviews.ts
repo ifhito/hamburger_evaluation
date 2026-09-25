@@ -9,6 +9,7 @@ function buildKey(params: ReviewSearchParams | undefined, page: number): string 
   const qs = new URLSearchParams();
   if (params?.rating !== undefined) qs.set("rating", String(params.rating));
   if (params?.keyword) qs.set("keyword", params.keyword);
+  if (params?.sort) qs.set("sort", params.sort);
   if (params?.userId !== undefined) qs.set("user_id", params.userId);
   if (params?.burgerId !== undefined) qs.set("burger_id", params.burgerId);
   qs.set("page", String(page));

@@ -15,6 +15,7 @@
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 32px;
 }
@@ -77,4 +78,16 @@
     grid-template-columns: 1fr;
     gap: 16px;
   }
+}
+
+.sort {
+  width: auto;
+  flex-shrink: 0;
+  composes: input from '../../../components/ui/field.module.css';
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 720px) {
+  .sort { width: 100%; }
 }

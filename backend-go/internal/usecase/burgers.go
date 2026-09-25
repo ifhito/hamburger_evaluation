@@ -7,6 +7,12 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
+// BurgerListFilter は一覧の名前検索と並び順を指定する。空の Sort はランキング順を維持する。
+type BurgerListFilter struct {
+	Keyword string
+	Sort    string
+}
+
 // BurgerQuery は burger 向けの consumer 側の読み取りの契約である。読み取り専用。
 type BurgerQuery interface {
 	// GetBurgerWithStats は burger 1 件を、保存された統計(まだレビューが1件もなければ nil)とともに返す。
@@ -19,7 +25,7 @@ type BurgerQuery interface {
 	// weighted_score の降順(同値は id の昇順)で返す。review が無い burger は対象外。
 	// 2 つ目の戻り値は、offset+limit 件より後ろにも一致する burger があるか(has_more)で、
 	// 実装は limit+1 件を取得して判定する。
-	ListBurgerRankings(ctx context.Context, limit, offset int32) ([]domain.BurgerRanking, bool, error)
+	ListBurgerRankings(ctx context.Context, filter BurgerListFilter, limit, offset int32) ([]domain.BurgerRanking, bool, error)
 }
 
 // Burgers は burger の use case を実装する: 1 件の詳細(GET /burgers/{id})と、weighted_score
@@ -62,11 +68,11 @@ func (b *Burgers) Get(ctx context.Context, viewer *domain.User, id string) (doma
 	return detail, nil
 }
 
-// List は、weighted_score の高い順に burger を返す。範囲外の page/perPage は clampPage の
+// List は、名前検索と並び順を適用した burger を返す。範囲外の page/perPage は clampPage の
 // 規則で補正される。2 つ目の戻り値は、次のページがあるか(has_more)である。
-func (b *Burgers) List(ctx context.Context, page, perPage int) ([]domain.BurgerRanking, bool, error) {
+func (b *Burgers) List(ctx context.Context, filter BurgerListFilter, page, perPage int) ([]domain.BurgerRanking, bool, error) {
 	limit, offset := clampPage(page, perPage)
-	rankings, hasMore, err := b.query.ListBurgerRankings(ctx, limit, offset)
+	rankings, hasMore, err := b.query.ListBurgerRankings(ctx, filter, limit, offset)
 	if err != nil {
 		return nil, false, fmt.Errorf("list burger rankings: %w", err)
 	}

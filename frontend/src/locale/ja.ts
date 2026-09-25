@@ -2,6 +2,7 @@
 // 文言は、デザイン(design/redesign/*.html の data-en の対になる日本語)が使えるところはそのまま移し、
 // デザインに無いもの(aria-label・フォールバックのエラー文言など)は、同じ調子で自然な日本語にした。
 const ja = {
+  lists: { sortLabel: "並び替え", name: "名前順", newest: "新しい順", rating: "評価の高い順", ranking: "ランキング順", burgerSearch: "バーガー名で探す" },
   nav: {
     aboutHeader: "Burger Stackについて",
     brand: "BurgerStack",

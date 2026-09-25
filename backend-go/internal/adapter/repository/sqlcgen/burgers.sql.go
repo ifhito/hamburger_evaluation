@@ -115,13 +115,20 @@ SELECT b.id, b.name,
 FROM burgers b
 JOIN burger_stats bs ON bs.burger_id = b.id AND bs.review_count > 0
 JOIN representative_shop rs ON rs.burger_id = b.id
-ORDER BY bs.weighted_score DESC, b.id ASC
-LIMIT $2 OFFSET $1
+WHERE ($1::text IS NULL OR b.name ILIKE $1::text)
+ORDER BY
+ CASE WHEN $2::text = 'newest' THEN b.created_at END DESC,
+ CASE WHEN $2::text = 'name' THEN b.name END ASC,
+ CASE WHEN $2::text NOT IN ('newest', 'name') THEN bs.weighted_score END DESC,
+ b.id ASC
+LIMIT $4 OFFSET $3
 `
 
 type ListBurgerRankingsParams struct {
-	PageOffset int32
-	PageLimit  int32
+	NamePattern pgtype.Text
+	SortOrder   string
+	PageOffset  int32
+	PageLimit   int32
 }
 
 type ListBurgerRankingsRow struct {
@@ -142,9 +149,14 @@ type ListBurgerRankingsRow struct {
 // 作成の古い順(created_at 昇順、同時刻は id 昇順)の先頭を採る(DISTINCT ON)。これは、
 // domain.ReviewShopFor が匿名の viewer に対して選ぶショップ(見えるショップの先頭)と同じ選び方
 // である(この一覧には viewer がなく、常に匿名と同じ扱いになるため)。次のページの有無を知るために
-// limit+1 件を取得する。
+// limit+1 件を取得する。名前検索と並び順はページに切り分ける前に適用し、同値はid昇順で確定する。
 func (q *Queries) ListBurgerRankings(ctx context.Context, arg ListBurgerRankingsParams) ([]ListBurgerRankingsRow, error) {
-	rows, err := q.db.Query(ctx, listBurgerRankings, arg.PageOffset, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listBurgerRankings,
+		arg.NamePattern,
+		arg.SortOrder,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

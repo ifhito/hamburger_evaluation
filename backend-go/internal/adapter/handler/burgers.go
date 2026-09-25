@@ -42,7 +42,7 @@ func handleListBurgers(burgers *usecase.Burgers) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		list, hasMore, err := burgers.List(r.Context(), page, perPage)
+		list, hasMore, err := burgers.List(r.Context(), usecase.BurgerListFilter{Keyword: r.URL.Query().Get("keyword"), Sort: r.URL.Query().Get("sort")}, page, perPage)
 		if err != nil {
 			log.Printf("burgers: list: %v", err)
 			writeInternalError(w)

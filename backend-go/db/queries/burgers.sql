@@ -47,7 +47,7 @@ WHERE b.id = $1;
 -- 作成の古い順(created_at 昇順、同時刻は id 昇順)の先頭を採る(DISTINCT ON)。これは、
 -- domain.ReviewShopFor が匿名の viewer に対して選ぶショップ(見えるショップの先頭)と同じ選び方
 -- である(この一覧には viewer がなく、常に匿名と同じ扱いになるため)。次のページの有無を知るために
--- limit+1 件を取得する。
+-- limit+1 件を取得する。名前検索と並び順はページに切り分ける前に適用し、同値はid昇順で確定する。
 WITH representative_shop AS (
     SELECT DISTINCT ON (sb.burger_id)
         sb.burger_id, s.id AS shop_id, s.name AS shop_name
@@ -66,5 +66,10 @@ SELECT b.id, b.name,
 FROM burgers b
 JOIN burger_stats bs ON bs.burger_id = b.id AND bs.review_count > 0
 JOIN representative_shop rs ON rs.burger_id = b.id
-ORDER BY bs.weighted_score DESC, b.id ASC
+WHERE (sqlc.narg(name_pattern)::text IS NULL OR b.name ILIKE sqlc.narg(name_pattern)::text)
+ORDER BY
+ CASE WHEN sqlc.arg(sort_order)::text = 'newest' THEN b.created_at END DESC,
+ CASE WHEN sqlc.arg(sort_order)::text = 'name' THEN b.name END ASC,
+ CASE WHEN sqlc.arg(sort_order)::text NOT IN ('newest', 'name') THEN bs.weighted_score END DESC,
+ b.id ASC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
