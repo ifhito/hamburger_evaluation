@@ -20,9 +20,6 @@ export function ShopReviewCard({ review, ratingMax }: { review: Review; ratingMa
       <div className={styles.body}>
         <div className={styles.row}>
           {review.burger && <Link to={`/burgers/${review.burger.id}`} className={styles.name}>{review.burger.name}</Link>}
-          <time className={styles.date} dateTime={review.createdAt}>
-            {t("reviews.edit.postedOn", { date: formatDate(review.createdAt) })}
-          </time>
         </div>
         {review.shop && <p className={styles.shop}><Link to={`/shops/${review.shop.id}`}>{review.shop.name}</Link></p>}
         {review.visitedAt && (
@@ -35,6 +32,9 @@ export function ShopReviewCard({ review, ratingMax }: { review: Review; ratingMa
         <div className={styles.foot}>
           {review.user ? <Link to={`/users/${review.user.id}`}>{username}</Link> : <span>{username}</span>}
         </div>
+        <time className={styles.postedDate} dateTime={review.createdAt}>
+          {t("reviews.edit.postedOn", { date: formatDate(review.createdAt) })}
+        </time>
       </div>
     </article>
   );

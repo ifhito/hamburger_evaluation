@@ -22,6 +22,7 @@ export function Layout({ children, title }: LayoutProps) {
           <Logo name={t('nav.brand')} />
         </Link>
         <nav className={styles.nav}>
+          <Link to="/about" className={styles.navLink}>{t('nav.aboutHeader')}</Link>
           <Link to="/shops" className={styles.navLink}>{t('nav.shops')}</Link>
           <Link to="/reviews" className={styles.navLink}>{t('nav.reviews')}</Link>
           <Link to="/burgers" className={styles.navLink}>{t('nav.burgers')}</Link>

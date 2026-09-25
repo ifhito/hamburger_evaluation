@@ -1,7 +1,6 @@
-/* 枠・角丸・背景・overflow:hidden は、S45 の Card(components/ui/card.module.css)の .card から借りる。
-   padded は付けない(写真を端まで見せ、余白は .body 側だけに持つ) */
+/* カードの枠と縦配置は共通スタイルを使い、投稿日を最下部に揃える。 */
 .card {
-  composes: card from '../../../components/ui/card.module.css';
+  composes: card from '../../../components/reviewCard.module.css';
 }
 
 .photo,
@@ -25,6 +24,7 @@
 }
 
 .body {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -72,6 +72,7 @@
 }
 
 .photoLink {
+  flex-shrink: 0;
   display: block;
   color: inherit;
   text-decoration: none;
@@ -89,3 +90,7 @@
 }
 
 .card a { color: inherit; }
+
+.postedDate {
+  composes: postedDate from '../../../components/reviewCard.module.css';
+}

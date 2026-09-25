@@ -22,9 +22,6 @@ export function ProfileReviewCard({ review, ratingMax }: { review: Review; ratin
         <div className={styles.row}>
           {/* バーガーの名前は、利用者が自由に決めるので、HTML として解釈せず、文字として描画する */}
           {review.burger && <h3 className={styles.name}><Link to={`/burgers/${review.burger.id}`}>{review.burger.name}</Link></h3>}
-          <time className={styles.date} dateTime={review.createdAt}>
-            {t("reviews.edit.postedOn", { date: dateLabel })}
-          </time>
         </div>
         {review.shop && <p className={styles.shop}><Link to={`/shops/${review.shop.id}`}>{review.shop.name}</Link></p>}
         {review.visitedAt && (
@@ -34,6 +31,9 @@ export function ProfileReviewCard({ review, ratingMax }: { review: Review; ratin
         )}
         {ratingMax === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingMax} variant="stepped" />}
         {review.comment && <p className={styles.comment}>{review.comment}</p>}
+        <time className={styles.postedDate} dateTime={review.createdAt}>
+          {t("reviews.edit.postedOn", { date: dateLabel })}
+        </time>
       </div>
     </article>
   );
