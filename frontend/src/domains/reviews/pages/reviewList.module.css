@@ -80,8 +80,12 @@
   }
 }
 
+/* 共通入力の幅指定より優先し、3一覧で操作位置を揃える。 */
+.toolbar .sort {
+  width: 200px;
+}
+
 .sort {
-  width: auto;
   flex-shrink: 0;
   composes: input from '../../../components/ui/field.module.css';
   min-width: 0;
@@ -89,5 +93,6 @@
 }
 
 @media (max-width: 720px) {
-  .sort { width: 100%; }
+  .toolbar .sort { width: 100%; }
+  .search { flex: none; }
 }

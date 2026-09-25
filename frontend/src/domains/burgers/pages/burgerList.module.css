@@ -36,8 +36,12 @@
   }
 }
 
+/* 共通入力の幅指定より優先し、3一覧で操作位置を揃える。 */
+.toolbar .sort {
+  width: 200px;
+}
+
 .sort {
-  width: auto;
   flex-shrink: 0;
   composes: input from '../../../components/ui/field.module.css';
   min-width: 0;
@@ -53,9 +57,16 @@
 .search {
   composes: input from '../../../components/ui/field.module.css';
   flex: 1;
-  min-width: 180px;
+  min-width: 0;
 }
 
 @media (max-width: 720px) {
-  .sort { width: 100%; }
+  .toolbar {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .toolbar .sort { width: 100%; }
+  .search { flex: none; }
 }

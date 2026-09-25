@@ -24,12 +24,12 @@ export default function BurgerListPage() {
       </div>
 
       <div className={styles.toolbar}>
-        <input className={styles.search} aria-label={t("lists.burgerSearch")} placeholder={t("lists.burgerSearch")} value={keyword} onChange={(e) => setKeyword(e.target.value)} />
         <select className={styles.sort} aria-label={t("lists.sortLabel")} value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="ranking">{t("lists.ranking")}</option>
           <option value="newest">{t("lists.newest")}</option>
           <option value="name">{t("lists.name")}</option>
         </select>
+        <input className={styles.search} aria-label={t("lists.burgerSearch")} placeholder={t("lists.burgerSearch")} value={keyword} onChange={(e) => setKeyword(e.target.value)} />
       </div>
 
       {isLoading && <Loading />}
