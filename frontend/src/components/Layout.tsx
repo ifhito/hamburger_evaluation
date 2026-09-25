@@ -46,6 +46,7 @@ export function Layout({ children, title }: LayoutProps) {
       </main>
       <footer className={styles.footer}>
         <Link to="/about">{t('nav.about')}</Link>
+        <Link to="/mcp">{t('mcp.title')}</Link>
       </footer>
     </div>
   )

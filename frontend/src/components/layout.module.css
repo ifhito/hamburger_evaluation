@@ -93,6 +93,9 @@
 }
 
 .footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 1.5rem;
   width: min(70rem, 100% - 2rem);
   margin: 0 auto;
   padding: 1.5rem 0;
