@@ -1,0 +1,145 @@
+{
+  "fileId": "001b6a38-fea0-8183-8008-b188ed3900b6",
+  "boards": [
+    {
+      "key": "shops-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "0c6f9e8a-7fc1-42f6-a0ba-950e3a0e6224",
+      "width": 1280,
+      "height": 900
+    },
+    {
+      "key": "burgers-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "31bf377b-d7e0-492e-adfa-ca526867973d",
+      "width": 1280,
+      "height": 900
+    },
+    {
+      "key": "reviews-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "3f2fc28d-89ed-46e4-8563-b9c6a1d800dd",
+      "width": 1280,
+      "height": 925
+    },
+    {
+      "key": "shop-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "3e687ad9-9d8b-4900-8f80-7a347e6517b4",
+      "width": 1280,
+      "height": 1477
+    },
+    {
+      "key": "burger-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "e1c4f4d4-ccaf-40bb-a02a-04da08f05090",
+      "width": 1280,
+      "height": 1539
+    },
+    {
+      "key": "review-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "792a4b16-9d08-499c-bf86-6c66ef0d4bcd",
+      "width": 1280,
+      "height": 1213
+    },
+    {
+      "key": "profile-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "432999f1-80df-4152-9688-304a96f5b54c",
+      "width": 1280,
+      "height": 966
+    },
+    {
+      "key": "empty-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "93d7f2b8-a4e1-4659-968f-098c6836583e",
+      "width": 1280,
+      "height": 900
+    },
+    {
+      "key": "apps-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "47013c12-ee7f-4c79-94d2-6343a8e2133d",
+      "width": 1280,
+      "height": 1432
+    },
+    {
+      "key": "about-pc",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "f1867b01-dcd5-4eff-8495-478bca874e18",
+      "width": 1280,
+      "height": 2982
+    },
+    {
+      "key": "shops-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "c61be541-6089-4498-9e7f-287cc455bd41",
+      "width": 375,
+      "height": 1352
+    },
+    {
+      "key": "burgers-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "de591c90-0a59-45c0-b91b-c1b7ab808005",
+      "width": 375,
+      "height": 1330
+    },
+    {
+      "key": "reviews-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "2143c847-3af2-48a5-bfb4-40d6ccf75385",
+      "width": 375,
+      "height": 1546
+    },
+    {
+      "key": "shop-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "71bea88e-4116-4b4d-b8b6-c5aa2d0477dc",
+      "width": 375,
+      "height": 1998
+    },
+    {
+      "key": "burger-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "ecfab6e9-39a8-45c0-9299-f13c9487493d",
+      "width": 375,
+      "height": 2025
+    },
+    {
+      "key": "review-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "e21a76ab-1432-4e1b-85c1-eabda6d8ee92",
+      "width": 375,
+      "height": 1117
+    },
+    {
+      "key": "profile-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "c8cf60e1-a988-40de-9ba6-561645b01fab",
+      "width": 375,
+      "height": 1545
+    },
+    {
+      "key": "empty-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "5ab93cec-9a7f-46fd-8b51-6426f6893a21",
+      "width": 375,
+      "height": 812
+    },
+    {
+      "key": "apps-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "ac03f17a-5423-46eb-a57f-68070d57b138",
+      "width": 375,
+      "height": 2274
+    },
+    {
+      "key": "about-mobile",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "00889e60-5343-4512-a73c-859faba729e9",
+      "width": 375,
+      "height": 3183
+    }
+  ]
+}
