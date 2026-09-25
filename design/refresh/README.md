@@ -29,6 +29,7 @@
 
 1. `python3 design/scripts/serve_design_fixture.py` でサンプルAPIを起動します（127.0.0.1:18091のみ）。
 2. 参照するfrontendを `VITE_API_PROXY_TARGET=http://127.0.0.1:18091 pnpm run dev --host 127.0.0.1 --port 5188` で起動します。
+   node_modulesを別のworktreeからシンボリックリンクする場合は、Viteの `server.fs.allow` にその依存パッケージの実パスを追加し、フォントが403になっていないことを確認します。
 3. ローカル画面で `fixture@example.test` / `fixture` を入力してサンプルとしてサインインします。実在のアカウントではありません。
 4. ブラウザをPC 1280×900、モバイル375×812で開き、`extract_current_ui.js` を読み取り専用のevaluateで実行し、JSONとfull-page screenshotを保存します。画面: `/shops`, `/burgers`, `/reviews`, `/shops/s1`, `/burgers/b1`, `/reviews/r1`, `/users/u3`, `/users/u2`, `/users/u1`, `/about`。
 5. 次のコマンドで計測JSONから新規Penpotファイルを作成します。既存ファイルは上書きしません。再実行ごとに新規ファイルが作られます。
