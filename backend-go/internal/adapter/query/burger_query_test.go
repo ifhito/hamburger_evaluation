@@ -459,7 +459,7 @@ func TestBurgerRepresentativePhoto(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			list, _, err := q.ListBurgerRankings(ctx, 20, 0)
+			list, _, err := q.ListBurgerRankings(ctx, usecase.BurgerListFilter{}, 20, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

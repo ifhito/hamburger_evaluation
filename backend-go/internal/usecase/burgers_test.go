@@ -176,7 +176,7 @@ func TestBurgersPhotos(t *testing.T) {
 		})
 	}
 	q := &fakeBurgerQuery{rankings: []domain.BurgerRanking{{PhotoKey: &key}, {}}}
-	got, _, err := usecase.NewBurgers(q, stubPhotoURLs{}).List(context.Background(), 1, 20)
+	got, _, err := usecase.NewBurgers(q, stubPhotoURLs{}).List(context.Background(), usecase.BurgerListFilter{}, 1, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
