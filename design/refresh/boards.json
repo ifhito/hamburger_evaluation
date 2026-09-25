@@ -1,143 +1,143 @@
 {
-  "fileId": "001b6a38-fea0-8183-8008-b186dffb9951",
+  "fileId": "001b6a38-fea0-8183-8008-b188ed3900b6",
   "boards": [
     {
       "key": "shops-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "99f8ad27-5a01-401b-84a7-20526fd00a11",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "0c6f9e8a-7fc1-42f6-a0ba-950e3a0e6224",
       "width": 1280,
       "height": 900
     },
     {
       "key": "burgers-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "fd9a4652-442f-4580-9b49-68e6712a7cb7",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "31bf377b-d7e0-492e-adfa-ca526867973d",
       "width": 1280,
       "height": 900
     },
     {
       "key": "reviews-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "58e5450e-dd6a-4c72-b227-7ca85f03ece2",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "3f2fc28d-89ed-46e4-8563-b9c6a1d800dd",
       "width": 1280,
-      "height": 900
+      "height": 925
     },
     {
       "key": "shop-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "97478fd8-c098-4631-a6cc-720bcba20da4",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "3e687ad9-9d8b-4900-8f80-7a347e6517b4",
       "width": 1280,
-      "height": 1446
+      "height": 1477
     },
     {
       "key": "burger-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "6314f5ab-d0bd-444d-8ebf-e33d1daa63ac",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "e1c4f4d4-ccaf-40bb-a02a-04da08f05090",
       "width": 1280,
-      "height": 1508
+      "height": 1539
     },
     {
       "key": "review-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "147f2910-6560-49a3-8777-e66ccec7eebb",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "792a4b16-9d08-499c-bf86-6c66ef0d4bcd",
       "width": 1280,
       "height": 1213
     },
     {
       "key": "profile-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "7086cfe4-f6db-4baf-b6b0-ebfe14634518",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "432999f1-80df-4152-9688-304a96f5b54c",
       "width": 1280,
-      "height": 935
+      "height": 966
     },
     {
       "key": "empty-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "933c8f32-5f9b-401d-99c8-2a5f1732b452",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "93d7f2b8-a4e1-4659-968f-098c6836583e",
       "width": 1280,
       "height": 900
     },
     {
       "key": "apps-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "56d49609-72c1-49bc-8051-cb6fb3baa7b5",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "47013c12-ee7f-4c79-94d2-6343a8e2133d",
       "width": 1280,
-      "height": 1401
+      "height": 1432
     },
     {
       "key": "about-pc",
-      "page": "001b6a38-fea0-8183-8008-b186dffb9952",
-      "frame": "15a5dd7e-7c6a-4e0e-be46-eb422a1d8f65",
+      "page": "001b6a38-fea0-8183-8008-b188ed3900b7",
+      "frame": "f1867b01-dcd5-4eff-8495-478bca874e18",
       "width": 1280,
       "height": 2982
     },
     {
       "key": "shops-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "9d4f6511-2b65-47b8-b2ae-e130d0f5321a",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "c61be541-6089-4498-9e7f-287cc455bd41",
       "width": 375,
       "height": 1352
     },
     {
       "key": "burgers-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "c45126c7-53e4-4fbe-8e6d-b555bf9260f4",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "de591c90-0a59-45c0-b91b-c1b7ab808005",
       "width": 375,
       "height": 1330
     },
     {
       "key": "reviews-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "fed8c30d-d6cd-401e-aaa2-b0c35e287c6d",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "2143c847-3af2-48a5-bfb4-40d6ccf75385",
       "width": 375,
-      "height": 1485
+      "height": 1546
     },
     {
       "key": "shop-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "e5d55291-bbb9-4b1a-b05c-34339f52c9c7",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "71bea88e-4116-4b4d-b8b6-c5aa2d0477dc",
       "width": 375,
-      "height": 1937
+      "height": 1998
     },
     {
       "key": "burger-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "2881594a-9cb7-4de2-a14a-829b0980be92",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "ecfab6e9-39a8-45c0-9299-f13c9487493d",
       "width": 375,
-      "height": 1964
+      "height": 2025
     },
     {
       "key": "review-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "988c5b49-df90-4806-8768-591c89e80972",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "e21a76ab-1432-4e1b-85c1-eabda6d8ee92",
       "width": 375,
       "height": 1117
     },
     {
       "key": "profile-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "8c8d40dc-a5d5-4243-9fa5-679e3b04cc0a",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "c8cf60e1-a988-40de-9ba6-561645b01fab",
       "width": 375,
-      "height": 1484
+      "height": 1545
     },
     {
       "key": "empty-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "94eb7e0d-fc27-452d-b133-edc2c072d779",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "5ab93cec-9a7f-46fd-8b51-6426f6893a21",
       "width": 375,
       "height": 812
     },
     {
       "key": "apps-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "18176b6c-0c4c-4ed4-a1f9-04c597aed482",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "ac03f17a-5423-46eb-a57f-68070d57b138",
       "width": 375,
-      "height": 2213
+      "height": 2274
     },
     {
       "key": "about-mobile",
-      "page": "babe451a-f587-4514-9515-b05bdbe00f5d",
-      "frame": "c9a9a015-c2a6-421d-b4f2-ef6206579f05",
+      "page": "011380d3-bd56-4bde-8abf-9147f4f452ec",
+      "frame": "00889e60-5343-4512-a73c-859faba729e9",
       "width": 375,
       "height": 3183
     }
