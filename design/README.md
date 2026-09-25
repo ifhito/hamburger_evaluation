@@ -1,5 +1,7 @@
 # design/ — デザインツール Penpot(ローカル)
 
+最新の提案: [Burger Stack 全体デザイン（2026年9月）](refresh/README.md) — 主要10画面のPC・モバイル版、編集用Penpotファイルとプレビュー。
+
 [Penpot](https://penpot.app/) は、オープンソースのデザインツールです。ここには、Penpot を自分の PC で動かすための compose と、書き出したデザインのファイル(`.penpot`)を置きます。アプリ(`backend-go/`・`frontend/`)とは独立していて、アプリの起動・テストには影響しません。
 
 - 開く URL: <http://localhost:9001>(ポートは `.env` で変えられます)
