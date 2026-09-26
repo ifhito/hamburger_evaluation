@@ -10,7 +10,7 @@ const en = {
     "skip": "Skip to content",
     "information": "About the service",
     "ai": "Use with AI",
-    "message": "Find it. Taste it. Record it.\nYour favorite could inspire someone else.",
+    "message": "Keep a stack of your burger memories.",
     "discoverLead": "Find the burger you want to try next.",
     "targets": "Search for",
     "shops": "Shops",
