@@ -4,7 +4,7 @@ Issue #240。**全デザインの正本はPenpot**。アプリ本体は変更し
 
 編集用ファイル: [burgerstack-navigation.penpot](../files/burgerstack-navigation.penpot)
 
-[ローカルPenpotで開く](http://localhost:9001/#/workspace?project-id=001b6a38-fea0-8183-8008-b179064866fd&file-id=001b6a38-fea0-8183-8008-b21528f5e80f&page-id=001b6a38-fea0-8183-8008-b21528f5e810)
+[ローカルPenpotで開く](http://localhost:9001/#/workspace?project-id=001b6a38-fea0-8183-8008-b179064866fd&file-id=001b6a38-fea0-8183-8008-b216c1e44132&page-id=001b6a38-fea0-8183-8008-b216c1e44133)
 
 PC、スマホのホーム・探す・記録する・マイページ、フッター末尾、未ログイン、320pxの9ボード。文字・矩形・アイコンは編集可能。画像を1枚貼ったものではない。
 既存の全体デザインを上書きせず、今回の検討を別ファイルとして管理する。採用後に全体デザインへ統合する。
