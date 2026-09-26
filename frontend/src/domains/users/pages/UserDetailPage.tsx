@@ -53,6 +53,8 @@ export default function UserDetailPage() {
             <h1 className={styles.username}>{user.username}</h1>
             {/* 自己紹介文は利用者が自由に書くので、HTML として解釈せず、改行だけを保った文字として描画する */}
             {user.bio && <p className={styles.bio}>{user.bio}</p>}
+            {/* email は API が本人の閲覧時だけ返す。閲覧者の比較ではなく、API の返却有無で出し分ける */}
+            {user.email && <p className={styles.email}>{user.email}</p>}
             <div className={styles.actions}>
               <ShareLinkButton userId={user.id} />
               {user.canEdit && <><LinkButton to={`/users/${user.id}/edit`}>{t("users.detail.editProfile")}</LinkButton><LinkButton to="/signout">{t("nav.signout")}</LinkButton></>}

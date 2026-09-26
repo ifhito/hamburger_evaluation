@@ -39,6 +39,13 @@
   overflow-wrap: anywhere;
 }
 
+.email {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--ui-text-muted);
+  overflow-wrap: anywhere;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
