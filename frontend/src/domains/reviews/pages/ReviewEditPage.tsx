@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useUnsavedChanges } from "../../../app/navigation/useUnsavedChanges";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
@@ -33,12 +34,14 @@ export default function ReviewEditPage() {
   const ratingRange = useRatingRange();
   const meta = useMeta().data;
 
-  const { register, handleSubmit, setValue, watch, reset } = useUpdateReviewForm();
+  const { register, handleSubmit, setValue, watch, reset, formState: { isDirty } } = useUpdateReviewForm();
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoShrinking, setPhotoShrinking] = useState(false);
+
+  const markSaved = useUnsavedChanges(!!review?.canEdit && (isDirty || photo !== null || photoShrinking));
 
   useEffect(() => {
     if (review) reset({ rating: review.rating, comment: review.comment ?? "", visitedAt: review.visitedAt ?? "" });
@@ -64,6 +67,7 @@ export default function ReviewEditPage() {
     setIsSubmitting(true);
     try {
       await update(data, photo);
+      markSaved();
       void navigate(`/reviews/${id}`);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("reviews.edit.error")]);
@@ -99,7 +103,7 @@ export default function ReviewEditPage() {
                 <RatingInput
                   label={t("common.rating")}
                   value={watch("rating")}
-                  onChange={(v) => setValue("rating", v)}
+                  onChange={(v) => setValue("rating", v, { shouldDirty: true })}
                   min={ratingRange?.min}
                   max={ratingRange?.max}
                 />

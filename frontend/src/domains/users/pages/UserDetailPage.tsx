@@ -57,7 +57,7 @@ export default function UserDetailPage() {
             {user.email && <p className={styles.email}>{user.email}</p>}
             <div className={styles.actions}>
               <ShareLinkButton userId={user.id} />
-              {user.canEdit && <LinkButton to={`/users/${user.id}/edit`}>{t("users.detail.editProfile")}</LinkButton>}
+              {user.canEdit && <><LinkButton to={`/users/${user.id}/edit`}>{t("users.detail.editProfile")}</LinkButton><LinkButton to="/signout">{t("nav.signout")}</LinkButton></>}
             </div>
           </div>
         </section>

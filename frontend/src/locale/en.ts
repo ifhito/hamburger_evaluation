@@ -1,4 +1,25 @@
 const en = {
+  navigation: {
+    "home": "Home",
+    "discover": "Find your next bite",
+    "discoverShort": "Next bite",
+    "record": "Record",
+    "recordDesktop": "Record a bite",
+    "profile": "My page",
+    "main": "Main navigation",
+    "skip": "Skip to content",
+    "information": "About the service",
+    "ai": "Use with AI",
+    "message": "Find it. Taste it. Record it.\nYour favorite could inspire someone else.",
+    "discoverLead": "Find the burger you want to try next.",
+    "targets": "Search for",
+    "shops": "Shops",
+    "burgers": "Burgers",
+    "reviews": "Reviews",
+    "recordTitle": "Where did you eat?",
+    "recordLead": "Choose a shop to record your bite.",
+    "unsaved": "Your changes have not been saved. Leave this page?"
+},
   mcp: {
     "title": "Use Burger Stack with AI",
     "lead": "Ask your AI to find shops and record burgers you have enjoyed. Connect using your own Burger Stack account.",

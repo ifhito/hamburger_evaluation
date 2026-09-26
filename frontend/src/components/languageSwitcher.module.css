@@ -22,3 +22,7 @@
   background: var(--ui-text);
   color: var(--ui-bg);
 }
+
+.full { gap: 16px; }
+.full .langBtn { padding: 0 4px; font-size: 12px; }
+.full .on { background: transparent; color: var(--ui-text); font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }

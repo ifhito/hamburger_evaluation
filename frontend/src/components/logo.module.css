@@ -19,11 +19,13 @@
 }
 
 .text {
+  display: var(--brand-wordmark-display, inline);
   color: var(--color-text);
   letter-spacing: 0.01em;
 }
 
 .onDark .text {
+  display: var(--brand-wordmark-display, inline);
   color: #fff;
 }
 

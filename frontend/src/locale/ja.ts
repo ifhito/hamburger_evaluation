@@ -2,6 +2,27 @@
 // 文言は、デザイン(design/redesign/*.html の data-en の対になる日本語)が使えるところはそのまま移し、
 // デザインに無いもの(aria-label・フォールバックのエラー文言など)は、同じ調子で自然な日本語にした。
 const ja = {
+  navigation: {
+    "home": "ホーム",
+    "discover": "次の一口を探す",
+    "discoverShort": "次の一口",
+    "record": "記録する",
+    "recordDesktop": "食べた記録",
+    "profile": "マイページ",
+    "main": "メインナビゲーション",
+    "skip": "本文へ移動",
+    "information": "サービスについて",
+    "ai": "AIから使う",
+    "message": "探して、食べて、記録する。\nあなたの好きが、誰かのきっかけに。",
+    "discoverLead": "次に食べたい一口を探そう。",
+    "targets": "探す対象",
+    "shops": "お店",
+    "burgers": "バーガー",
+    "reviews": "レビュー",
+    "recordTitle": "どのお店で食べましたか？",
+    "recordLead": "お店を選んで、今日の一口を記録しましょう。",
+    "unsaved": "入力した内容が保存されていません。この画面を離れますか？"
+},
   mcp: {
     "title": "AIからBurger Stackを使う",
     "lead": "いつものAIに話しかけて、お店を探したり、食べたバーガーを記録したり。自分のBurger Stackアカウントでつなげます。",

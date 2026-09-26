@@ -355,12 +355,12 @@ describe("画面を離れたあと・ログインの状態の復元中の、交�
     exchangeGoogleCode.mockReturnValue(pending.promise);
     const page = await showAt("/auth/google/complete?code=one-time-code");
     await eventually(() => expect(exchangeGoogleCode).toHaveBeenCalledTimes(1));
-    await click(need(byText(page, "a", "Shops"), "Shops")); // ヘッダーのリンクで、別の画面へ
+    await click(need(page.querySelector('header a[href="/discover"]'), "探すリンク")); // ヘッダーのリンクで、別の画面へ
 
     await act(async () => pending.resolve(signedIn("/reviews")));
 
     await eventually(() => expect(localStorage.getItem("token")).toBe("jwt-from-google"));
-    expect(probeOf(page)).toBe("/shops|carol"); // /reviews へ移動させられていない。サインインは反映されている
+    expect(probeOf(page)).toBe("/discover|carol"); // /reviews へ移動させられていない。サインインは反映されている
   });
 
   it("ログイン中の利用者の手続きの失敗は、ログインの状態を復元し終えるまで、リンクを出さず、復元できたら、プロフィールへ戻るリンクを出す(サインインへの誤った導線を出さない)", async () => {

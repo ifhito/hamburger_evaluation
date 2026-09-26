@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useShopDetail } from "../hooks/useShops";
@@ -19,6 +19,8 @@ import textLinkStyles from "../../../components/ui/textLink.module.css";
 export default function ShopDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const backTo = searchParams.get("from") === "record" ? "/record" : "/shops";
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
   // canReview は閲覧者ごとに違うので、認証状態が確定してから取得する
@@ -34,7 +36,7 @@ export default function ShopDetailPage() {
   if (error || !shop) {
     return (
       <Layout>
-        <NotFound action={<LinkButton to="/shops">{t("shops.detail.backToShopsAction")}</LinkButton>} />
+        <NotFound action={<LinkButton to={backTo}>{t("shops.detail.backToShopsAction")}</LinkButton>} />
       </Layout>
     );
   }
@@ -52,7 +54,7 @@ export default function ShopDetailPage() {
   return (
     <Layout>
       <div className={styles.container}>
-        <TextLink to="/shops">{t("shops.detail.backToShops")}</TextLink>
+        <TextLink to={backTo}>{t("shops.detail.backToShops")}</TextLink>
 
         <div className={styles.hero}>
           {shop.photoUrl ? (
@@ -106,7 +108,7 @@ export default function ShopDetailPage() {
 
         {shop.status === "rejected" && (
           <p className={styles.backBelow}>
-            <TextLink to="/shops">{t("shops.detail.backToShops")}</TextLink>
+            <TextLink to={backTo}>{t("shops.detail.backToShops")}</TextLink>
           </p>
         )}
       </div>
