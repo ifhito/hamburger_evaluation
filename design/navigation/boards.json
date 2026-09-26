@@ -1,68 +1,68 @@
 {
-  "fileId": "001b6a38-fea0-8183-8008-b1a980a3d2dc",
+  "fileId": "001b6a38-fea0-8183-8008-b20a2d5ef79e",
   "projectId": "001b6a38-fea0-8183-8008-b179064866fd",
   "boards": [
     {
       "key": "home-pc",
       "name": "PC / ヘッダー・フッター",
-      "page": "001b6a38-fea0-8183-8008-b1a980a3d2dd",
-      "frame": "50e247de-094a-43d0-91bb-ed0c861366cc",
+      "page": "001b6a38-fea0-8183-8008-b20a2d5ef79f",
+      "frame": "920bdea6-458f-42c6-a98f-d42fcb7f49d9",
       "width": 1280,
       "height": 1372
     },
     {
       "key": "home-mobile",
       "name": "スマホ / ホーム",
-      "page": "001b6a38-fea0-8183-8008-b1a980a3d2dd",
-      "frame": "c1157f87-b323-4939-b30f-520ef4f3c94a",
+      "page": "001b6a38-fea0-8183-8008-b20a2d5ef79f",
+      "frame": "0fc4b2f2-7b33-43bb-b787-97ccfb929005",
       "width": 390,
       "height": 844
     },
     {
       "key": "search-mobile",
       "name": "スマホ / 探す",
-      "page": "001b6a38-fea0-8183-8008-b1a980a3d2dd",
-      "frame": "88e6dc18-d2da-44e8-969e-82c0376f6b2d",
+      "page": "001b6a38-fea0-8183-8008-b20a2d5ef79f",
+      "frame": "7f647d97-3c9b-4d65-a273-ab0e598a1cce",
       "width": 390,
       "height": 844
     },
     {
       "key": "record-mobile",
       "name": "スマホ / 記録する",
-      "page": "001b6a38-fea0-8183-8008-b1a980a3d2dd",
-      "frame": "75037387-a663-4ed4-86bc-8c7328e233e7",
+      "page": "001b6a38-fea0-8183-8008-b20a2d5ef79f",
+      "frame": "d96a3291-597f-4d22-8996-ef6a7f8ab6de",
       "width": 390,
       "height": 844
     },
     {
       "key": "profile-mobile",
       "name": "スマホ / マイページ",
-      "page": "001b6a38-fea0-8183-8008-b1a980a3d2dd",
-      "frame": "1a0e436b-85a6-4573-8029-5ba0adaf6ab1",
+      "page": "001b6a38-fea0-8183-8008-b20a2d5ef79f",
+      "frame": "ef92adad-18ab-4665-b00f-c0eff24f1735",
       "width": 390,
       "height": 844
     },
     {
       "key": "footer-mobile",
       "name": "スマホ / フッター末尾",
-      "page": "001b6a38-fea0-8183-8008-b1a980a3d2dd",
-      "frame": "5e619756-7cef-430d-8d7f-c0b922127752",
+      "page": "001b6a38-fea0-8183-8008-b20a2d5ef79f",
+      "frame": "330ed86e-0dd3-47f3-bdab-30cc2eabf4b7",
       "width": 390,
       "height": 844
     },
     {
       "key": "guest-mobile",
       "name": "スマホ / 未ログイン",
-      "page": "001b6a38-fea0-8183-8008-b1a980a3d2dd",
-      "frame": "8137db33-ab9b-4487-9d63-5e37687a69c5",
+      "page": "001b6a38-fea0-8183-8008-b20a2d5ef79f",
+      "frame": "2df3aa05-a8c8-4856-bc82-a19e70060235",
       "width": 390,
       "height": 844
     },
     {
       "key": "compact-mobile",
       "name": "スマホ / 320px",
-      "page": "001b6a38-fea0-8183-8008-b1a980a3d2dd",
-      "frame": "974d7bff-e62f-4594-a001-124987c07b7b",
+      "page": "001b6a38-fea0-8183-8008-b20a2d5ef79f",
+      "frame": "2d29d0e2-2a13-48f4-a1f4-f0123fac2a99",
       "width": 320,
       "height": 740
     }
