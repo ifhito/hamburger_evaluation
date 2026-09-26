@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / 'design/scripts'))
 from build_penpot import Penpot
 from build_burgerstack_refresh import BufferedBuilder, MeasuredDesign, upload
 
-NAMES = {'home-pc':'PC / ヘッダー・フッター', 'home-mobile':'スマホ / ホーム', 'search-mobile':'スマホ / 探す', 'record-mobile':'スマホ / 記録する', 'profile-mobile':'スマホ / マイページ', 'footer-mobile':'スマホ / フッター末尾', 'guest-mobile':'スマホ / 未ログイン', 'compact-mobile':'スマホ / 320px'}
+NAMES = {'home-pc':'PC / ヘッダー・フッター', 'home-mobile':'スマホ / ホーム', 'search-mobile':'スマホ / 探す', 'record-mobile':'スマホ / 記録する', 'profile-mobile':'スマホ / マイページ', 'footer-mobile':'スマホ / フッター末尾', 'guest-mobile':'スマホ / 未ログイン', 'compact-mobile':'スマホ / 320px', 'record-hover-pc':'PC / 記録ボタンのホバー'}
 
 def main():
     parser = argparse.ArgumentParser()

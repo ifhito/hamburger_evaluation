@@ -1,70 +1,78 @@
 {
-  "fileId": "001b6a38-fea0-8183-8008-b210ab3f8036",
+  "fileId": "001b6a38-fea0-8183-8008-b2142fbf8452",
   "projectId": "001b6a38-fea0-8183-8008-b179064866fd",
   "boards": [
     {
       "key": "home-pc",
       "name": "PC / ヘッダー・フッター",
-      "page": "001b6a38-fea0-8183-8008-b210ab3f8037",
-      "frame": "42edc995-0496-4ef4-b74a-cb13dae7d6c5",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "a0616603-74ca-4796-b6fa-b019b98e3504",
       "width": 1280,
       "height": 1372
     },
     {
       "key": "home-mobile",
       "name": "スマホ / ホーム",
-      "page": "001b6a38-fea0-8183-8008-b210ab3f8037",
-      "frame": "5e8e3380-cab2-488f-b9c7-9b1cb3e3bf0c",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "f5b3b65a-8ae1-4cbc-aab7-099896597665",
       "width": 390,
       "height": 844
     },
     {
       "key": "search-mobile",
       "name": "スマホ / 探す",
-      "page": "001b6a38-fea0-8183-8008-b210ab3f8037",
-      "frame": "bc674f8a-b597-4db4-8e9c-048c153352e3",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "af410cbf-6c82-4176-b6a4-d2e6bbb89362",
       "width": 390,
       "height": 844
     },
     {
       "key": "record-mobile",
       "name": "スマホ / 記録する",
-      "page": "001b6a38-fea0-8183-8008-b210ab3f8037",
-      "frame": "a42faca9-65af-44f4-80ff-0cb862dae688",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "010a67ea-35d5-48c5-8fba-31dcf93be089",
       "width": 390,
       "height": 844
     },
     {
       "key": "profile-mobile",
       "name": "スマホ / マイページ",
-      "page": "001b6a38-fea0-8183-8008-b210ab3f8037",
-      "frame": "db499afc-0f5e-4089-a6aa-55da84dbabbb",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "408efc91-d8d9-4b33-a427-2151b71f0706",
       "width": 390,
       "height": 844
     },
     {
       "key": "footer-mobile",
       "name": "スマホ / フッター末尾",
-      "page": "001b6a38-fea0-8183-8008-b210ab3f8037",
-      "frame": "369eeae6-5d68-4a91-8ce7-cc7854172409",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "902d7af3-662c-4a9e-90fb-e58d0fc71359",
       "width": 390,
       "height": 844
     },
     {
       "key": "guest-mobile",
       "name": "スマホ / 未ログイン",
-      "page": "001b6a38-fea0-8183-8008-b210ab3f8037",
-      "frame": "69ec5e12-e919-4db9-b76b-2c38dc6e8aca",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "3e12864b-8fb8-401a-ab0f-e4929b61dc3c",
       "width": 390,
       "height": 844
     },
     {
       "key": "compact-mobile",
       "name": "スマホ / 320px",
-      "page": "001b6a38-fea0-8183-8008-b210ab3f8037",
-      "frame": "a90e1d6a-4b8f-402f-8b84-0549c7e9ee71",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "595aca01-56b3-44a7-b36c-cd5a0b71c369",
       "width": 320,
       "height": 740
+    },
+    {
+      "key": "record-hover-pc",
+      "name": "PC / 記録ボタンのホバー",
+      "page": "001b6a38-fea0-8183-8008-b2142fbfd52b",
+      "frame": "d58fb955-eaad-484d-a713-f0962e19d84d",
+      "width": 1280,
+      "height": 1372
     }
   ]
 }

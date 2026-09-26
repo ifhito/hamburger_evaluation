@@ -4,9 +4,9 @@ Issue #240。**全デザインの正本はPenpot**。アプリ本体は変更し
 
 編集用ファイル: [burgerstack-navigation.penpot](../files/burgerstack-navigation.penpot)
 
-[ローカルPenpotで開く](http://localhost:9001/#/workspace?project-id=001b6a38-fea0-8183-8008-b179064866fd&file-id=001b6a38-fea0-8183-8008-b210ab3f8036&page-id=001b6a38-fea0-8183-8008-b210ab3f8037)
+[ローカルPenpotで開く](http://localhost:9001/#/workspace?project-id=001b6a38-fea0-8183-8008-b179064866fd&file-id=001b6a38-fea0-8183-8008-b2142fbf8452&page-id=001b6a38-fea0-8183-8008-b2142fbfd52b)
 
-PC、スマホのホーム・探す・記録する・マイページ、フッター末尾、未ログイン、320pxの8ボード。文字・矩形・アイコンは編集可能。画像を1枚貼ったものではない。
+PC、スマホのホーム・探す・記録する・マイページ、フッター末尾、未ログイン、320pxの9ボード。文字・矩形・アイコンは編集可能。画像を1枚貼ったものではない。
 既存の全体デザインを上書きせず、今回の検討を別ファイルとして管理する。採用後に全体デザインへ統合する。
 HTMLは操作確認用の補助。Penpotで変更した場合は、書き出しファイル・プレビュー・補助HTMLを同じ変更に揃える。競合時はPenpotを正とする。
 
@@ -69,3 +69,5 @@ FAQ・問い合わせ・規約・プライバシーは配置予約の静的テ�
 
 `captures/*.json` はブラウザの読み取り専用計測データ。`build_penpot.py --email <ローカルPenpotのメール> --password-file <非公開ファイル>` で新規ファイルへ取り込み、`../files/burgerstack-navigation.penpot` に書き出す。既存のファイルを更新するスクリプトではないため、Penpotで編集した後に再生成して上書きしない。
 `boards.json` がボードIDの対応。`previews/*-penpot.png` はPenpot exporterの出力、`*-source.jpg` は操作確認用ブラウザ画像。
+
+記録アイコンの＋には丸枠を付けない。PCの記録ボタンはホバー・キーボードフォーカスで背景が #fff1bb に変化する。Penpotの「PC / 記録ボタンのホバー」で比較できる。
