@@ -5,7 +5,7 @@ import "../../../lib/i18n";
 import { cleanup, mount } from "../../../test/dom";
 import UserDetailPage from "./UserDetailPage";
 
-// プロフィールの本体(名前・自己紹介・メール・操作・レビューの並び)の出し分けだけを確かめる。データの取得は差し替える。
+// プロフィールの本体(名前・自己紹介・操作・レビューの並び)の出し分けだけを確かめる。データの取得は差し替える。
 const state = vi.hoisted(() => ({
   profile: undefined as undefined | { id: string; username: string; bio: string; email?: string; canEdit: boolean },
   userLoading: false,
@@ -50,9 +50,9 @@ describe("UserDetailPage のプロフィール本体", () => {
     expect(page.textContent).toContain("Copy link");
   });
 
-  it("メールは、API が返したときだけ出す(返さない=他人のプロフィールでは、出さない)", async () => {
+  it("本人の情報にメールが含まれていても、プロフィールには表示しない", async () => {
     let page = await show();
-    expect(page.textContent).toContain("c@example.com");
+    expect(page.textContent).not.toContain("c@example.com");
     await cleanup();
 
     state.profile = { id: "7", username: "carol", bio: "", canEdit: false };

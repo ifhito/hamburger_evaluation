@@ -96,7 +96,7 @@ const ja = {
     reviewCount_other: "{{count}} 件のレビュー",
     states: {
       empty: { title: "まだ誰も食べていません", description: "最初のレビューを書いてみませんか?" },
-      loading: { title: "焼いています…", description: "少しだけお待ちください" },
+      loading: { title: "ハンバーガーをビルドしています", description: "少しだけお待ちください" },
       notFound: { code: "404", title: "売り切れです", description: "ページが見つかりません" },
     },
   },
