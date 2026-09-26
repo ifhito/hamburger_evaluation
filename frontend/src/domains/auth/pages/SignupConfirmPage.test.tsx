@@ -11,6 +11,7 @@ import { byText, cleanup, eventually, mount, need } from "../../../test/dom";
 import { AuthProvider } from "../AuthProvider";
 import { authApi } from "../api/authApiClient";
 import SignupConfirmPage from "./SignupConfirmPage";
+import { rememberSignupReturn } from "../signupReturn";
 
 vi.mock("../api/authApiClient", () => ({ authApi: { confirmSignup: vi.fn(), me: vi.fn() } }));
 const confirmSignup = vi.mocked(authApi.confirmSignup);
@@ -74,6 +75,14 @@ describe("SignupConfirmPage(確認メールのリンクの受け皿)", () => {
     expect(confirmSignup).toHaveBeenCalledTimes(1);
     expect(confirmSignup).toHaveBeenCalledWith("mail-token");
     await eventually(() => expect(page.querySelector("[data-testid=probe]")?.textContent).toBe("/reviews"));
+  });
+
+  it("記録入口から登録したときは、確認メールの完了後に店舗選択へ戻る", async () => {
+    rememberSignupReturn("/record");
+    confirmSignup.mockResolvedValue({ id: "7", username: "carol", email: "carol@example.com", canModerate: false, token: "jwt" });
+    const page = await show();
+    await eventually(() => expect(page.querySelector("[data-testid=probe]")?.textContent).toBe("/record"));
+    expect(localStorage.getItem("burgerstack:signup-return")).toBeNull();
   });
 
   it("確認できなかったとき(期限切れ・無効)は、API が返した文言を、そのまま、赤いエラーで出し、もう一度の新規登録へ案内する", async () => {

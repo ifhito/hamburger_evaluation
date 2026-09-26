@@ -12,8 +12,12 @@ import { ReviewListCard } from "../components/ReviewListCard";
 import styles from "./reviewList.module.css";
 
 // レビュー一覧(design/redesign/reviews.html)。「レビューを書く」は、必ずショップを選ぶ必要があるため、
-// ショップ一覧へ送る(サインインしている人だけに出す。API の項目ではなく、サインインの状態で決める)。
+// 記録する入口へ送る(サインインしている人だけに出す。API の項目ではなく、サインインの状態で決める)。
 export default function ReviewListPage() {
+  return <Layout><ReviewListContent /></Layout>;
+}
+
+export function ReviewListContent({ hideHeading = false }: { hideHeading?: boolean }) {
   const { t } = useTranslation();
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
@@ -28,10 +32,10 @@ export default function ReviewListPage() {
   const ratingOptions = ratingRange ? Array.from({ length: ratingRange.max - ratingRange.min + 1 }, (_, i) => ratingRange.max - i) : [];
 
   return (
-    <Layout>
-      <div className={styles.head}>
+    <>
+      {!hideHeading && <div className={styles.head}>
         <h1 className={styles.heading}>{t("reviews.list.title")}</h1>
-      </div>
+      </div>}
       <div className={styles.toolbar}>
         <select className={styles.sort} aria-label={t("lists.sortLabel")} value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="newest">{t("lists.newest")}</option>
@@ -64,7 +68,7 @@ export default function ReviewListPage() {
           </span>
         </div>
         {user && (
-          <LinkButton variant="primary" to="/shops">
+          <LinkButton variant="primary" to="/record">
             {t("reviews.list.newReview")}
           </LinkButton>
         )}
@@ -87,6 +91,6 @@ export default function ReviewListPage() {
           </Button>
         </div>
       )}
-    </Layout>
+    </>
   );
 }

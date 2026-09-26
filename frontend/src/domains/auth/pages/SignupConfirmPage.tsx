@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { consumeSignupReturn } from "../signupReturn";
 import { useAuth } from "../AuthProvider";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { Layout } from "../../../components/Layout";
@@ -24,7 +25,7 @@ export default function SignupConfirmPage() {
     if (started.current) return;
     started.current = true;
     confirmSignup(params.get("token") ?? "")
-      .then(() => navigate("/reviews", { replace: true }))
+      .then(() => navigate(consumeSignupReturn() ?? "/reviews", { replace: true }))
       .catch((e: unknown) => {
         setError(e instanceof ApiError ? e.messages : [t("auth.confirm.error")]);
       });

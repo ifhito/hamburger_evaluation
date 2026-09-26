@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, createRoutesFromElements, RouterProvider, Route } from "react-router-dom";
 import "../../../lib/i18n";
 import { byText, cleanup, click, mount, need, type as typeInto } from "../../../test/dom";
 import { todayDateOnly } from "../../../lib/date";
@@ -17,20 +17,17 @@ vi.mock("../../../api/meta", () => ({
   useMeta: () => ({ data: { text: { burgerNameMaxChars: 100, reviewCommentMaxChars: 2000 }, photo: { maxEdge: 1600, maxBytes: 5242880 } } }),
 }));
 
-const show = () =>
-  mount(
-    <MemoryRouter initialEntries={["/reviews/new?shop_id=9"]}>
-      <Routes>
-        <Route path="/reviews/new" element={<ReviewNewPage />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+const show = () => mount(<RouterProvider router={createMemoryRouter(createRoutesFromElements(<>
+  <Route path="/reviews/new" element={<ReviewNewPage />} />
+  <Route path="/discover" element={<h1>Destination</h1>} />
+  <Route path="/reviews/:id" element={<h1>Saved review</h1>} />
+</>), { initialEntries: ["/reviews/new?shop_id=9"] })} />);
 
 beforeEach(() => {
   create.mockReset();
   create.mockResolvedValue({ id: "77" });
 });
-afterEach(cleanup);
+afterEach(async () => { vi.restoreAllMocks(); await cleanup(); });
 
 describe("ReviewNewPage の評価(R6)", () => {
   it("開いた直後は、どの数字も選ばれていない(–)", async () => {
@@ -92,4 +89,19 @@ describe("ReviewNewPage の実食日(visitedAt)", () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0]).toMatchObject({ visitedAt: "2026-09-10" });
   });
+});
+
+it("評価だけ変更した場合も離脱を確認し、キャンセルすると入力を保つ", async () => {
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const page = await show();
+  await click(need(byText<HTMLButtonElement>(page, "button", "2"), "評価2"));
+  await click(need(page.querySelector('a[href="/discover"]'), "探すリンク"));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(page.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain("2");
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  confirm.mockReturnValue(true);
+  await click(need(page.querySelector('a[href="/discover"]'), "探すリンク"));
+  expect(page.querySelector("h1")?.textContent).toBe("Destination");
 });

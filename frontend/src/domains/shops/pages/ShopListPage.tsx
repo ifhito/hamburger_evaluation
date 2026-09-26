@@ -16,6 +16,10 @@ import styles from "./shopList.module.css";
 // サインインの状態で決める)。「ショップを管理」は backend が返す can_moderate の人だけに出す。並ぶショップの絞り込み
 // (公開中だけ・自分が作ったものも含む・すべて)は API が行い、frontend は返された一覧をそのまま出す。
 export default function ShopListPage() {
+  return <Layout><ShopListContent /></Layout>;
+}
+
+export function ShopListContent({ hideHeading = false, record = false }: { hideHeading?: boolean; record?: boolean }) {
   const { t } = useTranslation();
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
@@ -32,10 +36,10 @@ export default function ShopListPage() {
   } = useShops({ keyword, sort }, user?.id ?? null, { enabled: !authLoading });
 
   return (
-    <Layout>
-      <div className={styles.head}>
+    <>
+      {!hideHeading && <div className={styles.head}>
         <h1 className={styles.heading}>{t("shops.list.title")}</h1>
-      </div>
+      </div>}
       <div className={styles.toolbar}>
         <select className={styles.sort} aria-label={t("lists.sortLabel")} value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="name">{t("lists.name")}</option>
@@ -64,7 +68,7 @@ export default function ShopListPage() {
 
       <div className={styles.grid}>
         {shops?.map((shop) => (
-          <ShopPosterCard key={shop.id} shop={shop} ratingMax={ratingRange?.max} />
+          <ShopPosterCard key={shop.id} shop={shop} ratingMax={ratingRange?.max} to={record ? `/shops/${shop.id}?from=record` : undefined} />
         ))}
       </div>
 
@@ -75,6 +79,6 @@ export default function ShopListPage() {
           </Button>
         </div>
       )}
-    </Layout>
+    </>
   );
 }

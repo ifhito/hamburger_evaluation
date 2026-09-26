@@ -13,13 +13,14 @@ export function ShopPosterCard({
   shop,
   ratingMax,
   headingLevel = "h2",
+  to = `/shops/${shop.id}`,
 }: {
   shop: Shop;
   ratingMax: number | undefined;
   headingLevel?: "h2" | "h3";
+  to?: string;
 }) {
   const { t } = useTranslation();
-  const to = `/shops/${shop.id}`;
   const Heading = headingLevel;
   return (
     <article className={styles.poster}>

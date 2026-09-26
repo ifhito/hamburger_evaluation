@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { useLoginForm } from "../hooks/useAuthForm";
@@ -66,7 +66,7 @@ export default function SigninPage() {
           <GoogleSignIn mode="signin" returnTo={returnPathFrom(location.state)} />
           <p className={styles.linkline}>
             {t("auth.signin.noAccount")}{" "}
-            <a href="/signup">{t("auth.signin.signUpLink")}</a>
+            <Link to="/signup" state={location.state}>{t("auth.signin.signUpLink")}</Link>
           </p>
         </form>
       </div>

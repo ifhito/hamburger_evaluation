@@ -31,11 +31,11 @@ describe("ReviewListPage の「レビューを書く」", () => {
     expect(page.textContent).not.toContain("Write a review");
   });
 
-  it("サインインしているときは、ショップ一覧へのリンクとして出る", async () => {
+  it("サインインしているときは、記録する入口へのリンクとして出る", async () => {
     state.authUser = { id: "1" };
     const page = await show();
     const link = need(byText<HTMLAnchorElement>(page, "a", "Write a review"), "Write a review");
-    expect(link.getAttribute("href")).toBe("/shops");
+    expect(link.getAttribute("href")).toBe("/record");
   });
 });
 

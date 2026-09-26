@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import "../../../lib/i18n";
 import { cleanup, mount } from "../../../test/dom";
 import ShopListPage from "./ShopListPage";
+import RecordPage from "../../../app/navigation/RecordPage";
 
 // 「ショップを追加」「ショップを管理」の出し分け(サインインの状態・can_moderate)と、0 件のときの空の画面だけを確かめる。
 // 一覧の取得そのものは useShops.test.ts が確かめる。
@@ -61,4 +62,12 @@ describe("ShopListPage の初期の keyword", () => {
     const input = page.querySelector<HTMLInputElement>("input[type='text']");
     expect(input?.value).toBe("Shake");
   });
+});
+
+it("記録入口で審査待ちの店舗を選ぶと投稿フォームではなく店舗詳細へ進む", async () => {
+  state.authUser = { id: "1", canModerate: false };
+  state.shops = [{ id: "7", name: "Shake Shack", status: "pending", photoUrl: null, averageRating: null, reviewCount: 0 }];
+  const page = await mount(<MemoryRouter initialEntries={["/record"]}><RecordPage /></MemoryRouter>);
+  expect(page.querySelector('a[href="/shops/7?from=record"]')).not.toBeNull();
+  expect(page.querySelector('a[href^="/reviews/new"]')).toBeNull();
 });

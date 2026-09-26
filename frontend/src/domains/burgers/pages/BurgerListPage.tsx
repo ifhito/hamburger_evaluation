@@ -11,6 +11,10 @@ import styles from "./burgerList.module.css";
 
 // バーガー一覧。条件はAPIへ送り、返された順序で表示する。
 export default function BurgerListPage() {
+  return <Layout><BurgerListContent /></Layout>;
+}
+
+export function BurgerListContent({ hideHeading = false }: { hideHeading?: boolean }) {
   const { t } = useTranslation();
   const ratingRange = useRatingRange();
   const [sort, setSort] = useState("ranking");
@@ -18,10 +22,10 @@ export default function BurgerListPage() {
   const { data: burgers, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useBurgers({ keyword, sort });
 
   return (
-    <Layout>
-      <div className={styles.head}>
+    <>
+      {!hideHeading && <div className={styles.head}>
         <h1 className={styles.heading}>{t("burgers.list.title")}</h1>
-      </div>
+      </div>}
 
       <div className={styles.toolbar}>
         <select className={styles.sort} aria-label={t("lists.sortLabel")} value={sort} onChange={(e) => setSort(e.target.value)}>
@@ -49,6 +53,6 @@ export default function BurgerListPage() {
           </Button>
         </div>
       )}
-    </Layout>
+    </>
   );
 }

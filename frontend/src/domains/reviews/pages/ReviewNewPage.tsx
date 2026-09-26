@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { useUnsavedChanges } from "../../../app/navigation/useUnsavedChanges";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCreateReview } from "../hooks/useReviewMutations";
@@ -34,7 +35,7 @@ export default function ReviewNewPage() {
   const { create } = useCreateReview();
   const ratingRange = useRatingRange();
   const meta = useMeta().data;
-  const { register, handleSubmit, setValue, watch } = useCreateReviewForm({ shopId });
+  const { register, handleSubmit, setValue, watch, formState: { isDirty } } = useCreateReviewForm({ shopId });
 
   const [serverError, setServerError] = useState<string | string[] | null>(null);
   const [ratingMissing, setRatingMissing] = useState(false);
@@ -42,7 +43,9 @@ export default function ReviewNewPage() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoShrinking, setPhotoShrinking] = useState(false);
 
-  if (!shopId) return <Navigate to="/shops" replace />;
+  const markSaved = useUnsavedChanges(isDirty || photo !== null || photoShrinking);
+
+  if (!shopId) return <Navigate to="/record" replace />;
 
   const onSubmit = handleSubmit(async (data) => {
     if (data.rating === null) {
@@ -56,6 +59,7 @@ export default function ReviewNewPage() {
     setIsSubmitting(true);
     try {
       const review = await create({ ...data, rating: data.rating }, photo);
+      markSaved();
       void navigate(`/reviews/${review.id}`);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("reviews.new.error")]);
@@ -91,7 +95,7 @@ export default function ReviewNewPage() {
                   label={t("common.rating")}
                   value={watch("rating")}
                   onChange={(v) => {
-                    setValue("rating", v);
+                    setValue("rating", v, { shouldDirty: true });
                     setRatingMissing(false);
                   }}
                   min={ratingRange?.min}

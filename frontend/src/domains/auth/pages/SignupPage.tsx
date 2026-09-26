@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { returnPathFrom } from "../../../app/router/returnTo";
+import { rememberSignupReturn } from "../signupReturn";
 import { Trans, useTranslation } from "react-i18next";
 import { useAuth } from "../AuthProvider";
 import { useSignupForm } from "../hooks/useAuthForm";
@@ -13,6 +16,8 @@ import styles from "./auth.module.css";
 
 export default function SignupPage() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const returnTo = returnPathFrom(location.state);
   const { signup } = useAuth();
   const { register, handleSubmit, watch } = useSignupForm();
   const meta = useMeta().data;
@@ -26,6 +31,7 @@ export default function SignupPage() {
     setServerError(null);
     try {
       await signup(data);
+      rememberSignupReturn(returnTo);
       setSentTo(data.email);
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("auth.signup.error")]);
@@ -62,7 +68,7 @@ export default function SignupPage() {
         {/* デザイン(design/redesign/signup.html)は、Google のボタンを <form> の先頭、「サインイン」の導線を
             末尾に置く(どちらも <form> の中。<form> の外に出さない)。 */}
         <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
-          <GoogleSignIn mode="signup" />
+          <GoogleSignIn mode="signup" returnTo={returnTo} />
           {serverError && <Alert title={t("auth.signup.errorTitle")} message={serverError} />}
           <TextField
             id="username"
@@ -99,7 +105,7 @@ export default function SignupPage() {
           </Button>
           <p className={styles.linkline}>
             {t("auth.signup.hasAccount")}{" "}
-            <a href="/signin">{t("auth.signup.signInLink")}</a>
+            <Link to="/signin" state={location.state}>{t("auth.signup.signInLink")}</Link>
           </p>
         </form>
       </div>

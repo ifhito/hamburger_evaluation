@@ -33,9 +33,9 @@ const baseShop: ShopDetail = {
   canReview: false,
 };
 
-const show = () =>
+const show = (path = "/shops/7") =>
   mount(
-    <MemoryRouter initialEntries={["/shops/7"]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/shops/:id" element={<ShopDetailPage />} />
       </Routes>
@@ -127,4 +127,12 @@ describe("ShopDetailPage の「レビューを書く」(can_review)", () => {
     const page = await show();
     expect(page.textContent).toContain("Sign in to write a review");
   });
+});
+
+it("記録入口から選んだ店舗では、投稿可否を反映しつつ記録入口への戻り先を保つ", async () => {
+  state.authUser = { id: "1" };
+  state.shop = { ...baseShop, canReview: false, status: "pending" };
+  const page = await show("/shops/7?from=record");
+  expect(page.querySelector('a[href="/record"]')).not.toBeNull();
+  expect(page.querySelector('a[href^="/reviews/new"]')).toBeNull();
 });

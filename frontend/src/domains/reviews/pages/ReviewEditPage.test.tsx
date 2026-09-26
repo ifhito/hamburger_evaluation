@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, createRoutesFromElements, RouterProvider, Route } from "react-router-dom";
 import "../../../lib/i18n";
 import { byText, click, cleanup, mount, need, type as typeInto } from "../../../test/dom";
 import type { ReviewDetailView } from "../api/types";
@@ -29,14 +29,11 @@ const baseReview: ReviewDetailView = {
   shop: { id: "9", name: "Test Shop" },
 };
 
-const show = () =>
-  mount(
-    <MemoryRouter initialEntries={["/reviews/7/edit"]}>
-      <Routes>
-        <Route path="/reviews/:id/edit" element={<ReviewEditPage />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+const show = () => mount(<RouterProvider router={createMemoryRouter(createRoutesFromElements(<>
+  <Route path="/reviews/:id/edit" element={<ReviewEditPage />} />
+  <Route path="/discover" element={<h1>Destination</h1>} />
+  <Route path="/reviews/:id" element={<h1>Saved review</h1>} />
+</>), { initialEntries: ["/reviews/7/edit"] })} />);
 
 beforeEach(() => {
   state.review = baseReview;
@@ -44,7 +41,7 @@ beforeEach(() => {
   update.mockReset();
   update.mockResolvedValue({ id: "7" });
 });
-afterEach(cleanup);
+afterEach(async () => { vi.restoreAllMocks(); await cleanup(); });
 
 describe("ReviewEditPage の、見つからない・取得に失敗したとき", () => {
   it("売り切れの画面を出す(フォームも「編集できません」も出さない)", async () => {
@@ -96,4 +93,19 @@ describe("ReviewEditPage の実食日(visitedAt)", () => {
     expect(update).toHaveBeenCalledTimes(1);
     expect(update.mock.calls[0][0]).toMatchObject({ visitedAt: "2026-09-15" });
   });
+});
+
+it("評価だけ変更した場合も離脱を確認し、キャンセルすると入力を保つ", async () => {
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const page = await show();
+  await click(need(byText<HTMLButtonElement>(page, "button", "2"), "評価2"));
+  await click(need(page.querySelector('a[href="/discover"]'), "探すリンク"));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(page.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain("2");
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  confirm.mockReturnValue(true);
+  await click(need(page.querySelector('a[href="/discover"]'), "探すリンク"));
+  expect(page.querySelector("h1")?.textContent).toBe("Destination");
 });

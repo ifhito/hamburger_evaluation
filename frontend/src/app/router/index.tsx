@@ -2,6 +2,9 @@ import { createBrowserRouter } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { GuestRoute } from './GuestRoute'
 import { AdminRoute } from './AdminRoute'
+import DiscoverPage from '../navigation/DiscoverPage'
+import RecordPage from '../navigation/RecordPage'
+import MyPage from '../navigation/MyPage'
 
 import McpGuidePage from '../../domains/mcp/pages/McpGuidePage'
 import AboutPage from '../../domains/about/pages/AboutPage'
@@ -30,6 +33,7 @@ export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
 
   // 公開ルート
+  { path: '/discover', element: <DiscoverPage /> },
   { path: '/about', element: <AboutPage /> },
   { path: '/mcp', element: <McpGuidePage /> },
   { path: '/shops', element: <ShopListPage /> },
@@ -57,6 +61,8 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
+      { path: '/record', element: <RecordPage /> },
+      { path: '/me', element: <MyPage /> },
       { path: '/shops/new', element: <ShopNewPage /> },
       { path: '/reviews/new', element: <ReviewNewPage /> },
       { path: '/reviews/:id/edit', element: <ReviewEditPage /> },
