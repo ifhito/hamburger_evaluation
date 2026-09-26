@@ -4,7 +4,7 @@ Issue #240。**全デザインの正本はPenpot**。アプリ本体は変更し
 
 編集用ファイル: [burgerstack-navigation.penpot](../files/burgerstack-navigation.penpot)
 
-[ローカルPenpotで開く](http://localhost:9001/#/workspace?project-id=001b6a38-fea0-8183-8008-b179064866fd&file-id=001b6a38-fea0-8183-8008-b2142fbf8452&page-id=001b6a38-fea0-8183-8008-b2142fbfd52b)
+[ローカルPenpotで開く](http://localhost:9001/#/workspace?project-id=001b6a38-fea0-8183-8008-b179064866fd&file-id=001b6a38-fea0-8183-8008-b21528f5e80f&page-id=001b6a38-fea0-8183-8008-b21528f5e810)
 
 PC、スマホのホーム・探す・記録する・マイページ、フッター末尾、未ログイン、320pxの9ボード。文字・矩形・アイコンは編集可能。画像を1枚貼ったものではない。
 既存の全体デザインを上書きせず、今回の検討を別ファイルとして管理する。採用後に全体デザインへ統合する。
@@ -71,3 +71,5 @@ FAQ・問い合わせ・規約・プライバシーは配置予約の静的テ�
 `boards.json` がボードIDの対応。`previews/*-penpot.png` はPenpot exporterの出力、`*-source.jpg` は操作確認用ブラウザ画像。
 
 記録アイコンの＋には丸枠を付けない。PCの記録ボタンはホバー・キーボードフォーカスで背景が #fff1bb に変化する。Penpotの「PC / 記録ボタンのホバー」で比較できる。
+
+＋はハンバーガー右上に重ねる。＋の周囲ではバーガーの輪郭線を途切れさせ、両者の線が接続しない余白を確保する。丸枠は付けない。
