@@ -34,9 +34,21 @@ func ShopStatusCode(status domain.ShopStatus) (int16, error) {
 }
 
 // Shop は sqlc の shop のカラムを domain のエンティティに変換し、
-// smallint の status をデコードする（0=pending、1=active、2=rejected）。
-func Shop(id string, name string, status int16, note pgtype.Text, mapURL pgtype.Text, creatorID *string, closedAt pgtype.Timestamptz) (domain.Shop, error) {
+// smallint の status をデコードする（0=pending、1=active、2=rejected）。住所は domain.NewAddress で作り、
+// DB の値が規則に合わない（範囲外の都道府県のコード・上限を超える文字数）ときは、黙って捨てずにエラーを返す。
+func Shop(id string, name string, status int16, note pgtype.Text, mapURL pgtype.Text, prefectureCode pgtype.Int2, city string, streetAddress string, creatorID *string, closedAt pgtype.Timestamptz) (domain.Shop, error) {
 	shop := domain.Shop{ID: id, Name: name, ClosedAt: ClosedAt(closedAt)}
+	var code *int
+	if prefectureCode.Valid {
+		c := int(prefectureCode.Int16)
+		code = &c
+	}
+	address, err := domain.NewAddress(code, city, streetAddress)
+	if err != nil {
+		// %v で包む: 保存済みの値の不整合は利用者の入力の誤り(422)ではなく、ログつきの 500 にする。
+		return domain.Shop{}, fmt.Errorf("shop %s: address: %v", id, err)
+	}
+	shop.Address = address
 	switch status {
 	case 0:
 		shop.Status = domain.ShopStatusPending

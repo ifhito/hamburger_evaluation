@@ -51,7 +51,7 @@ func (f *shopStoreFake) ListShopsForModeration(_ context.Context, status *domain
 	return out[start:end], end < len(out), nil
 }
 
-func (f *shopStoreFake) UpdateShopName(_ context.Context, id string, name string, mapURL *string) (domain.Shop, error) {
+func (f *shopStoreFake) UpdateShopName(_ context.Context, id string, name string, mapURL *string, address domain.Address) (domain.Shop, error) {
 	if f.err != nil {
 		return domain.Shop{}, f.err
 	}
@@ -59,6 +59,7 @@ func (f *shopStoreFake) UpdateShopName(_ context.Context, id string, name string
 		if d.ID == id {
 			f.shops[i].Shop.Name = name
 			f.shops[i].Shop.MapURL = mapURL
+			f.shops[i].Shop.Address = address
 			return f.shops[i].Shop, nil
 		}
 	}
@@ -135,14 +136,14 @@ func TestCreateShop(t *testing.T) {
 			body:       `{"shop":{"name":"New Shack"}}`,
 			auth:       true,
 			wantStatus: http.StatusCreated,
-			wantBody:   `{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","moderation_note":null,"map_url":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}`,
+			wantBody:   `{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}`,
 		},
 		{
 			name:       "地図リンクを指定すると保存した値を 201 の応答に含める",
 			body:       `{"shop":{"name":"Mapped Shack","map_url":"https://maps.example/shack"}}`,
 			auth:       true,
 			wantStatus: http.StatusCreated,
-			wantBody:   `{"id":"` + uid.N(4) + `","name":"Mapped Shack","status":"pending","moderation_note":null,"map_url":"https://maps.example/shack","closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}`,
+			wantBody:   `{"id":"` + uid.N(4) + `","name":"Mapped Shack","status":"pending","moderation_note":null,"map_url":"https://maps.example/shack","closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}`,
 		},
 		{
 			name:       "http と https 以外の地図リンクは 422 を返す",
@@ -179,7 +180,7 @@ func TestCreateShop(t *testing.T) {
 			t.Errorf("anonymous list = %s, want []", anon)
 		}
 		own := do(router, http.MethodGet, "/shops?keyword=New+Shack", "", aliceAuth).Body.String()
-		if want := `[{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","map_url":null,"closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`; own != want {
+		if want := `[{"id":"` + uid.N(4) + `","name":"New Shack","status":"pending","map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","photo_url":null,"average_rating":null,"review_count":0}]`; own != want {
 			t.Errorf("creator list = %s, want %s", own, want)
 		}
 	})
@@ -287,14 +288,14 @@ func TestAdminListShops(t *testing.T) {
 		{
 			name:  "すべての shop を新しい順に返す",
 			query: "",
-			wantBody: `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","map_url":null,"closed_at":null,"creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false},` +
-				`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"map_url":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false},` +
-				`{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"map_url":null,"closed_at":null,"creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}]`,
+			wantBody: `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false},` +
+				`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false},` +
+				`{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}]`,
 		},
 		{
 			name:     "status=pending で絞り込む",
 			query:    "?status=pending",
-			wantBody: `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"map_url":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}]`,
+			wantBody: `[{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}]`,
 		},
 		{
 			name:     "未知の status は空配列になる",
@@ -304,9 +305,9 @@ func TestAdminListShops(t *testing.T) {
 		{
 			name:  "status が空ならすべての shop を返す",
 			query: "?status=",
-			wantBody: `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","map_url":null,"closed_at":null,"creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false},` +
-				`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"map_url":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false},` +
-				`{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"map_url":null,"closed_at":null,"creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}]`,
+			wantBody: `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"rejected","moderation_note":"needs fixes","map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false},` +
+				`{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"pending","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false},` +
+				`{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}]`,
 		},
 	}
 	for _, tt := range tests {
@@ -338,7 +339,7 @@ func TestAdminUpdateShop(t *testing.T) {
 			path:       "/admin/shops/" + uid.N(2),
 			body:       `{"shop":{"name":"Renamed Shack","map_url":"https://maps.example/renamed"}}`,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"id":"` + uid.N(2) + `","name":"Renamed Shack","status":"pending","moderation_note":null,"map_url":"https://maps.example/renamed","closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}`,
+			wantBody:   `{"id":"` + uid.N(2) + `","name":"Renamed Shack","status":"pending","moderation_note":null,"map_url":"https://maps.example/renamed","closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":true,"can_close":false,"can_reopen":false}`,
 		},
 		{
 			name:       "空の name は 422 を返す",
@@ -400,7 +401,7 @@ func TestAdminApproveShop(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","moderation_note":null,"map_url":null,"closed_at":null,"creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}`
+		want := `{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -408,7 +409,7 @@ func TestAdminApproveShop(t *testing.T) {
 
 	t.Run("approve された shop は匿名の一覧に出る", func(t *testing.T) {
 		got := do(router, http.MethodGet, "/shops?keyword=Rejected+Grill", "", "").Body.String()
-		if want := `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","map_url":null,"closed_at":null,"photo_url":null,"average_rating":null,"review_count":0}]`; got != want {
+		if want := `[{"id":"` + uid.N(3) + `","name":"Rejected Grill","status":"active","map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","photo_url":null,"average_rating":null,"review_count":0}]`; got != want {
 			t.Errorf("anonymous list = %s, want %s", got, want)
 		}
 	})
@@ -452,7 +453,7 @@ func TestAdminRejectShop(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"rejected","moderation_note":"spam","map_url":null,"closed_at":null,"creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false}`
+		want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"rejected","moderation_note":"spam","map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":null,"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -470,7 +471,7 @@ func TestAdminRejectShop(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"rejected","moderation_note":null,"map_url":null,"closed_at":null,"creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false}`
+		want := `{"id":"` + uid.N(2) + `","name":"Alice Pending","status":"rejected","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":{"id":"` + uid.N(1) + `","username":"alice"},"can_approve":true,"can_reject":false,"can_close":false,"can_reopen":false}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}
@@ -545,7 +546,7 @@ func TestAdminCloseAndReopenShop(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusOK, rec.Body)
 		}
-		want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"map_url":null,"closed_at":null,"creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}`
+		want := `{"id":"` + uid.N(1) + `","name":"Active Diner","status":"active","moderation_note":null,"map_url":null,"closed_at":null,"prefecture_code":null,"city":"","street_address":"","creator":null,"can_approve":false,"can_reject":true,"can_close":true,"can_reopen":false}`
 		if got := rec.Body.String(); got != want {
 			t.Errorf("body = %s, want %s", got, want)
 		}

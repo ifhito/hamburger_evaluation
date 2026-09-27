@@ -31,6 +31,16 @@ type textLimitsResponse struct {
 	UsernameMaxChars       int `json:"username_max_chars"`
 	BioMaxChars            int `json:"bio_max_chars"`
 	ModerationNoteMaxChars int `json:"moderation_note_max_chars"`
+	CityMaxChars           int `json:"city_max_chars"`
+	StreetAddressMaxChars  int `json:"street_address_max_chars"`
+}
+
+// prefectureResponse は、都道府県の表の 1 件である。frontend は、ショップの住所の入力・表示・絞り込みに、
+// この表を使う(都道府県の名前とコードを frontend に持たない)。
+type prefectureResponse struct {
+	Code   int    `json:"code"`
+	NameJA string `json:"name_ja"`
+	NameEN string `json:"name_en"`
 }
 
 // passwordLimitsResponse は、パスワードの長さの範囲である。文字数ではなくバイト数（bcrypt の入力の
@@ -45,10 +55,12 @@ type metaResponse struct {
 	Photo    photoLimitsResponse    `json:"photo"`
 	Text     textLimitsResponse     `json:"text"`
 	Password passwordLimitsResponse `json:"password"`
+	// Prefectures は、47 都道府県をコードの昇順で並べた表である。
+	Prefectures []prefectureResponse `json:"prefectures"`
 }
 
 // handleMeta は GET /meta を処理する：frontend が描画・送信前の処理に使う、backend のルールの値
-// （rating の範囲、写真の保存の上限、文字数の上限、パスワードの長さ）を返す（200。認証不要）。
+// （rating の範囲、写真の保存の上限、文字数の上限、パスワードの長さ、都道府県の表）を返す（200。認証不要）。
 // ルールを持つのは domain だけで、frontend は定数を複製しない。
 func handleMeta(loginProviders []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +90,30 @@ func newMetaResponse() metaResponse {
 			UsernameMaxChars:       domain.MaxUsernameChars,
 			BioMaxChars:            domain.MaxBioChars,
 			ModerationNoteMaxChars: domain.MaxModerationNoteChars,
+			CityMaxChars:           domain.MaxCityChars,
+			StreetAddressMaxChars:  domain.MaxStreetAddressChars,
 		},
-		Password: passwordLimitsResponse{MinBytes: domain.MinPasswordBytes, MaxBytes: domain.MaxPasswordBytes},
+		Password:    passwordLimitsResponse{MinBytes: domain.MinPasswordBytes, MaxBytes: domain.MaxPasswordBytes},
+		Prefectures: newPrefecturesResponse(),
 	}
+}
+
+// prefectureNamesEN は、都道府県の英語の名前(表示用の翻訳)である。添字 + 1 がコードで、domain.Prefectures と
+// 同じ 47 件・同じ順でなければならない(食い違いは TestPrefectureNamesENMatchDomain が検出する)。
+var prefectureNamesEN = [...]string{
+	"Hokkaido", "Aomori", "Iwate", "Miyagi", "Akita", "Yamagata", "Fukushima", "Ibaraki",
+	"Tochigi", "Gunma", "Saitama", "Chiba", "Tokyo", "Kanagawa", "Niigata", "Toyama",
+	"Ishikawa", "Fukui", "Yamanashi", "Nagano", "Gifu", "Shizuoka", "Aichi", "Mie",
+	"Shiga", "Kyoto", "Osaka", "Hyogo", "Nara", "Wakayama", "Tottori", "Shimane",
+	"Okayama", "Hiroshima", "Yamaguchi", "Tokushima", "Kagawa", "Ehime", "Kochi", "Fukuoka",
+	"Saga", "Nagasaki", "Kumamoto", "Oita", "Miyazaki", "Kagoshima", "Okinawa",
+}
+
+func newPrefecturesResponse() []prefectureResponse {
+	prefectures := domain.Prefectures()
+	resp := make([]prefectureResponse, 0, len(prefectures))
+	for _, p := range prefectures {
+		resp = append(resp, prefectureResponse{Code: p.Code(), NameJA: p.Name(), NameEN: prefectureNamesEN[p.Code()-1]})
+	}
+	return resp
 }

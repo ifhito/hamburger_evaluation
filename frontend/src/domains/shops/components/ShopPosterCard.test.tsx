@@ -14,6 +14,9 @@ const shop = (over: Partial<Shop>): Shop => ({
   averageRating: null,
   reviewCount: 0,
   mapUrl: null,
+  prefectureCode: null,
+  city: "",
+  streetAddress: "",
   closedAt: null,
   ...over,
 });

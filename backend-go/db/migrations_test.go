@@ -222,6 +222,20 @@ func TestMigrationsAcceptance(t *testing.T) {
 		assertTextLimits(ctx, t, conn)
 	})
 
+	// 都道府県のコードは 1〜47 だけが入り、範囲外は CHECK 制約違反になる(未設定の NULL は入る)。
+	t.Run("都道府県のコードは 1〜47 と NULL だけが入り、範囲外は CHECK 制約違反になる", func(t *testing.T) {
+		const insert = "INSERT INTO shops (name, status, prefecture_code) VALUES ('prefecture-shop', 0, $1)"
+		for _, ok := range []any{1, 47, nil} {
+			if _, err := conn.Exec(ctx, insert, ok); err != nil {
+				t.Errorf("prefecture_code=%v が入らない: %v", ok, err)
+			}
+		}
+		for _, bad := range []int{0, 48} {
+			_, err := conn.Exec(ctx, insert, bad)
+			assertPgError(t, err, "23514", "shops_prefecture_code_range")
+		}
+	})
+
 	// DB の CHECK の上限の値が、domain の定数と食い違っていない。
 	t.Run("DB の CHECK 制約の上限が、domain の定数と一致する", func(t *testing.T) {
 		got := checkLimits(ctx, t, conn)
@@ -231,6 +245,8 @@ func TestMigrationsAcceptance(t *testing.T) {
 			"shops_name_max_length":            domain.MaxShopNameChars,
 			"shops_moderation_note_max_length": domain.MaxModerationNoteChars,
 			"shops_map_url_max_length":         domain.MaxMapURLChars,
+			"shops_city_max_length":            domain.MaxCityChars,
+			"shops_street_address_max_length":  domain.MaxStreetAddressChars,
 			"users_username_max_length":        domain.MaxUsernameChars,
 			"users_bio_max_length":             domain.MaxBioChars,
 			"users_email_max_length":           domain.MaxEmailChars,
@@ -531,6 +547,9 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		// 追加マイグレーションの列は、追加された順に末尾へ並ぶ。
 		"shops/map_url/text/YES",
 		"shops/closed_at/timestamp with time zone/YES",
+		"shops/prefecture_code/smallint/YES",
+		"shops/city/text/NO",
+		"shops/street_address/text/NO",
 		"shops_burgers/shop_id/uuid/NO",
 		"shops_burgers/burger_id/uuid/NO",
 		// signup_verifications は 000008 で追加された。
@@ -603,6 +622,9 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/shops_name_max_length/c",
 		"shops/shops_moderation_note_max_length/c",
 		"shops/shops_map_url_max_length/c",
+		"shops/shops_city_max_length/c",
+		"shops/shops_street_address_max_length/c",
+		"shops/shops_prefecture_code_range/c",
 		"users/users_username_max_length/c",
 		"users/users_bio_max_length/c",
 		"users/users_email_max_length/c",
@@ -674,6 +696,7 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	wantIndexes := []string{
 		"idx_shops_status",
 		"idx_shops_creator_id",
+		"idx_shops_prefecture_code",
 		"idx_shops_burgers_burger_id",
 		"idx_reviews_user_id",
 		"idx_reviews_burger_id",
@@ -742,6 +765,10 @@ var textLimitCases = []textLimitCase{
 		"INSERT INTO shops (name, status, moderation_note) VALUES ('note-shop', 2, $1)"},
 	{"shops.map_url", domain.MaxMapURLChars, "shops_map_url_max_length",
 		"INSERT INTO shops (name, status, map_url) VALUES ('map-shop', 0, $1)"},
+	{"shops.city", domain.MaxCityChars, "shops_city_max_length",
+		"INSERT INTO shops (name, status, city) VALUES ('city-shop', 0, $1)"},
+	{"shops.street_address", domain.MaxStreetAddressChars, "shops_street_address_max_length",
+		"INSERT INTO shops (name, status, street_address) VALUES ('street-shop', 0, $1)"},
 	{"users.username", domain.MaxUsernameChars, "users_username_max_length",
 		"INSERT INTO users (email, username, password_digest) VALUES ('u' || md5(random()::text) || '@example.com', $1, 'digest')"},
 	{"users.bio", domain.MaxBioChars, "users_bio_max_length",

@@ -102,7 +102,7 @@ func TestShopRatingSort(t *testing.T) {
 	q := query.NewShopQuery(conn)
 	got := []string{}
 	for offset := int32(0); offset < 3; offset++ {
-		rows, more, err := q.ListShops(ctx, domain.ShopVisibilityFor(nil), "対象", usecase.ShopSortRating, 1, offset)
+		rows, more, err := q.ListShops(ctx, domain.ShopVisibilityFor(nil), "対象", nil, usecase.ShopSortRating, 1, offset)
 		if err != nil {
 			t.Fatal(err)
 		}

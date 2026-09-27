@@ -63,7 +63,7 @@ func TestShopModerationRepository(t *testing.T) {
 	newest := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Newest", 0, nil, alice, tNew)
 
 	t.Run("CreateShop は creator 付きの pending な shop を永続化する", func(t *testing.T) {
-		submission, err := domain.NewShopSubmission("Fresh Shack", alice, "https://maps.example.com/fresh-shack")
+		submission, err := domain.NewShopSubmission("Fresh Shack", alice, "https://maps.example.com/fresh-shack", nil, "", "")
 		if err != nil {
 			t.Fatalf("NewShopSubmission returned error: %v", err)
 		}
@@ -137,7 +137,7 @@ func TestShopModerationRepository(t *testing.T) {
 		if _, err := repo.UpdateShopStatus(ctx, shop, next.Status, next.ModerationNote); err != nil {
 			t.Fatalf("UpdateShopStatus returned error: %v", err)
 		}
-		renamed, err := repo.UpdateShopName(ctx, shop, "Race Shack Renamed", nil) // 古い rename 側が書き込む
+		renamed, err := repo.UpdateShopName(ctx, shop, "Race Shack Renamed", nil, domain.Address{}) // 古い rename 側が書き込む
 		if err != nil {
 			t.Fatalf("UpdateShopName returned error: %v", err)
 		}
@@ -179,7 +179,7 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 
 		// 並行する rename は、closed_at には触れない。
-		renamed, err := repo.UpdateShopName(ctx, shop, "Closable Shack Renamed", nil)
+		renamed, err := repo.UpdateShopName(ctx, shop, "Closable Shack Renamed", nil, domain.Address{})
 		if err != nil {
 			t.Fatalf("UpdateShopName returned error: %v", err)
 		}
@@ -203,7 +203,7 @@ func TestShopModerationRepository(t *testing.T) {
 		shop := dbtest.InsertUUIDRow(ctx, t, conn, insertShop, "Map Shack", 0, nil, alice, tNew)
 
 		mapURL := "https://maps.example.com/one"
-		set, err := repo.UpdateShopName(ctx, shop, "Map Shack", &mapURL)
+		set, err := repo.UpdateShopName(ctx, shop, "Map Shack", &mapURL, domain.Address{})
 		if err != nil {
 			t.Fatalf("UpdateShopName returned error: %v", err)
 		}
@@ -212,7 +212,7 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 
 		changed := "https://maps.example.com/two"
-		got, err := repo.UpdateShopName(ctx, shop, "Map Shack", &changed)
+		got, err := repo.UpdateShopName(ctx, shop, "Map Shack", &changed, domain.Address{})
 		if err != nil {
 			t.Fatalf("UpdateShopName returned error: %v", err)
 		}
@@ -220,7 +220,7 @@ func TestShopModerationRepository(t *testing.T) {
 			t.Errorf("changed.MapURL = %v, want %s", got.MapURL, changed)
 		}
 
-		cleared, err := repo.UpdateShopName(ctx, shop, "Map Shack", nil)
+		cleared, err := repo.UpdateShopName(ctx, shop, "Map Shack", nil, domain.Address{})
 		if err != nil {
 			t.Fatalf("UpdateShopName returned error: %v", err)
 		}
@@ -232,8 +232,39 @@ func TestShopModerationRepository(t *testing.T) {
 		}
 	})
 
+	t.Run("CreateShop と UpdateShopName は住所を保存し、未設定に戻せる", func(t *testing.T) {
+		tokyo, osaka := 13, 27
+		submission, err := domain.NewShopSubmission("Address Shack", alice, "", &tokyo, "渋谷区", "神南1-2-3")
+		if err != nil {
+			t.Fatalf("NewShopSubmission returned error: %v", err)
+		}
+		created, err := repo.CreateShop(ctx, submission)
+		if err != nil {
+			t.Fatalf("CreateShop returned error: %v", err)
+		}
+		if created.Address != mustAddress(t, &tokyo, "渋谷区", "神南1-2-3") {
+			t.Errorf("created = %+v, want 13・渋谷区・神南1-2-3", created.Address)
+		}
+
+		moved, err := repo.UpdateShopName(ctx, created.ID, "Address Shack", nil, mustAddress(t, &osaka, "大阪市北区", ""))
+		if err != nil {
+			t.Fatalf("UpdateShopName returned error: %v", err)
+		}
+		if moved.Address != mustAddress(t, &osaka, "大阪市北区", "") {
+			t.Errorf("moved = %+v, want 27・大阪市北区・空", moved.Address)
+		}
+
+		cleared, err := repo.UpdateShopName(ctx, created.ID, "Address Shack", nil, domain.Address{})
+		if err != nil {
+			t.Fatalf("UpdateShopName returned error: %v", err)
+		}
+		if !cleared.Address.IsEmpty() {
+			t.Errorf("cleared = %+v, want 未設定", cleared.Address)
+		}
+	})
+
 	t.Run("UpdateShopName に存在しない id を渡すと ErrShopNotFound になる", func(t *testing.T) {
-		_, err := repo.UpdateShopName(ctx, uid.N(99999), "x", nil)
+		_, err := repo.UpdateShopName(ctx, uid.N(99999), "x", nil, domain.Address{})
 		if !errors.Is(err, domain.ErrShopNotFound) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
@@ -252,4 +283,14 @@ func TestShopModerationRepository(t *testing.T) {
 			t.Fatalf("error = %v, want %v", err, domain.ErrShopNotFound)
 		}
 	})
+}
+
+// mustAddress は、テストの住所を domain.NewAddress で作る(不正ならテストを止める)。
+func mustAddress(t *testing.T, prefectureCode *int, city, streetAddress string) domain.Address {
+	t.Helper()
+	address, err := domain.NewAddress(prefectureCode, city, streetAddress)
+	if err != nil {
+		t.Fatalf("NewAddress: %v", err)
+	}
+	return address
 }

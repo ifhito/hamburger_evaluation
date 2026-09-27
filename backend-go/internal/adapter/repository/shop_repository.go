@@ -41,31 +41,41 @@ func (r *ShopRepository) CreateShop(ctx context.Context, shop domain.Shop) (doma
 		Status:         code,
 		ModerationNote: textOrNull(shop.ModerationNote),
 		MapURL:         textOrNull(shop.MapURL),
+		PrefectureCode: prefectureColumn(shop.Address),
+		City:           shop.Address.City(),
+		StreetAddress:  shop.Address.StreetAddress(),
 		CreatorID:      shop.CreatorID,
 	})
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("create shop: %w", err)
 	}
-	created, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
+	created, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.PrefectureCode, row.City, row.StreetAddress, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("create shop: %w", err)
 	}
 	return created, nil
 }
 
-// UpdateShopName は、id の shop の name と map_url だけを永続化し、保存された行を返す。
+// UpdateShopName は、id の shop の name と map_url と住所だけを永続化し、保存された行を返す。
 // 読み取りから書き込みまでの間に shop が消えた場合は domain.ErrShopNotFound
 // を返す。カラムを限定して書くことで、同時に行われた status の変更が古い
 // スナップショットによって元に戻されるのを防ぐ。
-func (r *ShopRepository) UpdateShopName(ctx context.Context, id string, name string, mapURL *string) (domain.Shop, error) {
-	row, err := r.q.UpdateShopName(ctx, sqlcgen.UpdateShopNameParams{ID: id, Name: name, MapURL: textOrNull(mapURL)})
+func (r *ShopRepository) UpdateShopName(ctx context.Context, id string, name string, mapURL *string, address domain.Address) (domain.Shop, error) {
+	row, err := r.q.UpdateShopName(ctx, sqlcgen.UpdateShopNameParams{
+		ID:             id,
+		Name:           name,
+		MapURL:         textOrNull(mapURL),
+		PrefectureCode: prefectureColumn(address),
+		City:           address.City(),
+		StreetAddress:  address.StreetAddress(),
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Shop{}, fmt.Errorf("update shop name: %w", domain.ErrShopNotFound)
 		}
 		return domain.Shop{}, fmt.Errorf("update shop name: %w", err)
 	}
-	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
+	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.PrefectureCode, row.City, row.StreetAddress, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("update shop name: %w", err)
 	}
@@ -92,7 +102,7 @@ func (r *ShopRepository) UpdateShopStatus(ctx context.Context, id string, status
 		}
 		return domain.Shop{}, fmt.Errorf("update shop status: %w", err)
 	}
-	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
+	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.PrefectureCode, row.City, row.StreetAddress, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("update shop status: %w", err)
 	}
@@ -111,7 +121,7 @@ func (r *ShopRepository) UpdateShopClosedAt(ctx context.Context, id string, clos
 		}
 		return domain.Shop{}, fmt.Errorf("update shop closed_at: %w", err)
 	}
-	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
+	updated, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.PrefectureCode, row.City, row.StreetAddress, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.Shop{}, fmt.Errorf("update shop closed_at: %w", err)
 	}
@@ -132,4 +142,14 @@ func timestamptzOrNull(t *time.Time) pgtype.Timestamptz {
 		return pgtype.Timestamptz{}
 	}
 	return pgtype.Timestamptz{Time: *t, Valid: true}
+}
+
+// prefectureColumn は、住所の都道府県を、smallint の NULL 許容の列(prefecture_code)の形式に変換する
+// (未設定は NULL)。
+func prefectureColumn(address domain.Address) pgtype.Int2 {
+	prefecture, ok := address.Prefecture()
+	if !ok {
+		return pgtype.Int2{}
+	}
+	return pgtype.Int2{Int16: int16(prefecture.Code()), Valid: true}
 }

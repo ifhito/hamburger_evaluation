@@ -12,9 +12,9 @@ import (
 )
 
 const createShop = `-- name: CreateShop :one
-INSERT INTO shops (name, status, moderation_note, map_url, creator_id)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
+INSERT INTO shops (name, status, moderation_note, map_url, prefecture_code, city, street_address, creator_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at, prefecture_code, city, street_address
 `
 
 type CreateShopParams struct {
@@ -22,6 +22,9 @@ type CreateShopParams struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	MapURL         pgtype.Text
+	PrefectureCode pgtype.Int2
+	City           string
+	StreetAddress  string
 	CreatorID      *string
 }
 
@@ -31,6 +34,9 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		arg.Status,
 		arg.ModerationNote,
 		arg.MapURL,
+		arg.PrefectureCode,
+		arg.City,
+		arg.StreetAddress,
 		arg.CreatorID,
 	)
 	var i Shop
@@ -44,6 +50,9 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		&i.UpdatedAt,
 		&i.MapURL,
 		&i.ClosedAt,
+		&i.PrefectureCode,
+		&i.City,
+		&i.StreetAddress,
 	)
 	return i, err
 }
@@ -59,7 +68,7 @@ func (q *Queries) DeleteShop(ctx context.Context, id string) error {
 }
 
 const getShop = `-- name: GetShop :one
-SELECT id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at FROM shops
+SELECT id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at, prefecture_code, city, street_address FROM shops
 WHERE id = $1
 `
 
@@ -76,12 +85,15 @@ func (q *Queries) GetShop(ctx context.Context, id string) (Shop, error) {
 		&i.UpdatedAt,
 		&i.MapURL,
 		&i.ClosedAt,
+		&i.PrefectureCode,
+		&i.City,
+		&i.StreetAddress,
 	)
 	return i, err
 }
 
 const getShopWithCreator = `-- name: GetShopWithCreator :one
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        u.username AS creator_username,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
@@ -98,6 +110,9 @@ type GetShopWithCreatorRow struct {
 	Status          int16
 	ModerationNote  pgtype.Text
 	MapURL          pgtype.Text
+	PrefectureCode  pgtype.Int2
+	City            string
+	StreetAddress   string
 	CreatorID       *string
 	ClosedAt        pgtype.Timestamptz
 	CreatorUsername pgtype.Text
@@ -116,6 +131,9 @@ func (q *Queries) GetShopWithCreator(ctx context.Context, id string) (GetShopWit
 		&i.Status,
 		&i.ModerationNote,
 		&i.MapURL,
+		&i.PrefectureCode,
+		&i.City,
+		&i.StreetAddress,
 		&i.CreatorID,
 		&i.ClosedAt,
 		&i.CreatorUsername,
@@ -196,7 +214,7 @@ func (q *Queries) ListShopReviews(ctx context.Context, shopID string) ([]ListSho
 }
 
 const listShops = `-- name: ListShops :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -206,16 +224,18 @@ WHERE ($1::boolean
        OR s.status = 1
        OR s.creator_id = $2::uuid)
   AND ($3::text IS NULL OR s.name ILIKE $3::text)
+  AND ($4::smallint IS NULL OR s.prefecture_code = $4::smallint)
 ORDER BY s.name, s.id
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListShopsParams struct {
-	ViewAll     bool
-	ViewerID    *string
-	NamePattern pgtype.Text
-	PageOffset  int32
-	PageLimit   int32
+	ViewAll        bool
+	ViewerID       *string
+	NamePattern    pgtype.Text
+	PrefectureCode pgtype.Int2
+	PageOffset     int32
+	PageLimit      int32
 }
 
 type ListShopsRow struct {
@@ -224,6 +244,9 @@ type ListShopsRow struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	MapURL         pgtype.Text
+	PrefectureCode pgtype.Int2
+	City           string
+	StreetAddress  string
 	CreatorID      *string
 	ClosedAt       pgtype.Timestamptz
 	ReviewCount    int64
@@ -235,7 +258,7 @@ type ListShopsRow struct {
 // （すべて閲覧 / active / 自分のもの）を SQL に翻訳したものであり、
 // ルール自体は domain パッケージにある。status 1 = active。name_pattern は
 // あらかじめエスケープ済みの ILIKE パターン（キーワードフィルタなしなら
-// NULL）である。creator_id を NULL の viewer_id と比較しても決して真に
+// NULL）である。prefecture_code は都道府県の絞り込み（なしなら NULL）で、範囲の判定は domain が行う。creator_id を NULL の viewer_id と比較しても決して真に
 // ならず、これがまさに匿名の場合である。
 // 集計(件数・平均・写真)は、shop_stats の保存された値を LEFT JOIN で添える(1 回のクエリ)。集計は非同期に
 // 計算されるので、行がないショップ(未集計)は、件数 0・平均と写真なしになる。
@@ -244,6 +267,7 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 		arg.ViewAll,
 		arg.ViewerID,
 		arg.NamePattern,
+		arg.PrefectureCode,
 		arg.PageOffset,
 		arg.PageLimit,
 	)
@@ -260,6 +284,9 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 			&i.Status,
 			&i.ModerationNote,
 			&i.MapURL,
+			&i.PrefectureCode,
+			&i.City,
+			&i.StreetAddress,
 			&i.CreatorID,
 			&i.ClosedAt,
 			&i.ReviewCount,
@@ -277,7 +304,7 @@ func (q *Queries) ListShops(ctx context.Context, arg ListShopsParams) ([]ListSho
 }
 
 const listShopsByNewest = `-- name: ListShopsByNewest :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -287,16 +314,18 @@ WHERE ($1::boolean
        OR s.status = 1
        OR s.creator_id = $2::uuid)
   AND ($3::text IS NULL OR s.name ILIKE $3::text)
+  AND ($4::smallint IS NULL OR s.prefecture_code = $4::smallint)
 ORDER BY s.created_at DESC, s.id DESC
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListShopsByNewestParams struct {
-	ViewAll     bool
-	ViewerID    *string
-	NamePattern pgtype.Text
-	PageOffset  int32
-	PageLimit   int32
+	ViewAll        bool
+	ViewerID       *string
+	NamePattern    pgtype.Text
+	PrefectureCode pgtype.Int2
+	PageOffset     int32
+	PageLimit      int32
 }
 
 type ListShopsByNewestRow struct {
@@ -305,6 +334,9 @@ type ListShopsByNewestRow struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	MapURL         pgtype.Text
+	PrefectureCode pgtype.Int2
+	City           string
+	StreetAddress  string
 	CreatorID      *string
 	ClosedAt       pgtype.Timestamptz
 	ReviewCount    int64
@@ -321,6 +353,7 @@ func (q *Queries) ListShopsByNewest(ctx context.Context, arg ListShopsByNewestPa
 		arg.ViewAll,
 		arg.ViewerID,
 		arg.NamePattern,
+		arg.PrefectureCode,
 		arg.PageOffset,
 		arg.PageLimit,
 	)
@@ -337,6 +370,9 @@ func (q *Queries) ListShopsByNewest(ctx context.Context, arg ListShopsByNewestPa
 			&i.Status,
 			&i.ModerationNote,
 			&i.MapURL,
+			&i.PrefectureCode,
+			&i.City,
+			&i.StreetAddress,
 			&i.CreatorID,
 			&i.ClosedAt,
 			&i.ReviewCount,
@@ -354,7 +390,7 @@ func (q *Queries) ListShopsByNewest(ctx context.Context, arg ListShopsByNewestPa
 }
 
 const listShopsByRating = `-- name: ListShopsByRating :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -364,16 +400,18 @@ WHERE ($1::boolean
        OR s.status = 1
        OR s.creator_id = $2::uuid)
   AND ($3::text IS NULL OR s.name ILIKE $3::text)
+  AND ($4::smallint IS NULL OR s.prefecture_code = $4::smallint)
 ORDER BY ss.average_rating DESC NULLS LAST, s.name, s.id
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListShopsByRatingParams struct {
-	ViewAll     bool
-	ViewerID    *string
-	NamePattern pgtype.Text
-	PageOffset  int32
-	PageLimit   int32
+	ViewAll        bool
+	ViewerID       *string
+	NamePattern    pgtype.Text
+	PrefectureCode pgtype.Int2
+	PageOffset     int32
+	PageLimit      int32
 }
 
 type ListShopsByRatingRow struct {
@@ -382,6 +420,9 @@ type ListShopsByRatingRow struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	MapURL         pgtype.Text
+	PrefectureCode pgtype.Int2
+	City           string
+	StreetAddress  string
 	CreatorID      *string
 	ClosedAt       pgtype.Timestamptz
 	ReviewCount    int64
@@ -395,6 +436,7 @@ func (q *Queries) ListShopsByRating(ctx context.Context, arg ListShopsByRatingPa
 		arg.ViewAll,
 		arg.ViewerID,
 		arg.NamePattern,
+		arg.PrefectureCode,
 		arg.PageOffset,
 		arg.PageLimit,
 	)
@@ -411,6 +453,9 @@ func (q *Queries) ListShopsByRating(ctx context.Context, arg ListShopsByRatingPa
 			&i.Status,
 			&i.ModerationNote,
 			&i.MapURL,
+			&i.PrefectureCode,
+			&i.City,
+			&i.StreetAddress,
 			&i.CreatorID,
 			&i.ClosedAt,
 			&i.ReviewCount,
@@ -428,7 +473,7 @@ func (q *Queries) ListShopsByRating(ctx context.Context, arg ListShopsByRatingPa
 }
 
 const listShopsForModeration = `-- name: ListShopsForModeration :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        u.username AS creator_username
 FROM shops s
 LEFT JOIN users u ON u.id = s.creator_id
@@ -450,6 +495,9 @@ type ListShopsForModerationRow struct {
 	Status          int16
 	ModerationNote  pgtype.Text
 	MapURL          pgtype.Text
+	PrefectureCode  pgtype.Int2
+	City            string
+	StreetAddress   string
 	CreatorID       *string
 	ClosedAt        pgtype.Timestamptz
 	CreatorUsername pgtype.Text
@@ -474,6 +522,9 @@ func (q *Queries) ListShopsForModeration(ctx context.Context, arg ListShopsForMo
 			&i.Status,
 			&i.ModerationNote,
 			&i.MapURL,
+			&i.PrefectureCode,
+			&i.City,
+			&i.StreetAddress,
 			&i.CreatorID,
 			&i.ClosedAt,
 			&i.CreatorUsername,
@@ -495,7 +546,7 @@ SET name = $2,
     moderation_note = $4,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at, prefecture_code, city, street_address
 `
 
 type UpdateShopParams struct {
@@ -523,6 +574,9 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 		&i.UpdatedAt,
 		&i.MapURL,
 		&i.ClosedAt,
+		&i.PrefectureCode,
+		&i.City,
+		&i.StreetAddress,
 	)
 	return i, err
 }
@@ -532,7 +586,7 @@ UPDATE shops
 SET closed_at = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at, prefecture_code, city, street_address
 `
 
 type UpdateShopClosedAtParams struct {
@@ -556,6 +610,9 @@ func (q *Queries) UpdateShopClosedAt(ctx context.Context, arg UpdateShopClosedAt
 		&i.UpdatedAt,
 		&i.MapURL,
 		&i.ClosedAt,
+		&i.PrefectureCode,
+		&i.City,
+		&i.StreetAddress,
 	)
 	return i, err
 }
@@ -564,21 +621,34 @@ const updateShopName = `-- name: UpdateShopName :one
 UPDATE shops
 SET name = $2,
     map_url = $3,
+    prefecture_code = $4,
+    city = $5,
+    street_address = $6,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at, prefecture_code, city, street_address
 `
 
 type UpdateShopNameParams struct {
-	ID     string
-	Name   string
-	MapURL pgtype.Text
+	ID             string
+	Name           string
+	MapURL         pgtype.Text
+	PrefectureCode pgtype.Int2
+	City           string
+	StreetAddress  string
 }
 
-// 列を限定した名前変更：name と map_url だけを更新するので、並行する status の変更
+// 列を限定した名前変更：name と map_url と住所だけを更新するので、並行する status の変更
 // （approve/reject）が古いスナップショットによって元に戻されることはない。
 func (q *Queries) UpdateShopName(ctx context.Context, arg UpdateShopNameParams) (Shop, error) {
-	row := q.db.QueryRow(ctx, updateShopName, arg.ID, arg.Name, arg.MapURL)
+	row := q.db.QueryRow(ctx, updateShopName,
+		arg.ID,
+		arg.Name,
+		arg.MapURL,
+		arg.PrefectureCode,
+		arg.City,
+		arg.StreetAddress,
+	)
 	var i Shop
 	err := row.Scan(
 		&i.ID,
@@ -590,6 +660,9 @@ func (q *Queries) UpdateShopName(ctx context.Context, arg UpdateShopNameParams) 
 		&i.UpdatedAt,
 		&i.MapURL,
 		&i.ClosedAt,
+		&i.PrefectureCode,
+		&i.City,
+		&i.StreetAddress,
 	)
 	return i, err
 }
@@ -600,7 +673,7 @@ SET status = $2,
     moderation_note = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
+RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at, prefecture_code, city, street_address
 `
 
 type UpdateShopStatusParams struct {
@@ -625,6 +698,9 @@ func (q *Queries) UpdateShopStatus(ctx context.Context, arg UpdateShopStatusPara
 		&i.UpdatedAt,
 		&i.MapURL,
 		&i.ClosedAt,
+		&i.PrefectureCode,
+		&i.City,
+		&i.StreetAddress,
 	)
 	return i, err
 }

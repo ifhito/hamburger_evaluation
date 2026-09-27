@@ -105,6 +105,9 @@ type Shop struct {
 	UpdatedAt      pgtype.Timestamptz
 	MapURL         pgtype.Text
 	ClosedAt       pgtype.Timestamptz
+	PrefectureCode pgtype.Int2
+	City           string
+	StreetAddress  string
 }
 
 type ShopStat struct {

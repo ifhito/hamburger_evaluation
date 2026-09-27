@@ -74,3 +74,38 @@ func fetchShopStats(ctx context.Context, t *testing.T, conn *pgx.Conn) string {
 	}
 	return out
 }
+
+// TestSeedFillsMissingShopAddress は、住所のないまま残った既存のショップ(住所の列を足す前に seed した開発用の DB)に
+// seed をもう一度実行すると seed の住所が入り、手で住所を入れたショップは変わらないことを確かめる。
+func TestSeedFillsMissingShopAddress(t *testing.T) {
+	ctx := context.Background()
+	conn, url := dbtest.New(t)
+	t.Setenv("DATABASE_URL", url)
+
+	if err := run(ctx); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, err := conn.Exec(ctx, `UPDATE shops SET prefecture_code = NULL, city = '', street_address = '' WHERE name = 'ナニワバーガー 梅田'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(ctx, `UPDATE shops SET prefecture_code = 14, city = '横浜市', street_address = '' WHERE name = 'Shake Shack 渋谷'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(ctx); err != nil {
+		t.Fatalf("2 回目の seed: %v", err)
+	}
+	for _, tt := range []struct {
+		name, want string
+	}{
+		{"ナニワバーガー 梅田", "27:大阪市北区:梅田1-2-3"},
+		{"Shake Shack 渋谷", "14:横浜市:"},
+	} {
+		var got string
+		if err := conn.QueryRow(ctx, `SELECT coalesce(prefecture_code::text, '-') || ':' || city || ':' || street_address FROM shops WHERE name = $1`, tt.name).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != tt.want {
+			t.Errorf("%s の住所 = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
