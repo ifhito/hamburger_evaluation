@@ -222,10 +222,16 @@ func seedUser(ctx context.Context, tx pgx.Tx, email, username string, admin bool
 }
 
 // seedShop は name で shop を探し（seed の natural key である。schema には
-// これに対する unique 制約がない）、なければ与えられた status と住所で作成する。
-func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID string, prefectureCode int16, city, streetAddress string) (string, error) {
+// これに対する unique 制約がない）、なければ与えられた status と住所で作成する。住所は domain.NewAddress の
+// 規則に従う（都道府県は必須）。
+func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID string, prefectureCode int, city, streetAddress string) (string, error) {
+	address, err := domain.NewAddress(&prefectureCode, city, streetAddress)
+	if err != nil {
+		return "", fmt.Errorf("address of shop %s: %w", name, err)
+	}
+	prefecture, _ := address.Prefecture()
 	var id string
-	err := tx.QueryRow(ctx, `SELECT id FROM shops WHERE name = $1`, name).Scan(&id)
+	err = tx.QueryRow(ctx, `SELECT id FROM shops WHERE name = $1`, name).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
@@ -234,7 +240,7 @@ func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creator
 	}
 	err = tx.QueryRow(ctx,
 		`INSERT INTO shops (name, status, creator_id, prefecture_code, city, street_address) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-		name, status, creatorID, prefectureCode, city, streetAddress,
+		name, status, creatorID, prefecture.Code(), address.City(), address.StreetAddress(),
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("insert shop %s: %w", name, err)

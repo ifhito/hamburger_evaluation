@@ -96,7 +96,18 @@ func TestMeta(t *testing.T) {
 	}
 }
 
-// prefecturesJSON は、domain の都道府県の表を、GET /meta の prefectures の形の JSON にする。
+// wantPrefectureNamesEN は、GET /meta の prefectures の英語の名前の期待値(コードの昇順)である。
+var wantPrefectureNamesEN = []string{
+	"Hokkaido", "Aomori", "Iwate", "Miyagi", "Akita", "Yamagata", "Fukushima", "Ibaraki",
+	"Tochigi", "Gunma", "Saitama", "Chiba", "Tokyo", "Kanagawa", "Niigata", "Toyama",
+	"Ishikawa", "Fukui", "Yamanashi", "Nagano", "Gifu", "Shizuoka", "Aichi", "Mie",
+	"Shiga", "Kyoto", "Osaka", "Hyogo", "Nara", "Wakayama", "Tottori", "Shimane",
+	"Okayama", "Hiroshima", "Yamaguchi", "Tokushima", "Kagawa", "Ehime", "Kochi", "Fukuoka",
+	"Saga", "Nagasaki", "Kumamoto", "Oita", "Miyazaki", "Kagoshima", "Okinawa",
+}
+
+// prefecturesJSON は、domain の都道府県の表(コードと日本語の名前)に、英語の名前の期待値を添えて、
+// GET /meta の prefectures の形の JSON にする。
 func prefecturesJSON(t *testing.T) string {
 	t.Helper()
 	type item struct {
@@ -106,7 +117,7 @@ func prefecturesJSON(t *testing.T) string {
 	}
 	var items []item
 	for _, p := range domain.Prefectures() {
-		items = append(items, item{p.Code, p.NameJA, p.NameEN})
+		items = append(items, item{p.Code(), p.Name(), wantPrefectureNamesEN[p.Code()-1]})
 	}
 	b, err := json.Marshal(items)
 	if err != nil {

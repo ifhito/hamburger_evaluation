@@ -368,7 +368,7 @@ type submitShopInput struct {
 
 func (t *mcpTools) submitShop(ctx context.Context, _ *mcp.CallToolRequest, in submitShopInput) (*mcp.CallToolResult, any, error) {
 	detail, err := t.shops.Create(ctx, t.viewer, in.Name, in.MapURL,
-		domain.ShopAddress{PrefectureCode: in.PrefectureCode, City: in.City, StreetAddress: in.StreetAddress})
+		usecase.ShopAddressPatch{PrefectureCode: in.PrefectureCode, PrefectureCodeSet: true, City: &in.City, StreetAddress: &in.StreetAddress})
 	if err != nil {
 		return t.toolError("submit_shop", err)
 	}

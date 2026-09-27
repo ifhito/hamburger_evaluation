@@ -111,7 +111,7 @@ func newAdminShopResponse(detail domain.ShopDetail) adminShopResponse {
 		ModerationNote:      detail.ModerationNote,
 		MapURL:              detail.MapURL,
 		ClosedAt:            formatClosedAt(detail.ClosedAt),
-		shopAddressResponse: newShopAddressResponse(detail.ShopAddress),
+		shopAddressResponse: newShopAddressResponse(detail.Address),
 		Creator:             newUserRefResponse(detail.Creator),
 		CanApprove:          detail.Shop.CanBeApproved(),
 		CanReject:           detail.Shop.CanBeRejected(),
@@ -176,8 +176,7 @@ func handleCreateShop(shops *usecase.Shops) http.HandlerFunc {
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		detail, err := shops.Create(r.Context(), viewer, req.Shop.Name, req.Shop.MapURL,
-			req.addressPatch().Apply(domain.ShopAddress{}))
+		detail, err := shops.Create(r.Context(), viewer, req.Shop.Name, req.Shop.MapURL, req.addressPatch())
 		if err != nil {
 			writeShopModerationError(w, r, "create", err)
 			return

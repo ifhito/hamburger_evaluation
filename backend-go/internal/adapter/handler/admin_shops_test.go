@@ -51,7 +51,7 @@ func (f *shopStoreFake) ListShopsForModeration(_ context.Context, status *domain
 	return out[start:end], end < len(out), nil
 }
 
-func (f *shopStoreFake) UpdateShopName(_ context.Context, id string, name string, mapURL *string, address domain.ShopAddress) (domain.Shop, error) {
+func (f *shopStoreFake) UpdateShopName(_ context.Context, id string, name string, mapURL *string, address domain.Address) (domain.Shop, error) {
 	if f.err != nil {
 		return domain.Shop{}, f.err
 	}
@@ -59,7 +59,7 @@ func (f *shopStoreFake) UpdateShopName(_ context.Context, id string, name string
 		if d.ID == id {
 			f.shops[i].Shop.Name = name
 			f.shops[i].Shop.MapURL = mapURL
-			f.shops[i].Shop.ShopAddress = address
+			f.shops[i].Shop.Address = address
 			return f.shops[i].Shop, nil
 		}
 	}

@@ -40,8 +40,13 @@ type shopAddressResponse struct {
 	StreetAddress  string `json:"street_address"`
 }
 
-func newShopAddressResponse(address domain.ShopAddress) shopAddressResponse {
-	return shopAddressResponse{PrefectureCode: address.PrefectureCode, City: address.City, StreetAddress: address.StreetAddress}
+func newShopAddressResponse(address domain.Address) shopAddressResponse {
+	resp := shopAddressResponse{City: address.City(), StreetAddress: address.StreetAddress()}
+	if prefecture, ok := address.Prefecture(); ok {
+		code := prefecture.Code()
+		resp.PrefectureCode = &code
+	}
+	return resp
 }
 
 // shopSummaryResponse は、ショップの集計である(一覧と詳細で共通。項目は末尾に並ぶ)。
@@ -67,7 +72,7 @@ func newShopResponse(listing domain.ShopListing) shopResponse {
 		Status:              string(listing.Status),
 		MapURL:              listing.MapURL,
 		ClosedAt:            formatClosedAt(listing.ClosedAt),
-		shopAddressResponse: newShopAddressResponse(listing.ShopAddress),
+		shopAddressResponse: newShopAddressResponse(listing.Address),
 		shopSummaryResponse: newShopSummaryResponse(listing.Summary),
 	}
 }
@@ -165,7 +170,7 @@ func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok b
 }
 
 // invalidPrefectureCode は、整数でない都道府県のコードの代わりに domain へ渡す値である。どの都道府県の
-// コードでもないので、domain.ValidatePrefectureCode が「不正」として拒否する(範囲の判定は domain だけが持つ)。
+// コードでもないので、domain.PrefectureOf が「不正」として拒否する(範囲の判定は domain だけが持つ)。
 const invalidPrefectureCode = 0
 
 // prefectureCodeParam は、都道府県のコードの文字列(query の値、または JSON の値の字面)を整数として解釈する。
@@ -249,7 +254,7 @@ func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 		Creator:             newUserRefResponse(detail.Creator),
 		Reviews:             make([]shopReviewResponse, 0, len(detail.Reviews)),
 		CanReview:           detail.CanReview,
-		shopAddressResponse: newShopAddressResponse(detail.ShopAddress),
+		shopAddressResponse: newShopAddressResponse(detail.Address),
 		shopSummaryResponse: newShopSummaryResponse(detail.Summary),
 	}
 	for _, review := range detail.Reviews {

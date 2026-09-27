@@ -57,7 +57,7 @@ func (f *fakeShopQuery) ListShopsForModeration(ctx context.Context, status *doma
 // fail-loud する。
 type fakeShopRepo struct {
 	createShop         func(ctx context.Context, shop domain.Shop) (domain.Shop, error)
-	updateShopName     func(ctx context.Context, id string, name string, mapURL *string, address domain.ShopAddress) (domain.Shop, error)
+	updateShopName     func(ctx context.Context, id string, name string, mapURL *string, address domain.Address) (domain.Shop, error)
 	updateShopStatus   func(ctx context.Context, id string, status domain.ShopStatus, note *string) (domain.Shop, error)
 	updateShopClosedAt func(ctx context.Context, id string, closedAt *time.Time) (domain.Shop, error)
 }
@@ -69,7 +69,7 @@ func (f *fakeShopRepo) CreateShop(ctx context.Context, shop domain.Shop) (domain
 	return f.createShop(ctx, shop)
 }
 
-func (f *fakeShopRepo) UpdateShopName(ctx context.Context, id string, name string, mapURL *string, address domain.ShopAddress) (domain.Shop, error) {
+func (f *fakeShopRepo) UpdateShopName(ctx context.Context, id string, name string, mapURL *string, address domain.Address) (domain.Shop, error) {
 	if f.updateShopName == nil {
 		panic("unexpected UpdateShopName call")
 	}
@@ -228,7 +228,7 @@ func TestShopsCreate(t *testing.T) {
 				return shop, nil
 			},
 		}
-		got, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", "", domain.ShopAddress{})
+		got, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", "", usecase.ShopAddressPatch{})
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -250,7 +250,7 @@ func TestShopsCreate(t *testing.T) {
 				return shop, nil
 			},
 		}
-		got, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", "  https://maps.example.com/shack  ", domain.ShopAddress{})
+		got, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", "  https://maps.example.com/shack  ", usecase.ShopAddressPatch{})
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -260,7 +260,7 @@ func TestShopsCreate(t *testing.T) {
 	})
 
 	t.Run("空白の name は repository を呼ばずに ValidationError を返す", func(t *testing.T) {
-		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).Create(context.Background(), alice, "   ", "", domain.ShopAddress{})
+		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).Create(context.Background(), alice, "   ", "", usecase.ShopAddressPatch{})
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -268,7 +268,7 @@ func TestShopsCreate(t *testing.T) {
 	})
 
 	t.Run("http/https でない map_url は repository を呼ばずに ValidationError を返す", func(t *testing.T) {
-		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).Create(context.Background(), alice, "New Shack", "javascript:alert(1)", domain.ShopAddress{})
+		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).Create(context.Background(), alice, "New Shack", "javascript:alert(1)", usecase.ShopAddressPatch{})
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {
 			t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -281,7 +281,7 @@ func TestShopsCreate(t *testing.T) {
 				return domain.Shop{}, io.ErrUnexpectedEOF
 			},
 		}
-		if _, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", "", domain.ShopAddress{}); !errors.Is(err, io.ErrUnexpectedEOF) {
+		if _, err := newShops(&fakeShopQuery{}, repo).Create(context.Background(), alice, "New Shack", "", usecase.ShopAddressPatch{}); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("Create error = %v, want %v", err, io.ErrUnexpectedEOF)
 		}
 	})
@@ -482,7 +482,7 @@ func TestShopsModeration(t *testing.T) {
 		// updateShopStatus は未設定のままなので、status/note に触れる rename が
 		// あればテストが panic する。
 		repo := &fakeShopRepo{
-			updateShopName: func(_ context.Context, id string, name string, mapURL *string, _ domain.ShopAddress) (domain.Shop, error) {
+			updateShopName: func(_ context.Context, id string, name string, mapURL *string, _ domain.Address) (domain.Shop, error) {
 				gotID, gotName, gotMapURL = id, name, mapURL
 				stored := rejected.Shop
 				stored.Name = name
@@ -506,7 +506,7 @@ func TestShopsModeration(t *testing.T) {
 		var gotMapURL *string
 		gotMapURLSet := false
 		repo := &fakeShopRepo{
-			updateShopName: func(_ context.Context, id string, name string, mapURL *string, _ domain.ShopAddress) (domain.Shop, error) {
+			updateShopName: func(_ context.Context, id string, name string, mapURL *string, _ domain.Address) (domain.Shop, error) {
 				gotMapURL, gotMapURLSet = mapURL, true
 				stored := rejected.Shop
 				stored.Name = name
@@ -809,10 +809,10 @@ func TestShopsAddress(t *testing.T) {
 
 	t.Run("管理者の更新は、送られなかった住所の項目を、いまの値のまま書き込む", func(t *testing.T) {
 		current := domain.ShopDetail{Shop: domain.Shop{ID: uid.N(1), Name: "Diner", Status: domain.ShopStatusActive,
-			ShopAddress: domain.ShopAddress{PrefectureCode: &tokyo, City: "渋谷区", StreetAddress: "神南1-2-3"}}}
+			Address: mustAddress(t, &tokyo, "渋谷区", "神南1-2-3")}}
 		query := &fakeShopQuery{getShopWithCreator: func(context.Context, string) (domain.ShopDetail, error) { return current, nil }}
-		var written domain.ShopAddress
-		repo := &fakeShopRepo{updateShopName: func(_ context.Context, _ string, _ string, _ *string, address domain.ShopAddress) (domain.Shop, error) {
+		var written domain.Address
+		repo := &fakeShopRepo{updateShopName: func(_ context.Context, _ string, _ string, _ *string, address domain.Address) (domain.Shop, error) {
 			written = address
 			return current.Shop, nil
 		}}
@@ -820,7 +820,7 @@ func TestShopsAddress(t *testing.T) {
 		if _, err := newShops(query, repo).AdminUpdateName(ctx, admin, uid.N(1), "Diner", "", usecase.ShopAddressPatch{City: &city}); err != nil {
 			t.Fatalf("AdminUpdateName returned error: %v", err)
 		}
-		if written.PrefectureCode == nil || *written.PrefectureCode != 13 || written.City != "新宿区" || written.StreetAddress != "神南1-2-3" {
+		if written != mustAddress(t, &tokyo, "新宿区", "神南1-2-3") {
 			t.Errorf("書き込んだ住所 = %+v, want 13・新宿区・神南1-2-3", written)
 		}
 	})
@@ -835,4 +835,14 @@ func TestShopsAddress(t *testing.T) {
 			t.Errorf("err = %v, want *ValidationError", err)
 		}
 	})
+}
+
+// mustAddress は、テストの住所を domain.NewAddress で作る(不正ならテストを止める)。
+func mustAddress(t *testing.T, prefectureCode *int, city, streetAddress string) domain.Address {
+	t.Helper()
+	address, err := domain.NewAddress(prefectureCode, city, streetAddress)
+	if err != nil {
+		t.Fatalf("NewAddress: %v", err)
+	}
+	return address
 }

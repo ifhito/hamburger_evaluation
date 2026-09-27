@@ -2,9 +2,7 @@ package domain_test
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -96,7 +94,7 @@ func TestShopCanBeReviewedBy(t *testing.T) {
 // ホワイトスペースのみの名前は、Rails のメッセージそのままで失敗する。
 func TestNewShopSubmission(t *testing.T) {
 	t.Run("有効な名前なら creator 付きの pending な shop になる", func(t *testing.T) {
-		shop, err := domain.NewShopSubmission("New Shack", uid.N(7), "", domain.ShopAddress{})
+		shop, err := domain.NewShopSubmission("New Shack", uid.N(7), "", nil, "", "")
 		if err != nil {
 			t.Fatalf("NewShopSubmission returned error: %v", err)
 		}
@@ -113,7 +111,7 @@ func TestNewShopSubmission(t *testing.T) {
 
 	for _, name := range []string{"", "   ", "\t\n"} {
 		t.Run("空または空白のみの名前 "+name+" は検証エラーになる", func(t *testing.T) {
-			_, err := domain.NewShopSubmission(name, uid.N(7), "", domain.ShopAddress{})
+			_, err := domain.NewShopSubmission(name, uid.N(7), "", nil, "", "")
 			var vErr *domain.ValidationError
 			if !errors.As(err, &vErr) {
 				t.Fatalf("error = %v, want *domain.ValidationError", err)
@@ -363,72 +361,5 @@ func TestShopCanBeReviewedByClosedShop(t *testing.T) {
 				t.Errorf("CanBeReviewedBy(%+v) = true, want false (shop is closed)", tt.viewer)
 			}
 		})
-	}
-}
-
-// TestValidateShopAddress は住所の検証を固定する: どの項目も任意で、都道府県のコードは 1〜47、市区町村と
-// 番地以降は上限の文字数(日本語も 1 文字)まで。違反はすべて列挙し、前後の空白は取り除く。
-func TestValidateShopAddress(t *testing.T) {
-
-	t.Run("未設定の住所は有効", func(t *testing.T) {
-		if _, err := domain.ValidateShopAddress(domain.ShopAddress{}); err != nil {
-			t.Errorf("err = %v, want nil", err)
-		}
-	})
-
-	t.Run("上限ちょうどの住所は有効で、前後の空白は取り除かれる", func(t *testing.T) {
-		got, err := domain.ValidateShopAddress(domain.ShopAddress{
-			PrefectureCode: ptr(47),
-			City:           " " + strings.Repeat("区", domain.MaxCityChars) + " ",
-			StreetAddress:  strings.Repeat("丁", domain.MaxStreetAddressChars),
-		})
-		if err != nil {
-			t.Fatalf("err = %v, want nil", err)
-		}
-		if got.City != strings.Repeat("区", domain.MaxCityChars) {
-			t.Errorf("City = %q, want 空白を除いた値", got.City)
-		}
-	})
-
-	for _, n := range []int{0, 48, -1} {
-		t.Run(fmt.Sprintf("都道府県のコード %d は不正", n), func(t *testing.T) {
-			_, err := domain.ValidateShopAddress(domain.ShopAddress{PrefectureCode: ptr(n)})
-			var vErr *domain.ValidationError
-			if !errors.As(err, &vErr) || strings.Join(vErr.Texts(domain.LangEN), ",") != "Prefecture is invalid" {
-				t.Errorf("err = %v, want Prefecture is invalid", err)
-			}
-		})
-	}
-
-	t.Run("すべての違反を、都道府県・市区町村・番地以降の順に列挙する", func(t *testing.T) {
-		_, err := domain.ValidateShopAddress(domain.ShopAddress{
-			PrefectureCode: ptr(48),
-			City:           strings.Repeat("a", domain.MaxCityChars+1),
-			StreetAddress:  strings.Repeat("a", domain.MaxStreetAddressChars+1),
-		})
-		var vErr *domain.ValidationError
-		if !errors.As(err, &vErr) {
-			t.Fatalf("err = %v, want *ValidationError", err)
-		}
-		want := []string{"Prefecture is invalid", "City is too long (maximum is 100 characters)", "Street address is too long (maximum is 200 characters)"}
-		if got := vErr.Texts(domain.LangEN); !slices.Equal(got, want) {
-			t.Errorf("texts = %v, want %v", got, want)
-		}
-	})
-}
-
-// TestPrefectures は、都道府県の表が 47 件で、コード 1〜47 の昇順であることを固定する。
-func TestPrefectures(t *testing.T) {
-	got := domain.Prefectures()
-	if len(got) != 47 {
-		t.Fatalf("len = %d, want 47", len(got))
-	}
-	for i, p := range got {
-		if p.Code != i+1 || p.NameJA == "" || p.NameEN == "" {
-			t.Errorf("[%d] = %+v, want code %d と名前", i, p, i+1)
-		}
-	}
-	if got[12].NameJA != "東京都" || got[26].NameEN != "Osaka" {
-		t.Errorf("13 = %+v, 27 = %+v", got[12], got[26])
 	}
 }

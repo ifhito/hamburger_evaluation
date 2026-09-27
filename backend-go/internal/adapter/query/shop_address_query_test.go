@@ -68,16 +68,19 @@ func TestShopQueryPrefecture(t *testing.T) {
 		if err != nil || len(listings) != 1 {
 			t.Fatalf("listings = %+v, err = %v", listings, err)
 		}
-		want := domain.ShopAddress{PrefectureCode: &tokyo, City: "渋谷区", StreetAddress: "神南1-2-3"}
-		if !reflect.DeepEqual(listings[0].ShopAddress, want) {
-			t.Errorf("一覧の住所 = %+v, want %+v", listings[0].ShopAddress, want)
+		want, err := domain.NewAddress(&tokyo, "渋谷区", "神南1-2-3")
+		if err != nil {
+			t.Fatalf("NewAddress: %v", err)
+		}
+		if listings[0].Address != want {
+			t.Errorf("一覧の住所 = %+v, want %+v", listings[0].Address, want)
 		}
 		detail, err := shopQuery.GetShopWithCreator(ctx, tokyoBurger)
 		if err != nil {
 			t.Fatalf("GetShopWithCreator returned error: %v", err)
 		}
-		if !reflect.DeepEqual(detail.ShopAddress, want) {
-			t.Errorf("詳細の住所 = %+v, want %+v", detail.ShopAddress, want)
+		if detail.Address != want {
+			t.Errorf("詳細の住所 = %+v, want %+v", detail.Address, want)
 		}
 	})
 }

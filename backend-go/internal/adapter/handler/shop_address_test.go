@@ -18,6 +18,16 @@ type shopAddressBody struct {
 	StreetAddress  string `json:"street_address"`
 }
 
+// testAddress は、テストの住所を domain.NewAddress で作る(不正ならテストを止める)。
+func testAddress(t *testing.T, prefectureCode *int, city, streetAddress string) domain.Address {
+	t.Helper()
+	address, err := domain.NewAddress(prefectureCode, city, streetAddress)
+	if err != nil {
+		t.Fatalf("NewAddress: %v", err)
+	}
+	return address
+}
+
 func decodeAddress(t *testing.T, body []byte) shopAddressBody {
 	t.Helper()
 	var got shopAddressBody
@@ -123,7 +133,7 @@ func TestCreateShopAddress(t *testing.T) {
 func TestAdminUpdateShopAddress(t *testing.T) {
 	seeded := func() *shopStoreFake {
 		repo := seedShops(uid.N(1))
-		repo.shops[1].Shop.ShopAddress = domain.ShopAddress{PrefectureCode: shopPtr(13), City: "渋谷区", StreetAddress: "神南1-2-3"}
+		repo.shops[1].Shop.Address = testAddress(t, shopPtr(13), "渋谷区", "神南1-2-3")
 		return repo
 	}
 
@@ -138,7 +148,7 @@ func TestAdminUpdateShopAddress(t *testing.T) {
 		if got.PrefectureCode == nil || *got.PrefectureCode != 13 || got.City != "新宿区" || got.StreetAddress != "神南1-2-3" {
 			t.Errorf("住所 = %+v, want 13・新宿区・神南1-2-3", got)
 		}
-		if saved := repo.shops[1].Shop.ShopAddress; saved.City != "新宿区" || saved.StreetAddress != "神南1-2-3" || *saved.PrefectureCode != 13 {
+		if saved := repo.shops[1].Shop.Address; saved != testAddress(t, shopPtr(13), "新宿区", "神南1-2-3") {
 			t.Errorf("保存された住所 = %+v", saved)
 		}
 	})
@@ -169,7 +179,7 @@ func TestAdminUpdateShopAddress(t *testing.T) {
 		if rec.Code != http.StatusUnprocessableEntity || rec.Body.String() != `{"errors":["Prefecture is invalid"]}` {
 			t.Errorf("status/body = %d %s, want 422 Prefecture is invalid", rec.Code, rec.Body)
 		}
-		if saved := repo.shops[1].Shop; saved.Name != "Alice Pending" || saved.City != "渋谷区" {
+		if saved := repo.shops[1].Shop; saved.Name != "Alice Pending" || saved.Address.City() != "渋谷区" {
 			t.Errorf("保存された shop = %+v, want 変わらない", saved)
 		}
 	})
@@ -187,8 +197,8 @@ func TestAdminUpdateShopAddress(t *testing.T) {
 func TestListShopsPrefectureFilter(t *testing.T) {
 	repo := seedShops(uid.N(1))
 	repo.shops = append(repo.shops,
-		domain.ShopDetail{Shop: domain.Shop{ID: uid.N(4), Name: "Tokyo Burger", Status: domain.ShopStatusActive, ShopAddress: domain.ShopAddress{PrefectureCode: shopPtr(13), City: "渋谷区"}}},
-		domain.ShopDetail{Shop: domain.Shop{ID: uid.N(5), Name: "Osaka Burger", Status: domain.ShopStatusActive, ShopAddress: domain.ShopAddress{PrefectureCode: shopPtr(27)}}},
+		domain.ShopDetail{Shop: domain.Shop{ID: uid.N(4), Name: "Tokyo Burger", Status: domain.ShopStatusActive, Address: testAddress(t, shopPtr(13), "渋谷区", "")}},
+		domain.ShopDetail{Shop: domain.Shop{ID: uid.N(5), Name: "Osaka Burger", Status: domain.ShopStatusActive, Address: testAddress(t, shopPtr(27), "", "")}},
 	)
 	router, _, _, _ := newShopsRouter(t, repo)
 
@@ -222,9 +232,9 @@ func TestListShopsPrefectureFilter(t *testing.T) {
 // 住所つきのショップを返すことを確かめる。
 func TestMCPListShopsPrefecture(t *testing.T) {
 	k := newMCPKit(t)
-	k.shops.shops[0].Shop.ShopAddress = domain.ShopAddress{PrefectureCode: shopPtr(13), City: "渋谷区", StreetAddress: "神南1-2-3"}
+	k.shops.shops[0].Shop.Address = testAddress(t, shopPtr(13), "渋谷区", "神南1-2-3")
 	k.shops.shops = append(k.shops.shops, domain.ShopDetail{Shop: domain.Shop{ID: uid.N(50), Name: "Osaka Burger", Status: domain.ShopStatusActive,
-		ShopAddress: domain.ShopAddress{PrefectureCode: shopPtr(27)}}})
+		Address: testAddress(t, shopPtr(27), "", "")}})
 	session := k.connect(t, k.token(k.alice, readScope))
 
 	t.Run("prefecture_code 13 は東京都のショップだけを、住所つきで返す", func(t *testing.T) {

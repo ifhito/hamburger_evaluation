@@ -58,7 +58,7 @@ func (f *shopStoreFake) ListShops(_ context.Context, vis domain.ShopVisibility, 
 		if keyword != "" && !strings.Contains(strings.ToLower(d.Name), strings.ToLower(keyword)) {
 			continue
 		}
-		if prefectureCode != nil && (d.PrefectureCode == nil || *d.PrefectureCode != *prefectureCode) {
+		if prefecture, ok := d.Address.Prefecture(); prefectureCode != nil && (!ok || prefecture.Code() != *prefectureCode) {
 			continue
 		}
 		out = append(out, d.Shop)

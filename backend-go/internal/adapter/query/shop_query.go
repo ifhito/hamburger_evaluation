@@ -41,7 +41,13 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 		namePattern = pgtype.Text{String: "%" + likeEscaper.Replace(keyword) + "%", Valid: true}
 	}
 
-	params := sqlcgen.ListShopsParams{ViewAll: vis.ViewAll, ViewerID: vis.ViewerID, NamePattern: namePattern, PrefectureCode: rowmap.PrefectureCode(prefectureCode), PageLimit: limit + 1, PageOffset: offset}
+	// 都道府県のコードは、usecase が domain.PrefectureOf で検証済みである。nil は絞り込みなし(NULL)。
+	var prefectureFilter pgtype.Int2
+	if prefectureCode != nil {
+		prefectureFilter = pgtype.Int2{Int16: int16(*prefectureCode), Valid: true}
+	}
+
+	params := sqlcgen.ListShopsParams{ViewAll: vis.ViewAll, ViewerID: vis.ViewerID, NamePattern: namePattern, PrefectureCode: prefectureFilter, PageLimit: limit + 1, PageOffset: offset}
 	var rows []sqlcgen.ListShopsRow
 	var err error
 	if sort == usecase.ShopSortNewest {

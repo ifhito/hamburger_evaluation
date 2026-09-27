@@ -34,15 +34,20 @@ func ShopStatusCode(status domain.ShopStatus) (int16, error) {
 }
 
 // Shop は sqlc の shop のカラムを domain のエンティティに変換し、
-// smallint の status をデコードする（0=pending、1=active、2=rejected）。
+// smallint の status をデコードする（0=pending、1=active、2=rejected）。住所は domain.NewAddress で作り、
+// DB の値が規則に合わない（範囲外の都道府県のコード・上限を超える文字数）ときは、黙って捨てずにエラーを返す。
 func Shop(id string, name string, status int16, note pgtype.Text, mapURL pgtype.Text, prefectureCode pgtype.Int2, city string, streetAddress string, creatorID *string, closedAt pgtype.Timestamptz) (domain.Shop, error) {
 	shop := domain.Shop{ID: id, Name: name, ClosedAt: ClosedAt(closedAt)}
-	shop.City = city
-	shop.StreetAddress = streetAddress
+	var code *int
 	if prefectureCode.Valid {
-		code := int(prefectureCode.Int16)
-		shop.PrefectureCode = &code
+		c := int(prefectureCode.Int16)
+		code = &c
 	}
+	address, err := domain.NewAddress(code, city, streetAddress)
+	if err != nil {
+		return domain.Shop{}, fmt.Errorf("shop %s: address: %w", id, err)
+	}
+	shop.Address = address
 	switch status {
 	case 0:
 		shop.Status = domain.ShopStatusPending
@@ -65,15 +70,6 @@ func Shop(id string, name string, status int16, note pgtype.Text, mapURL pgtype.
 	}
 	shop.CreatorID = creatorID
 	return shop, nil
-}
-
-// PrefectureCode は、domain の都道府県のコード(nil = 未設定)を、smallint の NULL 許容の列の形式に変換する。
-// 範囲の判定は domain.ValidatePrefectureCode が済ませている。repository の書き込みと query の絞り込みが使う。
-func PrefectureCode(code *int) pgtype.Int2 {
-	if code == nil {
-		return pgtype.Int2{}
-	}
-	return pgtype.Int2{Int16: int16(*code), Valid: true}
 }
 
 // ShopReviewBurger は、stats つき burger の sqlc のカラムを domain の

@@ -41,9 +41,9 @@ func (r *ShopRepository) CreateShop(ctx context.Context, shop domain.Shop) (doma
 		Status:         code,
 		ModerationNote: textOrNull(shop.ModerationNote),
 		MapURL:         textOrNull(shop.MapURL),
-		PrefectureCode: rowmap.PrefectureCode(shop.PrefectureCode),
-		City:           shop.City,
-		StreetAddress:  shop.StreetAddress,
+		PrefectureCode: prefectureColumn(shop.Address),
+		City:           shop.Address.City(),
+		StreetAddress:  shop.Address.StreetAddress(),
 		CreatorID:      shop.CreatorID,
 	})
 	if err != nil {
@@ -60,14 +60,14 @@ func (r *ShopRepository) CreateShop(ctx context.Context, shop domain.Shop) (doma
 // 読み取りから書き込みまでの間に shop が消えた場合は domain.ErrShopNotFound
 // を返す。カラムを限定して書くことで、同時に行われた status の変更が古い
 // スナップショットによって元に戻されるのを防ぐ。
-func (r *ShopRepository) UpdateShopName(ctx context.Context, id string, name string, mapURL *string, address domain.ShopAddress) (domain.Shop, error) {
+func (r *ShopRepository) UpdateShopName(ctx context.Context, id string, name string, mapURL *string, address domain.Address) (domain.Shop, error) {
 	row, err := r.q.UpdateShopName(ctx, sqlcgen.UpdateShopNameParams{
 		ID:             id,
 		Name:           name,
 		MapURL:         textOrNull(mapURL),
-		PrefectureCode: rowmap.PrefectureCode(address.PrefectureCode),
-		City:           address.City,
-		StreetAddress:  address.StreetAddress,
+		PrefectureCode: prefectureColumn(address),
+		City:           address.City(),
+		StreetAddress:  address.StreetAddress(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -142,4 +142,14 @@ func timestamptzOrNull(t *time.Time) pgtype.Timestamptz {
 		return pgtype.Timestamptz{}
 	}
 	return pgtype.Timestamptz{Time: *t, Valid: true}
+}
+
+// prefectureColumn は、住所の都道府県を、smallint の NULL 許容の列(prefecture_code)の形式に変換する
+// (未設定は NULL)。
+func prefectureColumn(address domain.Address) pgtype.Int2 {
+	prefecture, ok := address.Prefecture()
+	if !ok {
+		return pgtype.Int2{}
+	}
+	return pgtype.Int2{Int16: int16(prefecture.Code()), Valid: true}
 }

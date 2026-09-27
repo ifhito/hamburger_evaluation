@@ -98,11 +98,22 @@ func newMetaResponse() metaResponse {
 	}
 }
 
+// prefectureNamesEN は、都道府県の英語の名前(表示用の翻訳)である。添字 + 1 がコードで、domain.Prefectures と
+// 同じ 47 件・同じ順でなければならない(食い違いは TestPrefectureNamesENMatchDomain が検出する)。
+var prefectureNamesEN = [...]string{
+	"Hokkaido", "Aomori", "Iwate", "Miyagi", "Akita", "Yamagata", "Fukushima", "Ibaraki",
+	"Tochigi", "Gunma", "Saitama", "Chiba", "Tokyo", "Kanagawa", "Niigata", "Toyama",
+	"Ishikawa", "Fukui", "Yamanashi", "Nagano", "Gifu", "Shizuoka", "Aichi", "Mie",
+	"Shiga", "Kyoto", "Osaka", "Hyogo", "Nara", "Wakayama", "Tottori", "Shimane",
+	"Okayama", "Hiroshima", "Yamaguchi", "Tokushima", "Kagawa", "Ehime", "Kochi", "Fukuoka",
+	"Saga", "Nagasaki", "Kumamoto", "Oita", "Miyazaki", "Kagoshima", "Okinawa",
+}
+
 func newPrefecturesResponse() []prefectureResponse {
 	prefectures := domain.Prefectures()
 	resp := make([]prefectureResponse, 0, len(prefectures))
 	for _, p := range prefectures {
-		resp = append(resp, prefectureResponse{Code: p.Code, NameJA: p.NameJA, NameEN: p.NameEN})
+		resp = append(resp, prefectureResponse{Code: p.Code(), NameJA: p.Name(), NameEN: prefectureNamesEN[p.Code()-1]})
 	}
 	return resp
 }
