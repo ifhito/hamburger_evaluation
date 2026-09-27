@@ -45,7 +45,8 @@ func Shop(id string, name string, status int16, note pgtype.Text, mapURL pgtype.
 	}
 	address, err := domain.NewAddress(code, city, streetAddress)
 	if err != nil {
-		return domain.Shop{}, fmt.Errorf("shop %s: address: %w", id, err)
+		// %v で包む: 保存済みの値の不整合は利用者の入力の誤り(422)ではなく、ログつきの 500 にする。
+		return domain.Shop{}, fmt.Errorf("shop %s: address: %v", id, err)
 	}
 	shop.Address = address
 	switch status {

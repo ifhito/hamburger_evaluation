@@ -1,12 +1,14 @@
 package rowmap_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/rowmap"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
 // TestShopAddress は、DB の行の住所を domain の住所に写すこと、規則に合わない値を黙って捨てずに
@@ -29,12 +31,12 @@ func TestShopAddress(t *testing.T) {
 		}
 	})
 
-	t.Run("範囲外の都道府県のコードや上限を超える文字数はエラーになる", func(t *testing.T) {
-		if _, err := rowmap.Shop("id", "n", 1, pgtype.Text{}, pgtype.Text{}, pgtype.Int2{Int16: 48, Valid: true}, "", "", nil, pgtype.Timestamptz{}); err == nil {
-			t.Error("都道府県のコード 48 で err = nil")
+	t.Run("範囲外の都道府県のコードや上限を超える文字数は、入力の誤り(422)ではないエラーになる", func(t *testing.T) {
+		if _, err := rowmap.Shop("id", "n", 1, pgtype.Text{}, pgtype.Text{}, pgtype.Int2{Int16: 48, Valid: true}, "", "", nil, pgtype.Timestamptz{}); err == nil || errors.As(err, new(*domain.ValidationError)) {
+			t.Errorf("都道府県のコード 48 で err = %v, want 検証エラーでないエラー", err)
 		}
-		if _, err := rowmap.Shop("id", "n", 1, pgtype.Text{}, pgtype.Text{}, pgtype.Int2{}, strings.Repeat("区", 101), "", nil, pgtype.Timestamptz{}); err == nil {
-			t.Error("101 文字の市区町村で err = nil")
+		if _, err := rowmap.Shop("id", "n", 1, pgtype.Text{}, pgtype.Text{}, pgtype.Int2{}, strings.Repeat("区", 101), "", nil, pgtype.Timestamptz{}); err == nil || errors.As(err, new(*domain.ValidationError)) {
+			t.Errorf("101 文字の市区町村で err = %v, want 検証エラーでないエラー", err)
 		}
 	})
 }

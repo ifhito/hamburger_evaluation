@@ -210,7 +210,8 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 // AdminUpdateName は shop の名前(と地図リンク・住所)を変更する（唯一の moderation 編集、Rails
 // parity）。admin でない viewer には、どの id が存在するかを探れないよう、
 // lookup の前に domain.ErrForbidden を返す。空白の name は
-// *ValidationError であり、mapURL は domain.ValidateMapURL の規則に従う。address は送られた項目だけを
+// *ValidationError であり、mapURL は domain.ValidateMapURL の規則に従う。name と mapURL は lookup の前に
+// 検証する（未知の id でも 422 になる）。address は送られた項目だけを
 // 変え（ShopAddressPatch）、lookup のあと、いまの住所に重ねた値を domain.NewAddress で 1 回だけ検証する
 // （未知の id は、住所が不正でも 404 になる）。
 func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id string, name string, mapURL string, address ShopAddressPatch) (domain.ShopDetail, error) {

@@ -2,12 +2,9 @@ package db_test
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -57,10 +54,10 @@ func TestShopClosedAtUpgrade(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				_, _, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", nil, "", 20, 0)
-				var pgErr *pgconn.PgError
-				if !errors.As(err, &pgErr) || pgErr.Code != "42703" {
-					t.Fatalf("追加前の一覧エラー = %v, want undefined_column", err)
+				// 一覧のエラーでは、先に別の未追加の列(住所)が見つからないと言われうるので、列の有無を直接確かめる。
+				var exists bool
+				if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'shops' AND column_name = 'closed_at')").Scan(&exists); err != nil || exists {
+					t.Fatalf("追加前の閉業日時の列: exists=%v err=%v, want 列がない", exists, err)
 				}
 			}
 			dbtest.Apply(ctx, t, conn, after)

@@ -223,7 +223,8 @@ func seedUser(ctx context.Context, tx pgx.Tx, email, username string, admin bool
 
 // seedShop は name で shop を探し（seed の natural key である。schema には
 // これに対する unique 制約がない）、なければ与えられた status と住所で作成する。住所は domain.NewAddress の
-// 規則に従う（都道府県は必須）。
+// 規則に従う（都道府県は必須）。既存の shop の住所がすべて未設定なら（住所の列を足す前に seed した DB）、
+// seed の住所を入れる。手で入れた住所は上書きしない。
 func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID string, prefectureCode int, city, streetAddress string) (string, error) {
 	address, err := domain.NewAddress(&prefectureCode, city, streetAddress)
 	if err != nil {
@@ -233,6 +234,13 @@ func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creator
 	var id string
 	err = tx.QueryRow(ctx, `SELECT id FROM shops WHERE name = $1`, name).Scan(&id)
 	if err == nil {
+		if _, err := tx.Exec(ctx,
+			`UPDATE shops SET prefecture_code = $2, city = $3, street_address = $4
+			 WHERE id = $1 AND prefecture_code IS NULL AND city = '' AND street_address = ''`,
+			id, prefecture.Code(), address.City(), address.StreetAddress(),
+		); err != nil {
+			return "", fmt.Errorf("fill address of shop %s: %w", name, err)
+		}
 		return id, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
