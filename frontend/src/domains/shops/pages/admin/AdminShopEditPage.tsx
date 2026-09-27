@@ -4,20 +4,20 @@ import { useTranslation } from "react-i18next";
 import { useUpdateShop } from "../../hooks/useShopMutations";
 import { useShopDetail } from "../../hooks/useShops";
 import { useAuth } from "../../../auth/AuthProvider";
-import { useShopForm } from "../../hooks/useShopForm";
+import { toShopInput, useShopForm } from "../../hooks/useShopForm";
 import { ApiError } from "../../../../api/client/buildApiClient";
-import { useMeta } from "../../../../api/meta";
+import { prefectureName, useMeta } from "../../../../api/meta";
 import { Alert } from "../../../../components/ui/Alert";
 import { Button } from "../../../../components/ui/Button";
 import { LinkButton } from "../../../../components/ui/LinkButton";
 import { Loading } from "../../../../components/ui/states";
-import { TextField } from "../../../../components/ui/TextField";
+import { SelectField, TextField } from "../../../../components/ui/TextField";
 import { TextLink } from "../../../../components/ui/TextLink";
 import { Layout } from "../../../../components/Layout";
 import styles from "./adminShopEdit.module.css";
 
 export default function AdminShopEditPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const shopId = id ?? "";
@@ -27,13 +27,21 @@ export default function AdminShopEditPage() {
 
   const { update } = useUpdateShop(shopId);
   const { register, handleSubmit, reset, watch } = useShopForm();
-  const textLimits = useMeta().data?.text;
+  const meta = useMeta().data;
+  const textLimits = meta?.text;
 
   // shop は詳細(SWR)の「オブジェクト」なので、バックグラウンドの再取得のたびに、値が同じでも
   // 参照が変わる。依存を shop?.id(変わらない識別子)にして、同じショップの再取得では reset せず、入力中の
   // 内容(打ちかけの新しい名前)を、無言で消さないようにする。
   useEffect(() => {
-    if (shop) reset({ name: shop.name, mapUrl: shop.mapUrl ?? "" });
+    if (shop)
+      reset({
+        name: shop.name,
+        mapUrl: shop.mapUrl ?? "",
+        prefectureCode: shop.prefectureCode === null ? "" : String(shop.prefectureCode),
+        city: shop.city,
+        streetAddress: shop.streetAddress,
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shop?.id, reset]);
 
@@ -44,7 +52,7 @@ export default function AdminShopEditPage() {
     setServerError(null);
     setIsSubmitting(true);
     try {
-      await update(data);
+      await update(toShopInput(data));
       void navigate("/admin/shops");
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("shops.admin.editError")]);
@@ -79,6 +87,37 @@ export default function AdminShopEditPage() {
               optional={t("shops.admin.optional")}
               placeholder={t("shops.new.mapUrlPlaceholder")}
               {...register("mapUrl")}
+            />
+            <SelectField
+              id="prefectureCode"
+              label={t("shops.new.prefecture")}
+              optional={t("shops.admin.optional")}
+              // 選択肢(GET /meta)が初期値より後に届いても、初期値の都道府県を選んだ表示にするため、値は watch で渡す。
+              value={watch("prefectureCode")}
+              {...register("prefectureCode")}
+            >
+              <option value="">{t("shops.new.prefectureUnset")}</option>
+              {meta?.prefectures.map((p) => (
+                <option key={p.code} value={p.code}>
+                  {prefectureName(p, i18n.language)}
+                </option>
+              ))}
+            </SelectField>
+            <TextField
+              id="city"
+              label={t("shops.new.city")}
+              optional={t("shops.admin.optional")}
+              placeholder={t("shops.new.cityPlaceholder")}
+              counter={{ value: watch("city"), max: textLimits?.cityMaxChars }}
+              {...register("city")}
+            />
+            <TextField
+              id="streetAddress"
+              label={t("shops.new.streetAddress")}
+              optional={t("shops.admin.optional")}
+              placeholder={t("shops.new.streetAddressPlaceholder")}
+              counter={{ value: watch("streetAddress"), max: textLimits?.streetAddressMaxChars }}
+              {...register("streetAddress")}
             />
             <div className={styles.actions}>
               <Button type="submit" wide isLoading={isSubmitting}>

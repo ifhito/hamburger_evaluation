@@ -1,6 +1,7 @@
 // Command seed は開発用 database に idempotent な fixture データを投入する。
 // admin ユーザー 1 人、一般ユーザー 3 人、承認済みの shop
-// 3 件と pending の shop 1 件、承認済みの shop ごとに burger 2 件、そして
+// 4 件（東京都 3 件・大阪府 1 件。絞り込みを試せるよう、住所つき）と pending の shop 1 件、
+// 承認済みの shop ごとに burger 2 件、そして
 // 固定された review 群である。その後、アプリが使うのと同じ domain の
 // calculator で burger_stats を再計算するので、GET のレスポンスは整合する。
 //
@@ -95,20 +96,26 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 
 	// shop の status のエンコーディングは db/migrations/000002 に対応する：
 	// 0=pending, 1=active。
-	shakeShack, err := seedShop(ctx, tx, "Shake Shack 渋谷", 1, admin)
+	// 住所の都道府県は JIS X 0401 のコード（13=東京都、27=大阪府）。実在の店は市区町村までにとどめ、
+	// 番地以降は架空の店にだけ入れる。
+	shakeShack, err := seedShop(ctx, tx, "Shake Shack 渋谷", 1, admin, 13, "渋谷区", "")
 	if err != nil {
 		return err
 	}
-	jsBurgers, err := seedShop(ctx, tx, "J.S. BURGERS CAFE 新宿", 1, admin)
+	jsBurgers, err := seedShop(ctx, tx, "J.S. BURGERS CAFE 新宿", 1, admin, 13, "新宿区", "")
 	if err != nil {
 		return err
 	}
-	freshness, err := seedShop(ctx, tx, "フレッシュネスバーガー 原宿", 1, admin)
+	freshness, err := seedShop(ctx, tx, "フレッシュネスバーガー 原宿", 1, admin, 13, "渋谷区", "")
+	if err != nil {
+		return err
+	}
+	umeda, err := seedShop(ctx, tx, "ナニワバーガー 梅田", 1, admin, 27, "大阪市北区", "梅田1-2-3")
 	if err != nil {
 		return err
 	}
 	// moderation のフローを試すための pending の shop 1 件。burger は持たない。
-	if _, err := seedShop(ctx, tx, "バーガースタンド 下北沢（審査待ち）", 0, alice); err != nil {
+	if _, err := seedShop(ctx, tx, "バーガースタンド 下北沢（審査待ち）", 0, alice, 13, "世田谷区", ""); err != nil {
 		return err
 	}
 
@@ -123,6 +130,8 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		{jsBurgers, "アボカドバーガー"},
 		{freshness, "クラシックバーガー"},
 		{freshness, "テリヤキバーガー"},
+		{umeda, "クラシックバーガー"},
+		{umeda, "たこ焼きバーガー"},
 	}
 	burgers := make([]string, len(specs))
 	for i, spec := range specs {
@@ -149,6 +158,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		{charlie, 2, 5, "肉汁たっぷりで最高でした！"},
 		{charlie, 4, 4, "バンズがふわふわで美味しかった。"},
 		{charlie, 5, 5, "また絶対行きたいです。"},
+		{bob, 7, 4, "ソースが濃厚で美味しかった。"},
 	}
 	for _, spec := range reviews {
 		if err := seedReview(ctx, tx, spec.userID, burgers[spec.burger], spec.rating, spec.comment); err != nil {
@@ -212,8 +222,8 @@ func seedUser(ctx context.Context, tx pgx.Tx, email, username string, admin bool
 }
 
 // seedShop は name で shop を探し（seed の natural key である。schema には
-// これに対する unique 制約がない）、なければ与えられた status で作成する。
-func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID string) (string, error) {
+// これに対する unique 制約がない）、なければ与えられた status と住所で作成する。
+func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creatorID string, prefectureCode int16, city, streetAddress string) (string, error) {
 	var id string
 	err := tx.QueryRow(ctx, `SELECT id FROM shops WHERE name = $1`, name).Scan(&id)
 	if err == nil {
@@ -223,8 +233,8 @@ func seedShop(ctx context.Context, tx pgx.Tx, name string, status int16, creator
 		return "", fmt.Errorf("find shop %s: %w", name, err)
 	}
 	err = tx.QueryRow(ctx,
-		`INSERT INTO shops (name, status, creator_id) VALUES ($1, $2, $3) RETURNING id`,
-		name, status, creatorID,
+		`INSERT INTO shops (name, status, creator_id, prefecture_code, city, street_address) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+		name, status, creatorID, prefectureCode, city, streetAddress,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("insert shop %s: %w", name, err)

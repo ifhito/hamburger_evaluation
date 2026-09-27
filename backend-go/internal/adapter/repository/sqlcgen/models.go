@@ -101,6 +101,9 @@ type Shop struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	CreatorID      *string
+	PrefectureCode pgtype.Int2
+	City           string
+	StreetAddress  string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	MapURL         pgtype.Text

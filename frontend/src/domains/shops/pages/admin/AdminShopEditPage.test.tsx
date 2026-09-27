@@ -4,11 +4,11 @@ import { act } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "../../../../lib/i18n";
 import { ApiError } from "../../../../api/client/buildApiClient";
-import { byText, cleanup, click, eventually, mount, need, type } from "../../../../test/dom";
+import { byText, choose, cleanup, click, eventually, mount, need, type } from "../../../../test/dom";
 import AdminShopEditPage from "./AdminShopEditPage";
 
 // 詳細の再取得で参照が変わっても、編集中の値が消えないことを確かめる。
-const state = vi.hoisted(() => ({ isLoading: false, error: undefined as unknown, shop: { id: "s1", name: "Old name", status: "active" } }));
+const state = vi.hoisted(() => ({ isLoading: false, error: undefined as unknown, shop: { id: "s1", name: "Old name", status: "active", mapUrl: null, prefectureCode: 13 as number | null, city: "渋谷区", streetAddress: "神南1-2-3" } }));
 const update = vi.hoisted(() => vi.fn());
 const detail = vi.hoisted(() => vi.fn());
 vi.mock("../../hooks/useShopMutations", () => ({
@@ -20,7 +20,18 @@ vi.mock("../../hooks/useShops", () => ({
     return { data: state.isLoading || state.error ? undefined : { ...state.shop }, isLoading: state.isLoading, error: state.error };
   },
 }));
-vi.mock("../../../../api/meta", () => ({ useMeta: () => ({ data: { text: { shopNameMaxChars: 100 } } }) }));
+vi.mock("../../../../api/meta", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../api/meta")>()),
+  useMeta: () => ({
+    data: {
+      text: { shopNameMaxChars: 100, cityMaxChars: 100, streetAddressMaxChars: 200 },
+      prefectures: [
+        { code: 13, nameJa: "東京都", nameEn: "Tokyo" },
+        { code: 27, nameJa: "大阪府", nameEn: "Osaka" },
+      ],
+    },
+  }),
+}));
 vi.mock("../../../auth/AuthProvider", () => ({ useAuth: () => ({ user: { id: "1", username: "admin", canModerate: true }, isLoading: false }) }));
 
 const show = () =>
@@ -59,7 +70,15 @@ describe("AdminShopEditPage(ショップの名前の編集)", () => {
       need(page.querySelector("form"), "form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
-    await eventually(() => expect(update).toHaveBeenCalledWith({ name: "New name", mapUrl: "" }));
+    await eventually(() =>
+      expect(update).toHaveBeenCalledWith({
+        name: "New name",
+        mapUrl: "",
+        prefectureCode: 13,
+        city: "渋谷区",
+        streetAddress: "神南1-2-3",
+      }),
+    );
     await eventually(() => expect(page.textContent).toBe("moderation list"));
   });
 
@@ -84,6 +103,40 @@ describe("AdminShopEditPage(ショップの名前の編集)", () => {
 
     // 詳細のオブジェクトが変わる再描画の後も、入力は残る。
     expect(input.value).toBe("New name in progress");
+  });
+
+  it("住所の 3 項目に、いまの値を初期値として入れる", async () => {
+    const page = await show();
+    const prefecture = need(page.querySelector<HTMLSelectElement>("#prefectureCode"), "都道府県");
+    await eventually(() => expect(prefecture.value).toBe("13"));
+    expect(prefecture.options[0]?.textContent).toBe("Not selected");
+    expect(page.querySelector<HTMLInputElement>("#city")?.value).toBe("渋谷区");
+    expect(page.querySelector<HTMLInputElement>("#streetAddress")?.value).toBe("神南1-2-3");
+  });
+
+  it("都道府県を「選択しない」に戻して保存すると、都道府県のコードに null を送って消せる", async () => {
+    update.mockResolvedValue(undefined);
+    const page = await show();
+    const prefecture = need(page.querySelector<HTMLSelectElement>("#prefectureCode"), "都道府県");
+    await eventually(() => expect(prefecture.value).toBe("13"));
+
+    await choose(prefecture, "");
+    await type(need(page.querySelector<HTMLInputElement>("#city"), "市区町村"), "");
+    await click(need(byText(page, "button", "Save"), "Save"));
+
+    await eventually(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ prefectureCode: null, city: "" })));
+  });
+
+  it("別の都道府県を選んで保存すると、そのコードを数値で送る", async () => {
+    update.mockResolvedValue(undefined);
+    const page = await show();
+    const prefecture = need(page.querySelector<HTMLSelectElement>("#prefectureCode"), "都道府県");
+    await eventually(() => expect(prefecture.value).toBe("13"));
+
+    await choose(prefecture, "27");
+    await click(need(byText(page, "button", "Save"), "Save"));
+
+    await eventually(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ prefectureCode: 27 })));
   });
 
   it("戻るリンクと、キャンセルは、どちらも管理の一覧へ移るリンク", async () => {

@@ -183,13 +183,14 @@ func (t *mcpTools) getMeta(context.Context, *mcp.CallToolRequest, emptyInput) (*
 }
 
 type listShopsInput struct {
-	Keyword string `json:"keyword,omitempty" jsonschema:"店名に含まれる文字で絞り込む。省略すると絞り込まない"`
-	Page    int    `json:"page,omitempty" jsonschema:"ページ番号(1 から)。省略すると 1"`
-	PerPage int    `json:"per_page,omitempty" jsonschema:"1 ページの件数。省略すると既定の件数で、多すぎる値は上限に丸められる"`
+	Keyword        string `json:"keyword,omitempty" jsonschema:"店名に含まれる文字で絞り込む。省略すると絞り込まない"`
+	PrefectureCode *int   `json:"prefecture_code,omitempty" jsonschema:"都道府県のコード(1〜47。get_meta の prefectures)で絞り込む。省略すると絞り込まない"`
+	Page           int    `json:"page,omitempty" jsonschema:"ページ番号(1 から)。省略すると 1"`
+	PerPage        int    `json:"per_page,omitempty" jsonschema:"1 ページの件数。省略すると既定の件数で、多すぎる値は上限に丸められる"`
 }
 
 func (t *mcpTools) listShops(ctx context.Context, _ *mcp.CallToolRequest, in listShopsInput) (*mcp.CallToolResult, any, error) {
-	list, hasMore, err := t.shops.List(ctx, &t.viewer, in.Keyword, "", in.Page, in.PerPage)
+	list, hasMore, err := t.shops.List(ctx, &t.viewer, in.Keyword, in.PrefectureCode, "", in.Page, in.PerPage)
 	if err != nil {
 		return t.toolError("list_shops", err)
 	}
@@ -358,12 +359,16 @@ func (t *mcpTools) deleteReview(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 type submitShopInput struct {
-	Name   string `json:"name" jsonschema:"申請するショップの名前(必須)"`
-	MapURL string `json:"map_url,omitempty" jsonschema:"地図へのリンク(任意。http または https の URL)"`
+	Name           string `json:"name" jsonschema:"申請するショップの名前(必須)"`
+	MapURL         string `json:"map_url,omitempty" jsonschema:"地図へのリンク(任意。http または https の URL)"`
+	PrefectureCode *int   `json:"prefecture_code,omitempty" jsonschema:"都道府県のコード(任意。1〜47。get_meta の prefectures)"`
+	City           string `json:"city,omitempty" jsonschema:"市区町村(任意)"`
+	StreetAddress  string `json:"street_address,omitempty" jsonschema:"番地以降(任意)"`
 }
 
 func (t *mcpTools) submitShop(ctx context.Context, _ *mcp.CallToolRequest, in submitShopInput) (*mcp.CallToolResult, any, error) {
-	detail, err := t.shops.Create(ctx, t.viewer, in.Name, in.MapURL)
+	detail, err := t.shops.Create(ctx, t.viewer, in.Name, in.MapURL,
+		domain.ShopAddress{PrefectureCode: in.PrefectureCode, City: in.City, StreetAddress: in.StreetAddress})
 	if err != nil {
 		return t.toolError("submit_shop", err)
 	}

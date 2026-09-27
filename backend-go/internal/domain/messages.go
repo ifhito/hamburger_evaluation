@@ -19,6 +19,9 @@ const (
 	keyShopCannotReopen  = "shop.cannot_reopen"
 	keyMapURLTooLong     = "map_url.too_long"
 	keyMapURLInvalid     = "map_url.invalid"
+	keyPrefectureInvalid = "prefecture.invalid"
+	keyCityTooLong       = "city.too_long"
+	keyStreetTooLong     = "street_address.too_long"
 	keyBioTooLong        = "bio.too_long"
 	keyUsernameBlank     = "username.blank"
 	keyUsernameTooLong   = "username.too_long"
@@ -47,6 +50,9 @@ var catalog = map[string]Entry{
 	keyShopCannotReopen:  {EN: "Shop is not closed", JA: "このショップは閉業していません"},
 	keyMapURLTooLong:     {EN: "Map url is too long (maximum is %d characters)", JA: "地図リンクが長すぎます(最大 %d 文字)"},
 	keyMapURLInvalid:     {EN: "Map url must be a valid http or https URL", JA: "地図リンクは http または https の URL にしてください"},
+	keyPrefectureInvalid: {EN: "Prefecture is invalid", JA: "都道府県の指定が正しくありません"},
+	keyCityTooLong:       {EN: "City is too long (maximum is %d characters)", JA: "市区町村が長すぎます(最大 %d 文字)"},
+	keyStreetTooLong:     {EN: "Street address is too long (maximum is %d characters)", JA: "番地以降が長すぎます(最大 %d 文字)"},
 	keyBioTooLong:        {EN: "Bio is too long (maximum is %d characters)", JA: "自己紹介が長すぎます(最大 %d 文字)"},
 	keyUsernameBlank:     {EN: "Username can't be blank", JA: "ユーザー名を入力してください"},
 	keyUsernameTooLong:   {EN: "Username is too long (maximum is %d characters)", JA: "ユーザー名が長すぎます(最大 %d 文字)"},

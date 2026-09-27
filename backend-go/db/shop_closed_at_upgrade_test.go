@@ -57,14 +57,14 @@ func TestShopClosedAtUpgrade(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				_, _, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", "", 20, 0)
+				_, _, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", nil, "", 20, 0)
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) || pgErr.Code != "42703" {
 					t.Fatalf("追加前の一覧エラー = %v, want undefined_column", err)
 				}
 			}
 			dbtest.Apply(ctx, t, conn, after)
-			items, more, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", "", 20, 0)
+			items, more, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", nil, "", 20, 0)
 			if err != nil {
 				t.Fatalf("追加後の店舗一覧: %v", err)
 			}
@@ -89,7 +89,7 @@ func TestShopClosedAtUpgrade(t *testing.T) {
 				t.Fatalf("店舗行: count=%d err=%v", count, err)
 			}
 			dbtest.Apply(ctx, t, conn, after)
-			if _, _, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", "", 20, 0); err != nil {
+			if _, _, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", nil, "", 20, 0); err != nil {
 				t.Fatalf("再適用後: %v", err)
 			}
 		})

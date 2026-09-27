@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -16,12 +17,63 @@ var msgForbidden = apiMsg(keyForbidden)
 // {"shop":{"name":...,"map_url":...}} ラッパーである。wrapper や name が欠けている場合は
 // "" にデコードされ、domain はそれを blank として拒否する。400 ではなく
 // Rails-parity の 422 になる。map_url も同様に、欠けていれば "" になり、
-// domain.ValidateMapURL がそれを「リンクなし」として扱う。
+// domain.ValidateMapURL がそれを「リンクなし」として扱う。住所の項目(prefecture_code・city・
+// street_address)は任意で、PUT では送った項目だけを変える(null・空文字は消す)。
 type shopParamsRequest struct {
 	Shop struct {
-		Name   string `json:"name"`
-		MapURL string `json:"map_url"`
+		Name           string                        `json:"name"`
+		MapURL         string                        `json:"map_url"`
+		PrefectureCode optionalJSON[json.RawMessage] `json:"prefecture_code"`
+		City           optionalJSON[string]          `json:"city"`
+		StreetAddress  optionalJSON[string]          `json:"street_address"`
 	} `json:"shop"`
+}
+
+// optionalJSON は、JSON の項目の「送られなかった」(Set が false)と「null」(Set が true で Value が nil)と
+// 「値」を区別する。PUT の部分更新で、送らなかった項目を変えずに、null で消せるようにするためである。
+type optionalJSON[T any] struct {
+	Set   bool
+	Value *T
+}
+
+// UnmarshalJSON は、項目が送られたことを記録して、値(null なら nil)を読む。
+func (o *optionalJSON[T]) UnmarshalJSON(data []byte) error {
+	o.Set = true
+	if string(data) == "null" {
+		return nil
+	}
+	var v T
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	o.Value = &v
+	return nil
+}
+
+// addressPatch は、送られた住所の項目を usecase の形にする。都道府県のコードは、JSON の整数だけを
+// そのまま渡し、空文字は未設定、それ以外の形(文字列・小数など)は prefectureCodeParam の規則で「不正」にする。
+// null・空文字の文字列の項目は、空文字(消す)にする。
+func (req shopParamsRequest) addressPatch() usecase.ShopAddressPatch {
+	patch := usecase.ShopAddressPatch{PrefectureCodeSet: req.Shop.PrefectureCode.Set}
+	if raw := req.Shop.PrefectureCode.Value; raw != nil && string(*raw) != `""` {
+		patch.PrefectureCode = prefectureCodeParam(string(*raw))
+	}
+	if req.Shop.City.Set {
+		patch.City = stringOrEmpty(req.Shop.City.Value)
+	}
+	if req.Shop.StreetAddress.Set {
+		patch.StreetAddress = stringOrEmpty(req.Shop.StreetAddress.Value)
+	}
+	return patch
+}
+
+// stringOrEmpty は、null(nil)を空文字にしたポインタを返す。
+func stringOrEmpty(s *string) *string {
+	if s == nil {
+		empty := ""
+		return &empty
+	}
+	return s
 }
 
 // rejectShopRequest は POST /admin/shops/{id}/reject の body である。
@@ -34,13 +86,14 @@ type rejectShopRequest struct {
 // adminShopResponse は shop の投稿/moderation の payload である。id、name、
 // status、moderation_note、creator を持ち、reviews は持たない。
 type adminShopResponse struct {
-	ID             string           `json:"id"`
-	Name           string           `json:"name"`
-	Status         string           `json:"status"`
-	ModerationNote *string          `json:"moderation_note"`
-	MapURL         *string          `json:"map_url"`
-	ClosedAt       *string          `json:"closed_at"`
-	Creator        *userRefResponse `json:"creator"`
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	Status         string  `json:"status"`
+	ModerationNote *string `json:"moderation_note"`
+	MapURL         *string `json:"map_url"`
+	ClosedAt       *string `json:"closed_at"`
+	shopAddressResponse
+	Creator *userRefResponse `json:"creator"`
 	// CanApprove・CanReject は、承認・却下の操作を画面が提示してよいか（domain が判断する）。
 	CanApprove bool `json:"can_approve"`
 	CanReject  bool `json:"can_reject"`
@@ -52,17 +105,18 @@ type adminShopResponse struct {
 
 func newAdminShopResponse(detail domain.ShopDetail) adminShopResponse {
 	return adminShopResponse{
-		ID:             detail.ID,
-		Name:           detail.Name,
-		Status:         string(detail.Status),
-		ModerationNote: detail.ModerationNote,
-		MapURL:         detail.MapURL,
-		ClosedAt:       formatClosedAt(detail.ClosedAt),
-		Creator:        newUserRefResponse(detail.Creator),
-		CanApprove:     detail.Shop.CanBeApproved(),
-		CanReject:      detail.Shop.CanBeRejected(),
-		CanClose:       detail.Shop.CanBeClosed(),
-		CanReopen:      detail.Shop.CanBeReopened(),
+		ID:                  detail.ID,
+		Name:                detail.Name,
+		Status:              string(detail.Status),
+		ModerationNote:      detail.ModerationNote,
+		MapURL:              detail.MapURL,
+		ClosedAt:            formatClosedAt(detail.ClosedAt),
+		shopAddressResponse: newShopAddressResponse(detail.ShopAddress),
+		Creator:             newUserRefResponse(detail.Creator),
+		CanApprove:          detail.Shop.CanBeApproved(),
+		CanReject:           detail.Shop.CanBeRejected(),
+		CanClose:            detail.Shop.CanBeClosed(),
+		CanReopen:           detail.Shop.CanBeReopened(),
 	}
 }
 
@@ -122,7 +176,8 @@ func handleCreateShop(shops *usecase.Shops) http.HandlerFunc {
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		detail, err := shops.Create(r.Context(), viewer, req.Shop.Name, req.Shop.MapURL)
+		detail, err := shops.Create(r.Context(), viewer, req.Shop.Name, req.Shop.MapURL,
+			req.addressPatch().Apply(domain.ShopAddress{}))
 		if err != nil {
 			writeShopModerationError(w, r, "create", err)
 			return
@@ -173,7 +228,7 @@ func handleAdminUpdateShop(shops *usecase.Shops) http.HandlerFunc {
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		detail, err := shops.AdminUpdateName(r.Context(), viewer, id, req.Shop.Name, req.Shop.MapURL)
+		detail, err := shops.AdminUpdateName(r.Context(), viewer, id, req.Shop.Name, req.Shop.MapURL, req.addressPatch())
 		if err != nil {
 			writeShopModerationError(w, r, "admin update", err)
 			return

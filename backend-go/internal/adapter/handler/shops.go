@@ -27,7 +27,21 @@ type shopResponse struct {
 	Status   string  `json:"status"`
 	MapURL   *string `json:"map_url"`
 	ClosedAt *string `json:"closed_at"`
+	shopAddressResponse
 	shopSummaryResponse
+}
+
+// shopAddressResponse は、ショップの住所である(ショップを返すすべての応答で共通)。PrefectureCode は
+// 都道府県のコード(未設定なら null)で、名前は GET /meta の prefectures の表で引く。City・StreetAddress は、
+// 未設定なら空文字。
+type shopAddressResponse struct {
+	PrefectureCode *int   `json:"prefecture_code"`
+	City           string `json:"city"`
+	StreetAddress  string `json:"street_address"`
+}
+
+func newShopAddressResponse(address domain.ShopAddress) shopAddressResponse {
+	return shopAddressResponse{PrefectureCode: address.PrefectureCode, City: address.City, StreetAddress: address.StreetAddress}
 }
 
 // shopSummaryResponse は、ショップの集計である(一覧と詳細で共通。項目は末尾に並ぶ)。
@@ -53,6 +67,7 @@ func newShopResponse(listing domain.ShopListing) shopResponse {
 		Status:              string(listing.Status),
 		MapURL:              listing.MapURL,
 		ClosedAt:            formatClosedAt(listing.ClosedAt),
+		shopAddressResponse: newShopAddressResponse(listing.ShopAddress),
 		shopSummaryResponse: newShopSummaryResponse(listing.Summary),
 	}
 }
@@ -68,6 +83,7 @@ type shopDetailResponse struct {
 	ModerationNote      *string              `json:"moderation_note"`
 	MapURL              *string              `json:"map_url"`
 	ClosedAt            *string              `json:"closed_at"`
+	shopAddressResponse                      // 一覧と同じ住所
 	Creator             *userRefResponse     `json:"creator"`
 	Reviews             []shopReviewResponse `json:"reviews"`
 	CanReview           bool                 `json:"can_review"`
@@ -148,12 +164,30 @@ func pageParams(w http.ResponseWriter, r *http.Request) (page, perPage int, ok b
 	return page, perPage, true
 }
 
+// invalidPrefectureCode は、整数でない都道府県のコードの代わりに domain へ渡す値である。どの都道府県の
+// コードでもないので、domain.ValidatePrefectureCode が「不正」として拒否する(範囲の判定は domain だけが持つ)。
+const invalidPrefectureCode = 0
+
+// prefectureCodeParam は、都道府県のコードの文字列(query の値、または JSON の値の字面)を整数として解釈する。
+// 空は未設定(nil)。整数でない値(abc・1.5・JSON の文字列など)は invalidPrefectureCode にする。
+func prefectureCodeParam(raw string) *int {
+	if raw == "" {
+		return nil
+	}
+	code, err := strconv.Atoi(raw)
+	if err != nil {
+		code = invalidPrefectureCode
+	}
+	return &code
+}
+
 // handleListShops は GET /shops を処理する：（存在する場合の）viewer から
 // 見える shop のトップレベルの JSON 配列で、keyword で絞り込まれ、
 // ページネーションされる。page / per_page が整数でなければ 422 である。
 // sort=newest を指定すると新着順（created_at 降順・id 降順）になり、それ以外の値
 // （省略・空・未知の値を含む）は、これまでどおりの店名順になる（422 にはしない）。
-// 次のページの有無は、レスポンスヘッダー X-Has-More（true / false）で返す。
+// 次のページの有無は、レスポンスヘッダー X-Has-More（true / false）で返す。prefecture_code を指定すると、
+// その都道府県の shop だけに絞り込む（空・省略は絞り込みなし。都道府県のコードでなければ 422）。
 func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		page, perPage, ok := pageParams(w, r)
@@ -161,7 +195,13 @@ func handleListShops(shops *usecase.Shops) http.HandlerFunc {
 			return
 		}
 		sort := usecase.ShopSort(r.URL.Query().Get("sort"))
-		list, hasMore, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"), sort, page, perPage)
+		prefectureCode := prefectureCodeParam(r.URL.Query().Get("prefecture_code"))
+		list, hasMore, err := shops.List(r.Context(), viewerPtr(r), r.URL.Query().Get("keyword"), prefectureCode, sort, page, perPage)
+		var vErr *domain.ValidationError
+		if errors.As(err, &vErr) {
+			writeValidation(w, r, vErr)
+			return
+		}
 		if err != nil {
 			log.Printf("shops: list: %v", err)
 			writeInternalError(w)
@@ -209,6 +249,7 @@ func newShopDetailResponse(detail domain.ShopDetail) shopDetailResponse {
 		Creator:             newUserRefResponse(detail.Creator),
 		Reviews:             make([]shopReviewResponse, 0, len(detail.Reviews)),
 		CanReview:           detail.CanReview,
+		shopAddressResponse: newShopAddressResponse(detail.ShopAddress),
 		shopSummaryResponse: newShopSummaryResponse(detail.Summary),
 	}
 	for _, review := range detail.Reviews {

@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -77,8 +78,11 @@ func TestMeta(t *testing.T) {
 		`,"shop_name_max_chars":` + itoa(domain.MaxShopNameChars) +
 		`,"username_max_chars":` + itoa(domain.MaxUsernameChars) +
 		`,"bio_max_chars":` + itoa(domain.MaxBioChars) +
-		`,"moderation_note_max_chars":` + itoa(domain.MaxModerationNoteChars) + `},` +
+		`,"moderation_note_max_chars":` + itoa(domain.MaxModerationNoteChars) +
+		`,"city_max_chars":` + itoa(domain.MaxCityChars) +
+		`,"street_address_max_chars":` + itoa(domain.MaxStreetAddressChars) + `},` +
 		`"password":{"min_bytes":` + itoa(domain.MinPasswordBytes) + `,"max_bytes":` + itoa(domain.MaxPasswordBytes) + `},` +
+		`"prefectures":` + prefecturesJSON(t) + `,` +
 		// パスワード以外のサインイン方法は、設定(環境変数)で決まる。Google が無効なときは、空の配列である。
 		`"login_providers":[]}`
 	if got := rec.Body.String(); got != want {
@@ -89,6 +93,55 @@ func TestMeta(t *testing.T) {
 	}
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
 		t.Errorf("Content-Type = %q, want application/json", got)
+	}
+}
+
+// prefecturesJSON は、domain の都道府県の表を、GET /meta の prefectures の形の JSON にする。
+func prefecturesJSON(t *testing.T) string {
+	t.Helper()
+	type item struct {
+		Code   int    `json:"code"`
+		NameJA string `json:"name_ja"`
+		NameEN string `json:"name_en"`
+	}
+	var items []item
+	for _, p := range domain.Prefectures() {
+		items = append(items, item{p.Code, p.NameJA, p.NameEN})
+	}
+	b, err := json.Marshal(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// TestMetaPrefectures は、GET /meta の prefectures が、47 都道府県をコード 1〜47 の昇順で、日本語と英語の
+// 名前つきで返すことを確かめる。
+func TestMetaPrefectures(t *testing.T) {
+	_, auth, _ := newAuthKit()
+	rec := do(newTestRouterWith(t, okPinger, auth), http.MethodGet, "/meta", "", "")
+	var body struct {
+		Prefectures []struct {
+			Code   int    `json:"code"`
+			NameJA string `json:"name_ja"`
+			NameEN string `json:"name_en"`
+		} `json:"prefectures"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v (body %s)", err, rec.Body)
+	}
+	if len(body.Prefectures) != 47 {
+		t.Fatalf("prefectures = %d 件, want 47", len(body.Prefectures))
+	}
+	for i, p := range body.Prefectures {
+		if p.Code != i+1 || p.NameJA == "" || p.NameEN == "" {
+			t.Errorf("prefectures[%d] = %+v, want code %d と名前", i, p, i+1)
+		}
+	}
+	for code, want := range map[int][2]string{1: {"北海道", "Hokkaido"}, 13: {"東京都", "Tokyo"}, 27: {"大阪府", "Osaka"}, 47: {"沖縄県", "Okinawa"}} {
+		if got := body.Prefectures[code-1]; got.NameJA != want[0] || got.NameEN != want[1] {
+			t.Errorf("code %d = %+v, want %v", code, got, want)
+		}
 	}
 }
 

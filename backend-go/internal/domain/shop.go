@@ -25,7 +25,9 @@ type Shop struct {
 	Status         ShopStatus
 	ModerationNote *string
 	// MapURL は、地図へのリンク(Google Maps の共有 URL など)である。任意で、設定されていなければ nil。
-	MapURL    *string
+	MapURL *string
+	// ShopAddress は、任意の住所(都道府県・市区町村・番地以降)である。
+	ShopAddress
 	CreatorID *string
 	// ClosedAt は閉業のフラグである（nil = 営業中、非 nil = 閉業した時刻）。moderation の
 	// status（pending/active/rejected）とは独立の状態で、閉業した shop は、status や
@@ -90,11 +92,54 @@ func ValidateMapURL(raw string) (*string, error) {
 	return &trimmed, nil
 }
 
+// ShopAddress は shop の住所である。どの項目も任意で、PrefectureCode は未設定なら nil、City と
+// StreetAddress は未設定なら空文字である。
+type ShopAddress struct {
+	// PrefectureCode は都道府県のコード(1〜47。Prefectures の表)である。
+	PrefectureCode *int
+	// City は市区町村(例: 渋谷区)である。
+	City string
+	// StreetAddress は番地以降(例: 神南1-2-3)である。
+	StreetAddress string
+}
+
+// MaxCityChars は市区町村の文字数の上限(Unicode のコードポイント数)である。
+// DB の CHECK 制約 shops_city_max_length(000002_create_shops)と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。
+const MaxCityChars = 100
+
+// MaxStreetAddressChars は番地以降の文字数の上限(Unicode のコードポイント数)である。
+// DB の CHECK 制約 shops_street_address_max_length(000002_create_shops)と同じ値でなければならない。
+// 食い違いは db/migrations_test.go が検出する。
+const MaxStreetAddressChars = 200
+
+// ValidateShopAddress は住所を検証し、市区町村と番地以降の前後の空白を取り除いた住所を返す(空白だけなら
+// 未設定の空文字になる)。都道府県のコードは ValidatePrefectureCode の規則に従い、市区町村は MaxCityChars、
+// 番地以降は MaxStreetAddressChars 文字まで。違反は、都道府県・市区町村・番地以降の順に、すべて列挙する。
+func ValidateShopAddress(address ShopAddress) (ShopAddress, error) {
+	var issues []Message
+	if err := ValidatePrefectureCode(address.PrefectureCode); err != nil {
+		issues = append(issues, Msg(keyPrefectureInvalid))
+	}
+	address.City = strings.TrimSpace(address.City)
+	if exceedsChars(address.City, MaxCityChars) {
+		issues = append(issues, Msg(keyCityTooLong, MaxCityChars))
+	}
+	address.StreetAddress = strings.TrimSpace(address.StreetAddress)
+	if exceedsChars(address.StreetAddress, MaxStreetAddressChars) {
+		issues = append(issues, Msg(keyStreetTooLong, MaxStreetAddressChars))
+	}
+	if len(issues) > 0 {
+		return ShopAddress{}, NewValidationError(issues...)
+	}
+	return address, nil
+}
+
 // NewShopSubmission は、ユーザーが投稿した shop を組み立てる。名前は validate
 // され、status は pending で始まり（Rails ShopStatus.initial）、moderation
 // note はまだなく、投稿したユーザーが creator として記録される。mapURL は任意の
-// 地図リンクで、ValidateMapURL で検証される。
-func NewShopSubmission(name string, creatorID string, mapURL string) (Shop, error) {
+// 地図リンクで、ValidateMapURL で検証される。address は任意の住所で、ValidateShopAddress で検証される。
+func NewShopSubmission(name string, creatorID string, mapURL string, address ShopAddress) (Shop, error) {
 	if err := ValidateShopName(name); err != nil {
 		return Shop{}, err
 	}
@@ -102,7 +147,11 @@ func NewShopSubmission(name string, creatorID string, mapURL string) (Shop, erro
 	if err != nil {
 		return Shop{}, err
 	}
-	return Shop{Name: name, Status: ShopStatusPending, MapURL: normalizedMapURL, CreatorID: &creatorID}, nil
+	normalizedAddress, err := ValidateShopAddress(address)
+	if err != nil {
+		return Shop{}, err
+	}
+	return Shop{Name: name, Status: ShopStatusPending, MapURL: normalizedMapURL, ShopAddress: normalizedAddress, CreatorID: &creatorID}, nil
 }
 
 // Approve は active への moderation 遷移である。Rails ShopStatus と同様に、
@@ -286,10 +335,10 @@ type ShopReviewBurger struct {
 type ShopRepository interface {
 	// CreateShop は新しい shop を永続化し、生成された id つきで返す。
 	CreateShop(ctx context.Context, shop Shop) (Shop, error)
-	// UpdateShopName は、id の shop の name と map_url だけを永続化し、保存された行を
+	// UpdateShopName は、id の shop の name と map_url と住所だけを永続化し、保存された行を
 	// 返す。カラム限定なので、並行する status の変更が古いスナップショットで
 	// 元に戻されることは決してない。
-	UpdateShopName(ctx context.Context, id string, name string, mapURL *string) (Shop, error)
+	UpdateShopName(ctx context.Context, id string, name string, mapURL *string, address ShopAddress) (Shop, error)
 	// UpdateShopStatus は、id の shop の status と moderation note だけを
 	// 永続化し、保存された行を返す。カラム限定なので、並行する rename が
 	// 古いスナップショットで元に戻されることは決してない。
@@ -322,9 +371,9 @@ func (s *Shops) Create(ctx context.Context, shop Shop) (Shop, error) {
 	return s.repo.CreateShop(ctx, shop)
 }
 
-// UpdateName は、id の shop の name と map_url だけを永続化し、保存された行を返す。
-func (s *Shops) UpdateName(ctx context.Context, id string, name string, mapURL *string) (Shop, error) {
-	return s.repo.UpdateShopName(ctx, id, name, mapURL)
+// UpdateName は、id の shop の name と map_url と住所だけを永続化し、保存された行を返す。
+func (s *Shops) UpdateName(ctx context.Context, id string, name string, mapURL *string, address ShopAddress) (Shop, error) {
+	return s.repo.UpdateShopName(ctx, id, name, mapURL, address)
 }
 
 // UpdateStatus は、id の shop の status と moderation note だけを永続化し、
