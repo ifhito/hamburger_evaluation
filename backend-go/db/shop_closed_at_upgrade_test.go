@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +37,8 @@ func TestShopClosedAtUpgrade(t *testing.T) {
 				}
 			}
 			for _, file := range downs {
-				if strings.HasPrefix(filepath.Base(file), "000019_") {
+				// 後続のマイグレーション(住所の 000020 など)も、逆順に取り消してから閉業日時を消す。
+				if filepath.Base(file) >= "000019_" {
 					rollback = append(rollback, file)
 				}
 			}

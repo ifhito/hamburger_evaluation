@@ -542,14 +542,14 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"shops/status/smallint/NO",
 		"shops/moderation_note/text/YES",
 		"shops/creator_id/uuid/YES",
-		"shops/prefecture_code/smallint/YES",
-		"shops/city/text/NO",
-		"shops/street_address/text/NO",
 		"shops/created_at/timestamp with time zone/NO",
 		"shops/updated_at/timestamp with time zone/NO",
 		// 追加マイグレーションの列は、追加された順に末尾へ並ぶ。
 		"shops/map_url/text/YES",
 		"shops/closed_at/timestamp with time zone/YES",
+		"shops/prefecture_code/smallint/YES",
+		"shops/city/text/NO",
+		"shops/street_address/text/NO",
 		"shops_burgers/shop_id/uuid/NO",
 		"shops_burgers/burger_id/uuid/NO",
 		// signup_verifications は 000008 で追加された。

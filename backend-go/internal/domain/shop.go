@@ -104,12 +104,12 @@ type ShopAddress struct {
 }
 
 // MaxCityChars は市区町村の文字数の上限(Unicode のコードポイント数)である。
-// DB の CHECK 制約 shops_city_max_length(000002_create_shops)と同じ値でなければならない。
+// DB の CHECK 制約 shops_city_max_length(000020_add_shop_address)と同じ値でなければならない。
 // 食い違いは db/migrations_test.go が検出する。
 const MaxCityChars = 100
 
 // MaxStreetAddressChars は番地以降の文字数の上限(Unicode のコードポイント数)である。
-// DB の CHECK 制約 shops_street_address_max_length(000002_create_shops)と同じ値でなければならない。
+// DB の CHECK 制約 shops_street_address_max_length(000020_add_shop_address)と同じ値でなければならない。
 // 食い違いは db/migrations_test.go が検出する。
 const MaxStreetAddressChars = 200
 

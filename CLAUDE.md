@@ -403,7 +403,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 
 - 文字数は Unicode の**コードポイント数**で数える(バイト数でも書記素クラスタでもない。日本語は 1 文字、通常の絵文字も 1 文字。結合文字は 1 コードポイントごとに数える)。PostgreSQL の `char_length` と同じ数え方である
 - `PUT` の部分更新は、送られた項目だけを検証する
-- DB にも `CHECK (char_length(...) <= N)` がある(多層防御。最初のマイグレーションの `CREATE TABLE` に、名前つきの制約として入っている)。値は domain の定数と同じで、食い違いは `db/migrations_test.go` が検出する。上限を変えるときは、定数と、該当する `CREATE TABLE` の `CHECK` の 2 か所を直す(実運用に入ったあとは、新しいマイグレーションで直す)
+- DB にも `CHECK (char_length(...) <= N)` がある(多層防御。最初のマイグレーションの `CREATE TABLE` に、名前つきの制約として入っている。あとから足した列は、その列を足したマイグレーション(地図リンクは `000018_add_shop_map_url`、市区町村・番地以降は `000020_add_shop_address`)の `ALTER TABLE` に入っている)。値は domain の定数と同じで、食い違いは `db/migrations_test.go` が検出する。上限を変えるときは、定数と、該当する `CHECK` の 2 か所を直す(実運用に入ったあとは、新しいマイグレーションで直す)
 - リクエスト body 全体の上限は、経路・Content-Type にかかわらず 10 MiB。MCP SDK も同じ上限に揃える。超過すると 413。写真自体は別に 5 MiB まで。multipart のテキスト項目は 1 項目 64 KiB(外側のガード。超えると 400)
 
 ### データベーススキーマ
@@ -411,7 +411,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 `backend-go/db/migrations/` のマイグレーションで定義された 8 つのテーブル:
 
 - **users** — id (uuid), email, username, bio (自己紹介文。書かれていなければ空文字), password_digest, admin フラグ, 論理削除 (discarded_at)
-- **shops** — id (uuid), name, モデレーション状態 (pending / active / rejected), moderation_note, map_url (任意の地図リンク), 住所 (prefecture_code(JIS X 0401 の都道府県コード 1〜47。未設定は NULL。索引あり)・city・street_address。任意で、未設定の文字列は空文字), 申請者への FK
+- **shops** — id (uuid), name, モデレーション状態 (pending / active / rejected), moderation_note, map_url (任意の地図リンク), 住所 (prefecture_code(JIS X 0401 の都道府県コード 1〜47。未設定は NULL。索引あり)・city・street_address。任意で、未設定の文字列は空文字。`000020_add_shop_address` で追加。既存のショップは住所が未設定のまま残る), 申請者への FK
 - **burgers** — id (uuid), 中間テーブル経由でショップに紐づくバーガー
 - **shops_burgers** *(中間テーブル)* — shop_id (FK, uuid), burger_id (FK, uuid)
 - **reviews** — id (uuid), rating, comment, user への FK, burger への FK, photo_key (写真の保存キー。任意), 論理削除 (discarded_at)
