@@ -778,7 +778,7 @@ func TestShopsGetReviewPhotos(t *testing.T) {
 }
 
 // TestShopsAddress は、住所の use case の流れを固定する: 一覧の都道府県の絞り込みは、検証してから query へ
-// 渡し、管理者の更新は、送られた項目だけを、いまの住所に重ねて書き込む。送られた値の違反は、lookup の前に返す。
+// 渡し、管理者の更新は、送られた項目だけを、いまの住所に重ねて書き込む。住所は lookup のあとに検証するので、未知の id は住所が不正でも見つからないエラーになる。
 func TestShopsAddress(t *testing.T) {
 	ctx := context.Background()
 	admin := domain.User{ID: uid.N(9), Username: "root", Admin: true}
@@ -825,10 +825,25 @@ func TestShopsAddress(t *testing.T) {
 		}
 	})
 
-	t.Run("管理者の更新で送られた住所が不正なら、lookup の前に検証のエラーを返す", func(t *testing.T) {
+	t.Run("管理者の更新で住所が不正でも、未知の id なら見つからないエラーを返す", func(t *testing.T) {
 		bad := 0
-		// query と repo は未設定なので、呼ばれればテストが panic する。
-		_, err := newShops(&fakeShopQuery{}, &fakeShopRepo{}).AdminUpdateName(ctx, admin, uid.N(1), "Diner", "",
+		query := &fakeShopQuery{getShopWithCreator: func(context.Context, string) (domain.ShopDetail, error) {
+			return domain.ShopDetail{}, domain.ErrShopNotFound
+		}}
+		// repo は未設定なので、書き込みが呼ばれればテストが panic する。
+		_, err := newShops(query, &fakeShopRepo{}).AdminUpdateName(ctx, admin, uid.N(1), "Diner", "",
+			usecase.ShopAddressPatch{PrefectureCode: &bad, PrefectureCodeSet: true})
+		if !errors.Is(err, domain.ErrShopNotFound) {
+			t.Errorf("err = %v, want %v", err, domain.ErrShopNotFound)
+		}
+	})
+
+	t.Run("管理者の更新で送られた住所が不正なら、書き込まずに検証のエラーを返す", func(t *testing.T) {
+		bad := 0
+		current := domain.ShopDetail{Shop: domain.Shop{ID: uid.N(1), Name: "Diner", Status: domain.ShopStatusActive}}
+		query := &fakeShopQuery{getShopWithCreator: func(context.Context, string) (domain.ShopDetail, error) { return current, nil }}
+		// repo は未設定なので、書き込みが呼ばれればテストが panic する。
+		_, err := newShops(query, &fakeShopRepo{}).AdminUpdateName(ctx, admin, uid.N(1), "Diner", "",
 			usecase.ShopAddressPatch{PrefectureCode: &bad, PrefectureCodeSet: true})
 		var vErr *domain.ValidationError
 		if !errors.As(err, &vErr) {

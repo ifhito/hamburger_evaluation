@@ -211,7 +211,8 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 // parity）。admin でない viewer には、どの id が存在するかを探れないよう、
 // lookup の前に domain.ErrForbidden を返す。空白の name は
 // *ValidationError であり、mapURL は domain.ValidateMapURL の規則に従う。address は送られた項目だけを
-// 変え（ShopAddressPatch）、送られた値は lookup の前に domain.NewAddress で検証する。
+// 変え（ShopAddressPatch）、lookup のあと、いまの住所に重ねた値を domain.NewAddress で 1 回だけ検証する
+// （未知の id は、住所が不正でも 404 になる）。
 func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id string, name string, mapURL string, address ShopAddressPatch) (domain.ShopDetail, error) {
 	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
@@ -221,10 +222,6 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id stri
 	}
 	normalizedMapURL, err := domain.ValidateMapURL(mapURL)
 	if err != nil {
-		return domain.ShopDetail{}, err
-	}
-	// 送られた値だけで住所を作り、lookup の前に検証する（不正な値なら、存在しない id でも 422 にする）。
-	if _, err := domain.NewAddress(address.over(domain.Address{})); err != nil {
 		return domain.ShopDetail{}, err
 	}
 	// fetch はレスポンス用の creator（と、未知の id に対する 404）を
