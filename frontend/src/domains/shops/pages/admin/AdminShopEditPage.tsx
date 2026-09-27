@@ -97,7 +97,8 @@ export default function AdminShopEditPage() {
               {...register("prefectureCode")}
             >
               <option value="">{t("shops.new.prefectureUnset")}</option>
-              {meta?.prefectures.map((p) => (
+              {/* prefectures を足す前の GET /meta の応答がキャッシュに残っていることがあるので、ないときも落とさない。 */}
+              {meta?.prefectures?.map((p) => (
                 <option key={p.code} value={p.code}>
                   {prefectureName(p, i18n.language)}
                 </option>

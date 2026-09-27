@@ -10,17 +10,17 @@ import ShopNewPage from "./ShopNewPage";
 const create = vi.hoisted(() => vi.fn());
 vi.mock("../hooks/useShopMutations", () => ({ useCreateShop: () => ({ create }) }));
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: { id: "1", username: "alice", canModerate: false }, isLoading: false }) }));
+const metaData = vi.hoisted(() => ({
+  text: { shopNameMaxChars: 100, cityMaxChars: 100, streetAddressMaxChars: 200 },
+  prefectures: [
+    { code: 1, nameJa: "北海道", nameEn: "Hokkaido" },
+    { code: 13, nameJa: "東京都", nameEn: "Tokyo" },
+  ],
+}));
+const useMeta = vi.hoisted(() => vi.fn());
 vi.mock("../../../api/meta", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../api/meta")>()),
-  useMeta: () => ({
-    data: {
-      text: { shopNameMaxChars: 100, cityMaxChars: 100, streetAddressMaxChars: 200 },
-      prefectures: [
-        { code: 1, nameJa: "北海道", nameEn: "Hokkaido" },
-        { code: 13, nameJa: "東京都", nameEn: "Tokyo" },
-      ],
-    },
-  }),
+  useMeta,
 }));
 
 const show = () =>
@@ -37,6 +37,7 @@ const input = (page: HTMLElement, id: string) => need(page.querySelector<HTMLInp
 
 beforeEach(() => {
   vi.resetAllMocks();
+  useMeta.mockReturnValue({ data: metaData });
 });
 afterEach(cleanup);
 
@@ -46,6 +47,13 @@ describe("ShopNewPage の住所", () => {
     const select = need(page.querySelector<HTMLSelectElement>("#prefectureCode"), "都道府県");
     expect([...select.options].map((o) => o.textContent)).toEqual(["Not selected", "Hokkaido", "Tokyo"]);
     expect(select.value).toBe("");
+  });
+
+  it("GET /meta の応答に都道府県がない(古いキャッシュ)ときも描画でき、選択肢は未選択だけになる", async () => {
+    useMeta.mockReturnValue({ data: { text: metaData.text } });
+    const page = await show();
+    const select = need(page.querySelector<HTMLSelectElement>("#prefectureCode"), "都道府県");
+    expect([...select.options].map((o) => o.textContent)).toEqual(["Not selected"]);
   });
 
   it("都道府県・市区町村・番地以降を入れて申請すると、都道府県は数値のコードで送る", async () => {

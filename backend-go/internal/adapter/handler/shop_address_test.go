@@ -254,3 +254,33 @@ func TestMCPListShopsPrefecture(t *testing.T) {
 		}
 	})
 }
+
+// TestMCPSubmitShopAddress は、MCP の submit_shop が、住所の 3 項目を受け取って保存し、範囲外の都道府県は
+// REST と同じ文言で拒否して、ショップを作らないことを確かめる。
+func TestMCPSubmitShopAddress(t *testing.T) {
+	k := newMCPKit(t)
+	session := k.connect(t, k.token(k.bob, readScope, writeScope))
+
+	t.Run("都道府県・市区町村・番地以降を渡すと、応答に同じ住所が入る", func(t *testing.T) {
+		text, isErr := call(t, session, "submit_shop", map[string]any{"name": "住所つきの店", "prefecture_code": 13, "city": "渋谷区", "street_address": "神南1-2-3"})
+		if isErr {
+			t.Fatalf("submit_shop failed: %s", text)
+		}
+		var got shopAddressBody
+		mustJSON(t, text, &got)
+		if got.PrefectureCode == nil || *got.PrefectureCode != 13 || got.City != "渋谷区" || got.StreetAddress != "神南1-2-3" {
+			t.Errorf("住所 = %+v, want 13・渋谷区・神南1-2-3", got)
+		}
+	})
+
+	t.Run("範囲外の都道府県は REST と同じ文言のエラーになり、ショップは作られない", func(t *testing.T) {
+		before := len(k.shops.shops)
+		text, isErr := call(t, session, "submit_shop", map[string]any{"name": "都道府県が不正な店", "prefecture_code": 48})
+		if !isErr || text != "Prefecture is invalid" {
+			t.Errorf("submit_shop = %q (isError=%v), want Prefecture is invalid", text, isErr)
+		}
+		if after := len(k.shops.shops); after != before {
+			t.Errorf("ショップの件数 = %d, want %d のまま", after, before)
+		}
+	})
+}
