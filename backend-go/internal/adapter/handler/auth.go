@@ -85,6 +85,7 @@ func handleSignup(signups *usecase.Signups) http.HandlerFunc {
 			Email:                req.Email,
 			Password:             req.Password,
 			PasswordConfirmation: req.PasswordConfirmation,
+			Lang:                 langOf(r),
 		})
 		if err != nil {
 			var vErr *domain.ValidationError

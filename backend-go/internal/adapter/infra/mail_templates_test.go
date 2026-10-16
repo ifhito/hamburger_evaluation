@@ -75,6 +75,73 @@ func TestHumanizeDuration(t *testing.T) {
 	}
 }
 
+// TestRenderSignupConfirmationJA は、日本語の確認メールに、確認リンクと有効期間(24 時間)と、
+// 心当たりがなければ無視してよいことが入ることを確かめる。
+func TestRenderSignupConfirmationJA(t *testing.T) {
+	msg := renderSignupConfirmation(usecase.SignupConfirmation{
+		To:             "a@example.com",
+		ConfirmURL:     "https://app.example.com/signup/confirm?token=abc123",
+		ValidFor:       domain.SignupTokenTTL,
+		IdempotencyKey: "k",
+		Lang:           domain.LangJA,
+	})
+	if msg.To != "a@example.com" || msg.Subject != "BurgerStack のメールアドレスの確認" {
+		t.Errorf("宛先・件名 = %q / %q", msg.To, msg.Subject)
+	}
+	for _, want := range []string{
+		"https://app.example.com/signup/confirm?token=abc123",
+		"BurgerStack のアカウントの作成",
+		"有効期間は 24 時間です。",
+		"心当たりがなければ、このメールは無視してください。",
+	} {
+		if !strings.Contains(msg.Body, want) {
+			t.Errorf("本文に %q がない:\n%s", want, msg.Body)
+		}
+	}
+}
+
+// TestRenderAlreadyRegisteredJA は、日本語の通知に、ログイン画面へのリンクが入り、確認のリンク・
+// トークンが入らないことを確かめる。
+func TestRenderAlreadyRegisteredJA(t *testing.T) {
+	msg := renderAlreadyRegistered(usecase.AlreadyRegisteredNotice{To: "a@example.com", SignInURL: "https://app.example.com/signin", IdempotencyKey: "k", Lang: domain.LangJA})
+	if msg.To != "a@example.com" || msg.Subject != "BurgerStack のアカウントはすでにあります" {
+		t.Errorf("宛先・件名 = %q / %q", msg.To, msg.Subject)
+	}
+	for _, want := range []string{"https://app.example.com/signin", "アカウントはすでにあります", "心当たりがなければ、このメールは無視してください。"} {
+		if !strings.Contains(msg.Body, want) {
+			t.Errorf("本文に %q がない:\n%s", want, msg.Body)
+		}
+	}
+	if lower := strings.ToLower(msg.Body); strings.Contains(lower, "token") || strings.Contains(lower, "confirm") || strings.Contains(msg.Body, "確認") {
+		t.Errorf("通知メールに確認トークン・確認リンクの言葉が含まれている:\n%s", msg.Body)
+	}
+}
+
+// TestRenderMailEnglishForNonJapanese は、英語(LangEN)と、それ以外の値(指定なし・対応しない言語)の
+// 文面が、どちらも従来の英語の文面と同じであることを確かめる。
+func TestRenderMailEnglishForNonJapanese(t *testing.T) {
+	base := usecase.SignupConfirmation{To: "a@example.com", ConfirmURL: "https://app.example.com/signup/confirm?token=abc", ValidFor: domain.SignupTokenTTL}
+	note := usecase.AlreadyRegisteredNotice{To: "a@example.com", SignInURL: "https://app.example.com/signin"}
+	want, wantNote := renderSignupConfirmation(base), renderAlreadyRegistered(note)
+	for _, lang := range []domain.Lang{domain.LangEN, "fr"} {
+		base.Lang, note.Lang = lang, lang
+		if got := renderSignupConfirmation(base); got != want {
+			t.Errorf("%q の確認メール = %+v, want 英語 %+v", lang, got, want)
+		}
+		if got := renderAlreadyRegistered(note); got != wantNote {
+			t.Errorf("%q の通知 = %+v, want 英語 %+v", lang, got, wantNote)
+		}
+	}
+}
+
+func TestHumanizeDurationJA(t *testing.T) {
+	for d, want := range map[time.Duration]string{24 * time.Hour: "24 時間", time.Hour: "1 時間", 90 * time.Minute: "90 分", 30 * time.Second: "1 分"} {
+		if got := humanizeDurationJA(d); got != want {
+			t.Errorf("humanizeDurationJA(%v) = %q, want %q", d, got, want)
+		}
+	}
+}
+
 // TestClassifyDeliveryError は、送信の実装のエラーが、domain の言葉（一時的・恒久的な失敗）に翻訳されることを確かめる。
 func TestClassifyDeliveryError(t *testing.T) {
 	tests := []struct {

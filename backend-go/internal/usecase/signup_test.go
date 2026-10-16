@@ -299,6 +299,31 @@ func TestSignupsRequest(t *testing.T) {
 		}
 	})
 
+	t.Run("入力の言語を、確認・通知の意図にそのまま載せる", func(t *testing.T) {
+		input := validSignup
+		input.Lang = domain.LangJA
+		for name, query := range map[string]*fakeUserQuery{"未登録": notRegistered, "登録済み": alreadyRegistered} {
+			mailer := &recordingMailer{}
+			repo := &fakeSignupRepo{create: okCreate}
+			if err := newSignups(query, repo, &recordingHasher{}, mailer, fakeIssuer{}, testSignupConfig).Request(context.Background(), input); err != nil {
+				t.Fatalf("%s: Request returned error: %v", name, err)
+			}
+			for _, n := range mailer.confirmations {
+				if n.Lang != domain.LangJA {
+					t.Errorf("%s: 確認の意図の言語 = %q, want ja", name, n.Lang)
+				}
+			}
+			for _, n := range mailer.notices {
+				if n.Lang != domain.LangJA {
+					t.Errorf("%s: 通知の意図の言語 = %q, want ja", name, n.Lang)
+				}
+			}
+			if mailer.total() != 1 {
+				t.Errorf("%s: 意図 = %d 件, want 1", name, mailer.total())
+			}
+		}
+	})
+
 	t.Run("同じ窓の中の通知は同じ冪等キーで、窓をまたぐと別のキーになる(大文字小文字は区別しない)", func(t *testing.T) {
 		now := testNow
 		cfg := usecase.SignupConfig{BaseURL: "https://app.example.com", Now: func() time.Time { return now }}

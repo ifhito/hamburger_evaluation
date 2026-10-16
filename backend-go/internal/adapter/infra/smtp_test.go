@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"mime"
 	"net"
 	"strconv"
 	"strings"
@@ -92,6 +93,34 @@ func TestSMTPMailerModes(t *testing.T) {
 	}
 }
 
+// TestSMTPMailerEncodesJapaneseSubject は、日本語の件名が、ヘッダーで RFC 2047 の形に符号化されて
+// 送られ、復号すると元の件名になることを確かめる(英語の件名は、そのまま。TestSMTPMailerModes)。
+func TestSMTPMailerEncodesJapaneseSubject(t *testing.T) {
+	srv := smtptest.Start(t, &smtptest.Server{})
+	m := newSMTPTestMailer(t, srv, "none", "", "", nil)
+	const subject = "BurgerStack のメールアドレスの確認"
+	if err := m.Deliver(context.Background(), mailMessage{To: "a@example.com", Subject: subject, Body: "本文\n"}); err != nil {
+		t.Fatalf("Deliver returned error: %v", err)
+	}
+	mails := srv.Received()
+	if len(mails) != 1 {
+		t.Fatalf("received mails = %d, want 1", len(mails))
+	}
+	var header string
+	for _, line := range strings.Split(mails[0].Data, "\r\n") {
+		if v, ok := strings.CutPrefix(line, "Subject: "); ok {
+			header = v
+		}
+	}
+	if !strings.HasPrefix(header, "=?UTF-8?b?") {
+		t.Fatalf("Subject のヘッダー = %q, want RFC 2047 の B 符号化", header)
+	}
+	got, err := new(mime.WordDecoder).DecodeHeader(header)
+	if err != nil || got != subject {
+		t.Errorf("復号した件名 = %q (err %v), want %q", got, err, subject)
+	}
+}
+
 func TestSMTPMailerRefusals(t *testing.T) {
 	serverTLS, roots := smtptest.NewCert(t)
 
@@ -154,6 +183,7 @@ func TestSMTPMailerRefusals(t *testing.T) {
 			"宛先に表示名がある":          {To: "Name <a@example.com>", Subject: "s", Body: "b"},
 			"件名に別のヘッダーを差し込む":     {To: "a@example.com", Subject: "s\r\nX-Injected: 1", Body: "b"},
 			"件名に LF だけを差し込む":     {To: "a@example.com", Subject: "s\nX-Injected: 1", Body: "b"},
+			"日本語の件名に改行を差し込む":     {To: "a@example.com", Subject: "確認\r\nX-Injected: 1", Body: "b"},
 			"宛先が複数":              {To: "a@example.com, b@example.com", Subject: "s", Body: "b"},
 			"宛先が空":               {To: "", Subject: "s", Body: "b"},
 			"宛先にヘッダー用の改行を含む(CR)": {To: "a@example.com\r", Subject: "s", Body: "b"},
