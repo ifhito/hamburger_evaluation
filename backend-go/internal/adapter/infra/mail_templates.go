@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
 
@@ -19,7 +20,18 @@ type mailMessage struct {
 // renderSignupConfirmation は、確認リンクつきのメールの文面を作る。本文には、リンクと有効期間だけを
 // 入れる。利用者が入力した値（username など）は、この意図の値に含まれないので、入れようがない
 // （第三者の email で signup した人が、本文に任意の文言を差し込めないようにするため）。
+// 言語は n.Lang で、日本語(domain.LangJA)のときだけ日本語、それ以外は英語である。
 func renderSignupConfirmation(n usecase.SignupConfirmation) mailMessage {
+	if n.Lang == domain.LangJA {
+		return mailMessage{
+			To:      n.To,
+			Subject: "BurgerStack のメールアドレスの確認",
+			Body: "BurgerStack のアカウントの作成を完了するには、次のリンクを開いて、メールアドレスを確認してください。\n\n" +
+				n.ConfirmURL + "\n\n" +
+				"このリンクの有効期間は " + humanizeDurationJA(n.ValidFor) + "です。\n" +
+				"心当たりがなければ、このメールは無視してください。\n",
+		}
+	}
 	return mailMessage{
 		To:      n.To,
 		Subject: "Confirm your email address for BurgerStack",
@@ -31,8 +43,18 @@ func renderSignupConfirmation(n usecase.SignupConfirmation) mailMessage {
 }
 
 // renderAlreadyRegistered は、「すでに登録済み」の通知の文面を作る。確認のリンク・トークンは
-// 入れず、ログイン画面へのリンクだけを入れる。
+// 入れず、ログイン画面へのリンクだけを入れる。言語の選び方は renderSignupConfirmation と同じである。
 func renderAlreadyRegistered(n usecase.AlreadyRegisteredNotice) mailMessage {
+	if n.Lang == domain.LangJA {
+		return mailMessage{
+			To:      n.To,
+			Subject: "BurgerStack のアカウントはすでにあります",
+			Body: "このメールアドレスで BurgerStack への登録が試みられましたが、アカウントはすでにあります。\n\n" +
+				"次のリンクからログインできます。\n\n" +
+				n.SignInURL + "\n\n" +
+				"心当たりがなければ、このメールは無視してください。\n",
+		}
+	}
 	return mailMessage{
 		To:      n.To,
 		Subject: "You already have a BurgerStack account",
@@ -57,4 +79,12 @@ func humanizeDuration(d time.Duration) string {
 		return "1 minute"
 	}
 	return fmt.Sprintf("%d minutes", minutes)
+}
+
+// humanizeDurationJA は、有効期間を日本語の短い言い回しにする（"24 時間"、"90 分"）。
+func humanizeDurationJA(d time.Duration) string {
+	if d >= time.Hour && d%time.Hour == 0 {
+		return fmt.Sprintf("%d 時間", int(d/time.Hour))
+	}
+	return fmt.Sprintf("%d 分", max(int((d+time.Minute-1)/time.Minute), 1))
 }

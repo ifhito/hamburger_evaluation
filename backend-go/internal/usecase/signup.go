@@ -26,6 +26,8 @@ type SignupConfirmation struct {
 	ValidFor time.Duration
 	// IdempotencyKey は、この要求の冪等キーである。同じキーの要求は、メールが 1 通しか出ない。
 	IdempotencyKey string
+	// Lang は、メールの文面の言語である(signup の要求の言語。保存しない)。
+	Lang domain.Lang
 }
 
 // AlreadyRegisteredNotice は、「登録済みの email に、すでに登録済みであることを知らせる」という
@@ -37,6 +39,8 @@ type AlreadyRegisteredNotice struct {
 	SignInURL string
 	// IdempotencyKey は、この要求の冪等キーである。同じキーの要求は、メールが 1 通しか出ない。
 	IdempotencyKey string
+	// Lang は、メールの文面の言語である(signup の要求の言語。保存しない)。
+	Lang domain.Lang
 }
 
 // SignupVerificationQuery は、確認待ちの signup を読み取る、読み取り専用の窓口である。
@@ -78,6 +82,8 @@ type SignupInput struct {
 	Email                string
 	Password             string
 	PasswordConfirmation *string
+	// Lang は、送るメールの言語である(handler が要求から決めた値をそのまま載せる)。
+	Lang domain.Lang
 }
 
 // validate は検証の失敗の文言(言語に依らない Message)を返す。valid なら空である。
@@ -151,6 +157,7 @@ func (s *Signups) Request(ctx context.Context, input SignupInput) error {
 			To:             input.Email,
 			SignInURL:      s.cfg.BaseURL + "/signin",
 			IdempotencyKey: domain.AlreadyRegisteredMailKey(input.Email, s.now()),
+			Lang:           input.Lang,
 		})
 		return nil
 	case !errors.Is(err, domain.ErrUserNotFound):
@@ -176,6 +183,7 @@ func (s *Signups) Request(ctx context.Context, input SignupInput) error {
 			ConfirmURL:     s.cfg.BaseURL + "/signup/confirm?token=" + url.QueryEscape(token.Raw),
 			ValidFor:       domain.SignupTokenTTL,
 			IdempotencyKey: domain.SignupConfirmationMailKey(receipt.ID, receipt.Generation),
+			Lang:           input.Lang,
 		})
 	}
 	return nil

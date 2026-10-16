@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"mime"
 	"net"
 	"net/mail"
 	"net/smtp"
@@ -173,7 +174,8 @@ func (m *SMTPMailer) tlsConfigFor() *tls.Config {
 	return cfg
 }
 
-// buildMessage は、プレーンテキスト（UTF-8）のメッセージを組み立てる。本文の改行は、
+// buildMessage は、プレーンテキスト（UTF-8）のメッセージを組み立てる。件名は RFC 2047 の形に符号化する
+// （ASCII だけの件名は、そのまま）。本文の改行は、
 // net/smtp の Data() の書き込みが CRLF に変換し、行頭の "." も処理する。
 func (m *SMTPMailer) buildMessage(msg mailMessage) ([]byte, error) {
 	id := make([]byte, 16)
@@ -187,7 +189,7 @@ func (m *SMTPMailer) buildMessage(msg mailMessage) ([]byte, error) {
 	headers := []string{
 		"From: " + m.from,
 		"To: " + msg.To,
-		"Subject: " + msg.Subject,
+		"Subject: " + mime.BEncoding.Encode("UTF-8", msg.Subject),
 		"Date: " + time.Now().UTC().Format(time.RFC1123Z),
 		"Message-ID: <" + hex.EncodeToString(id) + "@" + domain + ">",
 		"MIME-Version: 1.0",

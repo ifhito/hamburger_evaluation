@@ -568,3 +568,59 @@ func TestSignupConfirmIntegration(t *testing.T) {
 		t.Errorf("登録済みへの通知の意図 = %d 件, want 1", n)
 	}
 }
+
+// signupWithLang は、Accept-Language(空なら付けない)つきで POST /signup を送る。
+func signupWithLang(router http.Handler, body, acceptLanguage string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/signup", strings.NewReader(body))
+	if acceptLanguage != "" {
+		req.Header.Set("Accept-Language", acceptLanguage)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestSignupMailFollowsRequestLanguage は、確認メール・登録済みの通知の言語が、signup の要求の
+// Accept-Language で決まること(ja なら日本語、指定なし・en・fr などは英語)と、応答は言語と登録の有無に
+// かかわらず同じ 202 であることを扱う。文面そのものは infra のテストが確かめる。
+func TestSignupMailFollowsRequestLanguage(t *testing.T) {
+	for _, tt := range []struct {
+		name, header string
+		want         domain.Lang
+	}{
+		{"日本語の指定は日本語", "ja", domain.LangJA},
+		{"指定なしは英語", "", domain.LangEN},
+		{"英語の指定は英語", "en", domain.LangEN},
+		{"対応しない言語(fr)は英語", "fr", domain.LangEN},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			kit := newSignupKit(t)
+			kit.users.seed("bob", "bob@example.com", "Password123!")
+			fresh := signupWithLang(kit.router, signupBody("eve", "eve@example.com", "Password123!"), tt.header)
+			registered := signupWithLang(kit.router, signupBody("eve", "bob@example.com", "Password123!"), tt.header)
+			for _, rec := range []*httptest.ResponseRecorder{fresh, registered} {
+				if rec.Code != http.StatusAccepted || rec.Body.String() != signupAcceptedBody {
+					t.Errorf("signup = %d %s, want 202 %s", rec.Code, rec.Body, signupAcceptedBody)
+				}
+			}
+			if c, n := kit.mailer.counts(); c != 1 || n != 1 {
+				t.Fatalf("確認 %d 件・通知 %d 件, want 1 件ずつ", c, n)
+			}
+			if got := kit.mailer.confirmations[0].Lang; got != tt.want {
+				t.Errorf("確認メールの言語 = %q, want %q", got, tt.want)
+			}
+			if got := kit.mailer.notices[0].Lang; got != tt.want {
+				t.Errorf("通知メールの言語 = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("検証の違反の文言は、従来どおり言語で切り替わる", func(t *testing.T) {
+		kit := newSignupKit(t)
+		ja := signupWithLang(kit.router, signupBody("eve", "eve@example.com", "weak"), "ja")
+		en := signupWithLang(kit.router, signupBody("eve", "eve@example.com", "weak"), "en")
+		if ja.Code != http.StatusUnprocessableEntity || en.Code != http.StatusUnprocessableEntity || ja.Body.String() == en.Body.String() {
+			t.Errorf("ja = %d %s / en = %d %s, want 言語ごとに違う文言の 422", ja.Code, ja.Body, en.Code, en.Body)
+		}
+	})
+}
