@@ -118,12 +118,25 @@ func TestRenderAlreadyRegisteredJA(t *testing.T) {
 }
 
 // TestRenderMailEnglishForNonJapanese は、英語(LangEN)と、それ以外の値(指定なし・対応しない言語)の
-// 文面が、どちらも従来の英語の文面と同じであることを確かめる。
+// 文面が、どれも従来の英語の文面と一字一句同じであることを確かめる。
 func TestRenderMailEnglishForNonJapanese(t *testing.T) {
-	base := usecase.SignupConfirmation{To: "a@example.com", ConfirmURL: "https://app.example.com/signup/confirm?token=abc", ValidFor: domain.SignupTokenTTL}
-	note := usecase.AlreadyRegisteredNotice{To: "a@example.com", SignInURL: "https://app.example.com/signin"}
-	want, wantNote := renderSignupConfirmation(base), renderAlreadyRegistered(note)
-	for _, lang := range []domain.Lang{domain.LangEN, "fr"} {
+	const confirmURL = "https://app.example.com/signup/confirm?token=abc"
+	const signInURL = "https://app.example.com/signin"
+	base := usecase.SignupConfirmation{To: "a@example.com", ConfirmURL: confirmURL, ValidFor: domain.SignupTokenTTL}
+	note := usecase.AlreadyRegisteredNotice{To: "a@example.com", SignInURL: signInURL}
+	want := mailMessage{
+		To:      "a@example.com",
+		Subject: "Confirm your email address for BurgerStack",
+		Body: "Please confirm your email address to finish creating your BurgerStack account:\n\n" + confirmURL +
+			"\n\nThis link expires in 24 hours.\nIf you didn't sign up, you can safely ignore this email.\n",
+	}
+	wantNote := mailMessage{
+		To:      "a@example.com",
+		Subject: "You already have a BurgerStack account",
+		Body: "Someone tried to sign up for BurgerStack with this email address, but an account already exists.\n\nYou can sign in here:\n\n" +
+			signInURL + "\n\nIf this wasn't you, you can safely ignore this email.\n",
+	}
+	for _, lang := range []domain.Lang{domain.LangEN, "", "fr"} {
 		base.Lang, note.Lang = lang, lang
 		if got := renderSignupConfirmation(base); got != want {
 			t.Errorf("%q の確認メール = %+v, want 英語 %+v", lang, got, want)
