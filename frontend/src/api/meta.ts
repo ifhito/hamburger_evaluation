@@ -16,12 +16,27 @@ export interface Meta {
     usernameMaxChars: number;
     bioMaxChars: number;
     moderationNoteMaxChars: number;
+    cityMaxChars: number;
+    streetAddressMaxChars: number;
   };
   // パスワードの長さの範囲。文字数ではなくバイト数(日本語の 1 文字は 3 バイト)。説明文の表示にだけ使う。
   password: { minBytes: number; maxBytes: number };
   // パスワードのほかに使えるサインイン方法の名前(例: ["google"])。規則ではなく、backend の設定で決まる。
   // サインインの画面に、これに含まれる方法のボタンだけを出す(なければ空の配列)。
   loginProviders: string[];
+  // 都道府県の一覧(コードの昇順)。住所の選択肢と表示名に使う。一覧も名前も frontend には持たない。
+  prefectures: Prefecture[];
+}
+
+export interface Prefecture {
+  code: number;
+  nameJa: string;
+  nameEn: string;
+}
+
+// 都道府県の表示名。表示言語が日本語なら日本語名、それ以外は英語名を使う。
+export function prefectureName(prefecture: Prefecture, language: string): string {
+  return language === "ja" ? prefecture.nameJa : prefecture.nameEn;
 }
 
 const metaApiClient = buildApiClient();

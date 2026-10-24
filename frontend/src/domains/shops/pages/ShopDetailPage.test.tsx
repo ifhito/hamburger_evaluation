@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import "../../../lib/i18n";
-import { cleanup, mount } from "../../../test/dom";
+import i18n from "../../../lib/i18n";
+import { cleanup, mount, need } from "../../../test/dom";
 import type { ShopDetail } from "../api/types";
 import ShopDetailPage from "./ShopDetailPage";
 
@@ -16,6 +16,10 @@ vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: state.authUs
 vi.mock("../hooks/useShops", () => ({
   useShopDetail: () => ({ data: state.shop, isLoading: false, error: state.error }),
 }));
+vi.mock("../../../api/meta", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../api/meta")>()),
+  useMeta: () => ({ data: { prefectures: [{ code: 13, nameJa: "東京都", nameEn: "Tokyo" }] } }),
+}));
 vi.mock("../../reviews/hooks/useRatingRange", () => ({ useRatingRange: () => ({ min: 1, max: 5 }) }));
 
 const baseShop: ShopDetail = {
@@ -26,6 +30,9 @@ const baseShop: ShopDetail = {
   averageRating: null,
   reviewCount: 0,
   mapUrl: null,
+  prefectureCode: null,
+  city: "",
+  streetAddress: "",
   closedAt: null,
   moderationNote: null,
   creator: null,
@@ -47,7 +54,10 @@ beforeEach(() => {
   state.shop = baseShop;
   state.error = undefined;
 });
-afterEach(cleanup);
+afterEach(async () => {
+  await cleanup();
+  await i18n.changeLanguage("en");
+});
 
 describe("ShopDetailPage の状態の表示", () => {
   it("見つからない(404)ときは、売り切れの画面を出す", async () => {
@@ -105,6 +115,36 @@ describe("ShopDetailPage の地図リンク(map_url)", () => {
     state.shop = { ...baseShop, mapUrl: null };
     const page = await show();
     expect(page.textContent).not.toContain("View on map");
+  });
+});
+
+describe("ShopDetailPage の住所", () => {
+  const withAddress = { ...baseShop, prefectureCode: 13, city: "渋谷区", streetAddress: "神南1-2-3" };
+
+  it("日本語表示では「都道府県名 市区町村 番地以降」を半角スペースでつないで出す", async () => {
+    await i18n.changeLanguage("ja");
+    state.shop = withAddress;
+    const page = await show();
+    expect(page.textContent).toContain("東京都 渋谷区 神南1-2-3");
+  });
+
+  it("英語表示では、都道府県を英語名で出す", async () => {
+    state.shop = withAddress;
+    const page = await show();
+    expect(page.textContent).toContain("Tokyo 渋谷区 神南1-2-3");
+  });
+
+  it("空の部分は飛ばしてつなぐ(都道府県が未設定なら市区町村から始まる)", async () => {
+    state.shop = { ...withAddress, prefectureCode: null, streetAddress: "" };
+    const page = await show();
+    const name = need(page.querySelector("h1"), "店名");
+    expect(name.nextElementSibling?.textContent).toBe("渋谷区");
+  });
+
+  it("住所が全部未設定なら、住所の行を出さない", async () => {
+    const page = await show();
+    const name = need(page.querySelector("h1"), "店名");
+    expect(name.nextElementSibling).toBeNull();
   });
 });
 

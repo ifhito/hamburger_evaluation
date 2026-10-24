@@ -16,6 +16,7 @@ var exposedInMeta = []string{
 	"MinRating", "MaxRating",
 	"MaxCommentChars", "MaxBurgerNameChars", "MaxShopNameChars",
 	"MaxUsernameChars", "MaxBioChars", "MaxModerationNoteChars",
+	"MaxCityChars", "MaxStreetAddressChars",
 	"MinPasswordBytes", "MaxPasswordBytes",
 	"MaxPhotoBytes", "MaxPhotoEdge",
 }

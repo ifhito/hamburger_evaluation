@@ -26,6 +26,9 @@ function page(hasMore: boolean, count = 1): Page<Shop> {
       averageRating: null,
       reviewCount: 0,
       mapUrl: null,
+      prefectureCode: null,
+      city: "",
+      streetAddress: "",
       closedAt: null,
     })),
     hasMore,
@@ -45,6 +48,11 @@ describe("getKey", () => {
   it("sort はキーに入り、指定しなければ入らない", () => {
     expect(getKey({ sort: "newest" })(0, null)).toBe("/shops?sort=newest&page=1");
     expect(getKey(undefined)(0, null)).toBe("/shops?page=1");
+  });
+
+  it("都道府県のコードは prefecture_code としてキーに入り、keyword と一緒に送れる。空なら入らない", () => {
+    expect(getKey({ keyword: "beef", prefectureCode: "13" })(0, null)).toBe("/shops?keyword=beef&prefecture_code=13&page=1");
+    expect(getKey({ prefectureCode: "" })(0, null)).toBe("/shops?page=1");
   });
 
   it("前ページに続きがある(hasMore が true)なら次ページのキーを返す", () => {

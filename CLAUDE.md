@@ -340,13 +340,13 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 - `POST /signup/confirm` — 確認メールのリンクの平文トークン(`{"token":"…"}`)でアカウントを作成する。成功すると従来の signup と同じ 201 `{id, username, email, admin, can_moderate, token}`(`can_moderate` は login・`GET /me` と共通)を返し、そのままログイン状態にできる。期限切れ・存在しない・改ざん・使用済みのトークン(と、確認までの間に同じ email のユーザーが作られていた場合)は、区別できない同一の 400 `{"error":"Confirmation token is invalid or has expired"}`
 - `POST /login` — 認証して JWT トークンを受け取る (email とパスワードは signup と同じ規則を `domain.ValidateCredentials` で判定し、満たさなければ照合の前に 422。規則を満たしたうえで誤っていれば 401 `Invalid email or password`)
 - `GET /me` — Bearer トークンから解決した現在のユーザー(`id`・`username`・`email`・`admin`・`can_moderate`)。無効・期限切れのトークンは 401。frontend は、トークンの有効性を自分で判断せず、起動時にこの応答でログイン状態を復元する。`can_moderate`(moderation ができるか。domain の `User.CanModerate`)は、`POST /login`・`POST /signup` の応答にも含まれ、frontend は `admin` から権限を導かず、管理画面の出し分けをこの値で行う (要認証)
-- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}, "text": {"review_comment_max_chars": 2000, "burger_name_max_chars": 100, "shop_name_max_chars": 100, "username_max_chars": 50, "bio_max_chars": 500, "moderation_note_max_chars": 500}, "password": {"min_bytes": 8, "max_bytes": 72}, "login_providers": []}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、文字数の上限は domain の `Max*Chars`、パスワードの長さは `MinPasswordBytes` / `MaxPasswordBytes`、写真の上限は `domain/photo.go` の `MaxPhotoEdge` と `MaxPhotoBytes`)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小・文字数のカウンター・パスワードの説明文にこの値を使う。文字数はコードポイント数(日本語・絵文字も 1 文字)、パスワードはバイト数(日本語は 1 文字が 3 バイト)。domain に `Max*` / `Min*` の公開の定数を足したときは、`GET /meta` に足すか、出さない理由を `handler/meta_limits_test.go` の一覧に書く(書かないとテストが失敗する)。frontend の文字数のカウンター(`CharCounter`)は表示だけで、上限を超えても入力も送信も止めない(判定は backend の 422)。`login_providers` は、パスワードのほかに使えるサインイン方法で、規則ではなく設定(環境変数)で決まる(Google が有効なら `["google"]`、無効なら空の配列。frontend は、これに含まれる方法のボタンだけを出す。MCP の `get_meta` には含めない)
+- `GET /meta` — frontend が描画・送信前の処理に使う、backend のルールの値(`{"rating": {"min": 1, "max": 5}, "photo": {"max_edge": 1600, "max_bytes": 5242880}, "text": {"review_comment_max_chars": 2000, "burger_name_max_chars": 100, "shop_name_max_chars": 100, "username_max_chars": 50, "bio_max_chars": 500, "moderation_note_max_chars": 500, "city_max_chars": 100, "street_address_max_chars": 200}, "password": {"min_bytes": 8, "max_bytes": 72}, "prefectures": [{"code": 1, "name_ja": "北海道", "name_en": "Hokkaido"}, …, {"code": 47, "name_ja": "沖縄県", "name_en": "Okinawa"}], "login_providers": []}`)。認証不要で、`Cache-Control: public, max-age=3600`。ルールを持つのは backend だけ(rating の範囲は domain の `MinRating` / `MaxRating`、文字数の上限は domain の `Max*Chars`、パスワードの長さは `MinPasswordBytes` / `MaxPasswordBytes`、写真の上限は `domain/photo.go` の `MaxPhotoEdge` と `MaxPhotoBytes`、都道府県の表(JIS X 0401 のコード 1〜47 の昇順 47 件。コードと日本語の名前)は `domain/address.go` の `Prefectures`。英語の名前は表示用の翻訳なので、handler(`meta.go` の `prefectureNamesEN`)が持つ)で、frontend は定数を持たず、評価の選択肢・★の描画・絞り込み・写真の縮小・文字数のカウンター・パスワードの説明文・都道府県の選択肢と表示にこの値を使う。文字数はコードポイント数(日本語・絵文字も 1 文字)、パスワードはバイト数(日本語は 1 文字が 3 バイト)。domain に `Max*` / `Min*` の公開の定数を足したときは、`GET /meta` に足すか、出さない理由を `handler/meta_limits_test.go` の一覧に書く(書かないとテストが失敗する)。frontend の文字数のカウンター(`CharCounter`)は表示だけで、上限を超えても入力も送信も止めない(判定は backend の 422)。`login_providers` は、パスワードのほかに使えるサインイン方法で、規則ではなく設定(環境変数)で決まる(Google が有効なら `["google"]`、無効なら空の配列。frontend は、これに含まれる方法のボタンだけを出す。MCP の `get_meta` には含めない)
 - `POST /logout` — 確認メッセージを返すだけ。JWT は stateless なのでサーバー側での無効化はなく、token の破棄はクライアントが行う (要認証)
 
 **ショップ**
-- `GET /shops` — ショップ一覧 (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される。次のページがあるかを、レスポンスヘッダー `X-Has-More: true|false` で返す。本文は従来どおりの配列で、1 ページの件数は backend が決め、frontend は件数から最終ページを推測しない。`sort=newest` を指定すると `created_at` 降順・`id` 降順(新着順)で返す。指定しなければ、これまでどおり店名順。`sort=rating` は平均評価降順(未評価は最後、同点は店名・id昇順)。それ以外は既定の店名順になる)。各ショップに集計の `photo_url`・`average_rating`・`review_count` を含む(上の「ショップの集計」)
-- `GET /shops/:id` — ショップ 1 件の取得 (`can_review`: 閲覧者がこのショップにレビューを書けるか。domain の `CanBeReviewedBy` の結果で、匿名は `false`。frontend は「レビューを書く」ボタンをこの値で出し分ける。一覧と同じ集計 `photo_url`・`average_rating`・`review_count` も含む)
-- `POST /shops` — ショップの申請 (要認証)
+- `GET /shops` — ショップ一覧 (`page` / `per_page` が整数でなければ 422。空・省略は既定値、範囲外の整数は補正される。次のページがあるかを、レスポンスヘッダー `X-Has-More: true|false` で返す。本文は従来どおりの配列で、1 ページの件数は backend が決め、frontend は件数から最終ページを推測しない。`sort=newest` を指定すると `created_at` 降順・`id` 降順(新着順)で返す。指定しなければ、これまでどおり店名順。`sort=rating` は平均評価降順(未評価は最後、同点は店名・id昇順)。それ以外は既定の店名順になる)。`prefecture_code`(都道府県のコード 1〜47)で、その都道府県のショップだけに絞り込める(空・省略は絞り込みなし。1〜47 の整数でなければ 422 `{"errors":["Prefecture is invalid"]}`。`keyword` とは AND。MCP の `list_shops` の `prefecture_code` も同じ検証・同じ文言)。各ショップに住所(`prefecture_code`(未設定は `null`)・`city`・`street_address`(未設定は空文字))と、集計の `photo_url`・`average_rating`・`review_count` を含む(上の「ショップの集計」)
+- `GET /shops/:id` — ショップ 1 件の取得 (`can_review`: 閲覧者がこのショップにレビューを書けるか。domain の `CanBeReviewedBy` の結果で、匿名は `false`。frontend は「レビューを書く」ボタンをこの値で出し分ける。一覧と同じ住所と集計 `photo_url`・`average_rating`・`review_count` も含む)
+- `POST /shops` — ショップの申請 (要認証。本文の `shop` に、任意で住所 `prefecture_code`(1〜47 の整数か `null`)・`city`・`street_address` を含められる。`null`・空文字は未設定。`prefecture_code` が 1〜47 の整数でなければ 422 `Prefecture is invalid`。判定は domain の値オブジェクト `Address`(`NewAddress`。都道府県は `Prefecture`・`PrefectureOf`)。住所はショップを返すすべての応答(一覧・詳細・管理の一覧・申請と更新の応答・MCP)に含む)
 
 **バーガー**
 - `GET /burgers` — バーガーのランキング一覧。`keyword` でバーガー名の部分一致検索。`sort=newest` は作成日時降順、`sort=name` は名前昇順(同値はいずれもid昇順)。省略・その他の値は従来どおり `weighted_score`(加重スコア)の降順で返し、同値は `id` の昇順で決着する。review が 1 件もない(`burger_stats` が未計算、または削除で 0 件に戻った)バーガーは対象外。各要素は `id`・`name`・`shop`(紐づく代表のショップ `{id, name}`。複数の active な shop に紐づくバーガーは、作成が最も古い active な shop を代表にする。`domain.ReviewShopFor` が匿名の閲覧者に選ぶショップと同じ選び方で、この endpoint には閲覧者がなく常に匿名と同じ扱いになる)・`average_rating`・`weighted_score`・`review_count`。`page` / `per_page` と `X-Has-More` の扱いは `GET /shops` と同じ。認証不要
@@ -378,7 +378,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 **管理者** (要認証。管理者のみ許可する判定は usecase で行う)
 - 一覧は `status` で絞り込み、`page` / `per_page` でページングする。既定は1ページ目・20件、件数の上限は100件。整数でない入力は422。並び順は `created_at DESC, id DESC` のまま。RESTは配列を返し、`X-Has-More` に次ページの有無を含める。MCPの `list_admin_shops` も同じ引数を受け取り、`{items, has_more}` を返す。
 - `GET /admin/shops` — モデレーション用のショップ一覧 (各ショップに `can_approve` / `can_reject`: 承認・却下の操作を画面が提示してよいか。domain の `Shop.CanBeApproved` / `CanBeRejected` が status から判断する。`PUT`・`approve`・`reject` の応答にも含まれる。frontend は status を比較してボタンを出さない)
-- `PUT /admin/shops/:id` — ショップの更新
+- `PUT /admin/shops/:id` — ショップの更新 (住所の項目は、送ったものだけを変える。送らなければ変わらず、`null`・空文字を送ると消える。検証は `POST /shops` と同じ)
 - `POST /admin/shops/:id/approve` — 申請されたショップの承認
 - `POST /admin/shops/:id/reject` — 申請されたショップの却下
 - `POST /admin/shops/:id/close` — 営業中のショップを閉業にする(`closed_at` を設定。active でない、またはすでに閉業したショップへの要求は 422)
@@ -386,7 +386,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 
 ### 入力の上限
 
-テキスト入力には文字数の上限がある。超えると 422 で、`{"errors": ["Comment is too long (maximum is 2000 characters)"]}` のように、他の違反と一緒に列挙される(検証は永続化の前で、失敗したら何も書かれない。JSON と multipart の両方の経路で同じ)。判定は domain だけが持ち(上限の定数は、ルールを持つ側の `internal/domain/` のファイルに、検証の関数と並べて置く: `review.go` のコメント・バーガー名、`shop.go` のショップ名・却下メモ、`username.go`、`email.go`、`bio.go` の自己紹介文)、frontend は判定を持たず、サーバーのメッセージを表示する。
+テキスト入力には文字数の上限がある。超えると 422 で、`{"errors": ["Comment is too long (maximum is 2000 characters)"]}` のように、他の違反と一緒に列挙される(検証は永続化の前で、失敗したら何も書かれない。JSON と multipart の両方の経路で同じ)。判定は domain だけが持ち(上限の定数は、ルールを持つ側の `internal/domain/` のファイルに、検証の関数と並べて置く: `review.go` のコメント・バーガー名、`shop.go` のショップ名・却下メモ・地図リンク・市区町村・番地以降、`username.go`、`email.go`、`bio.go` の自己紹介文)、frontend は判定を持たず、サーバーのメッセージを表示する。
 
 | 項目 | 上限(文字) |
 |---|---|
@@ -394,6 +394,8 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 | バーガー名(`burger_name` の経路) | 100 |
 | ショップ名(`POST /shops`、`PUT /admin/shops/:id`) | 100 |
 | 地図リンク(`POST /shops`、`PUT /admin/shops/:id` の `map_url`) | 2,048 |
+| 市区町村(`POST /shops`、`PUT /admin/shops/:id` の `city`) | 100 |
+| 番地以降(`POST /shops`、`PUT /admin/shops/:id` の `street_address`) | 200 |
 | ユーザー名(`POST /signup`、`PUT /users/:id`) | 50 |
 | メールアドレス(`POST /signup`、`PUT /users/:id`) | 254 |
 | 自己紹介文(`PUT /users/:id` の `bio`。送ったときだけ判定) | 500 |
@@ -401,7 +403,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 
 - 文字数は Unicode の**コードポイント数**で数える(バイト数でも書記素クラスタでもない。日本語は 1 文字、通常の絵文字も 1 文字。結合文字は 1 コードポイントごとに数える)。PostgreSQL の `char_length` と同じ数え方である
 - `PUT` の部分更新は、送られた項目だけを検証する
-- DB にも `CHECK (char_length(...) <= N)` がある(多層防御。最初のマイグレーションの `CREATE TABLE` に、名前つきの制約として入っている)。値は domain の定数と同じで、食い違いは `db/migrations_test.go` が検出する。上限を変えるときは、定数と、該当する `CREATE TABLE` の `CHECK` の 2 か所を直す(実運用に入ったあとは、新しいマイグレーションで直す)
+- DB にも `CHECK (char_length(...) <= N)` がある(多層防御。最初のマイグレーションの `CREATE TABLE` に、名前つきの制約として入っている。あとから足した列は、その列を足したマイグレーション(地図リンクは `000018_add_shop_map_url`、市区町村・番地以降は `000020_add_shop_address`)の `ALTER TABLE` に入っている)。値は domain の定数と同じで、食い違いは `db/migrations_test.go` が検出する。上限を変えるときは、定数と、該当する `CHECK` の 2 か所を直す(実運用に入ったあとは、新しいマイグレーションで直す)
 - リクエスト body 全体の上限は、経路・Content-Type にかかわらず 10 MiB。MCP SDK も同じ上限に揃える。超過すると 413。写真自体は別に 5 MiB まで。multipart のテキスト項目は 1 項目 64 KiB(外側のガード。超えると 400)
 
 ### データベーススキーマ
@@ -409,7 +411,7 @@ AI アプリ(Claude Code など)が、このアプリのショップ・レビュ
 `backend-go/db/migrations/` のマイグレーションで定義された 8 つのテーブル:
 
 - **users** — id (uuid), email, username, bio (自己紹介文。書かれていなければ空文字), password_digest, admin フラグ, 論理削除 (discarded_at)
-- **shops** — id (uuid), name, モデレーション状態 (pending / active / rejected), moderation_note, map_url (任意の地図リンク), 申請者への FK
+- **shops** — id (uuid), name, モデレーション状態 (pending / active / rejected), moderation_note, map_url (任意の地図リンク), 住所 (prefecture_code(JIS X 0401 の都道府県コード 1〜47。未設定は NULL。索引あり)・city・street_address。任意で、未設定の文字列は空文字。`000020_add_shop_address` で追加。既存のショップは住所が未設定のまま残る), 申請者への FK
 - **burgers** — id (uuid), 中間テーブル経由でショップに紐づくバーガー
 - **shops_burgers** *(中間テーブル)* — shop_id (FK, uuid), burger_id (FK, uuid)
 - **reviews** — id (uuid), rating, comment, user への FK, burger への FK, photo_key (写真の保存キー。任意), 論理削除 (discarded_at)

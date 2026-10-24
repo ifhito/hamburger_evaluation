@@ -25,7 +25,9 @@ type Shop struct {
 	Status         ShopStatus
 	ModerationNote *string
 	// MapURL は、地図へのリンク(Google Maps の共有 URL など)である。任意で、設定されていなければ nil。
-	MapURL    *string
+	MapURL *string
+	// Address は、任意の住所(都道府県・市区町村・番地以降)である。ゼロ値は住所なし。
+	Address   Address
 	CreatorID *string
 	// ClosedAt は閉業のフラグである（nil = 営業中、非 nil = 閉業した時刻）。moderation の
 	// status（pending/active/rejected）とは独立の状態で、閉業した shop は、status や
@@ -93,8 +95,9 @@ func ValidateMapURL(raw string) (*string, error) {
 // NewShopSubmission は、ユーザーが投稿した shop を組み立てる。名前は validate
 // され、status は pending で始まり（Rails ShopStatus.initial）、moderation
 // note はまだなく、投稿したユーザーが creator として記録される。mapURL は任意の
-// 地図リンクで、ValidateMapURL で検証される。
-func NewShopSubmission(name string, creatorID string, mapURL string) (Shop, error) {
+// 地図リンクで、ValidateMapURL で検証される。住所(prefectureCode・city・streetAddress)は任意で、
+// NewAddress で作られる。検証は名前・地図リンク・住所の順で、最初の違反を返す。
+func NewShopSubmission(name string, creatorID string, mapURL string, prefectureCode *int, city, streetAddress string) (Shop, error) {
 	if err := ValidateShopName(name); err != nil {
 		return Shop{}, err
 	}
@@ -102,7 +105,11 @@ func NewShopSubmission(name string, creatorID string, mapURL string) (Shop, erro
 	if err != nil {
 		return Shop{}, err
 	}
-	return Shop{Name: name, Status: ShopStatusPending, MapURL: normalizedMapURL, CreatorID: &creatorID}, nil
+	address, err := NewAddress(prefectureCode, city, streetAddress)
+	if err != nil {
+		return Shop{}, err
+	}
+	return Shop{Name: name, Status: ShopStatusPending, MapURL: normalizedMapURL, Address: address, CreatorID: &creatorID}, nil
 }
 
 // Approve は active への moderation 遷移である。Rails ShopStatus と同様に、
@@ -286,10 +293,10 @@ type ShopReviewBurger struct {
 type ShopRepository interface {
 	// CreateShop は新しい shop を永続化し、生成された id つきで返す。
 	CreateShop(ctx context.Context, shop Shop) (Shop, error)
-	// UpdateShopName は、id の shop の name と map_url だけを永続化し、保存された行を
+	// UpdateShopName は、id の shop の name と map_url と住所だけを永続化し、保存された行を
 	// 返す。カラム限定なので、並行する status の変更が古いスナップショットで
 	// 元に戻されることは決してない。
-	UpdateShopName(ctx context.Context, id string, name string, mapURL *string) (Shop, error)
+	UpdateShopName(ctx context.Context, id string, name string, mapURL *string, address Address) (Shop, error)
 	// UpdateShopStatus は、id の shop の status と moderation note だけを
 	// 永続化し、保存された行を返す。カラム限定なので、並行する rename が
 	// 古いスナップショットで元に戻されることは決してない。
@@ -322,9 +329,9 @@ func (s *Shops) Create(ctx context.Context, shop Shop) (Shop, error) {
 	return s.repo.CreateShop(ctx, shop)
 }
 
-// UpdateName は、id の shop の name と map_url だけを永続化し、保存された行を返す。
-func (s *Shops) UpdateName(ctx context.Context, id string, name string, mapURL *string) (Shop, error) {
-	return s.repo.UpdateShopName(ctx, id, name, mapURL)
+// UpdateName は、id の shop の name と map_url と住所だけを永続化し、保存された行を返す。
+func (s *Shops) UpdateName(ctx context.Context, id string, name string, mapURL *string, address Address) (Shop, error) {
+	return s.repo.UpdateShopName(ctx, id, name, mapURL, address)
 }
 
 // UpdateStatus は、id の shop の status と moderation note だけを永続化し、

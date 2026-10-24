@@ -29,19 +29,25 @@ func NewShopQuery(db sqlcgen.DBTX) *ShopQuery {
 
 var _ usecase.ShopQuery = (*ShopQuery)(nil)
 
-// ListShops は、keyword に一致する可視の shop を、sort の並び順（既定は name、id の順。
+// ListShops は、keyword に一致し、prefectureCode が nil でなければその都道府県にある可視の shop を、sort の並び順（既定は name、id の順。
 // usecase.ShopSortNewest なら created_at 降順、id 降順）で並べて、集計(shop_stats の保存された値。
 // まだ集計されていないショップは空の集計)つきで返す。集計は LEFT JOIN で添えるので、クエリは 1 回である。
 // keyword はエスケープ済みの ILIKE パラメータとして渡され、SQL に連結される
 // ことはない。次のページの有無を知るために limit+1 件を取得し、limit 件に切り詰めて
 // 返す。2 つ目の戻り値は、offset+limit 件より後ろにも見える shop があるか（has_more）である。
-func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, sort usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error) {
+func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, prefectureCode *int, sort usecase.ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error) {
 	var namePattern pgtype.Text
 	if keyword != "" {
 		namePattern = pgtype.Text{String: "%" + likeEscaper.Replace(keyword) + "%", Valid: true}
 	}
 
-	params := sqlcgen.ListShopsParams{ViewAll: vis.ViewAll, ViewerID: vis.ViewerID, NamePattern: namePattern, PageLimit: limit + 1, PageOffset: offset}
+	// 都道府県のコードは、usecase が domain.PrefectureOf で検証済みである。nil は絞り込みなし(NULL)。
+	var prefectureFilter pgtype.Int2
+	if prefectureCode != nil {
+		prefectureFilter = pgtype.Int2{Int16: int16(*prefectureCode), Valid: true}
+	}
+
+	params := sqlcgen.ListShopsParams{ViewAll: vis.ViewAll, ViewerID: vis.ViewerID, NamePattern: namePattern, PrefectureCode: prefectureFilter, PageLimit: limit + 1, PageOffset: offset}
 	var rows []sqlcgen.ListShopsRow
 	var err error
 	if sort == usecase.ShopSortNewest {
@@ -70,7 +76,7 @@ func (r *ShopQuery) ListShops(ctx context.Context, vis domain.ShopVisibility, ke
 	rows, hasMore := trimPage(rows, limit)
 	listings := make([]domain.ShopListing, 0, len(rows))
 	for _, row := range rows {
-		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
+		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.PrefectureCode, row.City, row.StreetAddress, row.CreatorID, row.ClosedAt)
 		if err != nil {
 			return nil, false, fmt.Errorf("list shops: %w", err)
 		}
@@ -89,7 +95,7 @@ func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.S
 		}
 		return domain.ShopDetail{}, fmt.Errorf("get shop with creator: %w", err)
 	}
-	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
+	shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.PrefectureCode, row.City, row.StreetAddress, row.CreatorID, row.ClosedAt)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("get shop with creator: %w", err)
 	}
@@ -154,7 +160,7 @@ func (r *ShopQuery) ListShopsForModeration(ctx context.Context, status *domain.S
 	rows, hasMore := trimPage(rows, limit)
 	details := make([]domain.ShopDetail, 0, len(rows))
 	for _, row := range rows {
-		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.CreatorID, row.ClosedAt)
+		shop, err := rowmap.Shop(row.ID, row.Name, row.Status, row.ModerationNote, row.MapURL, row.PrefectureCode, row.City, row.StreetAddress, row.CreatorID, row.ClosedAt)
 		if err != nil {
 			return nil, false, fmt.Errorf("list shops for moderation: %w", err)
 		}

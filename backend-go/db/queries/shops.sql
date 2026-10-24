@@ -1,6 +1,6 @@
 -- name: CreateShop :one
-INSERT INTO shops (name, status, moderation_note, map_url, creator_id)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO shops (name, status, moderation_note, map_url, prefecture_code, city, street_address, creator_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetShop :one
@@ -12,11 +12,11 @@ WHERE id = $1;
 -- （すべて閲覧 / active / 自分のもの）を SQL に翻訳したものであり、
 -- ルール自体は domain パッケージにある。status 1 = active。name_pattern は
 -- あらかじめエスケープ済みの ILIKE パターン（キーワードフィルタなしなら
--- NULL）である。creator_id を NULL の viewer_id と比較しても決して真に
+-- NULL）である。prefecture_code は都道府県の絞り込み（なしなら NULL）で、範囲の判定は domain が行う。creator_id を NULL の viewer_id と比較しても決して真に
 -- ならず、これがまさに匿名の場合である。
 -- 集計(件数・平均・写真)は、shop_stats の保存された値を LEFT JOIN で添える(1 回のクエリ)。集計は非同期に
 -- 計算されるので、行がないショップ(未集計)は、件数 0・平均と写真なしになる。
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -26,6 +26,7 @@ WHERE (sqlc.arg(view_all)::boolean
        OR s.status = 1
        OR s.creator_id = sqlc.narg(viewer_id)::uuid)
   AND (sqlc.narg(name_pattern)::text IS NULL OR s.name ILIKE sqlc.narg(name_pattern)::text)
+  AND (sqlc.narg(prefecture_code)::smallint IS NULL OR s.prefecture_code = sqlc.narg(prefecture_code)::smallint)
 ORDER BY s.name, s.id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
@@ -34,7 +35,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- 同一で、ORDER BY だけが違う(name 昇順+id 昇順 → created_at 降順+id 降順)。列ごとに向きが違う
 -- 並び替えを 1 つの動的な ORDER BY に詰め込むより、クエリを分けた方が読みやすく安全なので、
 -- そうしている。
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -44,12 +45,13 @@ WHERE (sqlc.arg(view_all)::boolean
        OR s.status = 1
        OR s.creator_id = sqlc.narg(viewer_id)::uuid)
   AND (sqlc.narg(name_pattern)::text IS NULL OR s.name ILIKE sqlc.narg(name_pattern)::text)
+  AND (sqlc.narg(prefecture_code)::smallint IS NULL OR s.prefecture_code = sqlc.narg(prefecture_code)::smallint)
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: ListShopsByRating :many
 -- 平均評価の高い順。未評価は最後、同点は店名・IDで順序を確定する。
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
@@ -59,6 +61,7 @@ WHERE (sqlc.arg(view_all)::boolean
        OR s.status = 1
        OR s.creator_id = sqlc.narg(viewer_id)::uuid)
   AND (sqlc.narg(name_pattern)::text IS NULL OR s.name ILIKE sqlc.narg(name_pattern)::text)
+  AND (sqlc.narg(prefecture_code)::smallint IS NULL OR s.prefecture_code = sqlc.narg(prefecture_code)::smallint)
 ORDER BY ss.average_rating DESC NULLS LAST, s.name, s.id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
@@ -67,7 +70,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- （id desc が created_at の同値を解消し、順序を決定的にする）。
 -- status_code は smallint の status フィルタで、すべての status なら NULL
 -- である。文字列から smallint への対応付けは repository にある。
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        u.username AS creator_username
 FROM shops s
 LEFT JOIN users u ON u.id = s.creator_id
@@ -78,7 +81,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: GetShopWithCreator :one
 -- 集計(件数・平均・写真)は、shop_stats の保存された値を添える(未集計のショップは、件数 0・平均と写真なし)。
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at,
        u.username AS creator_username,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
@@ -114,11 +117,14 @@ WHERE id = $1
 RETURNING *;
 
 -- name: UpdateShopName :one
--- 列を限定した名前変更：name と map_url だけを更新するので、並行する status の変更
+-- 列を限定した名前変更：name と map_url と住所だけを更新するので、並行する status の変更
 -- （approve/reject）が古いスナップショットによって元に戻されることはない。
 UPDATE shops
 SET name = $2,
     map_url = $3,
+    prefecture_code = $4,
+    city = $5,
+    street_address = $6,
     updated_at = now()
 WHERE id = $1
 RETURNING *;

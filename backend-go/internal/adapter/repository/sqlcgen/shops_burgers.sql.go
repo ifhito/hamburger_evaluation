@@ -127,7 +127,7 @@ func (q *Queries) GetShopBurgerWithStats(ctx context.Context, arg GetShopBurgerW
 }
 
 const listBurgerShops = `-- name: ListBurgerShops :many
-SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at
+SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.prefecture_code, s.city, s.street_address, s.creator_id, s.closed_at
 FROM shops_burgers sb
 JOIN shops s ON s.id = sb.shop_id
 WHERE sb.burger_id = $1
@@ -140,6 +140,9 @@ type ListBurgerShopsRow struct {
 	Status         int16
 	ModerationNote pgtype.Text
 	MapURL         pgtype.Text
+	PrefectureCode pgtype.Int2
+	City           string
+	StreetAddress  string
 	CreatorID      *string
 	ClosedAt       pgtype.Timestamptz
 }
@@ -162,6 +165,9 @@ func (q *Queries) ListBurgerShops(ctx context.Context, burgerID string) ([]ListB
 			&i.Status,
 			&i.ModerationNote,
 			&i.MapURL,
+			&i.PrefectureCode,
+			&i.City,
+			&i.StreetAddress,
 			&i.CreatorID,
 			&i.ClosedAt,
 		); err != nil {

@@ -82,7 +82,7 @@ func TestShopQuery(t *testing.T) {
 
 	list := func(t *testing.T, vis domain.ShopVisibility, keyword string, limit, offset int32) []domain.Shop {
 		t.Helper()
-		listings, _, err := shopQuery.ListShops(ctx, vis, keyword, "", limit, offset)
+		listings, _, err := shopQuery.ListShops(ctx, vis, keyword, nil, "", limit, offset)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -160,7 +160,7 @@ func TestShopQuery(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				shops, hasMore, err := shopQuery.ListShops(ctx, anon, "Order Cafe", "", tt.limit, tt.offset)
+				shops, hasMore, err := shopQuery.ListShops(ctx, anon, "Order Cafe", nil, "", tt.limit, tt.offset)
 				if err != nil {
 					t.Fatalf("ListShops returned error: %v", err)
 				}
@@ -380,7 +380,7 @@ func TestShopQueryListShopsByNewest(t *testing.T) {
 	sameOld := sortedIDs(old1, old2)
 
 	t.Run("sort=newest は created_at 降順・id 降順で返し、可視性のフィルタも変わらず効く", func(t *testing.T) {
-		listings, _, err := shopQuery.ListShops(ctx, anon, "", usecase.ShopSortNewest, 100, 0)
+		listings, _, err := shopQuery.ListShops(ctx, anon, "", nil, usecase.ShopSortNewest, 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -394,7 +394,7 @@ func TestShopQueryListShopsByNewest(t *testing.T) {
 	})
 
 	t.Run("管理者には pending なショップも見え、新着順の先頭になる", func(t *testing.T) {
-		listings, _, err := shopQuery.ListShops(ctx, adminVis, "", usecase.ShopSortNewest, 100, 0)
+		listings, _, err := shopQuery.ListShops(ctx, adminVis, "", nil, usecase.ShopSortNewest, 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}
@@ -404,7 +404,7 @@ func TestShopQueryListShopsByNewest(t *testing.T) {
 	})
 
 	t.Run("sort を渡さなければ、これまでどおりの店名順のままである", func(t *testing.T) {
-		listings, _, err := shopQuery.ListShops(ctx, anon, "", "", 100, 0)
+		listings, _, err := shopQuery.ListShops(ctx, anon, "", nil, "", 100, 0)
 		if err != nil {
 			t.Fatalf("ListShops returned error: %v", err)
 		}

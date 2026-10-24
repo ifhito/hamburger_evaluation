@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { useTranslation } from 'react-i18next'
 import { countChars } from '../../lib/countChars'
 import styles from './field.module.css'
@@ -74,6 +74,15 @@ export function TextArea({ id, label, optional, hint, counter, short, ...props }
         {...props}
         className={[styles.input, styles.area, short ? styles.short : ''].filter(Boolean).join(' ')}
       />
+    </Frame>
+  )
+}
+
+// 選択欄(ラベル・説明つき)。見た目は 1 行の入力欄と同じ。
+export function SelectField({ id, label, optional, hint, ...props }: Omit<Common, 'counter'> & SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <Frame id={id} label={label} optional={optional} hint={hint}>
+      <select id={id} aria-describedby={describedBy(id, hint, undefined)} {...props} className={styles.input} />
     </Frame>
   )
 }

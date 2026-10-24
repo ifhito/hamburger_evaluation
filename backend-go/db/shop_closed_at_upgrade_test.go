@@ -2,13 +2,9 @@ package db_test
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/query"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
@@ -38,7 +34,8 @@ func TestShopClosedAtUpgrade(t *testing.T) {
 				}
 			}
 			for _, file := range downs {
-				if strings.HasPrefix(filepath.Base(file), "000019_") {
+				// 後続のマイグレーション(住所の 000020 など)も、逆順に取り消してから閉業日時を消す。
+				if filepath.Base(file) >= "000019_" {
 					rollback = append(rollback, file)
 				}
 			}
@@ -57,14 +54,14 @@ func TestShopClosedAtUpgrade(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				_, _, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", "", 20, 0)
-				var pgErr *pgconn.PgError
-				if !errors.As(err, &pgErr) || pgErr.Code != "42703" {
-					t.Fatalf("追加前の一覧エラー = %v, want undefined_column", err)
+				// 一覧のエラーでは、先に別の未追加の列(住所)が見つからないと言われうるので、列の有無を直接確かめる。
+				var exists bool
+				if err := conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'shops' AND column_name = 'closed_at')").Scan(&exists); err != nil || exists {
+					t.Fatalf("追加前の閉業日時の列: exists=%v err=%v, want 列がない", exists, err)
 				}
 			}
 			dbtest.Apply(ctx, t, conn, after)
-			items, more, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", "", 20, 0)
+			items, more, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", nil, "", 20, 0)
 			if err != nil {
 				t.Fatalf("追加後の店舗一覧: %v", err)
 			}
@@ -89,7 +86,7 @@ func TestShopClosedAtUpgrade(t *testing.T) {
 				t.Fatalf("店舗行: count=%d err=%v", count, err)
 			}
 			dbtest.Apply(ctx, t, conn, after)
-			if _, _, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", "", 20, 0); err != nil {
+			if _, _, err := shops.ListShops(ctx, domain.ShopVisibility{}, "", nil, "", 20, 0); err != nil {
 				t.Fatalf("再適用後: %v", err)
 			}
 		})

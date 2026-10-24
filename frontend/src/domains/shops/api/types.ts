@@ -13,6 +13,10 @@ export interface Shop {
   reviewCount: number;
   // 地図へのリンク(Google マップの共有リンクなど)。未設定なら null。
   mapUrl: string | null;
+  // 住所。都道府県はコード(GET /meta の prefectures の code)で、未設定なら null。市区町村・番地以降は未設定なら空文字。
+  prefectureCode: number | null;
+  city: string;
+  streetAddress: string;
   // 閉業した日時(ISO8601)。閉業していなければ null。status(審査の状態)とは独立した値。
   closedAt: string | null;
 }
@@ -43,9 +47,17 @@ export interface AdminShop extends Shop {
 export interface ShopCreateInput {
   name: string;
   mapUrl: string;
+  // null は未設定(更新では、住所の都道府県を消す)。
+  prefectureCode: number | null;
+  city: string;
+  streetAddress: string;
 }
 
 export interface ShopUpdateInput {
   name: string;
   mapUrl: string;
+  // null は未設定(更新では、住所の都道府県を消す)。
+  prefectureCode: number | null;
+  city: string;
+  streetAddress: string;
 }

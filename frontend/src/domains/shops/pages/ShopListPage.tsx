@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useShops } from "../hooks/useShops";
 import { useAuth } from "../../auth/AuthProvider";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
+import { prefectureName, useMeta } from "../../../api/meta";
 import { Alert } from "../../../components/ui/Alert";
 import { Button } from "../../../components/ui/Button";
 import { LinkButton } from "../../../components/ui/LinkButton";
@@ -20,12 +21,15 @@ export default function ShopListPage() {
 }
 
 export function ShopListContent({ hideHeading = false, record = false }: { hideHeading?: boolean; record?: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, isLoading: authLoading } = useAuth();
+  const prefectures = useMeta().data?.prefectures;
   const ratingRange = useRatingRange();
   const [sort, setSort] = useState("name");
   const [searchParams] = useSearchParams();
   const [keyword, setKeyword] = useState(() => searchParams.get("keyword") ?? "");
+  // 都道府県の絞り込み。"" はすべての都道府県(prefecture_code を送らない)。
+  const [prefectureCode, setPrefectureCode] = useState("");
   const {
     data: shops,
     isLoading,
@@ -33,7 +37,7 @@ export function ShopListContent({ hideHeading = false, record = false }: { hideH
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useShops({ keyword, sort }, user?.id ?? null, { enabled: !authLoading });
+  } = useShops({ keyword, sort, prefectureCode }, user?.id ?? null, { enabled: !authLoading });
 
   return (
     <>
@@ -54,6 +58,19 @@ export function ShopListContent({ hideHeading = false, record = false }: { hideH
           onChange={(e) => setKeyword(e.target.value)}
           placeholder={t("shops.list.searchPlaceholder")}
         />
+        <select
+          className={styles.sort}
+          aria-label={t("shops.list.prefectureFilterLabel")}
+          value={prefectureCode}
+          onChange={(e) => setPrefectureCode(e.target.value)}
+        >
+          <option value="">{t("shops.list.allPrefectures")}</option>
+          {prefectures?.map((p) => (
+            <option key={p.code} value={p.code}>
+              {prefectureName(p, i18n.language)}
+            </option>
+          ))}
+        </select>
         {user?.canModerate && <LinkButton to="/admin/shops">{t("shops.list.moderate")}</LinkButton>}
         {user && (
           <LinkButton variant="primary" to="/shops/new">

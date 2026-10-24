@@ -94,7 +94,7 @@ func TestShopCanBeReviewedBy(t *testing.T) {
 // ホワイトスペースのみの名前は、Rails のメッセージそのままで失敗する。
 func TestNewShopSubmission(t *testing.T) {
 	t.Run("有効な名前なら creator 付きの pending な shop になる", func(t *testing.T) {
-		shop, err := domain.NewShopSubmission("New Shack", uid.N(7), "")
+		shop, err := domain.NewShopSubmission("New Shack", uid.N(7), "", nil, "", "")
 		if err != nil {
 			t.Fatalf("NewShopSubmission returned error: %v", err)
 		}
@@ -111,7 +111,7 @@ func TestNewShopSubmission(t *testing.T) {
 
 	for _, name := range []string{"", "   ", "\t\n"} {
 		t.Run("空または空白のみの名前 "+name+" は検証エラーになる", func(t *testing.T) {
-			_, err := domain.NewShopSubmission(name, uid.N(7), "")
+			_, err := domain.NewShopSubmission(name, uid.N(7), "", nil, "", "")
 			var vErr *domain.ValidationError
 			if !errors.As(err, &vErr) {
 				t.Fatalf("error = %v, want *domain.ValidationError", err)

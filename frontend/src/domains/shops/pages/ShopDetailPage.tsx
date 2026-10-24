@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useShopDetail } from "../hooks/useShops";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
+import { prefectureName, useMeta } from "../../../api/meta";
 import { Badge } from "../../../components/ui/Badge";
 import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
@@ -17,12 +18,13 @@ import textLinkStyles from "../../../components/ui/textLink.module.css";
 // ショップ詳細(design/redesign/shop-detail.html)。「レビューを書く」を出すかは backend が返す can_review だけで
 // 決める(閲覧者が誰かを frontend が判断しない)。審査待ち・却下の札と理由は、返された状態をそのまま出す。
 export default function ShopDetailPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const backTo = searchParams.get("from") === "record" ? "/record" : "/shops";
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
+  const prefectures = useMeta().data?.prefectures;
   // canReview は閲覧者ごとに違うので、認証状態が確定してから取得する
   const { data: shop, isLoading, error } = useShopDetail(id, user?.id ?? null, { enabled: !authLoading });
 
@@ -40,6 +42,12 @@ export default function ShopDetailPage() {
       </Layout>
     );
   }
+
+  // 住所は「都道府県名 市区町村 番地以降」を半角スペースでつなぐ(空の部分は飛ばす)。都道府県名は GET /meta の一覧から引く。
+  const prefecture = prefectures?.find((p) => p.code === shop.prefectureCode);
+  const address = [prefecture && prefectureName(prefecture, i18n.language), shop.city, shop.streetAddress]
+    .filter(Boolean)
+    .join(" ");
 
   // 「レビューを書く」は can_review が true のときだけ。サインインしていなければ、サインインへの案内に替える
   // (デザインの案。can_review は匿名では常に false なので、その場合だけ出る)。
@@ -68,6 +76,7 @@ export default function ShopDetailPage() {
           {shop.status !== "active" && <Badge>{t(`shops.statusBadge.${shop.status}`)}</Badge>}
           {shop.closedAt && <Badge>{t("shops.closedBadge")}</Badge>}
           <h1 className={styles.name}>{shop.name}</h1>
+          {address && <p>{address}</p>}
           {shop.mapUrl && (
             <a href={shop.mapUrl} target="_blank" rel="noopener noreferrer" className={textLinkStyles.textLink}>
               {t("shops.detail.viewOnMap")}

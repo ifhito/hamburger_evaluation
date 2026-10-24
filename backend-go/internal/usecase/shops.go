@@ -35,7 +35,8 @@ type ShopQuery interface {
 	// 定義し、レビューの書き込みのあとに、バックグラウンドのワーカーが計算し直す(結果整合)。
 	// 2 つ目の戻り値は、offset+limit 件より後ろにも見える shop があるか（has_more）で、実装は limit+1 件を
 	// 取得して判定する。
-	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, sort ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error)
+	// prefectureCode が nil でなければ、その都道府県の shop だけに絞り込む（keyword とは AND）。
+	ListShops(ctx context.Context, vis domain.ShopVisibility, keyword string, prefectureCode *int, sort ShopSort, limit, offset int32) ([]domain.ShopListing, bool, error)
 	// GetShopWithCreator は shop とその creator を、集計(保存された値。ListShops と同じ)つきで返す。
 	// Reviews は空のままである。
 	GetShopWithCreator(ctx context.Context, id string) (domain.ShopDetail, error)
@@ -47,6 +48,37 @@ type ShopQuery interface {
 	// 空のまま）を新しい順（created_at desc、id desc）に返す。任意で 1 つの
 	// status に絞り込める（nil = すべて）。limit+1 件を取得して次ページの有無も返す。
 	ListShopsForModeration(ctx context.Context, status *domain.ShopStatus, limit, offset int32) ([]domain.ShopDetail, bool, error)
+}
+
+// ShopAddressPatch は、送られた住所の項目である。送られなかった項目は、管理者の更新（PUT）では変えず、
+// 申請（POST）では未設定になる：PrefectureCodeSet が false なら都道府県を、City・StreetAddress が nil なら
+// その項目を送っていない。送られた null は、都道府県なら PrefectureCodeSet が true で PrefectureCode が nil、
+// 文字列なら空文字で、項目を消す。どれを送ったかという要求の形を表すだけで、規則は持たない
+// （検証は domain.NewAddress）。
+type ShopAddressPatch struct {
+	PrefectureCode    *int
+	PrefectureCodeSet bool
+	City              *string
+	StreetAddress     *string
+}
+
+// over は、current の値に、送られた項目だけを重ねた住所の生の値（domain.NewAddress の引数）を返す。
+func (p ShopAddressPatch) over(current domain.Address) (prefectureCode *int, city, streetAddress string) {
+	if prefecture, ok := current.Prefecture(); ok {
+		code := prefecture.Code()
+		prefectureCode = &code
+	}
+	if p.PrefectureCodeSet {
+		prefectureCode = p.PrefectureCode
+	}
+	city, streetAddress = current.City(), current.StreetAddress()
+	if p.City != nil {
+		city = *p.City
+	}
+	if p.StreetAddress != nil {
+		streetAddress = *p.StreetAddress
+	}
+	return prefectureCode, city, streetAddress
 }
 
 // Shops は shop の use case を実装する。公開の一覧と詳細、ユーザーによる
@@ -77,13 +109,19 @@ func (s *Shops) withPhotoURL(summary domain.ShopSummary) domain.ShopSummary {
 	return summary
 }
 
-// List は、viewer（nil = 匿名）から見える shop のうち keyword に一致する
-// ものを、sort の並び順で（newest = 新着順、rating = 平均評価順、それ以外 = 店名順）ページネーションして
+// List は、viewer（nil = 匿名）から見える shop のうち keyword に一致し、prefectureCode が nil でなければ
+// その都道府県にあるものを、sort の並び順で（newest = 新着順、rating = 平均評価順、それ以外 = 店名順）ページネーションして
 // 返す。範囲外の page/perPage は、エラーにせず clampPage の規則で補正される（page < 1 は 1、
 // perPage < 1 は 20、perPage の上限は 100）。2 つ目の戻り値は、次のページがあるか（has_more）である。
-func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, sort ShopSort, page, perPage int) ([]domain.ShopListing, bool, error) {
+// prefectureCode が都道府県のコードでなければ、domain の *ValidationError を返す。
+func (s *Shops) List(ctx context.Context, viewer *domain.User, keyword string, prefectureCode *int, sort ShopSort, page, perPage int) ([]domain.ShopListing, bool, error) {
+	if prefectureCode != nil {
+		if _, err := domain.PrefectureOf(*prefectureCode); err != nil {
+			return nil, false, err
+		}
+	}
 	limit, offset := clampPage(page, perPage)
-	listings, hasMore, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, sort, limit, offset)
+	listings, hasMore, err := s.query.ListShops(ctx, domain.ShopVisibilityFor(viewer), keyword, prefectureCode, sort, limit, offset)
 	if err != nil {
 		return nil, false, fmt.Errorf("list shops: %w", err)
 	}
@@ -124,9 +162,11 @@ func (s *Shops) Get(ctx context.Context, viewer *domain.User, id string) (domain
 // Create は viewer に代わって新しい shop を投稿する。shop は pending で
 // 始まり（後で moderator が activate する）、viewer が creator として
 // 記録される。空白の name は、domain の *ValidationError をそのまま返す。mapURL は
-// 任意の地図リンクで、domain.ValidateMapURL の規則に従う。
-func (s *Shops) Create(ctx context.Context, viewer domain.User, name string, mapURL string) (domain.ShopDetail, error) {
-	shop, err := domain.NewShopSubmission(name, viewer.ID, mapURL)
+// 任意の地図リンクで、domain.ValidateMapURL の規則に従う。address は送られた住所の項目で（送られなかった項目は
+// 未設定）、domain.NewAddress の規則に従う。
+func (s *Shops) Create(ctx context.Context, viewer domain.User, name string, mapURL string, address ShopAddressPatch) (domain.ShopDetail, error) {
+	prefectureCode, city, streetAddress := address.over(domain.Address{})
+	shop, err := domain.NewShopSubmission(name, viewer.ID, mapURL, prefectureCode, city, streetAddress)
 	if err != nil {
 		return domain.ShopDetail{}, err
 	}
@@ -167,11 +207,14 @@ func (s *Shops) AdminList(ctx context.Context, viewer domain.User, status string
 	return shops, hasMore, nil
 }
 
-// AdminUpdateName は shop の名前(と地図リンク)を変更する（唯一の moderation 編集、Rails
+// AdminUpdateName は shop の名前(と地図リンク・住所)を変更する（唯一の moderation 編集、Rails
 // parity）。admin でない viewer には、どの id が存在するかを探れないよう、
 // lookup の前に domain.ErrForbidden を返す。空白の name は
-// *ValidationError であり、mapURL は domain.ValidateMapURL の規則に従う。
-func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id string, name string, mapURL string) (domain.ShopDetail, error) {
+// *ValidationError であり、mapURL は domain.ValidateMapURL の規則に従う。name と mapURL は lookup の前に
+// 検証する（未知の id でも 422 になる）。address は送られた項目だけを
+// 変え（ShopAddressPatch）、lookup のあと、いまの住所に重ねた値を domain.NewAddress で 1 回だけ検証する
+// （未知の id は、住所が不正でも 404 になる）。
+func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id string, name string, mapURL string, address ShopAddressPatch) (domain.ShopDetail, error) {
 	if !viewer.CanModerate() {
 		return domain.ShopDetail{}, domain.ErrForbidden
 	}
@@ -183,13 +226,18 @@ func (s *Shops) AdminUpdateName(ctx context.Context, viewer domain.User, id stri
 		return domain.ShopDetail{}, err
 	}
 	// fetch はレスポンス用の creator（と、未知の id に対する 404）を
-	// 供給する。書き込み自体は name と map_url のカラムにしか触れないので、並行する
+	// 供給する。書き込み自体は name と map_url と住所のカラムにしか触れないので、並行する
 	// status の変更を元に戻すことはない。
 	detail, err := s.query.GetShopWithCreator(ctx, id)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}
-	updated, err := s.shops.UpdateName(ctx, id, name, normalizedMapURL)
+	// 送られなかった項目は、いまの値のまま残す。
+	newAddress, err := domain.NewAddress(address.over(detail.Address))
+	if err != nil {
+		return domain.ShopDetail{}, err
+	}
+	updated, err := s.shops.UpdateName(ctx, id, name, normalizedMapURL, newAddress)
 	if err != nil {
 		return domain.ShopDetail{}, fmt.Errorf("admin update shop name: %w", err)
 	}

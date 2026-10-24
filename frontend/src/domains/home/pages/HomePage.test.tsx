@@ -81,6 +81,9 @@ function shop(over: Partial<Shop>): Shop {
     averageRating: 4,
     reviewCount: 1,
     mapUrl: null,
+    prefectureCode: null,
+    city: "",
+    streetAddress: "",
     closedAt: null,
     ...over,
   };
