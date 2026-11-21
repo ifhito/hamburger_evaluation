@@ -47,11 +47,3 @@ FROM reviews r
 WHERE r.user_id = ANY(sqlc.arg(user_ids)::uuid[])
   AND r.discarded_at IS NULL
 ORDER BY r.created_at, r.id;
-
--- name: GetBurgerStats :one
-SELECT * FROM burger_stats
-WHERE burger_id = $1;
-
--- name: DeleteBurgerStats :exec
-DELETE FROM burger_stats
-WHERE burger_id = $1;

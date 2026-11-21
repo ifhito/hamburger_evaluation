@@ -48,16 +48,6 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 	return i, err
 }
 
-const deleteShop = `-- name: DeleteShop :exec
-DELETE FROM shops
-WHERE id = $1
-`
-
-func (q *Queries) DeleteShop(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, deleteShop, id)
-	return err
-}
-
 const getShop = `-- name: GetShop :one
 SELECT id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at FROM shops
 WHERE id = $1
@@ -87,7 +77,7 @@ SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.clo
        ss.average_rating,
        ss.photo_key
 FROM shops s
-LEFT JOIN users u ON u.id = s.creator_id
+LEFT JOIN users u ON u.id = s.creator_id AND u.discarded_at IS NULL
 LEFT JOIN shop_stats ss ON ss.shop_id = s.id
 WHERE s.id = $1
 `
@@ -107,6 +97,7 @@ type GetShopWithCreatorRow struct {
 }
 
 // 集計(件数・平均・写真)は、shop_stats の保存された値を添える(未集計のショップは、件数 0・平均と写真なし)。
+// 退会済みの申請者(u.discarded_at IS NOT NULL)は JOIN から外し、表示上の creator を出さない。
 func (q *Queries) GetShopWithCreator(ctx context.Context, id string) (GetShopWithCreatorRow, error) {
 	row := q.db.QueryRow(ctx, getShopWithCreator, id)
 	var i GetShopWithCreatorRow
@@ -431,7 +422,7 @@ const listShopsForModeration = `-- name: ListShopsForModeration :many
 SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
        u.username AS creator_username
 FROM shops s
-LEFT JOIN users u ON u.id = s.creator_id
+LEFT JOIN users u ON u.id = s.creator_id AND u.discarded_at IS NULL
 WHERE $1::smallint IS NULL
    OR s.status = $1::smallint
 ORDER BY s.created_at DESC, s.id DESC
@@ -486,45 +477,6 @@ func (q *Queries) ListShopsForModeration(ctx context.Context, arg ListShopsForMo
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateShop = `-- name: UpdateShop :one
-UPDATE shops
-SET name = $2,
-    status = $3,
-    moderation_note = $4,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, name, status, moderation_note, creator_id, created_at, updated_at, map_url, closed_at
-`
-
-type UpdateShopParams struct {
-	ID             string
-	Name           string
-	Status         int16
-	ModerationNote pgtype.Text
-}
-
-func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, error) {
-	row := q.db.QueryRow(ctx, updateShop,
-		arg.ID,
-		arg.Name,
-		arg.Status,
-		arg.ModerationNote,
-	)
-	var i Shop
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Status,
-		&i.ModerationNote,
-		&i.CreatorID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.MapURL,
-		&i.ClosedAt,
-	)
-	return i, err
 }
 
 const updateShopClosedAt = `-- name: UpdateShopClosedAt :one

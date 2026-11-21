@@ -532,6 +532,18 @@ func (c Config) GoogleWarnings() []string {
 	return nil
 }
 
+// jwtSecretRecommendedMinLength は、HS256 の秘密鍵として推奨する最小バイト長(256 ビット = 32 バイト)である。
+const jwtSecretRecommendedMinLength = 32
+
+// JWTWarnings は、JWT_SECRET が設定されているものの推奨最小長(32 バイト)未満のときに起動時の警告文を返す。
+// 既存の短い秘密鍵で動いている環境やテストを壊さないよう起動は止めず、秘密鍵の値そのものは決して含めない。
+func (c Config) JWTWarnings() []string {
+	if c.JWTSecret != "" && len(c.JWTSecret) < jwtSecretRecommendedMinLength {
+		return []string{fmt.Sprintf("JWT_SECRET is shorter than the recommended %d bytes (got %d bytes)", jwtSecretRecommendedMinLength, len(c.JWTSecret))}
+	}
+	return nil
+}
+
 // requireHTTPSOrLoopback は、name の値 raw が、https の URL か、ループバック(localhost・127.0.0.1・[::1])の
 // http の URL であることを確かめる。平文の http で、外部の提供元に、認可コードやトークンを送らないため。
 func requireHTTPSOrLoopback(name, raw string) error {

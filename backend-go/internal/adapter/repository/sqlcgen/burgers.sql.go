@@ -29,33 +29,6 @@ func (q *Queries) CreateBurger(ctx context.Context, name string) (Burger, error)
 	return i, err
 }
 
-const deleteBurger = `-- name: DeleteBurger :exec
-DELETE FROM burgers
-WHERE id = $1
-`
-
-func (q *Queries) DeleteBurger(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, deleteBurger, id)
-	return err
-}
-
-const getBurger = `-- name: GetBurger :one
-SELECT id, name, created_at, updated_at FROM burgers
-WHERE id = $1
-`
-
-func (q *Queries) GetBurger(ctx context.Context, id string) (Burger, error) {
-	row := q.db.QueryRow(ctx, getBurger, id)
-	var i Burger
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getBurgerWithStats = `-- name: GetBurgerWithStats :one
 SELECT b.id, b.name,
        (SELECT r.photo_key FROM reviews r JOIN users u ON u.id = r.user_id
@@ -182,65 +155,4 @@ func (q *Queries) ListBurgerRankings(ctx context.Context, arg ListBurgerRankings
 		return nil, err
 	}
 	return items, nil
-}
-
-const listBurgers = `-- name: ListBurgers :many
-SELECT id, name, created_at, updated_at FROM burgers
-ORDER BY created_at, id
-LIMIT $1 OFFSET $2
-`
-
-type ListBurgersParams struct {
-	Limit  int32
-	Offset int32
-}
-
-func (q *Queries) ListBurgers(ctx context.Context, arg ListBurgersParams) ([]Burger, error) {
-	rows, err := q.db.Query(ctx, listBurgers, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Burger
-	for rows.Next() {
-		var i Burger
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const updateBurger = `-- name: UpdateBurger :one
-UPDATE burgers
-SET name = $2,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, name, created_at, updated_at
-`
-
-type UpdateBurgerParams struct {
-	ID   string
-	Name string
-}
-
-func (q *Queries) UpdateBurger(ctx context.Context, arg UpdateBurgerParams) (Burger, error) {
-	row := q.db.QueryRow(ctx, updateBurger, arg.ID, arg.Name)
-	var i Burger
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }

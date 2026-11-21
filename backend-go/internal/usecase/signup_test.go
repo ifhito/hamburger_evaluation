@@ -473,12 +473,13 @@ func TestSignupsConfirm(t *testing.T) {
 				return domain.User{ID: uid.N(5), Username: p.Username, Email: p.Email}, nil
 			}},
 		}
-		signups := usecase.NewSignups(notRegistered, domain.NewSignupVerifications(&fakeSignupRepo{}), unit, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig)
+		sessions := newFakeSessionStore()
+		signups := usecase.NewSignups(notRegistered, domain.NewSignupVerifications(&fakeSignupRepo{}), domain.NewUserSessions(sessions), unit, fakeHasher{}, &recordingMailer{}, fakeIssuer{}, testSignupConfig)
 		return confirmKit{signups: signups, unit: unit, ops: &ops}
 	}
 	hash := domain.HashSignupToken("raw-token")
 
-	t.Run("有効なトークンなら、確認待ちをロックして読み、その内容でユーザーを作り、確認待ちを削除して確定する", func(t *testing.T) {
+	t.Run("有効なトークンなら、確認待ちをロックして読み、その内容でユーザーとセッションを作り、確認待ちを削除して確定する", func(t *testing.T) {
 		kit := newConfirmKit(nil, nil, nil, nil)
 		user, token, err := kit.signups.Confirm(context.Background(), "raw-token")
 		if err != nil {
@@ -501,6 +502,9 @@ func TestSignupsConfirm(t *testing.T) {
 		}
 		if want := "token-for-" + uid.N(5); token != want {
 			t.Errorf("token = %q, want %q", token, want)
+		}
+		if len(kit.unit.Sessions.Created) != 1 || kit.unit.Sessions.Created[0].TokenHash != domain.HashSessionToken(token) || kit.unit.Sessions.Created[0].UserID != uid.N(5) {
+			t.Errorf("保存されたセッション = %+v, want user %s hash %s", kit.unit.Sessions.Created, uid.N(5), domain.HashSessionToken(token))
 		}
 	})
 
@@ -566,6 +570,18 @@ func TestSignupsConfirm(t *testing.T) {
 		}
 		if len(*kit.ops) != 0 {
 			t.Errorf("操作 = %v, want なし", *kit.ops)
+		}
+	})
+
+	t.Run("セッションの保存に失敗したら、ユーザー作成も確認待ち削除も巻き戻される", func(t *testing.T) {
+		kit := newConfirmKit(nil, nil, nil, nil)
+		sessionErr := errors.New("session insert failed")
+		kit.unit.Sessions = &uowtest.SessionDiscards{CreateErr: sessionErr}
+		if _, _, err := kit.signups.Confirm(context.Background(), "raw-token"); !errors.Is(err, sessionErr) {
+			t.Fatalf("error = %v, want wrapped %v", err, sessionErr)
+		}
+		if kit.unit.Commits != 0 || kit.unit.Rollbacks != 1 {
+			t.Errorf("確定 %d 回・取り消し %d 回, want 確定 0・取り消し 1", kit.unit.Commits, kit.unit.Rollbacks)
 		}
 	})
 }

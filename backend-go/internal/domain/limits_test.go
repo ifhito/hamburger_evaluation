@@ -95,6 +95,8 @@ func TestTextLimitsKeepExistingRules(t *testing.T) {
 			[]string{"Rating must be in 1..5", "Comment is too long (maximum is 2000 characters)"}},
 		{"空白のみのコメントは有効(空欄のレビューを許す)", errMessages(ValidateReviewContent(3, " ", nil, time.Now())), nil},
 		{"空のユーザー名は blank だけ", ValidateUsername(""), []string{"Username can't be blank"}},
+		{"半角空白のみのユーザー名は空欄と同じ違反を返す", ValidateUsername("   "), []string{"Username can't be blank"}},
+		{"全角空白や改行のみのユーザー名も空欄と同じ違反を返す", ValidateUsername("　\t\n"), []string{"Username can't be blank"}},
 		{"空の email は blank だけ", ValidateEmail(""), []string{"Email can't be blank"}},
 		{"note なしの reject は有効", errMessages(ValidateModerationNote(nil)), nil},
 	}

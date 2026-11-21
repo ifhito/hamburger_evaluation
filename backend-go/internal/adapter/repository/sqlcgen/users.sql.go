@@ -65,11 +65,14 @@ func (q *Queries) DiscardUser(ctx context.Context, id string) (string, error) {
 
 const getActiveUserByEmail = `-- name: GetActiveUserByEmail :one
 SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
-WHERE email = $1 AND discarded_at IS NULL
+WHERE lower(email) = lower($1) AND discarded_at IS NULL
+ORDER BY created_at
+LIMIT 1
 `
 
-func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, getActiveUserByEmail, email)
+// ログインでもメールアドレスの大文字小文字を区別せず、退会していないユーザーを解決する。
+func (q *Queries) GetActiveUserByEmail(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRow(ctx, getActiveUserByEmail, lower)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -118,28 +121,6 @@ WHERE id = $1 AND discarded_at IS NULL
 
 func (q *Queries) GetActiveUserByID(ctx context.Context, id string) (User, error) {
 	row := q.db.QueryRow(ctx, getActiveUserByID, id)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Username,
-		&i.Bio,
-		&i.PasswordDigest,
-		&i.Admin,
-		&i.DiscardedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getUser = `-- name: GetUser :one
-SELECT id, email, username, bio, password_digest, admin, discarded_at, created_at, updated_at FROM users
-WHERE id = $1
-`
-
-func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
-	row := q.db.QueryRow(ctx, getUser, id)
 	var i User
 	err := row.Scan(
 		&i.ID,

@@ -35,8 +35,8 @@ func TestJWTCodecRoundTrip(t *testing.T) {
 		t.Fatalf("Verify = %s, want %s", got, userID)
 	}
 
-	// payload はちょうど {"user_id": "<uuid>", "exp": <unix>} でなければならない
-	// （frontend が読むのは exp だけ）。
+	// payload は {"user_id": "<uuid>", "exp": <unix>, "jti": "<uuid>"} でなければならない
+	// （frontend が読むのは exp だけで、jti は発行ごとの一意性を保証する）。
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		t.Fatalf("token has %d segments, want 3", len(parts))
@@ -49,8 +49,8 @@ func TestJWTCodecRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
-	if len(claims) != 2 {
-		t.Fatalf("payload has claims %v, want exactly user_id and exp", claims)
+	if len(claims) != 3 {
+		t.Fatalf("payload has claims %v, want user_id, exp and jti", claims)
 	}
 	if want := `"` + userID + `"`; string(claims["user_id"]) != want {
 		t.Fatalf("user_id claim = %s, want %s", claims["user_id"], want)
@@ -58,6 +58,20 @@ func TestJWTCodecRoundTrip(t *testing.T) {
 	if _, err := json.Number(claims["exp"]).Int64(); err != nil {
 		t.Fatalf("exp claim %s is not an integer: %v", claims["exp"], err)
 	}
+	var jti string
+	if err := json.Unmarshal(claims["jti"], &jti); err != nil || len(jti) != 36 {
+		t.Fatalf("jti claim = %s, want 36-char UUID", claims["jti"])
+	}
+
+	t.Run("同じ利用者に対して連続して発行しても毎回異なるトークンになる", func(t *testing.T) {
+		second, err := codec.Issue(userID)
+		if err != nil {
+			t.Fatalf("second Issue returned error: %v", err)
+		}
+		if second == token {
+			t.Fatal("consecutive Issue calls returned identical tokens")
+		}
+	})
 }
 
 func TestJWTCodecVerifyRejects(t *testing.T) {

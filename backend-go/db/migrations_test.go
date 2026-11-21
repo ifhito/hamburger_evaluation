@@ -170,26 +170,21 @@ func TestMigrationsAcceptance(t *testing.T) {
 		}
 	})
 
-	// 同じ email を持つ 2 人目のユーザーは UNIQUE 制約によって
-	// 拒否される。
-	t.Run("同じメールアドレスの 2 人目のユーザーを入れると、UNIQUE 制約違反になる", func(t *testing.T) {
-		const email = "ac4@example.com"
+	// 有効なユーザー同士では、同じメールアドレスは一意索引によって拒否される。
+	t.Run("有効なユーザーがすでに使っているメールアドレスで 2 人目を入れると、一意制約違反になる", func(t *testing.T) {
+		const email = "dup-active@example.com"
 		if _, err := conn.Exec(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3)",
-			email, "ac4-first", "digest"); err != nil {
+			email, "dup-first", "digest"); err != nil {
 			t.Fatalf("insert first user: %v", err)
 		}
 		_, err := conn.Exec(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ($1, $2, $3)",
-			email, "ac4-second", "digest")
-		// まったく同じ文字列は、UNIQUE(email)と lower(email)の一意の索引の、どちらにも違反する(先に検出された名前で報告される)。
-		var pgErr *pgconn.PgError
-		if !errors.As(err, &pgErr) || pgErr.Code != "23505" || (pgErr.ConstraintName != "users_email_key" && pgErr.ConstraintName != "users_email_lower_key") {
-			t.Fatalf("expected a unique violation on the email, got %v", err)
-		}
+			email, "dup-second", "digest")
+		assertPgError(t, err, "23505", "users_email_lower_key")
 	})
 
-	// メールの一意性は、大文字小文字を区別せずに、DB が保証する(事前の確認だけに頼らない)。退会済みも対象。
+	// メールの一意性は、大文字小文字を区別せずに、有効なユーザーに対して DB が保証する。
 	t.Run("大文字小文字だけが違うメールアドレスの 2 人目のユーザーを入れると、UNIQUE 制約違反になる", func(t *testing.T) {
 		if _, err := conn.Exec(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ('Case.Mixed@Example.com', 'case-first', 'digest')"); err != nil {
@@ -198,6 +193,61 @@ func TestMigrationsAcceptance(t *testing.T) {
 		_, err := conn.Exec(ctx,
 			"INSERT INTO users (email, username, password_digest) VALUES ('case.mixed@example.com', 'case-second', 'digest')")
 		assertPgError(t, err, "23505", "users_email_lower_key")
+	})
+
+	// 退会済み(discarded_at IS NOT NULL)のメールアドレスは新しいユーザーとして再登録できるが、有効な 2 人目は拒否される。
+	t.Run("退会済みのメールアドレスは再登録でき、有効な 2 人目は一意制約違反になる", func(t *testing.T) {
+		var goneID, activeID string
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO users (email, username, password_digest, discarded_at) VALUES ('rejoin@example.com', 'gone', 'digest', now()) RETURNING id",
+		).Scan(&goneID); err != nil {
+			t.Fatalf("insert discarded user: %v", err)
+		}
+		defer func() {
+			_, _ = conn.Exec(ctx, "DELETE FROM users WHERE id = ANY($1::uuid[])", []string{goneID, activeID})
+		}()
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ('REJOIN@example.com', 'rejoined', 'digest') RETURNING id",
+		).Scan(&activeID); err != nil {
+			t.Fatalf("insert rejoined user: %v", err)
+		}
+		_, err := conn.Exec(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ('rejoin@example.com', 'third', 'digest')")
+		assertPgError(t, err, "23505", "users_email_lower_key")
+	})
+
+	// セッションの記録(user_sessions)は、64 文字のトークンハッシュが一意で、ユーザー削除時に連鎖削除される。
+	t.Run("セッショントークンのハッシュは 64 文字かつ一意で、ユーザー削除と連動して消える", func(t *testing.T) {
+		var uid string
+		if err := conn.QueryRow(ctx,
+			"INSERT INTO users (email, username, password_digest) VALUES ('sess@example.com', 'sess', 'digest') RETURNING id",
+		).Scan(&uid); err != nil {
+			t.Fatalf("insert session user: %v", err)
+		}
+		hash := strings.Repeat("a", 64)
+		if _, err := conn.Exec(ctx,
+			"INSERT INTO user_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '1 hour')",
+			uid, hash); err != nil {
+			t.Fatalf("insert session: %v", err)
+		}
+		_, err := conn.Exec(ctx,
+			"INSERT INTO user_sessions (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '1 hour')",
+			uid, hash)
+		assertPgError(t, err, "23505", "user_sessions_token_hash_key")
+		_, err = conn.Exec(ctx,
+			"INSERT INTO user_sessions (user_id, token_hash, expires_at) VALUES ($1, 'short', now() + interval '1 hour')",
+			uid)
+		assertPgError(t, err, "23514", "user_sessions_token_hash_length")
+		if _, err := conn.Exec(ctx, "DELETE FROM users WHERE id = $1", uid); err != nil {
+			t.Fatalf("delete session user: %v", err)
+		}
+		var remaining int
+		if err := conn.QueryRow(ctx, "SELECT count(*) FROM user_sessions WHERE user_id = $1", uid).Scan(&remaining); err != nil {
+			t.Fatalf("count sessions: %v", err)
+		}
+		if remaining != 0 {
+			t.Fatalf("remaining sessions = %d, want 0", remaining)
+		}
 	})
 
 	// メール確認待ちの登録(signup_verifications)の制約。トークンのハッシュは一意、email は大文字小文字を
@@ -428,7 +478,7 @@ func TestMigrationsAcceptance(t *testing.T) {
 func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	t.Helper()
 
-	wantTables := []string{"burger_stats", "burger_stats_recalc_requests", "burgers", "login_handoffs", "mail_deliveries", "oauth_grants", "oauth_token_sessions", "reviews", "shop_stats", "shop_stats_recalc_requests", "shops", "shops_burgers", "signup_verifications", "user_identities", "users"}
+	wantTables := []string{"burger_stats", "burger_stats_recalc_requests", "burgers", "login_handoffs", "mail_deliveries", "oauth_grants", "oauth_token_sessions", "reviews", "shop_stats", "shop_stats_recalc_requests", "shops", "shops_burgers", "signup_verifications", "user_identities", "user_sessions", "users"}
 	gotTables := queryStrings(ctx, t, conn,
 		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name")
 	if strings.Join(gotTables, ",") != strings.Join(wantTables, ",") {
@@ -550,6 +600,12 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"user_identities/provider_user_id/text/NO",
 		"user_identities/email/text/NO",
 		"user_identities/created_at/timestamp with time zone/NO",
+		// user_sessions は 000020 で追加された(サーバー側で検証・失効させるセッショントークンの記録)。
+		"user_sessions/id/uuid/NO",
+		"user_sessions/user_id/uuid/NO",
+		"user_sessions/token_hash/text/NO",
+		"user_sessions/expires_at/timestamp with time zone/NO",
+		"user_sessions/created_at/timestamp with time zone/NO",
 		"users/id/uuid/NO",
 		"users/email/text/NO",
 		"users/username/text/NO",
@@ -588,7 +644,6 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 	}
 	wantConstraints := []string{
 		"users/users_pkey/p",
-		"users/users_email_key/u",
 		"shops/shops_pkey/p",
 		"shops/shops_status_check/c",
 		"shops/shops_creator_id_fkey/f",
@@ -659,6 +714,10 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"login_handoffs/login_handoffs_binder_hash_check/c",
 		"login_handoffs/login_handoffs_outcome_check/c",
 		"login_handoffs/login_handoffs_user_check/c",
+		"user_sessions/user_sessions_pkey/p",
+		"user_sessions/user_sessions_user_id_fkey/f",
+		"user_sessions/user_sessions_token_hash_key/u",
+		"user_sessions/user_sessions_token_hash_length/c",
 	}
 	for _, want := range wantConstraints {
 		if !constraints[want] {
@@ -685,6 +744,8 @@ func assertSchemaPresent(ctx context.Context, t *testing.T, conn *pgx.Conn) {
 		"idx_oauth_token_sessions_expires_at",
 		"idx_login_handoffs_expires_at",
 		"idx_login_handoffs_user_id",
+		"idx_user_sessions_user_id",
+		"idx_user_sessions_expires_at",
 		"users_email_lower_key",
 	}
 	for _, want := range wantIndexes {

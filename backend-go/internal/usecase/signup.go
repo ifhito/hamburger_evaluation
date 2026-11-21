@@ -117,6 +117,7 @@ func passwordConfirmationIssues(password string, confirmation *string) []domain.
 type Signups struct {
 	query         UserQuery
 	verifications *domain.SignupVerifications
+	sessions      *domain.UserSessions
 	uow           UnitOfWork
 	hasher        PasswordHasher
 	mailer        Mailer
@@ -124,8 +125,8 @@ type Signups struct {
 	cfg           SignupConfig
 }
 
-func NewSignups(query UserQuery, verifications *domain.SignupVerifications, uow UnitOfWork, hasher PasswordHasher, mailer Mailer, issuer TokenIssuer, cfg SignupConfig) *Signups {
-	return &Signups{query: query, verifications: verifications, uow: uow, hasher: hasher, mailer: mailer, issuer: issuer, cfg: cfg}
+func NewSignups(query UserQuery, verifications *domain.SignupVerifications, sessions *domain.UserSessions, uow UnitOfWork, hasher PasswordHasher, mailer Mailer, issuer TokenIssuer, cfg SignupConfig) *Signups {
+	return &Signups{query: query, verifications: verifications, sessions: sessions, uow: uow, hasher: hasher, mailer: mailer, issuer: issuer, cfg: cfg}
 }
 
 // Request は signup の入力を検証し、確認メールを送る手配をする。**登録済みの email でも
@@ -202,6 +203,7 @@ func (s *Signups) Request(ctx context.Context, input SignupInput) error {
 // トランザクションを持つ usecase が組み立てる。
 func (s *Signups) Confirm(ctx context.Context, rawToken string) (domain.User, string, error) {
 	var user domain.User
+	var token string
 	err := s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		if err := tx.SignupVerifications.Lock(ctx, rawToken); err != nil {
 			return err
@@ -220,7 +222,17 @@ func (s *Signups) Confirm(ctx context.Context, rawToken string) (domain.User, st
 		if err != nil {
 			return err
 		}
-		return tx.SignupVerifications.Discard(ctx, pending.ID)
+		if err := tx.SignupVerifications.Discard(ctx, pending.ID); err != nil {
+			return err
+		}
+		token, err = s.issuer.Issue(user.ID)
+		if err != nil {
+			return fmt.Errorf("issue token: %w", err)
+		}
+		if err := tx.UserSessions.Create(ctx, user.ID, token, sessionTTLOf(s.issuer)); err != nil {
+			return fmt.Errorf("create session: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrEmailTaken) {
@@ -228,10 +240,7 @@ func (s *Signups) Confirm(ctx context.Context, rawToken string) (domain.User, st
 		}
 		return domain.User{}, "", fmt.Errorf("confirm signup: %w", err)
 	}
-	token, err := s.issuer.Issue(user.ID)
-	if err != nil {
-		return domain.User{}, "", fmt.Errorf("issue token: %w", err)
-	}
+	discardExpiredUserSessions(ctx, s.sessions)
 	return user, token, nil
 }
 

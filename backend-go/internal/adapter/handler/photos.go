@@ -22,6 +22,8 @@ func PhotoFileServer(root string) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		// 配信する画像が HTML 等として誤解釈されないよう MIME スニッフィングを抑止する。
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		files.ServeHTTP(w, r)
 	})
 }

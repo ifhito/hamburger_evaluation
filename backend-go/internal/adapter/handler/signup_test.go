@@ -208,14 +208,15 @@ func newSignupKitWithHasher(t *testing.T, hasher usecase.PasswordHasher) *signup
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
 	store := newSignupStoreFake(users)
 	mailer := &mailRecorder{}
-	auth := usecase.NewAuth(users, hasher, codec, codec)
-	signups := usecase.NewSignups(users, domain.NewSignupVerifications(store),
-		&uowtest.UoW{Users: users, SignupVerifications: store, PendingSignups: store}, hasher, mailer, codec, testSignupConfig)
+	sessionWrites := domain.NewUserSessions(users)
+	auth := usecase.NewAuth(users, users, sessionWrites, hasher, codec, codec)
+	signups := usecase.NewSignups(users, domain.NewSignupVerifications(store), sessionWrites,
+		&uowtest.UoW{Users: users, UserSessions: users, SignupVerifications: store, PendingSignups: store}, hasher, mailer, codec, testSignupConfig)
 	reviewRepo := newReviewStoreFake()
 	shopRepo := &shopStoreFake{}
 	router := handler.NewRouter(okPinger, auth, signups, shopsUsecase(shopRepo, shopRepo), nil,
 		reviewsUsecase(reviewRepo, storage.NewDisk(t.TempDir(), "/photos")),
-		usecase.NewUsers(users, domain.NewUsers(users), &uowtest.UoW{Users: users}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), hasher), nil, nil, nil)
+		usecase.NewUsers(users, domain.NewUsers(users), &uowtest.UoW{Users: users, UserSessions: users}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), hasher), nil, nil, nil)
 	return &signupKit{router: router, users: users, store: store, mailer: mailer}
 }
 

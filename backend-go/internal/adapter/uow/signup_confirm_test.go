@@ -53,7 +53,8 @@ func newSignupWorld(t *testing.T) *signupWorld {
 	}
 	t.Cleanup(pool.Close)
 	verifications := domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pool))
-	signups := usecase.NewSignups(query.NewUserQuery(pool), verifications, uow.New(pool),
+	sessions := domain.NewUserSessions(repository.NewUserSessionRepository(pool))
+	signups := usecase.NewSignups(query.NewUserQuery(pool), verifications, sessions, uow.New(pool),
 		infra.BcryptPasswordHasher{}, noMail{}, infra.NewJWTCodec("test-secret", time.Hour),
 		usecase.SignupConfig{BaseURL: "https://app.example.com"})
 	return &signupWorld{ctx: ctx, pool: pool, signups: signups, verifications: verifications}

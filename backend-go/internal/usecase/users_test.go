@@ -572,3 +572,46 @@ func TestUsersDeleteDiscardsIdentities(t *testing.T) {
 		}
 	})
 }
+
+// TestUsersDeleteDiscardsSessions は、退会が、発行済みのセッション記録も論理削除と同じトランザクションで
+// 削除し、失敗時には退会全体を取り消すことを固定する。
+func TestUsersDeleteDiscardsSessions(t *testing.T) {
+	newUsersWith := func(repo domain.UserRepository, unit *uowtest.UoW) *usecase.Users {
+		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
+		return usecase.NewUsers(query, domain.NewUsers(repo), unit, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), fakeHasher{})
+	}
+	discardOK := &fakeUserRepo{discard: func(context.Context, string) error { return nil }}
+
+	t.Run("本人が退会すると、論理削除と同じトランザクションで自分のセッションをすべて削除する", func(t *testing.T) {
+		sessions := &uowtest.SessionDiscards{}
+		unit := &uowtest.UoW{Users: discardOK, Sessions: sessions}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersViewer.ID); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(sessions.UserIDs, []string{usersViewer.ID}) || unit.Commits != 1 {
+			t.Errorf("失効した利用者 = %v, commits = %d, want [%s] と 1", sessions.UserIDs, unit.Commits, usersViewer.ID)
+		}
+	})
+
+	t.Run("セッションの削除に失敗したときは、退会も確定せずトランザクションを取り消してエラーを返す", func(t *testing.T) {
+		sessions := &uowtest.SessionDiscards{DiscardErr: errors.New("database is down")}
+		unit := &uowtest.UoW{Users: discardOK, Sessions: sessions}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersViewer.ID); err == nil {
+			t.Fatal("エラーにならなかった")
+		}
+		if unit.Commits != 0 || unit.Rollbacks != 1 {
+			t.Errorf("commits = %d, rollbacks = %d, want 0 と 1", unit.Commits, unit.Rollbacks)
+		}
+	})
+
+	t.Run("他人の退会では拒否され、セッションを削除しない", func(t *testing.T) {
+		sessions := &uowtest.SessionDiscards{}
+		unit := &uowtest.UoW{Users: discardOK, Sessions: sessions}
+		if err := newUsersWith(discardOK, unit).Delete(context.Background(), usersViewer, usersOther.ID); !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("error = %v, want ErrForbidden", err)
+		}
+		if len(sessions.UserIDs) != 0 {
+			t.Errorf("失効した利用者 = %v, want なし", sessions.UserIDs)
+		}
+	})
+}

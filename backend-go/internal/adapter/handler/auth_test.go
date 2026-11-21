@@ -47,24 +47,29 @@ type fakeRecord struct {
 // 書き込みオブジェクトの引数型がコンパイル時に保証する）。err を設定するとすべての操作がその err で失敗する（500 の経路を
 // 駆動する）。
 type userStoreFake struct {
-	seq   int
-	users map[string]*fakeRecord
-	err   error
+	seq      int
+	users    map[string]*fakeRecord
+	sessions map[string]string
+	err      error
 }
 
 var (
-	_ usecase.UserQuery     = (*userStoreFake)(nil)
-	_ domain.UserRepository = (*userStoreFake)(nil)
+	_ usecase.UserQuery            = (*userStoreFake)(nil)
+	_ usecase.UserSessionQuery     = (*userStoreFake)(nil)
+	_ domain.UserRepository        = (*userStoreFake)(nil)
+	_ domain.UserSessionRepository = (*userStoreFake)(nil)
 )
 
-func newUserStoreFake() *userStoreFake { return &userStoreFake{users: map[string]*fakeRecord{}} }
+func newUserStoreFake() *userStoreFake {
+	return &userStoreFake{users: map[string]*fakeRecord{}, sessions: map[string]string{}}
+}
 
 func (f *userStoreFake) CreateUser(_ context.Context, p domain.CreateUserParams) (domain.User, error) {
 	if f.err != nil {
 		return domain.User{}, f.err
 	}
 	for _, rec := range f.users {
-		if rec.user.Email == p.Email {
+		if !rec.discarded && strings.EqualFold(rec.user.Email, p.Email) {
 			return domain.User{}, domain.ErrEmailTaken
 		}
 	}
@@ -79,7 +84,7 @@ func (f *userStoreFake) GetActiveUserByEmail(_ context.Context, email string) (u
 		return usecase.UserCredentials{}, f.err
 	}
 	for _, rec := range f.users {
-		if rec.user.Email == email && !rec.discarded {
+		if strings.EqualFold(rec.user.Email, email) && !rec.discarded {
 			return usecase.UserCredentials{User: rec.user, PasswordDigest: rec.digest}, nil
 		}
 	}
@@ -118,6 +123,68 @@ func (f *userStoreFake) GetActiveUserByID(_ context.Context, id string) (domain.
 	return domain.User{}, domain.ErrUserNotFound
 }
 
+func (f *userStoreFake) CreateUserSession(_ context.Context, p domain.CreateUserSessionParams) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.sessions[p.TokenHash] = p.UserID
+	return nil
+}
+
+func (f *userStoreFake) DiscardUserSessionByTokenHash(_ context.Context, tokenHash string) error {
+	if f.err != nil {
+		return f.err
+	}
+	delete(f.sessions, tokenHash)
+	return nil
+}
+
+func (f *userStoreFake) DiscardUserSessionsByUser(_ context.Context, userID string) error {
+	if f.err != nil {
+		return f.err
+	}
+	for h, uid := range f.sessions {
+		if uid == userID {
+			delete(f.sessions, h)
+		}
+	}
+	return nil
+}
+
+func (f *userStoreFake) DiscardExpiredUserSessions(_ context.Context, _ int) (int64, error) {
+	return 0, nil
+}
+
+func (f *userStoreFake) GetActiveUserBySessionTokenHash(_ context.Context, userID, tokenHash string) (domain.User, error) {
+	if f.err != nil {
+		return domain.User{}, f.err
+	}
+	storedUID, ok := f.sessions[tokenHash]
+	if !ok || storedUID != userID {
+		return domain.User{}, domain.ErrUserSessionNotFound
+	}
+	rec, ok := f.users[userID]
+	if !ok || rec.discarded {
+		return domain.User{}, domain.ErrUserSessionNotFound
+	}
+	return rec.user, nil
+}
+
+// sessionMintingCodec は、テストの準備で Issue を直接呼んだときにも in-memory のセッション記録を登録する。
+type sessionMintingCodec struct {
+	*infra.JWTCodec
+	store *userStoreFake
+}
+
+func (c *sessionMintingCodec) Issue(userID string) (string, error) {
+	tok, err := c.JWTCodec.Issue(userID)
+	if err != nil {
+		return "", err
+	}
+	c.store.sessions[domain.HashSessionToken(tok)] = userID
+	return tok, nil
+}
+
 // seed は、password に対する hasherFake の digest を持つ active なユーザーを
 // 保存する。
 func (f *userStoreFake) seed(username, email, password string) domain.User {
@@ -134,10 +201,10 @@ func (f *userStoreFake) seed(username, email, password string) domain.User {
 
 // newAuthKit は、in-memory の fake と本物の JWT codec の上に本物の auth
 // usecase を構築し、router レベルのテストに使える状態にする。
-func newAuthKit() (*userStoreFake, *usecase.Auth, *infra.JWTCodec) {
+func newAuthKit() (*userStoreFake, *usecase.Auth, *sessionMintingCodec) {
 	repo := newUserStoreFake()
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	return repo, usecase.NewAuth(repo, hasherFake{}, codec, codec), codec
+	return repo, usecase.NewAuth(repo, repo, domain.NewUserSessions(repo), hasherFake{}, codec, codec), &sessionMintingCodec{JWTCodec: codec, store: repo}
 }
 
 // unusedSignups は、signup を使わないテストの router に渡す Signups である。保存先もメールの
@@ -146,8 +213,8 @@ func unusedSignups() *usecase.Signups {
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
 	users := newUserStoreFake()
 	store := newSignupStoreFake(users)
-	return usecase.NewSignups(users, domain.NewSignupVerifications(store),
-		&uowtest.UoW{Users: users, SignupVerifications: store, PendingSignups: store},
+	return usecase.NewSignups(users, domain.NewSignupVerifications(store), domain.NewUserSessions(users),
+		&uowtest.UoW{Users: users, UserSessions: users, SignupVerifications: store, PendingSignups: store},
 		hasherFake{}, &mailRecorder{}, codec, testSignupConfig)
 }
 
@@ -478,7 +545,7 @@ func TestRequireAuth(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := do(router, http.MethodPost, "/logout", "", tt.authHeader)
+			rec := do(router, http.MethodGet, "/me", "", tt.authHeader)
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tt.wantStatus, rec.Body)
 			}
@@ -488,6 +555,67 @@ func TestRequireAuth(t *testing.T) {
 				}
 			}
 		})
+	}
+
+	t.Run("秘密鍵で正しく署名されていてもサーバー側にセッション記録がないトークンは 401 になる", func(t *testing.T) {
+		untracked, err := infra.NewJWTCodec(testJWTSecret, time.Hour).Issue(alice.ID)
+		if err != nil {
+			t.Fatalf("issue untracked token: %v", err)
+		}
+		rec := do(router, http.MethodGet, "/me", "", "Bearer "+untracked)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401 (body %s)", rec.Code, rec.Body)
+		}
+	})
+}
+
+// TestLogoutRevokesSession は、POST /logout の直後から同じトークンで認証必須の窓口に通らなくなることと、
+// メールアドレスの大文字小文字を区別せず再ログインできることを検証する。
+func TestLogoutRevokesSession(t *testing.T) {
+	repo, auth, _ := newAuthKit()
+	repo.seed("alice", "Alice@Example.com", "Password123!")
+	router := newTestRouterWith(t, okPinger, auth)
+
+	loginRec := do(router, http.MethodPost, "/login", `{"email":"alice@example.com","password":"Password123!"}`, "")
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want 200 (body %s)", loginRec.Code, loginRec.Body)
+	}
+	var loggedIn struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(loginRec.Body.Bytes(), &loggedIn); err != nil || loggedIn.Token == "" {
+		t.Fatalf("decode login body: %v (%s)", err, loginRec.Body)
+	}
+	bearer := "Bearer " + loggedIn.Token
+
+	if me := do(router, http.MethodGet, "/me", "", bearer); me.Code != http.StatusOK {
+		t.Fatalf("GET /me before logout = %d, want 200", me.Code)
+	}
+	if out := do(router, http.MethodPost, "/logout", "", bearer); out.Code != http.StatusOK {
+		t.Fatalf("POST /logout = %d, want 200 (body %s)", out.Code, out.Body)
+	}
+	if meAfter := do(router, http.MethodGet, "/me", "", bearer); meAfter.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /me after logout = %d, want 401 (body %s)", meAfter.Code, meAfter.Body)
+	}
+	if outAgain := do(router, http.MethodPost, "/logout", "", bearer); outAgain.Code != http.StatusUnauthorized {
+		t.Fatalf("second POST /logout = %d, want 401 (body %s)", outAgain.Code, outAgain.Body)
+	}
+}
+
+type panicPinger struct{}
+
+func (panicPinger) Ping(context.Context) error { panic("boom in handler") }
+
+// TestRouterRecoversPanic は、下流で予期せぬ panic が起きても最外周の middleware が捕捉し、
+// 英語固定の 500 JSON を返すことを検証する。
+func TestRouterRecoversPanic(t *testing.T) {
+	router := newTestRouter(t, panicPinger{})
+	rec := do(router, http.MethodGet, "/up", "", "")
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 (body %s)", rec.Code, rec.Body)
+	}
+	if got := rec.Body.String(); got != `{"error":"internal server error"}` {
+		t.Errorf("body = %q, want 500 JSON error", got)
 	}
 }
 

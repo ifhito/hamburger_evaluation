@@ -439,7 +439,9 @@ func (s *Server) Metadata() map[string]any {
 func (s *Server) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 	body, err := json.Marshal(s.Metadata())
 	if err != nil {
-		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"internal server error"}`))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

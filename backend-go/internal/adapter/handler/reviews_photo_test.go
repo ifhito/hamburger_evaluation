@@ -352,6 +352,14 @@ func TestPhotoDirectoryRequests(t *testing.T) {
 	_, photoURL := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
 	storedName := strings.TrimPrefix(photoURL, "/photos/reviews/")
 
+	served := do(router, http.MethodGet, photoURL, "", "")
+	if served.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200", photoURL, served.Code)
+	}
+	if got := served.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
+	}
+
 	for _, path := range []string{"/photos/", "/photos/reviews/"} {
 		rec := do(router, http.MethodGet, path, "", "")
 		if rec.Code != http.StatusNotFound {

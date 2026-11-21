@@ -70,7 +70,7 @@ func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *u
 		{path: "/signup", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignup(signups)}},
 		{path: "/signup/confirm", methods: map[string]http.HandlerFunc{http.MethodPost: handleSignupConfirm(signups)}},
 		{path: "/login", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogin(auth)}},
-		{path: "/logout", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogout}, middleware: RequireAuth(auth)},
+		{path: "/logout", methods: map[string]http.HandlerFunc{http.MethodPost: handleLogout(auth)}, middleware: RequireAuth(auth)},
 		{path: "/me", methods: map[string]http.HandlerFunc{http.MethodGet: handleMe}, middleware: RequireAuth(auth)},
 		{path: "/meta", methods: map[string]http.HandlerFunc{http.MethodGet: handleMeta(extras.google.LoginProviders())}},
 		// GET は匿名でも使える（OptionalAuth）ままで、ログインが必要なのは
@@ -140,7 +140,7 @@ func NewRouter(db Pinger, auth *usecase.Auth, signups *usecase.Signups, shops *u
 		{path: "/admin/shops/{id}/close", methods: map[string]http.HandlerFunc{http.MethodPost: handleCloseShop(shops)}, middleware: RequireAuth(auth)},
 		{path: "/admin/shops/{id}/reopen", methods: map[string]http.HandlerFunc{http.MethodPost: handleReopenShop(shops)}, middleware: RequireAuth(auth)},
 	}...))
-	return limitBody(mux)
+	return recoverPanic(limitBody(mux))
 }
 
 // oauthRoutes は、OAuth の認可サーバーの route を返す。oauth が nil なら、何も返さない。

@@ -126,6 +126,59 @@ type fakeVerifier struct {
 
 func (f fakeVerifier) Verify(token string) (string, error) { return f.verify(token) }
 
+// fakeSessionStore は、テスト用の usecase.UserSessionQuery かつ domain.UserSessionRepository である。
+type fakeSessionStore struct {
+	sessions map[string]domain.User
+	err      error
+}
+
+func newFakeSessionStore() *fakeSessionStore {
+	return &fakeSessionStore{sessions: map[string]domain.User{}}
+}
+
+func (s *fakeSessionStore) CreateUserSession(_ context.Context, p domain.CreateUserSessionParams) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.sessions[p.TokenHash] = domain.User{ID: p.UserID}
+	return nil
+}
+
+func (s *fakeSessionStore) DiscardUserSessionByTokenHash(_ context.Context, tokenHash string) error {
+	if s.err != nil {
+		return s.err
+	}
+	delete(s.sessions, tokenHash)
+	return nil
+}
+
+func (s *fakeSessionStore) DiscardUserSessionsByUser(_ context.Context, userID string) error {
+	if s.err != nil {
+		return s.err
+	}
+	for h, u := range s.sessions {
+		if u.ID == userID {
+			delete(s.sessions, h)
+		}
+	}
+	return nil
+}
+
+func (s *fakeSessionStore) DiscardExpiredUserSessions(context.Context, int) (int64, error) {
+	return 0, nil
+}
+
+func (s *fakeSessionStore) GetActiveUserBySessionTokenHash(_ context.Context, userID, tokenHash string) (domain.User, error) {
+	if s.err != nil {
+		return domain.User{}, s.err
+	}
+	u, ok := s.sessions[tokenHash]
+	if !ok || u.ID != userID {
+		return domain.User{}, fmt.Errorf("session: %w", domain.ErrUserSessionNotFound)
+	}
+	return u, nil
+}
+
 func strPtr(s string) *string { return &s }
 
 // assertValidationError は、err がちょうど wantMsgs を保持する
@@ -151,7 +204,8 @@ func TestAuthLogin(t *testing.T) {
 			return usecase.UserCredentials{User: activeUser, PasswordDigest: "digest(Password123!)"}, nil
 		},
 	}
-	auth := newAuth(query, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+	sessions := newFakeSessionStore()
+	auth := newAuth(query, sessions, sessions, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 
 	tests := []struct {
 		name      string
@@ -205,7 +259,8 @@ func TestAuthLogin(t *testing.T) {
 	for _, tt := range rejected {
 		t.Run(tt.name, func(t *testing.T) {
 			hasher := &recordingHasher{}
-			auth := newAuth(&fakeUserQuery{}, hasher, fakeIssuer{}, fakeVerifier{})
+			sessions := newFakeSessionStore()
+			auth := newAuth(&fakeUserQuery{}, sessions, sessions, hasher, fakeIssuer{}, fakeVerifier{})
 			_, token, err := auth.Login(context.Background(), tt.email, tt.password)
 			var vErr *domain.ValidationError
 			if !errors.As(err, &vErr) {
@@ -233,7 +288,8 @@ func TestAuthLogin(t *testing.T) {
 			},
 		}
 		hasher := &recordingHasher{}
-		auth := newAuth(notFound, hasher, fakeIssuer{}, fakeVerifier{})
+		sessions := newFakeSessionStore()
+		auth := newAuth(notFound, sessions, sessions, hasher, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Login(context.Background(), "b@example.com", "Password123!")
 		if !errors.Is(err, domain.ErrInvalidCredentials) {
 			t.Fatalf("Login error = %v, want %v", err, domain.ErrInvalidCredentials)
@@ -250,7 +306,8 @@ func TestAuthLogin(t *testing.T) {
 				return usecase.UserCredentials{}, repoErr
 			},
 		}
-		auth := newAuth(failing, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
+		sessions := newFakeSessionStore()
+		auth := newAuth(failing, sessions, sessions, fakeHasher{}, fakeIssuer{}, fakeVerifier{})
 		_, _, err := auth.Login(context.Background(), "a@example.com", "Password123!")
 		if !errors.Is(err, repoErr) || errors.Is(err, domain.ErrInvalidCredentials) {
 			t.Fatalf("Login error = %v, want wrapped %v", err, repoErr)
@@ -260,19 +317,11 @@ func TestAuthLogin(t *testing.T) {
 
 func TestAuthAuthenticateToken(t *testing.T) {
 	activeUser := domain.User{ID: uid.N(7), Username: "alice", Email: "a@example.com"}
-	query := &fakeUserQuery{
-		getByID: func(_ context.Context, id string) (domain.User, error) {
-			if id != activeUser.ID {
-				// 未知のユーザーと discard 済みのユーザーは、query の
-				// 境界ではどちらも "not found" になる。
-				return domain.User{}, fmt.Errorf("lookup: %w", domain.ErrUserNotFound)
-			}
-			return activeUser, nil
-		},
-	}
+	sessions := newFakeSessionStore()
+	sessions.sessions[domain.HashSessionToken("valid-active")] = activeUser
 	verifier := fakeVerifier{verify: func(token string) (string, error) {
 		switch token {
-		case "valid-active":
+		case "valid-active", "valid-logged-out":
 			return activeUser.ID, nil
 		case "valid-discarded":
 			return uid.N(8), nil
@@ -283,7 +332,7 @@ func TestAuthAuthenticateToken(t *testing.T) {
 			return "", errors.New("invalid token")
 		}
 	}}
-	auth := newAuth(query, fakeHasher{}, fakeIssuer{}, verifier)
+	auth := newAuth(&fakeUserQuery{}, sessions, sessions, fakeHasher{}, fakeIssuer{}, verifier)
 
 	tests := []struct {
 		name    string
@@ -292,6 +341,7 @@ func TestAuthAuthenticateToken(t *testing.T) {
 	}{
 		{name: "active ユーザーの有効な token ならそのユーザーを返す", token: "valid-active"},
 		{name: "不正な token は unauthenticated になる", token: "tampered-or-expired", wantErr: domain.ErrUnauthenticated},
+		{name: "サーバー側にセッションがない token は署名が正しくても unauthenticated になる", token: "valid-logged-out", wantErr: domain.ErrUnauthenticated},
 		{name: "未知または discard 済みのユーザーの token は unauthenticated になる", token: "valid-discarded", wantErr: domain.ErrUnauthenticated},
 	}
 	for _, tt := range tests {
@@ -312,14 +362,23 @@ func TestAuthAuthenticateToken(t *testing.T) {
 		})
 	}
 
+	t.Run("ログアウトしたトークンは直後から unauthenticated になる", func(t *testing.T) {
+		logoutSessions := newFakeSessionStore()
+		logoutSessions.sessions[domain.HashSessionToken("valid-active")] = activeUser
+		logoutAuth := newAuth(&fakeUserQuery{}, logoutSessions, logoutSessions, fakeHasher{}, fakeIssuer{}, verifier)
+		if err := logoutAuth.Logout(context.Background(), "valid-active"); err != nil {
+			t.Fatalf("Logout error = %v", err)
+		}
+		if _, err := logoutAuth.AuthenticateToken(context.Background(), "valid-active"); !errors.Is(err, domain.ErrUnauthenticated) {
+			t.Fatalf("AuthenticateToken after Logout = %v, want ErrUnauthenticated", err)
+		}
+	})
+
 	t.Run("repository の失敗は unauthenticated にならずそのまま伝播する", func(t *testing.T) {
 		repoErr := errors.New("connection lost")
-		failing := &fakeUserQuery{
-			getByID: func(context.Context, string) (domain.User, error) {
-				return domain.User{}, repoErr
-			},
-		}
-		auth := newAuth(failing, fakeHasher{}, fakeIssuer{}, verifier)
+		failing := newFakeSessionStore()
+		failing.err = repoErr
+		auth := newAuth(&fakeUserQuery{}, failing, failing, fakeHasher{}, fakeIssuer{}, verifier)
 		_, err := auth.AuthenticateToken(context.Background(), "valid-active")
 		if !errors.Is(err, repoErr) || errors.Is(err, domain.ErrUnauthenticated) {
 			t.Fatalf("AuthenticateToken error = %v, want wrapped %v", err, repoErr)
@@ -350,7 +409,8 @@ func TestAuthLoginForAccountWithoutPassword(t *testing.T) {
 		return usecase.UserCredentials{User: user, PasswordDigest: ""}, nil
 	}}
 	hasher := &digestRecordingHasher{}
-	auth := newAuth(query, hasher, fakeIssuer{}, fakeVerifier{})
+	sessions := newFakeSessionStore()
+	auth := newAuth(query, sessions, sessions, hasher, fakeIssuer{}, fakeVerifier{})
 
 	got, token, err := auth.Login(context.Background(), "carol@example.com", "Password123!")
 	if !errors.Is(err, domain.ErrInvalidCredentials) || token != "" || got != (domain.User{}) {

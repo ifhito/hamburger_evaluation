@@ -310,6 +310,10 @@ type UoW struct {
 	UserIdentities domain.UserIdentityRepository
 	// Identities は、退会のときの、結び付きの削除を記録する代役である。未設定(nil)なら、Do が空のものを作る。
 	Identities *IdentityDiscards
+	// UserSessions は、セッションの作成・失効を行う代役である。未設定(nil)のときは Sessions が使われる。
+	UserSessions domain.UserSessionRepository
+	// Sessions は、セッションの作成・退会時の失効を記録する既定の代役である。未設定(nil)なら、Do が空のものを作る。
+	Sessions *SessionDiscards
 	// LoginHandoffs と PendingHandoff は、画面へ渡すコードを使う手順の代役である。未設定(nil)のものが使われると
 	// panic する。
 	LoginHandoffs  domain.LoginHandoffRepository
@@ -371,6 +375,38 @@ func (d *IdentityDiscards) DiscardUserIdentitiesByUser(_ context.Context, userID
 
 var _ domain.UserIdentityRepository = (*IdentityDiscards)(nil)
 
+// SessionDiscards は、domain.UserSessionRepository の既定の代役で、作成されたセッションと退会で失効された
+// 利用者の ID を記録する。CreateErr や DiscardErr を設定すると、それぞれの操作がそのエラーで失敗する。
+type SessionDiscards struct {
+	Created    []domain.CreateUserSessionParams
+	UserIDs    []string
+	CreateErr  error
+	DiscardErr error
+}
+
+func (s *SessionDiscards) CreateUserSession(_ context.Context, params domain.CreateUserSessionParams) error {
+	if s.CreateErr != nil {
+		return s.CreateErr
+	}
+	s.Created = append(s.Created, params)
+	return nil
+}
+
+func (s *SessionDiscards) DiscardUserSessionByTokenHash(context.Context, string) error {
+	panic("unexpected DiscardUserSessionByTokenHash call in UoW")
+}
+
+func (s *SessionDiscards) DiscardUserSessionsByUser(_ context.Context, userID string) error {
+	s.UserIDs = append(s.UserIDs, userID)
+	return s.DiscardErr
+}
+
+func (s *SessionDiscards) DiscardExpiredUserSessions(context.Context, int) (int64, error) {
+	panic("unexpected DiscardExpiredUserSessions call in UoW")
+}
+
+var _ domain.UserSessionRepository = (*SessionDiscards)(nil)
+
 var _ usecase.UnitOfWork = (*UoW)(nil)
 
 // Do は fn を実行し、成功なら commit、エラーなら rollback として回数を数える。
@@ -390,9 +426,16 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 	if u.Identities == nil {
 		u.Identities = &IdentityDiscards{}
 	}
+	if u.Sessions == nil {
+		u.Sessions = &SessionDiscards{}
+	}
 	identities := u.UserIdentities
 	if identities == nil {
 		identities = u.Identities
+	}
+	sessions := u.UserSessions
+	if sessions == nil {
+		sessions = u.Sessions
 	}
 	tx := usecase.Tx{
 		OAuthGrants:    domain.NewOAuthGrants(u.Grants),
@@ -407,6 +450,7 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 		SignupVerifications: domain.NewSignupVerifications(u.SignupVerifications),
 		PendingSignups:      u.PendingSignups,
 		UserIdentities:      domain.NewUserIdentities(identities),
+		UserSessions:        domain.NewUserSessions(sessions),
 		LoginHandoffs:       domain.NewLoginHandoffs(u.LoginHandoffs),
 		PendingHandoff:      u.PendingHandoff,
 		UserReads:           u.UserReads,

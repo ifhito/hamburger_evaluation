@@ -40,10 +40,9 @@ func (f *userStoreFake) UpdateUserProfile(_ context.Context, id string, changes 
 		return domain.User{}, domain.ErrUserNotFound
 	}
 	if changes.Email != nil {
-		// unique index は、users_email_key と同様に、discard 済みの
-		// ユーザーにも及ぶ。
+		// 有効なユーザー同士では、大文字小文字を区別せずにメールの一意性を検査する(退会済みは除外)。
 		for otherID, other := range f.users {
-			if otherID != id && other.user.Email == *changes.Email {
+			if otherID != id && !other.discarded && strings.EqualFold(other.user.Email, *changes.Email) {
 				return domain.User{}, domain.ErrEmailTaken
 			}
 		}
@@ -630,10 +629,11 @@ func newUsersIntegrationKit(t *testing.T) (*pgx.Conn, http.Handler) {
 	userRepo := repository.NewUserRepository(conn)
 	hasher := infra.BcryptPasswordHasher{}
 	codec := infra.NewJWTCodec(testJWTSecret, time.Hour)
-	auth := usecase.NewAuth(userQuery, hasher, codec, codec)
+	sessionWrites := domain.NewUserSessions(repository.NewUserSessionRepository(conn))
+	auth := usecase.NewAuth(userQuery, query.NewUserSessionQuery(conn), sessionWrites, hasher, codec, codec)
 	mailer := &mailRecorder{}
 	unitOfWork := uow.New(conn)
-	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)),
+	signups := usecase.NewSignups(userQuery, domain.NewSignupVerifications(repository.NewSignupVerificationRepository(conn)), sessionWrites,
 		unitOfWork, hasher, mailer, codec, testSignupConfig)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
@@ -1038,4 +1038,39 @@ func TestUsersDiscardPropagationIntegration(t *testing.T) {
 	}
 	assertStats(sharedID, 1, 4.0)
 	assertStats(soloID, 0, 0.0)
+}
+
+// TestDeletedUserCanReRegisterAndOldSessionIsRevokedIntegration は、退会した直後に旧トークンが失効することと、
+// 同じメールアドレスで新しいアカウントを再登録・ログインできることを PostgreSQL 上で通して確かめる。
+func TestDeletedUserCanReRegisterAndOldSessionIsRevokedIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping DB-backed integration test in short mode")
+	}
+	conn, router := newUsersIntegrationKit(t)
+
+	firstID, firstBearer := signupUser(t, router, "alice", "Alice@Example.com", "Password123!")
+	if rec := do(router, http.MethodDelete, "/users/"+firstID, "", firstBearer); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete first account = %d, want 204 (body %s)", rec.Code, rec.Body)
+	}
+	var keptSessions int
+	if err := conn.QueryRow(context.Background(), `SELECT count(*) FROM user_sessions WHERE user_id = $1`, firstID).Scan(&keptSessions); err != nil {
+		t.Fatalf("count user_sessions: %v", err)
+	}
+	if keptSessions != 0 {
+		t.Fatalf("remaining user_sessions for deleted user = %d, want 0", keptSessions)
+	}
+	if rec := do(router, http.MethodGet, "/me", "", firstBearer); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /me with deleted user's token = %d, want 401 (body %s)", rec.Code, rec.Body)
+	}
+
+	secondID, secondBearer := signupUser(t, router, "alice-new", "alice@example.com", "NewPassw0rd!")
+	if secondID == firstID {
+		t.Fatalf("re-registered ID = %s, want a new ID distinct from %s", secondID, firstID)
+	}
+	if me := do(router, http.MethodGet, "/me", "", secondBearer); me.Code != http.StatusOK {
+		t.Fatalf("GET /me with re-registered token = %d, want 200 (body %s)", me.Code, me.Body)
+	}
+	if login := loginAs(router, "ALICE@EXAMPLE.COM", "NewPassw0rd!"); login.Code != http.StatusOK {
+		t.Fatalf("case-insensitive login after re-registration = %d, want 200 (body %s)", login.Code, login.Body)
+	}
 }

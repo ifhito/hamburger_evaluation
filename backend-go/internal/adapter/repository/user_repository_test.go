@@ -289,7 +289,7 @@ func TestUserRepositoryEmailUniqueIgnoringCase(t *testing.T) {
 		}
 	})
 
-	t.Run("退会済みの利用者のメールも、大文字小文字を無視して再利用できない(現行の方針)", func(t *testing.T) {
+	t.Run("退会済みの利用者のメールアドレスは新しいアカウントとして再登録でき、さらに有効な 2 人目は ErrEmailTaken になる", func(t *testing.T) {
 		conn, _ := dbtest.New(t)
 		repo := repository.NewUserRepository(conn)
 		gone, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "Gone@Example.com", Username: "gone", PasswordDigest: "d"})
@@ -299,8 +299,15 @@ func TestUserRepositoryEmailUniqueIgnoringCase(t *testing.T) {
 		if err := repo.DiscardUser(ctx, gone.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "gone@example.com", Username: "again", PasswordDigest: "d"}); !errors.Is(err, domain.ErrEmailTaken) {
-			t.Fatalf("err = %v, want ErrEmailTaken", err)
+		rejoined, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "gone@example.com", Username: "again", PasswordDigest: "d"})
+		if err != nil {
+			t.Fatalf("CreateUser for rejoined email returned error: %v", err)
+		}
+		if rejoined.ID == gone.ID {
+			t.Fatalf("rejoined ID = %s, want a new ID distinct from discarded %s", rejoined.ID, gone.ID)
+		}
+		if _, err := repo.CreateUser(ctx, domain.CreateUserParams{Email: "GONE@EXAMPLE.COM", Username: "third", PasswordDigest: "d"}); !errors.Is(err, domain.ErrEmailTaken) {
+			t.Fatalf("err = %v, want ErrEmailTaken for second active user", err)
 		}
 	})
 

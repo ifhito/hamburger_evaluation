@@ -45,14 +45,15 @@ const (
 // googleKit は、本物の PostgreSQL と、OpenID Connect の提供元の代役をつないで、Google でのサインインを
 // HTTP の入口から確かめるための一式である。
 type googleKit struct {
-	pool   *pgxpool.Pool
-	conn   *pgx.Conn
-	router http.Handler
-	idp    *fakeoidc.Server
-	codec  *infra.JWTCodec
-	alice  string // パスワードでサインインできる利用者(alice@example.com)
-	bob    string // パスワードでサインインできる利用者(bob@example.com)
-	logs   *bytes.Buffer
+	pool     *pgxpool.Pool
+	conn     *pgx.Conn
+	router   http.Handler
+	idp      *fakeoidc.Server
+	codec    *infra.JWTCodec
+	sessions *domain.UserSessions
+	alice    string // パスワードでサインインできる利用者(alice@example.com)
+	bob      string // パスワードでサインインできる利用者(bob@example.com)
+	logs     *bytes.Buffer
 
 	// handoffs は、コールバックの応答が、手続きを終えたブラウザに設定した「結び付けの値」の cookie を、コードごとに
 	// 覚えておく(そのブラウザが、あとで、そのコードを交換するときに、送るもの)。別のブラウザの交換は、これを使わない(exchangeWith)。
@@ -113,6 +114,13 @@ func (f *flakyIssuer) Issue(userID string) (string, error) {
 	return f.inner.Issue(userID)
 }
 
+func (f *flakyIssuer) TTL() time.Duration {
+	if t, ok := f.inner.(interface{ TTL() time.Duration }); ok {
+		return t.TTL()
+	}
+	return domain.DefaultUserSessionTTL
+}
+
 // slowIssuer は、トークンの発行を、少し遅くする(並行する交換を、確実に重ならせる)。
 type slowIssuer struct {
 	inner usecase.TokenIssuer
@@ -122,6 +130,13 @@ type slowIssuer struct {
 func (s slowIssuer) Issue(userID string) (string, error) {
 	time.Sleep(s.delay)
 	return s.inner.Issue(userID)
+}
+
+func (s slowIssuer) TTL() time.Duration {
+	if t, ok := s.inner.(interface{ TTL() time.Duration }); ok {
+		return t.TTL()
+	}
+	return domain.DefaultUserSessionTTL
 }
 
 // flakyUsers は、最初の failures 回だけ、利用者の取得(ID)に失敗する(DB の一時的なエラーの代役)。
@@ -210,11 +225,13 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	if ko.identityQuery != nil {
 		identityQuery = ko.identityQuery(identityQuery)
 	}
+	sessionWrites := domain.NewUserSessions(repository.NewUserSessionRepository(pool))
 	logins := usecase.NewGoogleLogins(
 		googleauth.New(googleauth.Config{ClientID: googleTestClientID, ClientSecret: googleTestClientSecret, RedirectURL: googleTestRedirect, Issuer: idp.URL}),
 		identityQuery, userQuery, loginUoW,
 		domain.NewLoginHandoffs(repository.NewLoginHandoffRepository(pool)),
 		domain.NewUserIdentities(repository.NewUserIdentityRepository(pool)),
+		sessionWrites,
 		loginIssuer,
 	)
 	google, err := handler.NewGoogleLogin(logins, handler.GoogleLoginConfig{AppBaseURL: googleTestAppBase, RedirectURL: googleTestRedirect, CookieSecret: testJWTSecret})
@@ -223,7 +240,7 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	}
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
-	router := handler.NewRouter(pool, usecase.NewAuth(userQuery, hasherFake{}, codec, codec), unusedSignups(),
+	router := handler.NewRouter(pool, usecase.NewAuth(userQuery, query.NewUserSessionQuery(pool), sessionWrites, hasherFake{}, codec, codec), unusedSignups(),
 		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)), nil,
 		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{}),
 		usecase.NewUsers(userQuery, domain.NewUsers(repository.NewUserRepository(pool)), unitOfWork, recalc, shopRecalc, hasherFake{}),
@@ -235,13 +252,16 @@ func newGoogleKit(t *testing.T, opts ...func(*kitOptions)) *googleKit {
 	originalLogWriter := log.Writer()
 	log.SetOutput(logs)
 	t.Cleanup(func() { log.SetOutput(originalLogWriter) })
-	return &googleKit{pool: pool, conn: conn, router: router, idp: idp, codec: codec, alice: alice, bob: bob, logs: logs, handoffs: map[string][]*http.Cookie{}}
+	return &googleKit{pool: pool, conn: conn, router: router, idp: idp, codec: codec, sessions: sessionWrites, alice: alice, bob: bob, logs: logs, handoffs: map[string][]*http.Cookie{}}
 }
 
 func (k *googleKit) bearer(t *testing.T, userID string) string {
 	t.Helper()
 	tok, err := k.codec.Issue(userID)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := k.sessions.Create(context.Background(), userID, tok, k.codec.TTL()); err != nil {
 		t.Fatal(err)
 	}
 	return "Bearer " + tok

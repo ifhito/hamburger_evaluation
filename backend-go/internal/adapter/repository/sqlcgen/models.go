@@ -162,3 +162,11 @@ type UserIdentity struct {
 	Email          string
 	CreatedAt      pgtype.Timestamptz
 }
+
+type UserSession struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}

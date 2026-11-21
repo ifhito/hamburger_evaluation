@@ -217,6 +217,22 @@ func TestReviewQuery(t *testing.T) {
 		}
 	})
 
+	t.Run("複数店舗に紐づくバーガーでも shop_id で絞り込んだときは指定した店舗が返る", func(t *testing.T) {
+		target := active2
+		reviews, _, err := reviewQuery.ListReviews(ctx, usecase.ReviewListFilter{ShopID: &target}, 100, 0)
+		if err != nil {
+			t.Fatalf("ListReviews returned error: %v", err)
+		}
+		if len(reviews) == 0 {
+			t.Fatal("expected reviews for active2")
+		}
+		for _, r := range reviews {
+			if r.Shop == nil || r.Shop.ID != active2 {
+				t.Errorf("review %s shop = %+v, want shop ID %s", r.ID, r.Shop, active2)
+			}
+		}
+	})
+
 	t.Run("shop_id の filter は、指定された shop 自体が active であることを要求する", func(t *testing.T) {
 		// active と pending の「両方」の shop に link された burger：その
 		// review は（active な link 経由で）フィードに含まれるが、pending な

@@ -48,6 +48,9 @@ type Tx struct {
 	// UserIdentities は、外部のサービス(Google など)のアカウントとの結び付きである。外部のサービスでの
 	// 新規登録で、ユーザーの作成と同じトランザクションで記録する。
 	UserIdentities *domain.UserIdentities
+	// UserSessions は、セッショントークンの記録である。確認メールからの登録確定・外部サービス認証の交換での作成、
+	// および退会時の全セッション失効を同じトランザクションで行う。
+	UserSessions *domain.UserSessions
 	// LoginHandoffs と PendingHandoff は、外部のサービスでのサインインの結果を画面へ渡すコードの、書き込みと読み取りである。
 	// コードを使う手順(ロック → 読み取り → 後続の処理 → 削除)を、1 つのトランザクションにするために使う。
 	LoginHandoffs  *domain.LoginHandoffs

@@ -226,6 +226,33 @@ func TestShopQuery(t *testing.T) {
 		}
 	})
 
+	t.Run("申請者が退会済みなら、ショップ詳細と審査一覧で表示上の申請者は nil になる", func(t *testing.T) {
+		if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = now() WHERE id = $1`, carol); err != nil {
+			t.Fatalf("discard carol: %v", err)
+		}
+		t.Cleanup(func() {
+			if _, err := conn.Exec(ctx, `UPDATE users SET discarded_at = NULL WHERE id = $1`, carol); err != nil {
+				t.Fatalf("restore carol: %v", err)
+			}
+		})
+		detail, err := shopQuery.GetShopWithCreator(ctx, deltaDiner)
+		if err != nil {
+			t.Fatalf("GetShopWithCreator returned error: %v", err)
+		}
+		if detail.Creator != nil {
+			t.Errorf("detail.Creator = %+v, want nil for discarded creator", detail.Creator)
+		}
+		modShops, _, err := shopQuery.ListShopsForModeration(ctx, nil, 50, 0)
+		if err != nil {
+			t.Fatalf("ListShopsForModeration returned error: %v", err)
+		}
+		for _, s := range modShops {
+			if s.ID == deltaDiner && s.Creator != nil {
+				t.Errorf("moderation Creator = %+v, want nil for discarded creator", s.Creator)
+			}
+		}
+	})
+
 	t.Run("GetShopWithCreator は closed_at を、設定されていればそのまま返す", func(t *testing.T) {
 		closedAt := time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC)
 		if _, err := conn.Exec(ctx, `UPDATE shops SET closed_at = $1 WHERE id = $2`, closedAt, deltaDiner); err != nil {

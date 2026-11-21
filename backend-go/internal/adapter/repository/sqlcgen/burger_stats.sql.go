@@ -11,35 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteBurgerStats = `-- name: DeleteBurgerStats :exec
-DELETE FROM burger_stats
-WHERE burger_id = $1
-`
-
-func (q *Queries) DeleteBurgerStats(ctx context.Context, burgerID string) error {
-	_, err := q.db.Exec(ctx, deleteBurgerStats, burgerID)
-	return err
-}
-
-const getBurgerStats = `-- name: GetBurgerStats :one
-SELECT burger_id, review_count, average_rating, weighted_score, confidence, calculated_at FROM burger_stats
-WHERE burger_id = $1
-`
-
-func (q *Queries) GetBurgerStats(ctx context.Context, burgerID string) (BurgerStat, error) {
-	row := q.db.QueryRow(ctx, getBurgerStats, burgerID)
-	var i BurgerStat
-	err := row.Scan(
-		&i.BurgerID,
-		&i.ReviewCount,
-		&i.AverageRating,
-		&i.WeightedScore,
-		&i.Confidence,
-		&i.CalculatedAt,
-	)
-	return i, err
-}
-
 const listBurgerReviewFacts = `-- name: ListBurgerReviewFacts :many
 SELECT r.rating, r.created_at, r.user_id
 FROM reviews r

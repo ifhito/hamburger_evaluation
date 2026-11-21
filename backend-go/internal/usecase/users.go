@@ -147,6 +147,9 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 		if err := tx.Users.Discard(ctx, targetID); err != nil {
 			return err
 		}
+		if err := tx.UserSessions.DiscardAllByUser(ctx, targetID); err != nil {
+			return err
+		}
 		if err := tx.OAuthGrants.RevokeAll(ctx, targetID); err != nil {
 			return err
 		}

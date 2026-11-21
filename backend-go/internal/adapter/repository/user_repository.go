@@ -14,9 +14,8 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
 
-// db/migrations/000001_create_users.up.sql の、メールの一意性を守る 2 つの名前である。users_email_key は
-// users.email の UNIQUE 制約(まったく同じ文字列)、users_email_lower_key は lower(email) の一意の索引
-// (大文字小文字だけが違うもの)。どちらの違反も、同じ ErrEmailTaken に対応づける。
+// メールの一意性を守る索引名である。000020 で退会済みを除く部分一意索引(users_email_lower_key)に統一されており、
+// 旧制約名(users_email_key)と合わせてどちらの違反も同じ ErrEmailTaken に対応づける。
 const (
 	usersEmailUniqueConstraint      = "users_email_key"
 	usersEmailLowerUniqueConstraint = "users_email_lower_key"

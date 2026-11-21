@@ -117,12 +117,13 @@ type GoogleLogins struct {
 	uow        UnitOfWork
 	handoffs   *domain.LoginHandoffs
 	identities *domain.UserIdentities
+	sessions   *domain.UserSessions
 	issuer     TokenIssuer
 }
 
 // NewGoogleLogins は GoogleLogins を組み立てる。
-func NewGoogleLogins(provider GoogleProvider, query IdentityQuery, users UserQuery, uow UnitOfWork, handoffs *domain.LoginHandoffs, identities *domain.UserIdentities, issuer TokenIssuer) *GoogleLogins {
-	return &GoogleLogins{provider: provider, query: query, users: users, uow: uow, handoffs: handoffs, identities: identities, issuer: issuer}
+func NewGoogleLogins(provider GoogleProvider, query IdentityQuery, users UserQuery, uow UnitOfWork, handoffs *domain.LoginHandoffs, identities *domain.UserIdentities, sessions *domain.UserSessions, issuer TokenIssuer) *GoogleLogins {
+	return &GoogleLogins{provider: provider, query: query, users: users, uow: uow, handoffs: handoffs, identities: identities, sessions: sessions, issuer: issuer}
 }
 
 // Begin は、サインインの手続きを始める。returnTo は、domain.SanitizeReturnTo で確かめて、アプリの中のパス
@@ -226,7 +227,7 @@ func (g *GoogleLogins) signIn(ctx context.Context, ident domain.ExternalIdentity
 			return outcome, userID
 		}
 		if errors.Is(err, domain.ErrEmailTaken) {
-			// 確認から作成までの間に、別のメールの利用者ができた(または、退会済みのメール)。
+			// 確認から作成までの間に、同じメールアドレスの有効な利用者が作られた。
 			return domain.OutcomeAccountExists, ""
 		}
 		log.Printf("google login: create user: %v", err)
@@ -329,6 +330,9 @@ func (g *GoogleLogins) Redeem(ctx context.Context, rawCode, binder string) (Goog
 				if err != nil {
 					return fmt.Errorf("issue token: %w", err)
 				}
+				if err := tx.UserSessions.Create(ctx, user.ID, token, sessionTTLOf(g.issuer)); err != nil {
+					return fmt.Errorf("create session: %w", err)
+				}
 				res.User, res.Token = user, token
 			case errors.Is(err, domain.ErrUserNotFound):
 				// コードを作ってから、交換までの間に退会した。サインインさせず、失敗として返す(コードは使い切る)。
@@ -341,6 +345,9 @@ func (g *GoogleLogins) Redeem(ctx context.Context, rawCode, binder string) (Goog
 	})
 	if err != nil {
 		return GoogleRedeemed{}, fmt.Errorf("redeem google login: %w", err)
+	}
+	if res.Token != "" {
+		discardExpiredUserSessions(ctx, g.sessions)
 	}
 	return res, nil
 }

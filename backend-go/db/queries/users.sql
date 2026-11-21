@@ -3,13 +3,12 @@ INSERT INTO users (email, username, password_digest, admin)
 VALUES ($1, $2, $3, $4)
 RETURNING *;
 
--- name: GetUser :one
-SELECT * FROM users
-WHERE id = $1;
-
 -- name: GetActiveUserByEmail :one
+-- ログインでもメールアドレスの大文字小文字を区別せず、退会していないユーザーを解決する。
 SELECT * FROM users
-WHERE email = $1 AND discarded_at IS NULL;
+WHERE lower(email) = lower($1) AND discarded_at IS NULL
+ORDER BY created_at
+LIMIT 1;
 
 -- name: GetActiveUserByEmailIgnoreCase :one
 -- メールの一意性は lower(email) で守られているので、「登録済みか」の確認(signup・外部のサービスでの新規登録)は、

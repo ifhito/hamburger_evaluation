@@ -26,10 +26,10 @@ func newUsers(query usecase.UserQuery, repo domain.UserRepository, hasher usecas
 	return usecase.NewUsers(query, domain.NewUsers(repo), &uowtest.UoW{Users: repo}, usecase.NewBurgerStatsRecalculator(uowtest.Clock{}), usecase.NewShopStatsRecalculator(uowtest.Clock{}), hasher)
 }
 
-func newAuth(query usecase.UserQuery, hasher usecase.PasswordHasher, issuer usecase.TokenIssuer, verifier usecase.TokenVerifier) *usecase.Auth {
-	return usecase.NewAuth(query, hasher, issuer, verifier)
+func newAuth(query usecase.UserQuery, sessionQuery usecase.UserSessionQuery, sessionRepo domain.UserSessionRepository, hasher usecase.PasswordHasher, issuer usecase.TokenIssuer, verifier usecase.TokenVerifier) *usecase.Auth {
+	return usecase.NewAuth(query, sessionQuery, domain.NewUserSessions(sessionRepo), hasher, issuer, verifier)
 }
 
 func newSignups(query usecase.UserQuery, repo domain.SignupVerificationRepository, hasher usecase.PasswordHasher, mailer usecase.Mailer, issuer usecase.TokenIssuer, cfg usecase.SignupConfig) *usecase.Signups {
-	return usecase.NewSignups(query, domain.NewSignupVerifications(repo), &uowtest.UoW{SignupVerifications: repo}, hasher, mailer, issuer, cfg)
+	return usecase.NewSignups(query, domain.NewSignupVerifications(repo), nil, &uowtest.UoW{SignupVerifications: repo}, hasher, mailer, issuer, cfg)
 }

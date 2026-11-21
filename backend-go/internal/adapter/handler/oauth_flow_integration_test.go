@@ -85,7 +85,8 @@ func newOAuthKit(t *testing.T) *oauthKit {
 	unitOfWork := uow.New(pool)
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
-	router := handler.NewRouter(pool, usecase.NewAuth(userQuery, hasherFake{}, codec, codec), unusedSignups(),
+	sessionWrites := domain.NewUserSessions(repository.NewUserSessionRepository(pool))
+	router := handler.NewRouter(pool, usecase.NewAuth(userQuery, query.NewUserSessionQuery(pool), sessionWrites, hasherFake{}, codec, codec), unusedSignups(),
 		shopsUsecase(query.NewShopQuery(pool), repository.NewShopRepository(pool)), nil,
 		usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, storage.NewDisk(t.TempDir(), "/photos"), infra.SystemClock{}),
 		usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, shopRecalc, hasherFake{}), nil,
@@ -99,6 +100,9 @@ func newOAuthKit(t *testing.T) *oauthKit {
 	for _, id := range []string{alice, bob} {
 		tok, err := codec.Issue(id)
 		if err != nil {
+			t.Fatal(err)
+		}
+		if err := sessionWrites.Create(ctx, id, tok, codec.TTL()); err != nil {
 			t.Fatal(err)
 		}
 		bearer[id] = "Bearer " + tok

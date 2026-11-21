@@ -92,13 +92,17 @@ func newMCPE2E(t *testing.T) *mcpE2E {
 	if err != nil {
 		t.Fatalf("new mcp server: %v", err)
 	}
-	auth := usecase.NewAuth(userQuery, hasher, codec, codec)
+	sessionWrites := domain.NewUserSessions(repository.NewUserSessionRepository(pool))
+	auth := usecase.NewAuth(userQuery, query.NewUserSessionQuery(pool), sessionWrites, hasher, codec, codec)
 	srv.Config.Handler = handler.NewRouter(pool, auth, unusedSignups(), shops, nil, reviews, users, nil, &handler.OAuth{Endpoints: e.oauth}, mcpServer)
 	srv.Start()
 	t.Cleanup(srv.Close)
 
 	if e.aliceJWT, err = codec.Issue(aliceID); err != nil {
 		t.Fatalf("issue jwt: %v", err)
+	}
+	if err := sessionWrites.Create(ctx, aliceID, e.aliceJWT, codec.TTL()); err != nil {
+		t.Fatalf("create session: %v", err)
 	}
 	return e
 }

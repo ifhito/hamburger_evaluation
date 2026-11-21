@@ -70,7 +70,7 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
        u.username AS creator_username
 FROM shops s
-LEFT JOIN users u ON u.id = s.creator_id
+LEFT JOIN users u ON u.id = s.creator_id AND u.discarded_at IS NULL
 WHERE sqlc.narg(status_code)::smallint IS NULL
    OR s.status = sqlc.narg(status_code)::smallint
 ORDER BY s.created_at DESC, s.id DESC
@@ -78,13 +78,14 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: GetShopWithCreator :one
 -- 集計(件数・平均・写真)は、shop_stats の保存された値を添える(未集計のショップは、件数 0・平均と写真なし)。
+-- 退会済みの申請者(u.discarded_at IS NOT NULL)は JOIN から外し、表示上の creator を出さない。
 SELECT s.id, s.name, s.status, s.moderation_note, s.map_url, s.creator_id, s.closed_at,
        u.username AS creator_username,
        COALESCE(ss.review_count, 0)::bigint AS review_count,
        ss.average_rating,
        ss.photo_key
 FROM shops s
-LEFT JOIN users u ON u.id = s.creator_id
+LEFT JOIN users u ON u.id = s.creator_id AND u.discarded_at IS NULL
 LEFT JOIN shop_stats ss ON ss.shop_id = s.id
 WHERE s.id = $1;
 
@@ -103,15 +104,6 @@ JOIN users u ON u.id = r.user_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
 WHERE sb.shop_id = $1 AND r.discarded_at IS NULL AND u.discarded_at IS NULL
 ORDER BY r.created_at DESC, r.id DESC;
-
--- name: UpdateShop :one
-UPDATE shops
-SET name = $2,
-    status = $3,
-    moderation_note = $4,
-    updated_at = now()
-WHERE id = $1
-RETURNING *;
 
 -- name: UpdateShopName :one
 -- 列を限定した名前変更：name と map_url だけを更新するので、並行する status の変更
@@ -143,7 +135,3 @@ SET closed_at = $2,
     updated_at = now()
 WHERE id = $1
 RETURNING *;
-
--- name: DeleteShop :exec
-DELETE FROM shops
-WHERE id = $1;

@@ -27,8 +27,8 @@ func TestUserQuery(t *testing.T) {
 		"alice@example.com", "alice", "digest-alice", false)
 	wantUser := domain.User{ID: aliceID, Username: "alice", Email: "alice@example.com", Admin: false}
 
-	t.Run("GetActiveUserByEmail は user と digest を返す", func(t *testing.T) {
-		creds, err := userQuery.GetActiveUserByEmail(ctx, "alice@example.com")
+	t.Run("GetActiveUserByEmail は大文字小文字を区別せずに user と digest を返す", func(t *testing.T) {
+		creds, err := userQuery.GetActiveUserByEmail(ctx, "ALICE@Example.com")
 		if err != nil {
 			t.Fatalf("GetActiveUserByEmail returned error: %v", err)
 		}

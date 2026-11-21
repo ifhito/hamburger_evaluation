@@ -3,26 +3,6 @@ INSERT INTO burgers (name)
 VALUES ($1)
 RETURNING *;
 
--- name: GetBurger :one
-SELECT * FROM burgers
-WHERE id = $1;
-
--- name: ListBurgers :many
-SELECT * FROM burgers
-ORDER BY created_at, id
-LIMIT $1 OFFSET $2;
-
--- name: UpdateBurger :one
-UPDATE burgers
-SET name = $2,
-    updated_at = now()
-WHERE id = $1
-RETURNING *;
-
--- name: DeleteBurger :exec
-DELETE FROM burgers
-WHERE id = $1;
-
 -- 写真はショップと同じく、退会していない投稿者による有効な写真付きレビューの最新を採る。
 -- 投稿日時が同じときは id の降順で決着する(domain の newerPhoto と同じ規則)。
 -- name: GetBurgerWithStats :one

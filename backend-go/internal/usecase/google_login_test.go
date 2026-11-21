@@ -126,7 +126,7 @@ func TestGoogleLoginsSignInRace(t *testing.T) {
 			return domain.UserIdentity{}, fmt.Errorf("create: %w", identityCreate)
 		}}
 		logins := usecase.NewGoogleLogins(fakeGoogleProvider{identity: ident}, &fakeIdentityQuery{lookups: lookups}, users,
-			&uowtest.UoW{Users: userRepo, UserIdentities: identityRepo}, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(identityRepo), fakeIssuer{})
+			&uowtest.UoW{Users: userRepo, UserIdentities: identityRepo}, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(identityRepo), nil, fakeIssuer{})
 		flow := usecase.GoogleFlow{Secrets: usecase.GoogleFlowSecrets{State: "s", Nonce: "n", Verifier: "v"}}
 		if _, err := logins.Complete(context.Background(), flow, usecase.GoogleCallback{Code: "c", State: "s"}); err != nil {
 			t.Fatal(err)
@@ -192,7 +192,7 @@ func TestGoogleLoginsSignInRace(t *testing.T) {
 func TestGoogleLoginsCompleteWithoutFlow(t *testing.T) {
 	handoffs := &fakeHandoffRepo{}
 	logins := usecase.NewGoogleLogins(fakeGoogleProvider{}, &fakeIdentityQuery{lookups: []func() (domain.UserIdentity, error){notLinked}}, &fakeUserQuery{},
-		&uowtest.UoW{}, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(fakeIdentityRepo{}), fakeIssuer{})
+		&uowtest.UoW{}, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(fakeIdentityRepo{}), nil, fakeIssuer{})
 
 	_, err := logins.Complete(context.Background(), usecase.GoogleFlow{}, usecase.GoogleCallback{Code: "c", State: "s"})
 
@@ -221,7 +221,7 @@ func TestGoogleLoginsRedeemRequiresBinder(t *testing.T) {
 		stored := domain.LoginHandoff{ID: uid.N(1), Outcome: domain.OutcomeFailed, ReturnTo: "/oauth/authorize?x=1", BinderHash: domain.HashLoginHandoffBinder(binder)}
 		unit := &uowtest.UoW{LoginHandoffs: handoffs, PendingHandoff: fakePendingHandoff{handoff: stored}}
 		logins := usecase.NewGoogleLogins(fakeGoogleProvider{}, &fakeIdentityQuery{lookups: []func() (domain.UserIdentity, error){notLinked}}, &fakeUserQuery{},
-			unit, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(fakeIdentityRepo{}), fakeIssuer{})
+			unit, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(fakeIdentityRepo{}), nil, fakeIssuer{})
 		res, err := logins.Redeem(context.Background(), "the-code", presented)
 		return domain.LoginHandoff{Outcome: res.Outcome, ReturnTo: res.ReturnTo}, err, handoffs, unit
 	}
@@ -245,6 +245,52 @@ func TestGoogleLoginsRedeemRequiresBinder(t *testing.T) {
 			if len(handoffs.discarded) != 0 || unit.Commits != 0 || unit.Rollbacks != 1 {
 				t.Errorf("%s: 削除 %v・commit %d・rollback %d, want 削除なし・rollback 1", name, handoffs.discarded, unit.Commits, unit.Rollbacks)
 			}
+		}
+	})
+
+	t.Run("サインイン成功の交換では同じトランザクションでセッションを保存し、保存失敗時はコードを消費せず巻き戻す", func(t *testing.T) {
+		alice := domain.User{ID: uid.N(3), Username: "alice", Email: "alice@example.com"}
+		userReads := &fakeUserQuery{getByID: func(_ context.Context, id string) (domain.User, error) {
+			if id == alice.ID {
+				return alice, nil
+			}
+			return domain.User{}, domain.ErrUserNotFound
+		}}
+		stored := domain.LoginHandoff{ID: uid.N(10), Outcome: domain.OutcomeSignedIn, UserID: alice.ID, ReturnTo: "/shops", BinderHash: domain.HashLoginHandoffBinder(binder)}
+
+		// 成功時はセッションが保存され、コードが削除されて確定する。
+		handoffs := &fakeHandoffRepo{}
+		sessions := newFakeSessionStore()
+		unit := &uowtest.UoW{LoginHandoffs: handoffs, PendingHandoff: fakePendingHandoff{handoff: stored}, UserReads: userReads}
+		logins := usecase.NewGoogleLogins(fakeGoogleProvider{}, &fakeIdentityQuery{lookups: []func() (domain.UserIdentity, error){notLinked}}, &fakeUserQuery{},
+			unit, domain.NewLoginHandoffs(handoffs), domain.NewUserIdentities(fakeIdentityRepo{}), domain.NewUserSessions(sessions), fakeIssuer{})
+		res, err := logins.Redeem(context.Background(), "the-code", binder)
+		if err != nil || res.Token == "" || res.User != alice {
+			t.Fatalf("Redeem = %+v, err = %v", res, err)
+		}
+		if len(unit.Sessions.Created) != 1 || unit.Sessions.Created[0].TokenHash != domain.HashSessionToken(res.Token) {
+			t.Errorf("保存されたセッション = %+v, want hash %s", unit.Sessions.Created, domain.HashSessionToken(res.Token))
+		}
+		if len(handoffs.discarded) != 1 || unit.Commits != 1 {
+			t.Errorf("削除 %v・commit %d, want 削除 1・commit 1", handoffs.discarded, unit.Commits)
+		}
+
+		// セッション保存が失敗したときは、コードを消費せず全体を取り消して再試行できるようにする。
+		failHandoffs := &fakeHandoffRepo{}
+		failErr := errors.New("session insert failed")
+		failUnit := &uowtest.UoW{
+			LoginHandoffs:  failHandoffs,
+			PendingHandoff: fakePendingHandoff{handoff: stored},
+			UserReads:      userReads,
+			Sessions:       &uowtest.SessionDiscards{CreateErr: failErr},
+		}
+		failLogins := usecase.NewGoogleLogins(fakeGoogleProvider{}, &fakeIdentityQuery{lookups: []func() (domain.UserIdentity, error){notLinked}}, &fakeUserQuery{},
+			failUnit, domain.NewLoginHandoffs(failHandoffs), domain.NewUserIdentities(fakeIdentityRepo{}), nil, fakeIssuer{})
+		if _, err := failLogins.Redeem(context.Background(), "the-code", binder); !errors.Is(err, failErr) {
+			t.Fatalf("Redeem error = %v, want wrapped %v", err, failErr)
+		}
+		if len(failHandoffs.discarded) != 0 || failUnit.Commits != 0 || failUnit.Rollbacks != 1 {
+			t.Errorf("失敗時の削除 %v・commit %d・rollback %d, want 削除なし・rollback 1", failHandoffs.discarded, failUnit.Commits, failUnit.Rollbacks)
 		}
 	})
 }

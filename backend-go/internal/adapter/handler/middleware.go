@@ -5,11 +5,56 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"strings"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/usecase"
 )
+
+// headerTrackingWriter は、下流がステータスコードや本文をすでに書き始めたかを記録する。
+// http.MaxBytesReader などが元の ResponseWriter を辿れるよう Unwrap を実装する。
+type headerTrackingWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (w *headerTrackingWriter) WriteHeader(code int) {
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *headerTrackingWriter) Write(b []byte) (int, error) {
+	w.wroteHeader = true
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *headerTrackingWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// recoverPanic は、handler の中で予期せぬ panic が起きても接続を素で切断せず、スタックトレースをログに残して
+// 500 JSON({"error":"internal server error"})を返す最外周の middleware である。
+// net/http の規約に従い http.ErrAbortHandler だけは握りつぶさず再送出する。
+func recoverPanic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tw := &headerTrackingWriter{ResponseWriter: w}
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+			if rec == http.ErrAbortHandler {
+				panic(rec)
+			}
+			log.Printf("http: panic recovered: %v\n%s", rec, debug.Stack())
+			if !tw.wroteHeader {
+				writeInternalError(w)
+			}
+		}()
+		next.ServeHTTP(tw, r)
+	})
+}
 
 // maxRequestBodyBytes は、すべての経路・Content-Type で本文全体を 10 MiB に制限する。
 // 写真自体のサイズや各入力項目の検査は、個別の処理で引き続き行う。

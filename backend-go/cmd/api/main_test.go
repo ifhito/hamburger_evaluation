@@ -223,4 +223,14 @@ func TestLogConfigWarnings(t *testing.T) {
 	if buf.Len() != 0 {
 		t.Fatalf("問題のない設定で、警告が出た: %s", buf.String())
 	}
+
+	buf.Reset()
+	logConfigWarnings(infra.Config{AppBaseURL: "http://localhost:5173", JWTSecret: "short-jwt-secret"})
+	jwtOut := buf.String()
+	if !strings.Contains(jwtOut, "level=WARN") || !strings.Contains(jwtOut, `msg="weak jwt secret setting"`) {
+		t.Fatalf("短い秘密鍵で警告が出ていない: %s", jwtOut)
+	}
+	if strings.Contains(jwtOut, "short-jwt-secret") {
+		t.Fatalf("ログに JWT_SECRET の値そのものが含まれている: %s", jwtOut)
+	}
 }

@@ -26,21 +26,6 @@ func (q *Queries) CreateShopBurger(ctx context.Context, arg CreateShopBurgerPara
 	return err
 }
 
-const deleteShopBurger = `-- name: DeleteShopBurger :exec
-DELETE FROM shops_burgers
-WHERE shop_id = $1 AND burger_id = $2
-`
-
-type DeleteShopBurgerParams struct {
-	ShopID   string
-	BurgerID string
-}
-
-func (q *Queries) DeleteShopBurger(ctx context.Context, arg DeleteShopBurgerParams) error {
-	_, err := q.db.Exec(ctx, deleteShopBurger, arg.ShopID, arg.BurgerID)
-	return err
-}
-
 const getShopBurgerByNameWithStats = `-- name: GetShopBurgerByNameWithStats :one
 SELECT b.id, b.name,
        bs.review_count, bs.average_rating, bs.weighted_score, bs.confidence
@@ -165,35 +150,6 @@ func (q *Queries) ListBurgerShops(ctx context.Context, burgerID string) ([]ListB
 			&i.CreatorID,
 			&i.ClosedAt,
 		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listShopBurgersByShop = `-- name: ListShopBurgersByShop :many
-SELECT sb.shop_id, sb.burger_id FROM shops_burgers sb
-JOIN burgers b ON b.id = sb.burger_id
-WHERE sb.shop_id = $1
-ORDER BY b.created_at, b.id
-`
-
-// burger の並びは、作成が古い順(同時刻は id で決定的に)。id は UUID なので、
-// id だけでは作成順にならない。
-func (q *Queries) ListShopBurgersByShop(ctx context.Context, shopID string) ([]ShopsBurger, error) {
-	rows, err := q.db.Query(ctx, listShopBurgersByShop, shopID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ShopsBurger
-	for rows.Next() {
-		var i ShopsBurger
-		if err := rows.Scan(&i.ShopID, &i.BurgerID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

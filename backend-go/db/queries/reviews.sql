@@ -7,7 +7,7 @@ RETURNING *;
 -- 全体の review フィード：discard されていない user の、discard されていない
 -- review のうち、その burger が少なくとも 1 つの active な shop（status 1）で
 -- 提供されているもの。author、burger、統計を 1 つのクエリで取得する
--- （N+1 なし）。shops_burgers に対する単純な JOIN ではなく EXISTS を使うのは、
+-- （N+1 なし）。shops_burgers に対する単純な JOIN ではなく LATERAL LIMIT 1 を使うのは、
 -- 複数の active な shop に紐づく burger でも、ちょうど 1 行だけが返るように
 -- するためである。u.discarded_at フィルタは、discard 済みの user の
 -- （まだ kept な）review をフィードから隠す。
@@ -18,14 +18,12 @@ RETURNING *;
 -- comment_pattern は comment に対する、あらかじめエスケープ済みの ILIKE
 -- パターンである（keyword_search。NULL の comment は Rails と同様に決して
 -- マッチしない）。
--- filter_shop_id は、burger がその shop に紐づいている review を残す
--- （Rails の shops_and_burgers の join）。ここでも行の重複を避けるために
--- EXISTS を使う。フィルタ対象の shop 自身も active（status 1）でなければ
--- ならない。これは shop フィルタが status を考慮しなかった Rails より厳しく、
--- フィードの EXISTS に既にある active な shop のルールとも一貫している。
+-- filter_shop_id は、LATERAL の中でその shop に絞り込むことで行の重複を避けつつ、
+-- 表示する店舗も指定された shop に揃える。フィルタ対象の shop 自身も active（status 1）でなければ
+-- ならない。
 -- filter_user_id は、その user が書いた review だけを残す（本 API の拡張で、
 -- Rails の ReviewQuery にはない）。公開ルール（discard 済みの review・user の
--- 除外と active な shop の EXISTS）はそのまま維持され、このフィルタは絞り込みだけを
+-- 除外と active な shop の条件）はそのまま維持され、このフィルタは絞り込みだけを
 -- 行う。公開の範囲を広げることはない。
 -- filter_burger_id も、その burger の review だけを残す（本 API の拡張で、
 -- Rails の ReviewQuery にはない）。公開ルールはそのまま維持され、絞り込みだけを行う
@@ -39,29 +37,19 @@ FROM reviews r
 JOIN users u ON u.id = r.user_id
 JOIN burgers b ON b.id = r.burger_id
 LEFT JOIN burger_stats bs ON bs.burger_id = b.id
--- ReviewShopFor の匿名閲覧者と同じく、公開店舗を作成の古い順から選ぶ。
+-- filter_shop_id が指定されたときはその公開店舗を選び、未指定のときは作成の古い順から選ぶ。
 JOIN LATERAL (
     SELECT s.id AS shop_id, s.name AS shop_name
     FROM shops_burgers sb JOIN shops s ON s.id = sb.shop_id
-    WHERE sb.burger_id = r.burger_id AND s.status = 1
+    WHERE sb.burger_id = r.burger_id
+      AND s.status = 1
+      AND (sqlc.narg(filter_shop_id)::uuid IS NULL OR s.id = sqlc.narg(filter_shop_id)::uuid)
     ORDER BY s.created_at, s.id LIMIT 1
 ) rs ON true
 WHERE r.discarded_at IS NULL
   AND u.discarded_at IS NULL
-  AND EXISTS (
-      SELECT 1
-      FROM shops_burgers sb
-      JOIN shops s ON s.id = sb.shop_id
-      WHERE sb.burger_id = r.burger_id AND s.status = 1
-  )
   AND (sqlc.narg(filter_rating)::bigint IS NULL OR r.rating = sqlc.narg(filter_rating)::bigint)
   AND (sqlc.narg(comment_pattern)::text IS NULL OR r.comment ILIKE sqlc.narg(comment_pattern)::text)
-  AND (sqlc.narg(filter_shop_id)::uuid IS NULL OR EXISTS (
-      SELECT 1
-      FROM shops_burgers fsb
-      JOIN shops fs ON fs.id = fsb.shop_id AND fs.status = 1
-      WHERE fsb.burger_id = r.burger_id AND fsb.shop_id = sqlc.narg(filter_shop_id)::uuid
-  ))
   AND (sqlc.narg(filter_user_id)::uuid IS NULL OR r.user_id = sqlc.narg(filter_user_id)::uuid)
   AND (sqlc.narg(filter_burger_id)::uuid IS NULL OR r.burger_id = sqlc.narg(filter_burger_id)::uuid)
 ORDER BY CASE WHEN sqlc.arg(sort_order)::text = 'rating' THEN r.rating END DESC,

@@ -94,8 +94,8 @@ func (r *ShopQuery) GetShopWithCreator(ctx context.Context, id string) (domain.S
 		return domain.ShopDetail{}, fmt.Errorf("get shop with creator: %w", err)
 	}
 	detail := domain.ShopDetail{Shop: shop, Summary: rowmap.ShopSummary(row.ReviewCount, row.AverageRating, row.PhotoKey)}
-	if row.CreatorID != nil {
-		// users.id は外部キーなので、LEFT JOIN で creator が見つかっている。
+	if row.CreatorID != nil && row.CreatorUsername.Valid {
+		// 退会済みの申請者は LEFT JOIN の条件(u.discarded_at IS NULL)で外れるため、CreatorUsername.Valid で生存を確かめる。
 		detail.Creator = &domain.UserRef{ID: *row.CreatorID, Username: row.CreatorUsername.String}
 	}
 	return detail, nil
@@ -159,8 +159,8 @@ func (r *ShopQuery) ListShopsForModeration(ctx context.Context, status *domain.S
 			return nil, false, fmt.Errorf("list shops for moderation: %w", err)
 		}
 		detail := domain.ShopDetail{Shop: shop}
-		if row.CreatorID != nil {
-			// users.id は外部キーなので、LEFT JOIN で creator が見つかっている。
+		if row.CreatorID != nil && row.CreatorUsername.Valid {
+			// 退会済みの申請者は LEFT JOIN の条件(u.discarded_at IS NULL)で外れるため、CreatorUsername.Valid で生存を確かめる。
 			detail.Creator = &domain.UserRef{ID: *row.CreatorID, Username: row.CreatorUsername.String}
 		}
 		details = append(details, detail)

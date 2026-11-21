@@ -78,12 +78,17 @@ func ShopReviewBurger(id string, name string, averageRating pgtype.Float8, revie
 // User は sqlc の行を domain のエンティティに変換し、password digest
 // と、ストレージ専用のカラムを落とす。
 func User(row sqlcgen.User) domain.User {
+	return SessionUser(row.ID, row.Username, row.Bio, row.Email, row.Admin)
+}
+
+// SessionUser は、ユーザーの基本列から domain.User を組み立てる。UserQuery と UserSessionQuery の両方が共有する。
+func SessionUser(id, username, bio, email string, admin bool) domain.User {
 	return domain.User{
-		ID:       row.ID,
-		Username: row.Username,
-		Bio:      row.Bio,
-		Email:    row.Email,
-		Admin:    row.Admin,
+		ID:       id,
+		Username: username,
+		Bio:      bio,
+		Email:    email,
+		Admin:    admin,
 	}
 }
 

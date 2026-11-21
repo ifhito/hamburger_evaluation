@@ -169,9 +169,20 @@ type messageResponse struct {
 	Message string `json:"message"`
 }
 
-// handleLogout は RequireAuth の背後で POST /logout を処理する。認証は
-// stateless な JWT なので、server 側で無効化するものは何もない
-// （Rails parity）。
-func handleLogout(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, messageResponse{Message: "Logged out successfully"})
+// handleLogout は RequireAuth の背後で POST /logout を処理し、Bearer トークンに対応する
+// サーバー側のセッション記録を削除して即座に失効させる。
+func handleLogout(auth *usecase.Auth) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token, ok := bearerToken(r)
+		if !ok {
+			writeError(w, r, http.StatusUnauthorized, msgUnauthorized)
+			return
+		}
+		if err := auth.Logout(r.Context(), token); err != nil {
+			log.Printf("logout: %v", err)
+			writeInternalError(w)
+			return
+		}
+		writeJSON(w, http.StatusOK, messageResponse{Message: "Logged out successfully"})
+	}
 }

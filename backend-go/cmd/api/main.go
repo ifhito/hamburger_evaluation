@@ -57,6 +57,9 @@ func logConfigWarnings(cfg infra.Config) {
 	for _, w := range cfg.GoogleWarnings() {
 		slog.Warn("suspicious google login setting", "detail", w)
 	}
+	for _, w := range cfg.JWTWarnings() {
+		slog.Warn("weak jwt secret setting", "detail", w)
+	}
 }
 
 // run は pool と handler を構築し、ctx が cancel されるまで（本番では
@@ -76,8 +79,12 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	// usecase は repository に依存せず、repository を呼ぶのは domain のコードだけである。
 	userQuery := query.NewUserQuery(pool)
 	userWrites := domain.NewUsers(repository.NewUserRepository(pool))
+	sessionQuery := query.NewUserSessionQuery(pool)
+	sessionWrites := domain.NewUserSessions(repository.NewUserSessionRepository(pool))
 	auth := usecase.NewAuth(
 		userQuery,
+		sessionQuery,
+		sessionWrites,
 		infra.BcryptPasswordHasher{},
 		jwtCodec,
 		jwtCodec,
@@ -106,6 +113,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	signups := usecase.NewSignups(
 		userQuery,
 		domain.NewSignupVerifications(repository.NewSignupVerificationRepository(pool)),
+		sessionWrites,
 		unitOfWork,
 		infra.BcryptPasswordHasher{},
 		mailer,
@@ -215,6 +223,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 			unitOfWork,
 			domain.NewLoginHandoffs(repository.NewLoginHandoffRepository(pool)),
 			domain.NewUserIdentities(repository.NewUserIdentityRepository(pool)),
+			sessionWrites,
 			jwtCodec,
 		)
 		googleLogin, err := handler.NewGoogleLogin(googleLogins, handler.GoogleLoginConfig{
