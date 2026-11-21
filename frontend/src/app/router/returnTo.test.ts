@@ -14,6 +14,12 @@ describe("returnPathFrom", () => {
     expect(returnPathFrom({ from: "javascript:alert(1)" })).toBeNull();
   });
 
+  it("サインアウトの画面(/signout)は戻り先にしない(サインインした直後にまたサインアウトしてしまうのを防ぐ)", () => {
+    expect(returnPathFrom({ from: "/signout" })).toBeNull();
+    expect(returnPathFrom({ from: "/signout?next=1" })).toBeNull();
+    expect(returnPathFrom({ from: "/signout/extra" })).toBeNull();
+  });
+
   it("state がない・オブジェクトでない・from が文字列でないときは、戻り先なしとして扱う", () => {
     expect(returnPathFrom(null)).toBeNull();
     expect(returnPathFrom(undefined)).toBeNull();

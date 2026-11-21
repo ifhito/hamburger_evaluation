@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useShopDetail } from "../hooks/useShops";
@@ -19,6 +19,7 @@ import textLinkStyles from "../../../components/ui/textLink.module.css";
 export default function ShopDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const backTo = searchParams.get("from") === "record" ? "/record" : "/shops";
   const { user, isLoading: authLoading } = useAuth();
@@ -48,7 +49,9 @@ export default function ShopDetailPage() {
       {t("shops.detail.writeReview")}
     </LinkButton>
   ) : !user ? (
-    <TextLink to="/signin">{t("shops.detail.signInToReview")}</TextLink>
+    <TextLink to="/signin" state={{ from: location.pathname + location.search }}>
+      {t("shops.detail.signInToReview")}
+    </TextLink>
   ) : null;
 
   return (

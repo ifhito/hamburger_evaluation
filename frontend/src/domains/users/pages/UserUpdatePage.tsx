@@ -45,7 +45,7 @@ function UserUpdateForm({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { logout, refreshUser } = useAuth();
+  const { clearSession, refreshUser } = useAuth();
   const { update } = useUpdateUser(id);
   const { destroy } = useDeleteUser();
   const meta = useMeta().data;
@@ -102,8 +102,10 @@ function UserUpdateForm({
     setIsDeleting(true);
     try {
       await destroy(id);
-      await logout();
-      void navigate("/reviews");
+      // 削除後はサーバー側のアカウントが既に無効なため POST /logout は呼ばず、移動と状態消去を同じ描画でまとめる
+      // (ProtectedRoute が先に /signin へ送る競合を防ぐ)。
+      clearSession();
+      void navigate("/reviews", { replace: true });
     } catch (e) {
       setServerError({
         title: t("users.update.deleteErrorTitle"),

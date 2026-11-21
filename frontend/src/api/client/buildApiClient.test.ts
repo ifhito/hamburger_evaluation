@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect } from "vitest";
 import type { InternalAxiosRequestConfig } from "axios";
 import i18n from "../../lib/i18n";
-import { ApiError, buildApiClient } from "./buildApiClient";
+import { ApiError, buildApiClient, onUnauthorized } from "./buildApiClient";
 
 describe("buildApiClient", () => {
   afterEach(() => {
@@ -82,6 +82,30 @@ describe("buildApiClient", () => {
       expect(failed, String(body)).toBeInstanceOf(ApiError);
       expect((failed as ApiError).status).toBe(502);
       expect((failed as ApiError).messages).toEqual(["An error occurred"]);
+    }
+  });
+
+  it("Bearer トークンを送った要求が 401 になったときだけ、失効したトークンを通知する(未認証のログイン失敗では通知しない)", async () => {
+    const notified: string[] = [];
+    const unsubscribe = onUnauthorized((token) => notified.push(token));
+    try {
+      const authedClient = buildApiClient(() => "expired-jwt");
+      authedClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+        const response = { data: { error: "Unauthorized" }, status: 401, statusText: "", headers: {}, config };
+        throw Object.assign(new Error("unauthorized"), { isAxiosError: true, response, config });
+      };
+      await authedClient.get("/me").catch(() => undefined);
+
+      const anonClient = buildApiClient(() => null);
+      anonClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+        const response = { data: { error: "Invalid credentials" }, status: 401, statusText: "", headers: {}, config };
+        throw Object.assign(new Error("unauthorized"), { isAxiosError: true, response, config });
+      };
+      await anonClient.post("/login", { email: "a@example.com", password: "wrong" }).catch(() => undefined);
+
+      expect(notified).toEqual(["expired-jwt"]);
+    } finally {
+      unsubscribe();
     }
   });
 });

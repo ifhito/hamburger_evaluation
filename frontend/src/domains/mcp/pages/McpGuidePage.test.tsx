@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import i18n from "../../../lib/i18n";
+import { returnPathFrom } from "../../../app/router/returnTo";
 import { byText, cleanup, click, mount, need } from "../../../test/dom";
 import { copyToClipboard } from "../../../lib/clipboard";
 import McpGuidePage from "./McpGuidePage";
 
+const authState = vi.hoisted(() => ({ user: null as { id: string; username: string } | null }));
 vi.mock("../../../lib/clipboard", () => ({ copyToClipboard: vi.fn() }));
-vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: null }) }));
+vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: authState.user, isLoading: false }) }));
 const copy = vi.mocked(copyToClipboard);
-beforeEach(async () => { copy.mockReset(); await i18n.changeLanguage("en"); });
+beforeEach(async () => { authState.user = null; copy.mockReset(); await i18n.changeLanguage("en"); });
 afterEach(cleanup);
 
 const render = () => mount(<MemoryRouter><McpGuidePage /></MemoryRouter>);
@@ -42,5 +44,29 @@ describe("MCPの接続案内", () => {
     expect(page.textContent).toContain("hamburger:read,hamburger:write");
     expect(page.textContent).not.toContain("hamburger:admin");
     expect(page.querySelector('footer a[href="/mcp"]')).not.toBeNull();
+  });
+
+  it("未サインイン時の解除案内は、サインイン後にマイページ(/me)へ戻れるよう state.from を渡す", async () => {
+    function SigninDest() {
+      const loc = useLocation();
+      return <p>from:{returnPathFrom(loc.state) ?? "none"}</p>;
+    }
+    const page = await mount(
+      <MemoryRouter initialEntries={["/mcp"]}>
+        <Routes>
+          <Route path="/mcp" element={<McpGuidePage />} />
+          <Route path="/signin" element={<SigninDest />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await click(need(byText(page, "a", "Sign in"), "サインインリンク"));
+    expect(page.textContent).toBe("from:/me");
+  });
+
+  it("サインイン済みのときは、新規登録ボタンを出さず、解除案内から本人のプロフィールへ直接案内する", async () => {
+    authState.user = { id: "u-42", username: "alice" };
+    const page = await render();
+    expect(page.querySelector('a[href="/signup"]')).toBeNull();
+    expect(page.querySelector('a[href="/users/u-42"]')?.textContent).toBe("My page");
   });
 });

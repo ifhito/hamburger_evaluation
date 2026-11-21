@@ -1,21 +1,27 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { cleanup, mount } from "../../test/dom";
 import { AdminRoute } from "./AdminRoute";
+import { returnPathFrom } from "./returnTo";
 
 const auth = vi.hoisted(() => ({ value: { user: null, isLoading: false } as { user: { canModerate: boolean } | null; isLoading: boolean } }));
 vi.mock("../../domains/auth/AuthProvider", () => ({ useAuth: () => auth.value }));
 
-const show = () =>
+function SigninCapture() {
+  const location = useLocation();
+  return <p>sign in:{returnPathFrom(location.state) ?? "none"}</p>;
+}
+
+const show = (initial = "/admin/shops?status=pending") =>
   mount(
-    <MemoryRouter initialEntries={["/admin/shops"]}>
+    <MemoryRouter initialEntries={[initial]}>
       <Routes>
         <Route element={<AdminRoute />}>
           <Route path="/admin/shops" element={<p>admin screen</p>} />
         </Route>
         <Route path="/shops" element={<p>shop list</p>} />
-        <Route path="/signin" element={<p>sign in</p>} />
+        <Route path="/signin" element={<SigninCapture />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -32,8 +38,8 @@ describe("AdminRoute(管理の画面に入れる人)", () => {
     expect((await show()).textContent).toBe("admin screen");
   });
 
-  it("サインインしていない人は、サインインの画面へ送る", async () => {
-    expect((await show()).textContent).toBe("sign in");
+  it("サインインしていない人は、元の管理画面のパスとクエリを戻り先(state.from)に添えてサインイン画面へ送る", async () => {
+    expect((await show()).textContent).toBe("sign in:/admin/shops?status=pending");
   });
 
   it("サインインしていても canModerate でない人は、ショップの一覧へ戻す(専用の「権限がありません」の画面は出さない)", async () => {

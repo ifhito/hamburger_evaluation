@@ -22,6 +22,17 @@ export class ApiError extends Error {
 // とき(Google のサインインの開始など)にも使う。
 export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
+type UnauthorizedListener = (expiredToken: string) => void;
+const unauthorizedListeners = new Set<UnauthorizedListener>();
+
+// 認証つきの要求が 401 で拒否されたとき(セッション途中のトークン失効など)の通知先を登録する。
+export function onUnauthorized(listener: UnauthorizedListener): () => void {
+  unauthorizedListeners.add(listener);
+  return () => {
+    unauthorizedListeners.delete(listener);
+  };
+}
+
 export function buildApiClient(getToken?: () => string | null) {
   const client = axios.create({ baseURL: API_BASE_URL });
 
@@ -65,6 +76,17 @@ export function buildApiClient(getToken?: () => string | null) {
     },
     (error: unknown) => {
       if (axios.isAxiosError(error) && error.response) {
+        const authHeader = error.config?.headers?.Authorization;
+        if (
+          error.response.status === 401 &&
+          typeof authHeader === "string" &&
+          authHeader.startsWith("Bearer ")
+        ) {
+          const sentToken = authHeader.slice("Bearer ".length);
+          if (sentToken) {
+            for (const listener of unauthorizedListeners) listener(sentToken);
+          }
+        }
         // 本文が空・null・文字列(プロキシの HTML など)のこともある(そのときは、項目なしとして扱う)。
         const data = (error.response.data ?? {}) as { error?: string; errors?: string[] };
         const messages =

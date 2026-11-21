@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { GuestRoute } from './GuestRoute'
 import { AdminRoute } from './AdminRoute'
+import NotFoundPage from './NotFoundPage'
 import DiscoverPage from '../navigation/DiscoverPage'
 import RecordPage from '../navigation/RecordPage'
 import MyPage from '../navigation/MyPage'
@@ -47,6 +48,8 @@ export const router = createBrowserRouter([
   { path: '/signup/confirm', element: <SignupConfirmPage /> },
   // Google でのサインインの結果の受け皿(ログイン中でも開ける。成功するとサインインした状態になる)
   { path: '/auth/google/complete', element: <GoogleCompletePage /> },
+  // サインアウトの受け皿(ProtectedRoute の下に置くと、状態消去の直後に /signin へ送られて戻り先が /signout になるため公開にする)
+  { path: '/signout', element: <SignoutPage /> },
 
   // ゲスト専用ルート
   {
@@ -66,14 +69,13 @@ export const router = createBrowserRouter([
       { path: '/shops/new', element: <ShopNewPage /> },
       { path: '/reviews/new', element: <ReviewNewPage /> },
       { path: '/reviews/:id/edit', element: <ReviewEditPage /> },
-      { path: '/signout', element: <SignoutPage /> },
       { path: '/users/:id/edit', element: <UserUpdatePage /> },
       // AI アプリが、ログインと許可だけでつなぐための、許可を尋ねる画面(backend の認可の URL から渡される)
       { path: '/oauth/authorize', element: <OAuthConsentPage /> },
     ],
   },
 
-  // Admin-only routes
+  // 管理者専用ルート
   {
     element: <AdminRoute />,
     children: [
@@ -81,4 +83,7 @@ export const router = createBrowserRouter([
       { path: '/admin/shops/:id/edit', element: <AdminShopEditPage /> },
     ],
   },
+
+  // どのルートにも一致しないパスは 404 画面を出す
+  { path: '*', element: <NotFoundPage /> },
 ])

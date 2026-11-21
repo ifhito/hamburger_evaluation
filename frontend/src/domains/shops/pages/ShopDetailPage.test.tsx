@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import "../../../lib/i18n";
-import { cleanup, mount } from "../../../test/dom";
+import { returnPathFrom } from "../../../app/router/returnTo";
+import { byText, cleanup, click, mount, need } from "../../../test/dom";
 import type { ShopDetail } from "../api/types";
 import ShopDetailPage from "./ShopDetailPage";
 
@@ -121,11 +122,24 @@ describe("ShopDetailPage の「レビューを書く」(can_review)", () => {
     expect(page.textContent).not.toContain("Write a review");
   });
 
-  it("サインインしていない(can_review が false)ときは、サインインへの案内を出す", async () => {
+  it("サインインしていない(can_review が false)ときは、サインイン後にこの店舗画面へ戻れるリンクを出す", async () => {
+    function SigninDest() {
+      const loc = useLocation();
+      return <p>from:{returnPathFrom(loc.state) ?? "none"}</p>;
+    }
     state.authUser = null;
     state.shop = { ...baseShop, canReview: false };
-    const page = await show();
+    const page = await mount(
+      <MemoryRouter initialEntries={["/shops/7?from=record"]}>
+        <Routes>
+          <Route path="/shops/:id" element={<ShopDetailPage />} />
+          <Route path="/signin" element={<SigninDest />} />
+        </Routes>
+      </MemoryRouter>,
+    );
     expect(page.textContent).toContain("Sign in to write a review");
+    await click(need(byText(page, "a", "Sign in to write a review →"), "サインイン案内"));
+    expect(page.textContent).toBe("from:/shops/7?from=record");
   });
 });
 

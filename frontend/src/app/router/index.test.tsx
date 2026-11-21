@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { router } from "./index";
 import HomePage from "../../domains/home/pages/HomePage";
+import NotFoundPage from "./NotFoundPage";
 
 describe("router の /", () => {
   // / は、以前の /shops への転送(Navigate)ではなく、新しいトップページ(HomePage)を表示する。
@@ -39,5 +40,20 @@ describe("MCPの接続案内", () => {
     expect(router.routes.find((route) => route.path === "/mcp")).toBeDefined();
     const guarded = router.routes.filter((route) => route.path === undefined).flatMap((route) => route.children ?? []);
     expect(guarded.some((route) => route.path === "/mcp")).toBe(false);
+  });
+});
+
+describe("サインアウトと未定義パスのルート", () => {
+  it("/signout は要ログインのガードの外(最上位)に置かれ、状態消去の直後に /signin へ奪われない", () => {
+    expect(router.routes.find((route) => route.path === "/signout")).toBeDefined();
+    const guarded = router.routes.filter((route) => route.path === undefined).flatMap((route) => route.children ?? []);
+    expect(guarded.some((route) => route.path === "/signout")).toBe(false);
+  });
+
+  it("未定義のパス(*)には 404 ページが割り当てられている", () => {
+    const fallback = router.routes.find((route) => route.path === "*");
+    expect(fallback).toBeDefined();
+    if (!fallback || !("element" in fallback)) throw new Error("fallback element not found");
+    expect(fallback.element).toMatchObject({ type: NotFoundPage });
   });
 });

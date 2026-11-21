@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../auth/AuthProvider";
 import { Layout } from "../../../components/Layout";
 import { Button } from "../../../components/ui/Button";
 import { LinkButton } from "../../../components/ui/LinkButton";
@@ -16,10 +17,19 @@ const claudeConfig = JSON.stringify({ mcpServers: { burger_stack: {
   type: "http", url: connectionUrl, oauth: { scopes: "hamburger:read" },
 } } }, null, 2);
 
+const COPY_FEEDBACK_RESET_MS = 1800;
+
 export default function McpGuidePage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "manual">("idle");
   const copy = async () => setCopyState(await copyToClipboard(connectionUrl) ? "copied" : "manual");
+
+  useEffect(() => {
+    if (copyState !== "copied") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), COPY_FEEDBACK_RESET_MS);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
 
   return (
     <Layout>
@@ -36,7 +46,7 @@ export default function McpGuidePage() {
           </div>
           <p role="status">{copyState === "copied" ? t("mcp.copied") : copyState === "manual" ? t("mcp.manual") : ""}</p>
           <p>{t("mcp.account")}</p>
-          <LinkButton to="/signup">{t("mcp.signup")}</LinkButton>
+          {!user && <LinkButton to="/signup">{t("mcp.signup")}</LinkButton>}
         </section>
         <section>
           <h2>{t("mcp.examplesTitle")}</h2>
@@ -78,7 +88,11 @@ export default function McpGuidePage() {
         <section>
           <h2>{t("mcp.disconnectTitle")}</h2>
           <p>{t("mcp.disconnect")}</p>
-          <LinkButton to="/signin">{t("mcp.signin")}</LinkButton>
+          {user ? (
+            <LinkButton to={`/users/${user.id}`}>{t("navigation.profile")}</LinkButton>
+          ) : (
+            <LinkButton to="/signin" state={{ from: "/me" }}>{t("mcp.signin")}</LinkButton>
+          )}
         </section>
         <section>
           <h2>{t("mcp.troubleTitle")}</h2>

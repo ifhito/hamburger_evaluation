@@ -12,8 +12,12 @@ export function appPathOrNull(path: string | null | undefined): string | null {
 }
 
 // state から、このアプリの中の戻り先だけを取り出す。それ以外は null(呼び出し側の既定の遷移先を使う)。
+// サインアウトの画面(/signout)に戻すと、サインインした直後にそのままサインアウトしてしまうため除外する。
 export function returnPathFrom(state: unknown): string | null {
   if (typeof state !== "object" || state === null) return null;
   const from = (state as ReturnToState).from;
-  return typeof from === "string" ? appPathOrNull(from) : null;
+  const path = typeof from === "string" ? appPathOrNull(from) : null;
+  if (!path) return null;
+  if (path === "/signout" || path.startsWith("/signout?") || path.startsWith("/signout/")) return null;
+  return path;
 }
