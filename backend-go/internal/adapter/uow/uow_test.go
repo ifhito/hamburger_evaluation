@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/storage"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/uow"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/statsworkertest"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/uid"
@@ -42,6 +46,7 @@ type world struct {
 	ctx        context.Context
 	conn       *pgx.Conn
 	dbURL      string
+	photoDir   string
 	shop       string
 	unit       *uow.UnitOfWork
 	recalc     *usecase.BurgerStatsRecalculator
@@ -62,16 +67,17 @@ func newWorld(t *testing.T) *world {
 	}
 	ctx := context.Background()
 	conn, dbURL := dbtest.New(t)
-	w := &world{ctx: ctx, conn: conn, dbURL: dbURL}
+	photoDir := t.TempDir()
+	w := &world{ctx: ctx, conn: conn, dbURL: dbURL, photoDir: photoDir}
 	w.unit = uow.New(conn)
 	w.recalc = usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	w.shopRecalc = usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	w.worker = statsworkertest.NewWorker(conn, infra.SystemClock{})
-	photos := storage.NewDisk(t.TempDir(), "/photos")
+	photos := storage.NewDisk(photoDir, "/photos")
 	w.queries.review = query.NewReviewQuery(conn)
 	w.queries.shop = query.NewShopQuery(conn)
 	w.reviews = usecase.NewReviews(w.queries.review, w.unit, w.recalc, w.shopRecalc, photos, infra.SystemClock{})
-	w.users = usecase.NewUsers(query.NewUserQuery(conn), domain.NewUsers(repository.NewUserRepository(conn)), w.unit, w.recalc, w.shopRecalc, infra.BcryptPasswordHasher{})
+	w.users = usecase.NewUsers(query.NewUserQuery(conn), domain.NewUsers(repository.NewUserRepository(conn)), w.unit, w.recalc, w.shopRecalc, infra.BcryptPasswordHasher{}, usecase.WithUserPhotoCleanup(photos))
 	w.shop = dbtest.InsertUUIDRow(ctx, t, conn,
 		`INSERT INTO shops (name, status, moderation_note, creator_id) VALUES ($1, $2, $3, $4) RETURNING id`,
 		"Active One", 1, nil, nil)
@@ -297,10 +303,16 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		}); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("存在しないレビューの編集 = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if err := fail(func(tx usecase.Tx) error { return tx.Reviews.Discard(ctx, victim.ID) }); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := fail(func(tx usecase.Tx) error {
+			_, err := tx.Reviews.Discard(ctx, victim.ID)
+			return err
+		}); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("削除済みのレビューの削除 = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if err := fail(func(tx usecase.Tx) error { return tx.Reviews.Discard(ctx, uid.N(99999)) }); !errors.Is(err, domain.ErrReviewNotFound) {
+		if err := fail(func(tx usecase.Tx) error {
+			_, err := tx.Reviews.Discard(ctx, uid.N(99999))
+			return err
+		}); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("存在しないレビューの削除 = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 
@@ -359,6 +371,36 @@ func TestUnitOfWorkBurgerStats(t *testing.T) {
 		if after != before {
 			t.Errorf("統計 = %+v, want 変化なし %+v", after, before)
 		}
+	})
+
+	t.Run("同じ利用者が別のバーガーに投稿・編集・削除すると、過去にレビューしたバーガーの統計も最新の履歴に合わせて更新される", func(t *testing.T) {
+		frank := w.user(t, "frank")
+		grace := w.user(t, "grace")
+		burgerA := w.burger(t, "Cross History A")
+		burgerB := w.burger(t, "Cross History B")
+
+		w.review(t, grace, burgerA, 2, "baseline")
+		w.review(t, frank, burgerA, 5, "first")
+		w.settle(t)
+		dbtest.RequireConsistentStats(ctx, t, conn, burgerA)
+
+		// frank が別のバーガー burgerB に偏りのない評価を足すと、frank の信頼度が変わり、burgerA の統計も再計算される。
+		frankOnB := w.review(t, frank, burgerB, 1, "contrast")
+		w.settle(t)
+		dbtest.RequireConsistentStats(ctx, t, conn, burgerA)
+		dbtest.RequireConsistentStats(ctx, t, conn, burgerB)
+
+		if _, err := w.reviews.Update(ctx, frank, frankOnB.ID, 5, "all five", nil, nil); err != nil {
+			t.Fatalf("編集に失敗した: %v", err)
+		}
+		w.settle(t)
+		dbtest.RequireConsistentStats(ctx, t, conn, burgerA)
+
+		if err := w.reviews.Delete(ctx, frank, frankOnB.ID); err != nil {
+			t.Fatalf("削除に失敗した: %v", err)
+		}
+		w.settle(t)
+		dbtest.RequireConsistentStats(ctx, t, conn, burgerA)
 	})
 }
 
@@ -493,10 +535,22 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 	// victim が退会すると、shared の統計は alice のレビューだけになり、solo の統計は件数 0 の行になる。
 	victimShared := w.review(t, victim, shared, 2, "meh")
 	aliceShared := w.review(t, alice, shared, 4, "good")
-	victimSolo := w.review(t, victim, solo, 5, "only mine")
+	victimSolo, err := w.reviews.Create(ctx, victim, w.shop, solo, "", 5, "only mine", nil, &photo.Processed{
+		Data: []byte("photo-bytes"), ContentType: "image/jpeg", Ext: ".jpg",
+	})
+	if err != nil {
+		t.Fatalf("写真つきレビューの投稿に失敗した: %v", err)
+	}
+	if victimSolo.PhotoKey == nil {
+		t.Fatal("PhotoKey が保存されていない")
+	}
+	victimPhotoPath := filepath.Join(w.photoDir, filepath.FromSlash(*victimSolo.PhotoKey))
+	if _, err := os.Stat(victimPhotoPath); err != nil {
+		t.Fatalf("退会前に写真ファイルが存在しない: %v", err)
+	}
 	w.settle(t)
 
-	t.Run("ユーザーが退会すると、削除日時が記録され、ワーカーが動いたあと、そのユーザーがレビューしたバーガーの統計が、そのレビューを除いた値に更新される", func(t *testing.T) {
+	t.Run("ユーザーが退会すると、削除日時が記録され、レビュー写真のファイルが削除され、ワーカーが動いたあと統計が更新される", func(t *testing.T) {
 		if got := dbtest.RequireConsistentStats(ctx, t, conn, shared); got.ReviewCount != 2 {
 			t.Fatalf("退会前の shared の統計 = %+v, want 件数 2", got)
 		}
@@ -517,14 +571,24 @@ func TestUnitOfWorkDiscardUser(t *testing.T) {
 		if discardedAt == nil {
 			t.Fatal("削除日時(users.discarded_at)が記録されていない")
 		}
-		// 退会したユーザーのレビュー自体は、削除されない。画面から隠すのは、読み取りの側で
-		// 削除済みのユーザーのレビューを除いて行う。
+		// 退会したユーザーのレビュー自体は、削除されない。ただし写真の参照(photo_key)とディスク上の
+		// 写真ファイルは削除され、孤立ファイルや公開ファイル直リンクが残らない。
 		var keptReviews int
 		if err := conn.QueryRow(ctx, `SELECT count(*) FROM reviews WHERE user_id = $1 AND discarded_at IS NULL`, victim.ID).Scan(&keptReviews); err != nil {
 			t.Fatalf("victim のレビュー数の取得に失敗した: %v", err)
 		}
 		if keptReviews != 2 {
 			t.Errorf("victim の削除されていないレビュー数 = %d, want 2(レビューは削除されない)", keptReviews)
+		}
+		var remainingPhotos int
+		if err := conn.QueryRow(ctx, `SELECT count(*) FROM reviews WHERE user_id = $1 AND photo_key IS NOT NULL`, victim.ID).Scan(&remainingPhotos); err != nil {
+			t.Fatalf("victim の photo_key 数の取得に失敗した: %v", err)
+		}
+		if remainingPhotos != 0 {
+			t.Errorf("退会後の photo_key が残っているレビュー数 = %d, want 0", remainingPhotos)
+		}
+		if _, err := os.Stat(victimPhotoPath); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("退会後の写真ファイル stat = %v, want ErrNotExist (path=%s)", err, strings.TrimPrefix(victimPhotoPath, w.photoDir))
 		}
 		// shared の統計は、alice のレビューだけになる。alice のレビューは影響を受けない。
 		sharedStats := dbtest.RequireConsistentStats(ctx, t, conn, shared)

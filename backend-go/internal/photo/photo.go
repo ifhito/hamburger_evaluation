@@ -121,6 +121,14 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 		}
 		return Processed{}, fmt.Errorf("%w: detected %s", ErrUnsupportedImage, ct)
 	}
+	// ペイロード全体の読み込み(最大 5 MiB + 1)と decode/shrink/encode の同時実行数を decodeSem で制限する。
+	// 先に取得しないと、待機中のリクエストがそれぞれ 5 MiB のバッファを抱えたまま並び、メモリ上限を突き破る。
+	select {
+	case decodeSem <- struct{}{}:
+	case <-ctx.Done():
+		return Processed{}, ctx.Err()
+	}
+	defer func() { <-decodeSem }()
 	data, err := io.ReadAll(br)
 	if err != nil {
 		return Processed{}, fmt.Errorf("read image: %w", err)
@@ -134,16 +142,6 @@ func Process(ctx context.Context, r io.Reader) (Processed, error) {
 	if ct == "image/jpeg" {
 		orientation = jpegOrientation(data)
 	}
-	// ここから先の処理はメモリを大量に使う（decode + shrink + encode の
-	// バッファ）。decodeSem が、同時にこれを行うアップロードの数を制限する。
-	// 待機はタイムアウトではなく、リクエスト context のキャンセルによって
-	// 制限される。
-	select {
-	case decodeSem <- struct{}{}:
-	case <-ctx.Done():
-		return Processed{}, ctx.Err()
-	}
-	defer func() { <-decodeSem }()
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return Processed{}, fmt.Errorf("%w: %v", ErrUnsupportedImage, err)

@@ -108,13 +108,33 @@ RETURNING *;
 -- name: DiscardReview :one
 -- 列を限定した soft delete：discarded_at にタイムスタンプを設定するだけで、
 -- しかも 1 回だけ行う。すでに discard 済みの review はどの行にもマッチせず、
--- not found として現れる。burger_id を返すので、呼び出し元は同じ
--- トランザクション内でその burger の統計を再計算できる。
+-- not found として現れる。削除前の photo_key も同時に返すことで、並行する写真差し替えがあっても
+-- 正確に直前の写真ファイルを掃除できる。
 UPDATE reviews
 SET discarded_at = now(),
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
-RETURNING burger_id;
+RETURNING burger_id, photo_key;
+
+-- name: ClearUserReviewPhotoKeys :many
+-- 退会する利用者の有効なレビューから photo_key を外し、削除すべき直前のキー一覧を返す（レビュー行自体は残す）。
+WITH old_photos AS (
+    SELECT r0.id, r0.photo_key
+    FROM reviews r0
+    WHERE r0.user_id = @user_id
+      AND r0.discarded_at IS NULL
+      AND r0.photo_key IS NOT NULL
+    ORDER BY r0.id
+    FOR NO KEY UPDATE
+),
+cleared AS (
+    UPDATE reviews r
+    SET photo_key = NULL,
+        updated_at = now()
+    FROM old_photos o
+    WHERE r.id = o.id
+)
+SELECT o.photo_key::text AS photo_key FROM old_photos o;
 
 -- name: ListReviewShops :many
 -- review が属する shop(review の burger を持つ shop すべて。burger は複数の shop にありうる)を、作成の古い順に返す。

@@ -10,9 +10,12 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/photo"
 )
@@ -458,5 +461,93 @@ func TestProcessRejectionCauses(t *testing.T) {
 				t.Errorf("HEIC / HEIF のエラーか = %v, want %v (err %v)", got, tt.wantHEIF, err)
 			}
 		})
+	}
+}
+
+// gatedTailReader は、先頭 head バイトを即座に返したあと、gate が閉じるまで後続の読み取りを止める。
+// decodeSem の空き待ちの間に io.ReadAll が走って巨大な本体をメモリに溜め込まないことを確かめるために使う。
+type gatedTailReader struct {
+	head     []byte
+	tail     []byte
+	headRead bool
+	entered  chan struct{}
+	gate     chan struct{}
+	tailRead atomic.Bool
+}
+
+func (r *gatedTailReader) Read(p []byte) (int, error) {
+	if !r.headRead {
+		n := copy(p, r.head)
+		r.head = r.head[n:]
+		if len(r.head) == 0 {
+			r.headRead = true
+		}
+		return n, nil
+	}
+	select {
+	case r.entered <- struct{}{}:
+	default:
+	}
+	r.tailRead.Store(true)
+	<-r.gate
+	if len(r.tail) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, r.tail)
+	r.tail = r.tail[n:]
+	return n, nil
+}
+
+func TestProcessAcquiresSemaphoreBeforeBufferingFullBody(t *testing.T) {
+	validJPEG := encode(t, "jpeg", 64, 64)
+	// bufio.NewReader の初回 Peek(512) が 1 回の Read で済むよう、先頭チャンクは有効な JPEG 全体より少し短く渡し、
+	// 残りの本体はセマフォ取得後の io.ReadAll で初めて読まれる形にする。
+	if len(validJPEG) < 600 {
+		validJPEG = encode(t, "jpeg", 400, 400)
+	}
+	split := 520
+
+	gate := make(chan struct{})
+	holders := make([]*gatedTailReader, 2)
+	done := make(chan error, 2)
+	for i := range holders {
+		holders[i] = &gatedTailReader{
+			head:    append([]byte(nil), validJPEG[:split]...),
+			tail:    append([]byte(nil), validJPEG[split:]...),
+			entered: make(chan struct{}, 1),
+			gate:    gate,
+		}
+		go func(rd *gatedTailReader) {
+			_, err := photo.Process(context.Background(), rd)
+			done <- err
+		}(holders[i])
+		select {
+		case <-holders[i].entered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("先行するアップロードがセマフォを取得して本体の読み取りに入らなかった")
+		}
+	}
+
+	waiter := &gatedTailReader{
+		head:    append([]byte(nil), validJPEG[:split]...),
+		tail:    append([]byte(nil), validJPEG[split:]...),
+		entered: make(chan struct{}, 1),
+		gate:    gate,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+	_, err := photo.Process(ctx, waiter)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("待機中の Process のエラー = %v, want %v", err, context.DeadlineExceeded)
+	}
+	if waiter.tailRead.Load() {
+		t.Error("セマフォが空く前に 3 件目の本体(tail)を読み込んでバッファリングした")
+	}
+
+	close(gate)
+	for i := 0; i < 2; i++ {
+		if err := <-done; err != nil {
+			t.Errorf("先行するアップロード %d のエラー = %v, want nil", i, err)
+		}
 	}
 }

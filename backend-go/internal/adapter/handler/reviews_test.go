@@ -243,32 +243,48 @@ func (f *reviewStoreFake) UpdateReviewContent(_ context.Context, id string, rati
 	return rec.review, nil
 }
 
-func (f *reviewStoreFake) UpdateReviewContentAndPhotoKey(_ context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, error) {
+func (f *reviewStoreFake) UpdateReviewContentAndPhotoKey(_ context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, *string, error) {
 	if f.err != nil {
-		return domain.Review{}, f.err
+		return domain.Review{}, nil, f.err
 	}
 	rec, ok := f.reviews[id]
 	if !ok || rec.discarded {
-		return domain.Review{}, domain.ErrReviewNotFound
+		return domain.Review{}, nil, domain.ErrReviewNotFound
 	}
+	prev := rec.review.PhotoKey
 	rec.review.Rating = rating
 	c := comment
 	rec.review.Comment = &c
 	rec.review.VisitedAt = visitedAt
 	rec.review.PhotoKey = photoKey
-	return rec.review, nil
+	return rec.review, prev, nil
 }
 
-func (f *reviewStoreFake) DiscardReview(_ context.Context, id string) error {
+func (f *reviewStoreFake) DiscardReview(_ context.Context, id string) (*string, error) {
 	if f.err != nil {
-		return f.err
+		return nil, f.err
 	}
 	rec, ok := f.reviews[id]
 	if !ok || rec.discarded {
-		return domain.ErrReviewNotFound
+		return nil, domain.ErrReviewNotFound
 	}
 	rec.discarded = true
-	return nil
+	return rec.review.PhotoKey, nil
+}
+
+func (f *reviewStoreFake) DiscardReviewPhotosByUser(_ context.Context, userID string) ([]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	var keys []string
+	for _, rec := range f.reviews {
+		if rec.discarded || rec.review.AuthorID != userID || rec.review.PhotoKey == nil {
+			continue
+		}
+		keys = append(keys, *rec.review.PhotoKey)
+		rec.review.PhotoKey = nil
+	}
+	return keys, nil
 }
 
 var (

@@ -561,6 +561,11 @@ func handleUpdateReview(reviews *usecase.Reviews) http.HandlerFunc {
 		// 省略・空文字なら未設定に戻る)で、「変えない」ための特別な扱いはない。
 		var form multipartReviewForm
 		if isMultipart(r) {
+			// 写真の変換で CPU やメモリを消費する前に、対象レビューの存在(404)と所有権(403)を確かめる。
+			if err := reviews.CheckModifiable(r.Context(), viewer, id); err != nil {
+				writeReviewError(w, r, "update", err)
+				return
+			}
 			var ok bool
 			if form, ok = decodeReviewMultipart(w, r); !ok {
 				return

@@ -70,8 +70,9 @@ type fakeReviewRepo struct {
 	createReview              func(ctx context.Context, review domain.Review) (domain.Review, error)
 	createShopBurger          func(ctx context.Context, shopID string, burgerName string) (domain.ShopReviewBurger, error)
 	updateReviewContent       func(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time) (domain.Review, error)
-	updateReviewContentAndKey func(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, error)
-	discardReview             func(ctx context.Context, id string) error
+	updateReviewContentAndKey func(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, *string, error)
+	discardReview             func(ctx context.Context, id string) (*string, error)
+	discardPhotosByUser       func(ctx context.Context, userID string) ([]string, error)
 }
 
 func (f *fakeReviewRepo) CreateReview(ctx context.Context, review domain.Review) (domain.Review, error) {
@@ -95,18 +96,25 @@ func (f *fakeReviewRepo) UpdateReviewContent(ctx context.Context, id string, rat
 	return f.updateReviewContent(ctx, id, rating, comment, visitedAt)
 }
 
-func (f *fakeReviewRepo) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, error) {
+func (f *fakeReviewRepo) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, *string, error) {
 	if f.updateReviewContentAndKey == nil {
 		panic("unexpected UpdateReviewContentAndPhotoKey call")
 	}
 	return f.updateReviewContentAndKey(ctx, id, rating, comment, visitedAt, photoKey)
 }
 
-func (f *fakeReviewRepo) DiscardReview(ctx context.Context, id string) error {
+func (f *fakeReviewRepo) DiscardReview(ctx context.Context, id string) (*string, error) {
 	if f.discardReview == nil {
 		panic("unexpected DiscardReview call")
 	}
 	return f.discardReview(ctx, id)
+}
+
+func (f *fakeReviewRepo) DiscardReviewPhotosByUser(ctx context.Context, userID string) ([]string, error) {
+	if f.discardPhotosByUser == nil {
+		panic("unexpected DiscardReviewPhotosByUser call")
+	}
+	return f.discardPhotosByUser(ctx, userID)
 }
 
 // TestReviewsListPagination は Shops.List と同じフォールバック規則を固定する。
@@ -544,9 +552,9 @@ func TestReviewsDelete(t *testing.T) {
 		var discarded string
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{
-			discardReview: func(_ context.Context, id string) error {
+			discardReview: func(_ context.Context, id string) (*string, error) {
 				discarded = id
-				return nil
+				return nil, nil
 			},
 		}
 		if err := newReviews(query, repo, &fakePhotoStorage{}).Delete(ctx, alice, stored.ID); err != nil {
@@ -577,8 +585,8 @@ func TestReviewsDelete(t *testing.T) {
 	t.Run("discard の競合が起きたときは repository の ErrReviewNotFound が返る", func(t *testing.T) {
 		query := &fakeReviewQuery{getReview: getReview}
 		repo := &fakeReviewRepo{
-			discardReview: func(_ context.Context, _ string) error {
-				return domain.ErrReviewNotFound // load から書き込みまでの間に discard された
+			discardReview: func(_ context.Context, _ string) (*string, error) {
+				return nil, domain.ErrReviewNotFound // load から書き込みまでの間に discard された
 			},
 		}
 		if err := newReviews(query, repo, &fakePhotoStorage{}).Delete(ctx, alice, stored.ID); !errors.Is(err, domain.ErrReviewNotFound) {
@@ -718,14 +726,14 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 			// updateReviewContent は未設定のままである。写真の経路で
 			// content だけの別の文を実行すれば panic する（書き込みは
 			// 単一の atomic な repository の呼び出しでなければならない）。
-			updateReviewContentAndKey: func(_ context.Context, id string, rating int, comment string, _ *time.Time, photoKey *string) (domain.Review, error) {
+			updateReviewContentAndKey: func(_ context.Context, id string, rating int, comment string, _ *time.Time, photoKey *string) (domain.Review, *string, error) {
 				gotRating, gotComment = rating, comment
 				review := stored.Review
 				review.Rating = rating
 				c := comment
 				review.Comment = &c
 				review.PhotoKey = photoKey
-				return review, nil
+				return review, &oldKey, nil
 			},
 		}
 		got, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", nil, upload)
@@ -754,8 +762,8 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 			// 失敗したということは content の文が「一切」実行されていない
 			// ので、あとから content の変更が見えることはありえない。
 			// 紛れ込んだ content だけの呼び出しは panic する。
-			updateReviewContentAndKey: func(_ context.Context, _ string, _ int, _ string, _ *time.Time, _ *string) (domain.Review, error) {
-				return domain.Review{}, domain.ErrReviewNotFound // load から書き込みまでの間に discard された
+			updateReviewContentAndKey: func(_ context.Context, _ string, _ int, _ string, _ *time.Time, _ *string) (domain.Review, *string, error) {
+				return domain.Review{}, nil, domain.ErrReviewNotFound // load から書き込みまでの間に discard された
 			},
 		}
 		_, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", nil, upload)
@@ -788,28 +796,49 @@ func TestReviewsUpdatePhoto(t *testing.T) {
 			t.Errorf("PhotoURL = %v, want the kept old key's URL", got.PhotoURL)
 		}
 	})
+
+	t.Run("並行する編集で photo_key が変わっていたときは、事前読込の古いキーではなくトランザクション直前のキーを削除する", func(t *testing.T) {
+		photos := &fakePhotoStorage{}
+		query := &fakeReviewQuery{getReview: getReview} // 事前読込では oldKey を返す
+		newerOldKey := "reviews/concurrent-middle.jpg"
+		repo := &fakeReviewRepo{
+			updateReviewContentAndKey: func(_ context.Context, _ string, rating int, comment string, _ *time.Time, photoKey *string) (domain.Review, *string, error) {
+				review := stored.Review
+				review.Rating = rating
+				review.PhotoKey = photoKey
+				return review, &newerOldKey, nil
+			},
+		}
+		if _, err := newReviews(query, repo, photos).Update(ctx, alice, stored.ID, 5, "Better", nil, upload); err != nil {
+			t.Fatalf("Update returned error: %v", err)
+		}
+		if !reflect.DeepEqual(photos.deletes, []string{newerOldKey}) {
+			t.Errorf("deletes = %v, want [%s] (not stale %s)", photos.deletes, newerOldKey, oldKey)
+		}
+	})
 }
 
 // TestReviewsDeletePhoto は Delete の、写真を削除する部分を扱う。discard が成功
-// した後に、blob は best-effort で削除される。
+// した後に、トランザクション内で確定した直前の blob が best-effort で削除される。
 func TestReviewsDeletePhoto(t *testing.T) {
 	ctx := context.Background()
 	alice := domain.User{ID: uid.N(1), Username: "alice"}
-	key := "reviews/gone.jpg"
+	staleKey := "reviews/stale.jpg"
+	actualKey := "reviews/gone.jpg"
 	photos := &fakePhotoStorage{}
 	query := &fakeReviewQuery{
 		getReview: func(_ context.Context, id string) (domain.ReviewDetail, error) {
-			return domain.ReviewDetail{Review: domain.Review{ID: id, AuthorID: alice.ID, PhotoKey: &key}}, nil
+			return domain.ReviewDetail{Review: domain.Review{ID: id, AuthorID: alice.ID, PhotoKey: &staleKey}}, nil
 		},
 	}
 	repo := &fakeReviewRepo{
-		discardReview: func(_ context.Context, _ string) error { return nil },
+		discardReview: func(_ context.Context, _ string) (*string, error) { return &actualKey, nil },
 	}
 	if err := newReviews(query, repo, photos).Delete(ctx, alice, uid.N(9)); err != nil {
 		t.Fatalf("Delete returned error: %v", err)
 	}
-	if !reflect.DeepEqual(photos.deletes, []string{key}) {
-		t.Errorf("deletes = %v, want %q", photos.deletes, key)
+	if !reflect.DeepEqual(photos.deletes, []string{actualKey}) {
+		t.Errorf("deletes = %v, want [%s]", photos.deletes, actualKey)
 	}
 }
 

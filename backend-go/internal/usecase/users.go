@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
@@ -22,10 +24,23 @@ type Users struct {
 	recalc    *BurgerStatsRecalculator
 	shopStats *ShopStatsRecalculator
 	hasher    PasswordHasher
+	photos    PhotoStorage
 }
 
-func NewUsers(query UserQuery, users *domain.Users, uow UnitOfWork, recalc *BurgerStatsRecalculator, shopStats *ShopStatsRecalculator, hasher PasswordHasher) *Users {
-	return &Users{query: query, users: users, uow: uow, recalc: recalc, shopStats: shopStats, hasher: hasher}
+// UsersOption は NewUsers の省略可能な設定である。
+type UsersOption func(*Users)
+
+// WithUserPhotoCleanup は、退会確定後に孤立したレビュー写真をストレージから best-effort で削除する保存先を設定する。
+func WithUserPhotoCleanup(photos PhotoStorage) UsersOption {
+	return func(u *Users) { u.photos = photos }
+}
+
+func NewUsers(query UserQuery, users *domain.Users, uow UnitOfWork, recalc *BurgerStatsRecalculator, shopStats *ShopStatsRecalculator, hasher PasswordHasher, opts ...UsersOption) *Users {
+	s := &Users{query: query, users: users, uow: uow, recalc: recalc, shopStats: shopStats, hasher: hasher}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Get は、discard されていないユーザー 1 人を、viewer（nil = 匿名）から見える
@@ -143,6 +158,7 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 	if !viewer.Manages(target.ID) {
 		return domain.ErrForbidden
 	}
+	var photoKeys []string
 	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		if err := tx.Users.Discard(ctx, targetID); err != nil {
 			return err
@@ -156,6 +172,10 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 		if err := tx.UserIdentities.DiscardAll(ctx, targetID); err != nil {
 			return err
 		}
+		var err error
+		if photoKeys, err = tx.Reviews.DiscardAllPhotosByUser(ctx, targetID); err != nil {
+			return err
+		}
 		if err := s.recalc.RequestRecalculationReviewedBy(ctx, tx, targetID); err != nil {
 			return err
 		}
@@ -164,5 +184,19 @@ func (s *Users) Delete(ctx context.Context, viewer domain.User, targetID string)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}
+	s.deletePhotosBestEffort(ctx, photoKeys)
 	return nil
+}
+
+func (s *Users) deletePhotosBestEffort(ctx context.Context, keys []string) {
+	if s.photos == nil || len(keys) == 0 {
+		return
+	}
+	for _, key := range keys {
+		delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if err := s.photos.Delete(delCtx, key); err != nil {
+			slog.Warn("best-effort withdrawn user review photo delete failed", "key", key, "error", err)
+		}
+		cancel()
+	}
 }

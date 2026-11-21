@@ -169,8 +169,12 @@ func TestReviewRepository(t *testing.T) {
 
 	t.Run("DiscardReview は soft delete をちょうど 1 回だけ行い、hard delete はしない", func(t *testing.T) {
 		victim := dbtest.InsertUUIDRow(ctx, t, conn, insertReview, 3, "bye", carol, cheese, nil, t2)
-		if err := repo.DiscardReview(ctx, victim); err != nil {
+		discardedKey, err := repo.DiscardReview(ctx, victim)
+		if err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
+		}
+		if discardedKey != nil {
+			t.Errorf("discardedKey = %v, want nil", discardedKey)
 		}
 		// 行はまだ存在し（soft delete）、discarded_at に時刻が刻まれている。
 		var discardedAt *time.Time
@@ -184,10 +188,10 @@ func TestReviewRepository(t *testing.T) {
 			t.Error("discarded_at is NULL, want a timestamp")
 		}
 		// 2 回目の discard はどの行にも一致しない。
-		if err := repo.DiscardReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := repo.DiscardReview(ctx, victim); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("second discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
-		if err := repo.DiscardReview(ctx, uid.N(99999)); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, err := repo.DiscardReview(ctx, uid.N(99999)); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Errorf("unknown discard = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 	})
@@ -378,11 +382,14 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateReviewContentAndPhotoKey は content・実食日・key を一緒に書き込む", func(t *testing.T) {
+	t.Run("UpdateReviewContentAndPhotoKey は content・実食日・key を一緒に書き込み、置き換え前の key を返す", func(t *testing.T) {
 		visitedAt := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
-		updated, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 5, "Even better", &visitedAt, strPtr("reviews/both.png"))
+		updated, prevKey, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 5, "Even better", &visitedAt, strPtr("reviews/both.png"))
 		if err != nil {
 			t.Fatalf("UpdateReviewContentAndPhotoKey returned error: %v", err)
+		}
+		if prevKey == nil || *prevKey != "reviews/abc.jpg" {
+			t.Errorf("prevKey = %v, want reviews/abc.jpg", prevKey)
 		}
 		if updated.Rating != 5 || updated.Comment == nil || *updated.Comment != "Even better" {
 			t.Errorf("updated = %+v, want rating 5 and the new comment", updated)
@@ -427,11 +434,15 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 	})
 
 	t.Run("discard 済みの review への UpdateReviewContentAndPhotoKey は ErrReviewNotFound になり、変更は残らない", func(t *testing.T) {
-		if err := repo.DiscardReview(ctx, created.ID); err != nil {
+		discardedKey, err := repo.DiscardReview(ctx, created.ID)
+		if err != nil {
 			t.Fatalf("DiscardReview returned error: %v", err)
 		}
+		if discardedKey == nil || *discardedKey != "reviews/both.png" {
+			t.Errorf("discardedKey = %v, want reviews/both.png", discardedKey)
+		}
 		// 結合した書き込みは rollback される：content の変更は何も残らない。
-		if _, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 1, "ghost", nil, strPtr("reviews/ghost.jpg")); !errors.Is(err, domain.ErrReviewNotFound) {
+		if _, _, err := repo.UpdateReviewContentAndPhotoKey(ctx, created.ID, 1, "ghost", nil, strPtr("reviews/ghost.jpg")); !errors.Is(err, domain.ErrReviewNotFound) {
 			t.Fatalf("UpdateReviewContentAndPhotoKey error = %v, want %v", err, domain.ErrReviewNotFound)
 		}
 		var rating int16
@@ -441,6 +452,52 @@ func TestReviewRepositoryPhotoKey(t *testing.T) {
 		}
 		if rating == 1 || (key != nil && *key == "reviews/ghost.jpg") {
 			t.Errorf("discarded review row = rating %d, key %v; the failed combined write leaked a change", rating, key)
+		}
+	})
+
+	t.Run("DiscardReviewPhotosByUser は対象ユーザーの有効なレビューの photo_key だけを NULL にして旧キーを返し、レビュー自体は残す", func(t *testing.T) {
+		bob := dbtest.InsertUserRow(ctx, t, conn,
+			`INSERT INTO users (email, username, password_digest) VALUES ($1, $2, 'x') RETURNING id`,
+			"bob@example.com", "bob")
+		withPhoto1, err := repo.CreateReview(ctx, domain.Review{Rating: 4, Comment: &comment, AuthorID: alice, BurgerID: burger, PhotoKey: strPtr("reviews/u1.jpg")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		withPhoto2, err := repo.CreateReview(ctx, domain.Review{Rating: 5, Comment: &comment, AuthorID: alice, BurgerID: burger, PhotoKey: strPtr("reviews/u2.png")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		otherUser, err := repo.CreateReview(ctx, domain.Review{Rating: 4, Comment: &comment, AuthorID: bob, BurgerID: burger, PhotoKey: strPtr("reviews/bob.jpg")})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		keys, err := repo.DiscardReviewPhotosByUser(ctx, alice)
+		if err != nil {
+			t.Fatalf("DiscardReviewPhotosByUser returned error: %v", err)
+		}
+		if len(keys) != 2 {
+			t.Fatalf("keys = %v, want 2 keys", keys)
+		}
+		gotSet := map[string]bool{keys[0]: true, keys[1]: true}
+		if !gotSet["reviews/u1.jpg"] || !gotSet["reviews/u2.png"] {
+			t.Errorf("keys = %v, want reviews/u1.jpg and reviews/u2.png", keys)
+		}
+		for _, id := range []string{withPhoto1.ID, withPhoto2.ID} {
+			row := readReviewRow(ctx, t, conn, id)
+			if row.PhotoKey != nil {
+				t.Errorf("review %s photo_key = %v, want nil", id, row.PhotoKey)
+			}
+			var discardedAt *time.Time
+			if err := conn.QueryRow(ctx, `SELECT discarded_at FROM reviews WHERE id = $1`, id).Scan(&discardedAt); err != nil {
+				t.Fatal(err)
+			}
+			if discardedAt != nil {
+				t.Errorf("review %s discarded_at = %v, want nil (review row stays kept)", id, discardedAt)
+			}
+		}
+		if bobRow := readReviewRow(ctx, t, conn, otherUser.ID); bobRow.PhotoKey == nil || *bobRow.PhotoKey != "reviews/bob.jpg" {
+			t.Errorf("bob's review photo_key = %v, want reviews/bob.jpg untouched", bobRow.PhotoKey)
 		}
 	})
 }

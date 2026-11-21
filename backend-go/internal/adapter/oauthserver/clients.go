@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ory/fosite"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 )
@@ -27,8 +28,9 @@ type clientResolver struct {
 	resource string
 	now      func() time.Time
 
-	mu    sync.Mutex
-	cache map[string]cachedClient
+	flight singleflight.Group
+	mu     sync.Mutex
+	cache  map[string]cachedClient
 }
 
 type cachedClient struct {
@@ -47,7 +49,7 @@ func newClientResolver(static []domain.OAuthClient, fetcher MetadataFetcher, res
 	return &clientResolver{static: m, fetcher: fetcher, resource: resource, now: now, cache: map[string]cachedClient{}}, nil
 }
 
-// resolve は、id のアプリの登録情報を返す。見つからない・文書が規則を満たさない・取得できないときはエラーを返す。
+// resolve は、id のアプリの登録情報を返す。同じ client_id への並行するキャッシュミスは singleflight で 1 回にまとめる。
 func (r *clientResolver) resolve(ctx context.Context, id string) (domain.OAuthClient, error) {
 	if c, ok := r.static[id]; ok {
 		return c, nil
@@ -58,16 +60,33 @@ func (r *clientResolver) resolve(ctx context.Context, id string) (domain.OAuthCl
 	if c, ok := r.cached(id); ok {
 		return c, nil
 	}
-	body, err := r.fetcher.Fetch(ctx, id)
-	if err != nil {
-		return domain.OAuthClient{}, err
+	// 片方の呼び出し元が途中でキャンセルしても相乗り中の別の要求を巻き込まないよう、共有の取得には独立した上限付き context を使う。
+	ch := r.flight.DoChan(id, func() (any, error) {
+		if c, ok := r.cached(id); ok {
+			return c, nil
+		}
+		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), domain.ClientMetadataFetchTimeout)
+		defer cancel()
+		body, err := r.fetcher.Fetch(fetchCtx, id)
+		if err != nil {
+			return domain.OAuthClient{}, err
+		}
+		c, err := domain.ParseClientMetadataDocument(id, body)
+		if err != nil {
+			return domain.OAuthClient{}, err
+		}
+		r.remember(c)
+		return c, nil
+	})
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return domain.OAuthClient{}, res.Err
+		}
+		return res.Val.(domain.OAuthClient), nil
+	case <-ctx.Done():
+		return domain.OAuthClient{}, ctx.Err()
 	}
-	c, err := domain.ParseClientMetadataDocument(id, body)
-	if err != nil {
-		return domain.OAuthClient{}, err
-	}
-	r.remember(c)
-	return c, nil
 }
 
 func (r *clientResolver) cached(id string) (domain.OAuthClient, bool) {
@@ -85,15 +104,24 @@ func (r *clientResolver) remember(c domain.OAuthClient) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := r.now()
-	if len(r.cache) >= maxCachedClients {
+	if _, exists := r.cache[c.ID]; !exists && len(r.cache) >= maxCachedClients {
 		for id, e := range r.cache {
 			if !now.Before(e.expires) {
 				delete(r.cache, id)
 			}
 		}
-	}
-	if len(r.cache) >= maxCachedClients {
-		return
+		if len(r.cache) >= maxCachedClients {
+			// 有効期限内の項目で埋まっている場合もキャッシュが無力化されないよう、最も早く期限切れになる項目を 1 件追い出す。
+			var evictID string
+			var earliest time.Time
+			for id, e := range r.cache {
+				if evictID == "" || e.expires.Before(earliest) || (e.expires.Equal(earliest) && id < evictID) {
+					evictID = id
+					earliest = e.expires
+				}
+			}
+			delete(r.cache, evictID)
+		}
 	}
 	r.cache[c.ID] = cachedClient{client: c, expires: now.Add(domain.ClientMetadataCacheTTL)}
 }

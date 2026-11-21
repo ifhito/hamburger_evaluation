@@ -1197,3 +1197,85 @@ func TestMCPListTooLargeForOneResultIsRejectedInsteadOfCut(t *testing.T) {
 		t.Errorf("a smaller page must work and be valid JSON, got isError=%v", isErr)
 	}
 }
+
+func TestMCPGetShopTooLargeGuidesCallerToListReviews(t *testing.T) {
+	k := newMCPKit(t)
+	long := strings.Repeat("あ", 2000)
+	for i := 0; i < 30; i++ {
+		k.shops.reviews[activeShopID] = append(k.shops.reviews[activeShopID], domain.ShopReview{
+			ID:      uid.N(1000 + i),
+			Rating:  4,
+			Comment: &long,
+			User:    &domain.UserRef{ID: k.alice.ID, Username: "alice"},
+			Burger:  &domain.ShopReviewBurger{ID: cheeseBurgerID, Name: "Cheese"},
+		})
+	}
+	s := k.connect(t, k.token(k.alice, readScope))
+	text, isErr := call(t, s, "get_shop", map[string]any{"shop_id": activeShopID})
+	if !isErr || !strings.Contains(text, "list_reviews") || strings.Contains(text, "per_page を小さく") {
+		t.Fatalf("got %q (isError=%v), want single-item guidance mentioning list_reviews without asking to shrink get_shop's non-existent per_page", text[:min(len(text), 120)], isErr)
+	}
+}
+
+func TestMCPWriteToolsValidateBeforeDecodingPhoto(t *testing.T) {
+	k := newMCPKit(t)
+	sBob := k.connect(t, k.token(k.bob, writeScope))
+	// 壊れた photo_base64 を付けても、承認待ちの他人のショップへの投稿や他人のレビュー更新は画像デコードより前に権限で断られる。
+	text, isErr := call(t, sBob, "create_review", map[string]any{
+		"shop_id":      pendingShopID,
+		"burger_id":    cheeseBurgerID,
+		"rating":       4,
+		"comment":      "nope",
+		"photo_base64": "not-base64!!!",
+	})
+	if !isErr || text != "Forbidden" {
+		t.Errorf("create_review on forbidden shop with bad photo = %q (isError=%v), want Forbidden before photo decode", text, isErr)
+	}
+
+	sAlice := k.connect(t, k.token(k.alice, writeScope))
+	createdText, isErr := call(t, sAlice, "create_review", map[string]any{
+		"shop_id":   activeShopID,
+		"burger_id": cheeseBurgerID,
+		"rating":    4,
+		"comment":   "mine",
+	})
+	if isErr {
+		t.Fatalf("seed alice review via mcp: %s", createdText)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	mustJSON(t, createdText, &created)
+
+	text, isErr = call(t, sBob, "update_review", map[string]any{
+		"review_id":    created.ID,
+		"rating":       5,
+		"comment":      "hijack",
+		"photo_base64": "not-base64!!!",
+	})
+	if !isErr || text != "Forbidden" {
+		t.Errorf("update_review on another user's review with bad photo = %q (isError=%v), want Forbidden before photo decode", text, isErr)
+	}
+
+	// 権限を満たしていても、評価値などの入力検証エラーは壊れた photo_base64 のデコードより先に返る。
+	text, isErr = call(t, sAlice, "create_review", map[string]any{
+		"shop_id":      activeShopID,
+		"burger_id":    cheeseBurgerID,
+		"rating":       0,
+		"comment":      "invalid rating",
+		"photo_base64": "not-base64!!!",
+	})
+	if !isErr || text != "Rating must be in 1..5" {
+		t.Errorf("create_review with invalid rating and bad photo = %q (isError=%v), want Rating must be in 1..5 before photo decode", text, isErr)
+	}
+
+	text, isErr = call(t, sAlice, "update_review", map[string]any{
+		"review_id":    created.ID,
+		"rating":       0,
+		"comment":      "invalid rating",
+		"photo_base64": "not-base64!!!",
+	})
+	if !isErr || text != "Rating must be in 1..5" {
+		t.Errorf("update_review with invalid rating and bad photo = %q (isError=%v), want Rating must be in 1..5 before photo decode", text, isErr)
+	}
+}

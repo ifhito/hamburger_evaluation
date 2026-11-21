@@ -108,6 +108,8 @@ func (m *SMTPMailer) Deliver(ctx context.Context, msg mailMessage) error {
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(deadline)
+	stop := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
+	defer stop()
 
 	c, err := smtp.NewClient(conn, m.host)
 	if err != nil {

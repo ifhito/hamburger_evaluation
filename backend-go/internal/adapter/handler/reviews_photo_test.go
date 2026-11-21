@@ -316,6 +316,23 @@ func TestUpdateReviewPhoto(t *testing.T) {
 			t.Errorf("photo file after plain update: %v", err)
 		}
 	})
+
+	t.Run("multipart の更新でも、存在しないレビューや他人のレビューは写真のデコードより前に 404・403 で断る", func(t *testing.T) {
+		router, _, aliceAuth, bobAuth, _ := newPhotoReviewsRouter(t, seedReviewWorld(uid.N(1)))
+		id, _ := createPhotoReview(t, router, aliceAuth, jpegBytes(t, 50_000))
+
+		badBody, badCT := multipartBody(t, map[string]string{"rating": "5", "comment": "Hijack"}, []byte("not-an-image"))
+		rec404 := doMultipart(router, http.MethodPut, fmt.Sprintf("/reviews/%s", uid.N(999)), badBody, badCT, aliceAuth)
+		if rec404.Code != http.StatusNotFound || rec404.Body.String() != `{"error":"Review not found"}` {
+			t.Errorf("unknown review multipart PUT = %d %s, want 404 Review not found before photo decode", rec404.Code, rec404.Body)
+		}
+
+		badBody2, badCT2 := multipartBody(t, map[string]string{"rating": "5", "comment": "Hijack"}, []byte("not-an-image"))
+		rec403 := doMultipart(router, http.MethodPut, fmt.Sprintf("/reviews/%s", id), badBody2, badCT2, bobAuth)
+		if rec403.Code != http.StatusForbidden || rec403.Body.String() != `{"error":"Forbidden"}` {
+			t.Errorf("other user's review multipart PUT = %d %s, want 403 Forbidden before photo decode", rec403.Code, rec403.Body)
+		}
+	})
 }
 
 // TestPhotoTraversal は、/photos の file server が root の外へ出られないことを

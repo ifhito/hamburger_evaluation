@@ -118,25 +118,29 @@ func (r *ReviewRepository) UpdateReviewContent(ctx context.Context, id string, r
 }
 
 // UpdateReviewContentAndPhotoKey は、削除されていないレビューの評価・コメント・写真のキーを更新し、
-// 更新後の行を返す。レビューが存在しない、または論理削除済みなら domain.ErrReviewNotFound を返す。
-// 評価とコメントの更新と、写真のキーの更新は、1 つのトランザクションで行う。途中で失敗しても、
-// 写真のキーが付かないままコメントだけが確定することはない。写真のキーの更新が返す行には、
-// 直前の更新(評価とコメント)がすでに反映されている。
-func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, error) {
+// 更新後の行と差し替え前の写真のキーを返す。レビューが存在しない、または論理削除済みなら domain.ErrReviewNotFound を返す。
+// 評価とコメントの更新と、写真のキーの更新は、1 つのトランザクションで行う。最初の UPDATE が行をロックして
+// 差し替え前の photo_key を返すため、並行する編集があっても直前のキーを取りこぼさない。
+func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (domain.Review, *string, error) {
 	var row sqlcgen.Review
+	var previousKey *string
 	err := withTx(ctx, r.db, "update review content and photo key", func(q *sqlcgen.Queries) error {
-		if _, err := q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
+		prevRow, err := q.UpdateReviewContent(ctx, sqlcgen.UpdateReviewContentParams{
 			ID:        id,
 			Rating:    int16(rating),
 			Comment:   pgtype.Text{String: comment, Valid: true},
 			VisitedAt: dateOrNull(visitedAt),
-		}); err != nil {
+		})
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("update review content and photo key: %w", domain.ErrReviewNotFound)
 			}
 			return fmt.Errorf("update review content and photo key: %w", err)
 		}
-		var err error
+		if prevRow.PhotoKey.Valid {
+			k := prevRow.PhotoKey.String
+			previousKey = &k
+		}
 		row, err = q.UpdateReviewPhotoKey(ctx, sqlcgen.UpdateReviewPhotoKeyParams{
 			ID:       id,
 			PhotoKey: textOrNull(photoKey),
@@ -150,21 +154,35 @@ func (r *ReviewRepository) UpdateReviewContentAndPhotoKey(ctx context.Context, i
 		return nil
 	})
 	if err != nil {
-		return domain.Review{}, err
+		return domain.Review{}, nil, err
 	}
-	return toDomainReview(row), nil
+	return toDomainReview(row), previousKey, nil
 }
 
-// DiscardReview はレビューを論理削除する(削除日時を記録するだけで、行は消さない)。レビューが
+// DiscardReview はレビューを論理削除し、削除直前に付いていた写真のキーを返す。レビューが
 // 存在しない、またはすでに論理削除済みなら domain.ErrReviewNotFound を返す。
-func (r *ReviewRepository) DiscardReview(ctx context.Context, id string) error {
-	if _, err := r.q.DiscardReview(ctx, id); err != nil {
+func (r *ReviewRepository) DiscardReview(ctx context.Context, id string) (*string, error) {
+	row, err := r.q.DiscardReview(ctx, id)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("discard review: %w", domain.ErrReviewNotFound)
+			return nil, fmt.Errorf("discard review: %w", domain.ErrReviewNotFound)
 		}
-		return fmt.Errorf("discard review: %w", err)
+		return nil, fmt.Errorf("discard review: %w", err)
 	}
-	return nil
+	if row.PhotoKey.Valid {
+		k := row.PhotoKey.String
+		return &k, nil
+	}
+	return nil, nil
+}
+
+// DiscardReviewPhotosByUser は、退会する利用者の有効なレビューから photo_key を外し、削除すべきキー一覧を返す。
+func (r *ReviewRepository) DiscardReviewPhotosByUser(ctx context.Context, userID string) ([]string, error) {
+	keys, err := r.q.ClearUserReviewPhotoKeys(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("clear user review photo keys: %w", err)
+	}
+	return keys, nil
 }
 
 // toDomainReview は sqlc の review 行を domain のエンティティに変換する。

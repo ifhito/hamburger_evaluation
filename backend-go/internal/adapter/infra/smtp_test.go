@@ -217,6 +217,30 @@ func TestSMTPMailerRefusals(t *testing.T) {
 		}
 	})
 
+	t.Run("接続後に応答しないサーバーでも、ctx のキャンセルや AsyncMailer.Close の期限で即座に打ち切る", func(t *testing.T) {
+		srv := smtptest.Start(t, &smtptest.Server{Hang: true})
+		m := newSMTPTestMailer(t, srv, "none", "", "", nil)
+		m.timeout = 10 * time.Second
+
+		repo := &fakeMailRepo{}
+		am := newAsyncMailer(m, domain.NewMailDeliveries(repo), 1, 4, 10*time.Second)
+		am.SendSignupConfirmation(confirmation("a@example.com", "hang-1"))
+		waitFor(t, "SMTP サーバーへの TCP 接続が確立する", func() bool {
+			conns, _ := srv.Stats()
+			return conns >= 1
+		})
+
+		start := time.Now()
+		closeCtx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+		defer cancel()
+		if err := am.Close(closeCtx); err == nil {
+			t.Fatal("Close returned nil error, want DeadlineExceeded")
+		}
+		if elapsed := time.Since(start); elapsed > 2*time.Second {
+			t.Errorf("Close が %v かかった(接続後の無応答セッションが cancel で中断されていない)", elapsed)
+		}
+	})
+
 	t.Run("接続できない(閉じたポート)のは、一時的な失敗になる", func(t *testing.T) {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

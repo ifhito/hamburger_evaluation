@@ -314,6 +314,8 @@ type UoW struct {
 	UserSessions domain.UserSessionRepository
 	// Sessions は、セッションの作成・退会時の失効を記録する既定の代役である。未設定(nil)なら、Do が空のものを作る。
 	Sessions *SessionDiscards
+	// ReviewPhotos は、Reviews が未設定(nil)のときに退会時の写真キー解除だけを受ける既定の代役である。
+	ReviewPhotos *ReviewPhotoDiscards
 	// LoginHandoffs と PendingHandoff は、画面へ渡すコードを使う手順の代役である。未設定(nil)のものが使われると
 	// panic する。
 	LoginHandoffs  domain.LoginHandoffRepository
@@ -407,6 +409,44 @@ func (s *SessionDiscards) DiscardExpiredUserSessions(context.Context, int) (int6
 
 var _ domain.UserSessionRepository = (*SessionDiscards)(nil)
 
+// ReviewPhotoDiscards は、退会時に呼び出されるレビュー写真の解除だけを記録する domain.ReviewRepository の代役である。
+// それ以外のレビュー書き込み操作は退会の範囲外なので panic する。
+type ReviewPhotoDiscards struct {
+	UserIDs []string
+	Keys    []string
+	Err     error
+}
+
+func (r *ReviewPhotoDiscards) CreateReview(context.Context, domain.Review) (domain.Review, error) {
+	panic("unexpected CreateReview call")
+}
+
+func (r *ReviewPhotoDiscards) CreateShopBurger(context.Context, string, string) (domain.ShopReviewBurger, error) {
+	panic("unexpected CreateShopBurger call")
+}
+
+func (r *ReviewPhotoDiscards) UpdateReviewContent(context.Context, string, int, string, *time.Time) (domain.Review, error) {
+	panic("unexpected UpdateReviewContent call")
+}
+
+func (r *ReviewPhotoDiscards) UpdateReviewContentAndPhotoKey(context.Context, string, int, string, *time.Time, *string) (domain.Review, *string, error) {
+	panic("unexpected UpdateReviewContentAndPhotoKey call")
+}
+
+func (r *ReviewPhotoDiscards) DiscardReview(context.Context, string) (*string, error) {
+	panic("unexpected DiscardReview call")
+}
+
+func (r *ReviewPhotoDiscards) DiscardReviewPhotosByUser(_ context.Context, userID string) ([]string, error) {
+	r.UserIDs = append(r.UserIDs, userID)
+	if r.Err != nil {
+		return nil, r.Err
+	}
+	return r.Keys, nil
+}
+
+var _ domain.ReviewRepository = (*ReviewPhotoDiscards)(nil)
+
 var _ usecase.UnitOfWork = (*UoW)(nil)
 
 // Do は fn を実行し、成功なら commit、エラーなら rollback として回数を数える。
@@ -429,6 +469,13 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 	if u.Sessions == nil {
 		u.Sessions = &SessionDiscards{}
 	}
+	if u.ReviewPhotos == nil {
+		u.ReviewPhotos = &ReviewPhotoDiscards{}
+	}
+	reviews := u.Reviews
+	if reviews == nil {
+		reviews = u.ReviewPhotos
+	}
 	identities := u.UserIdentities
 	if identities == nil {
 		identities = u.Identities
@@ -439,7 +486,7 @@ func (u *UoW) Do(ctx context.Context, fn func(ctx context.Context, tx usecase.Tx
 	}
 	tx := usecase.Tx{
 		OAuthGrants:    domain.NewOAuthGrants(u.Grants),
-		Reviews:        domain.NewReviews(u.Reviews),
+		Reviews:        domain.NewReviews(reviews),
 		Users:          domain.NewUsers(u.Users),
 		BurgerStats:    domain.NewBurgerStats(u.Stats),
 		Stats:          u.Stats,

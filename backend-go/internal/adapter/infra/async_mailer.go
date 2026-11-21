@@ -46,11 +46,14 @@ type mailJob struct {
 // 時間が、これらで変わらないので、登録の有無を推測されない）。再送はしない。記録できなかったときは、
 // 冪等を守るために送らない（重複して送るより、送らないほうを選ぶ）。
 type AsyncMailer struct {
-	deliverer mailDeliverer
-	records   *domain.MailDeliveries
-	timeout   time.Duration
-	queue     chan mailJob
-	wg        sync.WaitGroup
+	deliverer  mailDeliverer
+	records    *domain.MailDeliveries
+	timeout    time.Duration
+	queue      chan mailJob
+	wg         sync.WaitGroup
+	done       chan struct{}
+	workCtx    context.Context
+	cancelWork context.CancelFunc
 
 	mu     sync.Mutex
 	closed bool
@@ -62,16 +65,24 @@ func NewAsyncMailer(deliverer mailDeliverer, records *domain.MailDeliveries) *As
 }
 
 func newAsyncMailer(deliverer mailDeliverer, records *domain.MailDeliveries, workers, queueSize int, timeout time.Duration) *AsyncMailer {
+	workCtx, cancelWork := context.WithCancel(context.Background())
 	m := &AsyncMailer{
-		deliverer: deliverer,
-		records:   records,
-		timeout:   timeout,
-		queue:     make(chan mailJob, queueSize),
+		deliverer:  deliverer,
+		records:    records,
+		timeout:    timeout,
+		queue:      make(chan mailJob, queueSize),
+		done:       make(chan struct{}),
+		workCtx:    workCtx,
+		cancelWork: cancelWork,
 	}
 	for i := 0; i < workers; i++ {
 		m.wg.Add(1)
 		go m.work()
 	}
+	go func() {
+		m.wg.Wait()
+		close(m.done)
+	}()
 	return m
 }
 
@@ -106,13 +117,16 @@ func (m *AsyncMailer) enqueue(job mailJob) {
 func (m *AsyncMailer) work() {
 	defer m.wg.Done()
 	for job := range m.queue {
+		if m.workCtx.Err() != nil {
+			continue
+		}
 		m.process(job)
 	}
 }
 
 // process は、1 通分を、記録 → 送信 → 結果の記録の順で処理する。
 func (m *AsyncMailer) process(job mailJob) {
-	ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
+	ctx, cancel := context.WithTimeout(m.workCtx, m.timeout)
 	defer cancel()
 
 	id, recorded, err := m.records.Record(ctx, domain.CreateMailDeliveryParams{
@@ -129,8 +143,13 @@ func (m *AsyncMailer) process(job mailJob) {
 	}
 
 	sendErr := m.deliverer.Deliver(ctx, job.msg)
+	if m.workCtx.Err() != nil {
+		// シャットダウン期限超過による中断時は DB プール閉鎖と競合しないよう追撃の書き込みを行わず終了する。
+		log.Printf("mail: delivery aborted on shutdown: %v", sendErr)
+		return
+	}
 
-	resultCtx, resultCancel := context.WithTimeout(context.Background(), resultRecordTimeout)
+	resultCtx, resultCancel := context.WithTimeout(m.workCtx, resultRecordTimeout)
 	defer resultCancel()
 	if sendErr == nil {
 		if err := m.records.MarkSent(resultCtx, id); err != nil {
@@ -144,9 +163,9 @@ func (m *AsyncMailer) process(job mailJob) {
 	}
 }
 
-// Close は、新しいメールの受け付けを止め、キューに残っているメールを処理し切るのを、ctx が
-// 終わるまで待つ。呼び出し後の送信は捨てられる。ctx が先に終わったときは ctx.Err() を返す
-// （worker は、実行中の処理が timeout で終わるまで残りうる）。
+// Close は、新しいメールの受け付けを止め、キューに残っているメールを処理し切るのを ctx の期限まで待つ。
+// ctx が先に終わったときは worker の親 context をキャンセルして進行中の処理を中断させ、worker が完全に
+// 止まるのを待ってから ctx.Err() を返すため、Close 復帰後に DB プールへ触れる goroutine は残らない。
 func (m *AsyncMailer) Close(ctx context.Context) error {
 	m.mu.Lock()
 	if !m.closed {
@@ -155,15 +174,13 @@ func (m *AsyncMailer) Close(ctx context.Context) error {
 	}
 	m.mu.Unlock()
 
-	done := make(chan struct{})
-	go func() {
-		m.wg.Wait()
-		close(done)
-	}()
 	select {
-	case <-done:
+	case <-m.done:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		err := ctx.Err()
+		m.cancelWork()
+		<-m.done
+		return err
 	}
 }

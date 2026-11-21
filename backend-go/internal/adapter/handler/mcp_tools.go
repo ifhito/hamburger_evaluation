@@ -36,9 +36,12 @@ var mcpToolScopes = map[string]string{
 	"reopen_shop":      domain.OAuthScopeAdmin,
 }
 
-// toolResultTooLargeMessage は、結果が大きすぎるときの案内である。MCP のツールの説明・指示文と同じく、AI に渡す
-// 日本語で固定する(言語の切り替えの対象にしない)。
+// toolResultTooLargeMessage は、一覧ツールの結果が大きすぎるときの案内である。MCP のツールの説明・指示文と同じく、
+// AI に渡す日本語で固定する(言語の切り替えの対象にしない)。
 const toolResultTooLargeMessage = "結果が大きすぎます。per_page を小さくして、もう一度呼んでください。"
+
+// toolSingleResultTooLargeMessage は、per_page を持たない単一項目ツール(get_shop など)の結果が大きすぎるときの案内である。
+const toolSingleResultTooLargeMessage = "結果が大きすぎます。list_reviews などで条件や per_page を絞って取得してください。"
 
 // maxToolResultBytes は、1 回のツールの結果の最大のバイト数である。一覧が大きすぎるときは、途中で切って
 // 壊れた JSON を返すのではなく、件数を減らして呼び直すよう、エラーで伝える。
@@ -68,12 +71,10 @@ type mcpTools struct {
 
 func boolPtr(b bool) *bool { return &b }
 
-// newToolServer は、viewer のための MCP サーバー(全ツール入り)を組み立てる。書き込みのツールも一覧に
-// 出す。許可されていない範囲のツールを呼ぶと、要求の入口が 403 で、足りない範囲を伝える(クライアントは、
-// それを見て、範囲を広げる許可を求め直せる)。
-func (m *MCPServer) newToolServer(viewer domain.User, scopes []string, lang domain.Lang) *mcp.Server {
+// newToolServer は、全ツールを登録した共有の MCP サーバーを 1 回だけ組み立てる。
+// 各要求の認証済み利用者・許可範囲・言語は context から guarded が取り出すため、要求ごとの再構築とリフレクションを避けられる。
+func (m *MCPServer) newToolServer() *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "burgerstack", Version: "1.0.0"}, &mcp.ServerOptions{Instructions: mcpInstructions})
-	t := &mcpTools{viewer: viewer, scopes: scopes, lang: lang, shops: m.shops, reviews: m.reviews, users: m.users}
 
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: boolPtr(false)}
 	additive := &mcp.ToolAnnotations{DestructiveHint: boolPtr(false), OpenWorldHint: boolPtr(false)}
@@ -86,35 +87,46 @@ func (m *MCPServer) newToolServer(viewer domain.User, scopes []string, lang doma
 		}
 	}
 
-	mcp.AddTool(s, tool("get_meta", "評価の範囲(最小・最大)と、写真の上限など、このアプリの規則の値を返す。評価を書く前に呼んで、範囲を確かめる。", readOnly), guarded(t, "get_meta", t.getMeta))
-	mcp.AddTool(s, tool("list_shops", "ショップの一覧を返す(承認済みのショップと、自分が申請した審査待ちのショップ)。店名の一部で絞り込める。"+untrustedNote, readOnly), guarded(t, "list_shops", t.listShops))
-	mcp.AddTool(s, tool("get_shop", "ショップ 1 件の詳細(バーガーの平均評価つきのレビュー、レビューを書けるか)を返す。"+untrustedNote, readOnly), guarded(t, "get_shop", t.getShop))
-	mcp.AddTool(s, tool("list_reviews", "レビューの一覧を新しい順に返す。ショップ・投稿者・評価・本文の語で絞り込める。"+untrustedNote, readOnly), guarded(t, "list_reviews", t.listReviews))
-	mcp.AddTool(s, tool("get_review", "レビュー 1 件の詳細を返す。can_edit が true なら、自分のレビューで、編集・削除できる。shop は、そのレビューのショップ(id・name。見えないショップは null)で、can_review が true なら、そのショップに、自分がレビューを書ける。"+untrustedNote, readOnly), guarded(t, "get_review", t.getReview))
-	mcp.AddTool(s, tool("get_user", "利用者 1 人のプロフィール(名前・自己紹介)を返す。メールアドレスが含まれるのは、自分のプロフィールを見るときだけ。"+untrustedNote, readOnly), guarded(t, "get_user", t.getUser))
-	mcp.AddTool(s, tool("create_review", "ショップのバーガーに、レビュー(評価・本文・任意の写真1枚)を投稿する。バーガーは burger_id で指定し、なければ burger_name で指定する(なければ作る)。"+writesNote, additive), guarded(t, "create_review", t.createReview))
-	mcp.AddTool(s, tool("update_review", "自分のレビューの、評価と本文を書き換える。photo_base64 を指定すると写真を差し替え、省略すると現在の写真を保持する。他人のレビューは編集できない。"+writesNote, destructive), guarded(t, "update_review", t.updateReview))
-	mcp.AddTool(s, tool("delete_review", "自分のレビューを削除する。他人のレビューは削除できない。"+writesNote, destructive), guarded(t, "delete_review", t.deleteReview))
-	mcp.AddTool(s, tool("submit_shop", "新しいショップを申請する。申請したショップは、管理者が承認するまで、審査待ちになる。"+writesNote, additive), guarded(t, "submit_shop", t.submitShop))
-	mcp.AddTool(s, tool("list_admin_shops", "審査用に、すべての状態のショップの一覧を返す(管理者だけ)。status を省略すると、すべての状態を返す。"+untrustedNote, readOnly), guarded(t, "list_admin_shops", t.listAdminShops))
-	mcp.AddTool(s, tool("approve_shop", "審査待ちのショップを承認する(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(t, "approve_shop", t.approveShop))
-	mcp.AddTool(s, tool("reject_shop", "審査待ちのショップを却下する(管理者だけ)。理由は moderation_note に任意で書ける。"+writesNote+untrustedNote, destructive), guarded(t, "reject_shop", t.rejectShop))
-	mcp.AddTool(s, tool("close_shop", "営業中のショップを閉業にする(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(t, "close_shop", t.closeShop))
-	mcp.AddTool(s, tool("reopen_shop", "閉業したショップを再開する(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(t, "reopen_shop", t.reopenShop))
+	mcp.AddTool(s, tool("get_meta", "評価の範囲(最小・最大)と、写真の上限など、このアプリの規則の値を返す。評価を書く前に呼んで、範囲を確かめる。", readOnly), guarded(m, "get_meta", (*mcpTools).getMeta))
+	mcp.AddTool(s, tool("list_shops", "ショップの一覧を返す(承認済みのショップと、自分が申請した審査待ちのショップ)。店名の一部で絞り込める。"+untrustedNote, readOnly), guarded(m, "list_shops", (*mcpTools).listShops))
+	mcp.AddTool(s, tool("get_shop", "ショップ 1 件の詳細(バーガーの平均評価つきのレビュー、レビューを書けるか)を返す。"+untrustedNote, readOnly), guarded(m, "get_shop", (*mcpTools).getShop))
+	mcp.AddTool(s, tool("list_reviews", "レビューの一覧を新しい順に返す。ショップ・投稿者・評価・本文の語で絞り込める。"+untrustedNote, readOnly), guarded(m, "list_reviews", (*mcpTools).listReviews))
+	mcp.AddTool(s, tool("get_review", "レビュー 1 件の詳細を返す。can_edit が true なら、自分のレビューで、編集・削除できる。shop は、そのレビューのショップ(id・name。見えないショップは null)で、can_review が true なら、そのショップに、自分がレビューを書ける。"+untrustedNote, readOnly), guarded(m, "get_review", (*mcpTools).getReview))
+	mcp.AddTool(s, tool("get_user", "利用者 1 人のプロフィール(名前・自己紹介)を返す。メールアドレスが含まれるのは、自分のプロフィールを見るときだけ。"+untrustedNote, readOnly), guarded(m, "get_user", (*mcpTools).getUser))
+	mcp.AddTool(s, tool("create_review", "ショップのバーガーに、レビュー(評価・本文・任意の写真1枚)を投稿する。バーガーは burger_id で指定し、なければ burger_name で指定する(なければ作る)。"+writesNote, additive), guarded(m, "create_review", (*mcpTools).createReview))
+	mcp.AddTool(s, tool("update_review", "自分のレビューの、評価と本文を書き換える。photo_base64 を指定すると写真を差し替え、省略すると現在の写真を保持する。他人のレビューは編集できない。"+writesNote, destructive), guarded(m, "update_review", (*mcpTools).updateReview))
+	mcp.AddTool(s, tool("delete_review", "自分のレビューを削除する。他人のレビューは削除できない。"+writesNote, destructive), guarded(m, "delete_review", (*mcpTools).deleteReview))
+	mcp.AddTool(s, tool("submit_shop", "新しいショップを申請する。申請したショップは、管理者が承認するまで、審査待ちになる。"+writesNote, additive), guarded(m, "submit_shop", (*mcpTools).submitShop))
+	mcp.AddTool(s, tool("list_admin_shops", "審査用に、すべての状態のショップの一覧を返す(管理者だけ)。status を省略すると、すべての状態を返す。"+untrustedNote, readOnly), guarded(m, "list_admin_shops", (*mcpTools).listAdminShops))
+	mcp.AddTool(s, tool("approve_shop", "審査待ちのショップを承認する(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(m, "approve_shop", (*mcpTools).approveShop))
+	mcp.AddTool(s, tool("reject_shop", "審査待ちのショップを却下する(管理者だけ)。理由は moderation_note に任意で書ける。"+writesNote+untrustedNote, destructive), guarded(m, "reject_shop", (*mcpTools).rejectShop))
+	mcp.AddTool(s, tool("close_shop", "営業中のショップを閉業にする(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(m, "close_shop", (*mcpTools).closeShop))
+	mcp.AddTool(s, tool("reopen_shop", "閉業したショップを再開する(管理者だけ)。"+writesNote+untrustedNote, destructive), guarded(m, "reopen_shop", (*mcpTools).reopenShop))
 	return s
 }
 
-// guarded は、ツールの実行の直前に、トークンが、そのツールに必要な範囲(mcpToolScopes)を許可されているかを
-// 確かめる。足りなければ、ツールの中身(usecase)を呼ばずに、失敗を返す。要求の入口の確認(HandleMCP)は、
-// 本文から読み取った範囲で、範囲を広げる許可を求め直せる 403 を返すためのものだが、本文の読み取りが SDK の
-// 読み方と食い違っても、書き込みが通らないよう、実際に実行されるツールの名前で、もう一度確かめる。
-func guarded[In any](t *mcpTools, name string, h mcp.ToolHandlerFor[In, any]) mcp.ToolHandlerFor[In, any] {
+// guarded は、ツールの実行の直前に context から認証済みの情報を取り出し、必要な範囲(mcpToolScopes)が許可されて
+// いるかを確かめる。足りなければ usecase を呼ばずに失敗を返す。
+func guarded[In any](m *MCPServer, name string, h func(*mcpTools, context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, any, error)) mcp.ToolHandlerFor[In, any] {
 	required := mcpToolScopes[name]
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
+		principal, ok := ctx.Value(mcpPrincipalKey).(mcpPrincipal)
+		if !ok {
+			log.Printf("mcp: missing principal in tool context for %s", name)
+			return failure("internal server error")
+		}
+		t := &mcpTools{
+			viewer:  principal.user,
+			scopes:  principal.scopes,
+			lang:    principal.lang,
+			shops:   m.shops,
+			reviews: m.reviews,
+			users:   m.users,
+		}
 		if !slices.Contains(t.scopes, required) {
 			return t.failMessage(apiMsg(keyInsufficientScope, required))
 		}
-		return h(ctx, req, in)
+		return h(t, ctx, req, in)
 	}
 }
 
@@ -136,8 +148,17 @@ func (t *mcpTools) failMessage(m apiMessage) (*mcp.CallToolResult, any, error) {
 	return failure(text(t.lang, m))
 }
 
-// success は、v を JSON の文字列にして返す。結果が大きすぎるときは、切らずに、件数を減らすよう伝える。
+// success は、単一項目の結果 v を JSON の文字列にして返す。上限を超えるときは per_page を持たないツール向けの案内を返す。
 func success(v any) (*mcp.CallToolResult, any, error) {
+	return encodeToolResult(v, false)
+}
+
+// successList は、per_page を持つ一覧ツールの結果 v を JSON の文字列にして返す。上限を超えるときは per_page 縮小を案内する。
+func successList(v any) (*mcp.CallToolResult, any, error) {
+	return encodeToolResult(v, true)
+}
+
+func encodeToolResult(v any, paginated bool) (*mcp.CallToolResult, any, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
@@ -146,7 +167,10 @@ func success(v any) (*mcp.CallToolResult, any, error) {
 		return failure("internal server error")
 	}
 	if buf.Len() > maxToolResultBytes {
-		return failure(toolResultTooLargeMessage)
+		if paginated {
+			return failure(toolResultTooLargeMessage)
+		}
+		return failure(toolSingleResultTooLargeMessage)
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: strings.TrimSpace(buf.String())}}}, nil, nil
 }
@@ -197,7 +221,7 @@ func (t *mcpTools) listShops(ctx context.Context, _ *mcp.CallToolRequest, in lis
 	for _, shop := range list {
 		items = append(items, newShopResponse(shop))
 	}
-	return success(mcpList[shopResponse]{HasMore: hasMore, Items: items})
+	return successList(mcpList[shopResponse]{HasMore: hasMore, Items: items})
 }
 
 type getShopInput struct {
@@ -246,7 +270,7 @@ func (t *mcpTools) listReviews(ctx context.Context, _ *mcp.CallToolRequest, in l
 	for _, detail := range list {
 		items = append(items, newReviewListResponse(detail))
 	}
-	return success(mcpList[reviewListResponse]{HasMore: hasMore, Items: items})
+	return successList(mcpList[reviewListResponse]{HasMore: hasMore, Items: items})
 }
 
 type getReviewInput struct {
@@ -299,6 +323,9 @@ func (t *mcpTools) createReview(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if !ok {
 		return t.failMessage(msgVisitedAtInvalid)
 	}
+	if err := t.reviews.ValidateCreate(ctx, t.viewer, in.ShopID, in.BurgerID, in.BurgerName, in.Rating, in.Comment, visitedAt); err != nil {
+		return t.toolError("create_review", err)
+	}
 	processed, msg, err := decodeMCPPhoto(ctx, in.PhotoBase64)
 	if err != nil {
 		return t.toolError("create_review", err)
@@ -328,6 +355,9 @@ func (t *mcpTools) updateReview(ctx context.Context, _ *mcp.CallToolRequest, in 
 	visitedAt, ok := parseVisitedAtString(in.VisitedAt)
 	if !ok {
 		return t.failMessage(msgVisitedAtInvalid)
+	}
+	if err := t.reviews.ValidateUpdate(ctx, t.viewer, in.ReviewID, in.Rating, in.Comment, visitedAt); err != nil {
+		return t.toolError("update_review", err)
 	}
 	processed, msg, err := decodeMCPPhoto(ctx, in.PhotoBase64)
 	if err != nil {
@@ -387,7 +417,7 @@ func (t *mcpTools) listAdminShops(ctx context.Context, _ *mcp.CallToolRequest, i
 	for _, detail := range list {
 		items = append(items, newAdminShopResponse(detail))
 	}
-	return success(mcpList[adminShopResponse]{HasMore: hasMore, Items: items})
+	return successList(mcpList[adminShopResponse]{HasMore: hasMore, Items: items})
 }
 
 type approveShopInput struct {

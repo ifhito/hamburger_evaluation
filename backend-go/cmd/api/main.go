@@ -144,7 +144,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 	recalc := usecase.NewBurgerStatsRecalculator(infra.SystemClock{})
 	shopRecalc := usecase.NewShopStatsRecalculator(infra.SystemClock{})
 	reviews := usecase.NewReviews(query.NewReviewQuery(pool), unitOfWork, recalc, shopRecalc, photos, infra.SystemClock{})
-	users := usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, shopRecalc, infra.BcryptPasswordHasher{})
+	users := usecase.NewUsers(userQuery, userWrites, unitOfWork, recalc, shopRecalc, infra.BcryptPasswordHasher{}, usecase.WithUserPhotoCleanup(photos))
 
 	// 統計の再計算は、書き込みの応答を待たせないよう、バックグラウンドのワーカー(goroutine 1 本)が
 	// あとから行う。起動した直後に、前回の停止までに溜まっていた依頼を処理する。停止では、サーバーを

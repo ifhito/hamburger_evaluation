@@ -53,11 +53,11 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 	t.Run("削除は、該当のバーガーの再計算の依頼だけを登録し、統計の計算も burger のロックもせずに commit する", func(t *testing.T) {
 		stats := &uowtest.Stats{}
 		uow := &uowtest.UoW{Stats: stats}
-		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error { stats.Note("discard"); return nil }}
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) (*string, error) { stats.Note("discard"); return nil, nil }}
 		if err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID); err != nil {
 			t.Fatalf("Delete returned error: %v", err)
 		}
-		want := []string{"discard", "request:" + uid.N(5)}
+		want := []string{"discard", "reviewed-by:" + alice.ID, "request:" + uid.N(5)}
 		if !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
 		}
@@ -69,8 +69,8 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 	t.Run("存在しないレビューの削除は、再計算の依頼を登録せずに rollback する", func(t *testing.T) {
 		stats := &uowtest.Stats{}
 		uow := &uowtest.UoW{Stats: stats}
-		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error {
-			return domain.ErrReviewNotFound // 並行して先に削除された
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) (*string, error) {
+			return nil, domain.ErrReviewNotFound // 並行して先に削除された
 		}}
 		err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID)
 		if !errors.Is(err, domain.ErrReviewNotFound) {
@@ -88,7 +88,7 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 		requestErr := errors.New("boom")
 		stats := &uowtest.Stats{RequestErr: requestErr}
 		uow := &uowtest.UoW{Stats: stats}
-		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error { return nil }}
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) (*string, error) { return nil, nil }}
 		err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID)
 		if !errors.Is(err, requestErr) {
 			t.Fatalf("Delete error = %v, want wrapped %v", err, requestErr)
@@ -110,7 +110,7 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 			t.Fatalf("Create returned error: %v", err)
 		}
 		// 書き込みは burger の行をロックしない(ロックは、ワーカーが再計算するときだけ取る)。
-		want := []string{"insert", "request:" + uid.N(5)}
+		want := []string{"insert", "reviewed-by:" + alice.ID, "request:" + uid.N(5)}
 		if !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
 		}
@@ -137,7 +137,7 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 		if _, err := uowReviews(query, repo, uow).Create(ctx, alice, activeShop.ID, "", "Smash", 4, "ok", nil, nil); err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
-		want := []string{"find-or-create", "insert", "request:" + uid.N(7)}
+		want := []string{"find-or-create", "insert", "reviewed-by:" + alice.ID, "request:" + uid.N(7)}
 		if !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
 		}
@@ -180,15 +180,15 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 					updateReviewContent: func(_ context.Context, _ string, rating int, comment string, _ *time.Time) (domain.Review, error) {
 						return updated(stored.Review, rating, comment), nil
 					},
-					updateReviewContentAndKey: func(_ context.Context, _ string, rating int, comment string, _ *time.Time, _ *string) (domain.Review, error) {
-						return updated(stored.Review, rating, comment), nil
+					updateReviewContentAndKey: func(_ context.Context, _ string, rating int, comment string, _ *time.Time, _ *string) (domain.Review, *string, error) {
+						return updated(stored.Review, rating, comment), nil, nil
 					},
 				}
 				reviews := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow)
 				if _, err := reviews.Update(ctx, alice, stored.ID, 5, "Better", nil, processedIf(upload)); err != nil {
 					t.Fatalf("Update returned error: %v", err)
 				}
-				want := []string{"request:" + uid.N(5)}
+				want := []string{"reviewed-by:" + alice.ID, "request:" + uid.N(5)}
 				if !reflect.DeepEqual(stats.Ops, want) {
 					t.Errorf("操作の順序 = %v, want %v", stats.Ops, want)
 				}
@@ -196,6 +196,42 @@ func TestReviewsWriteRegistersRecalcRequestInOneTransaction(t *testing.T) {
 					t.Errorf("commits = %d, want 1", uow.Commits)
 				}
 			})
+		}
+	})
+
+	t.Run("投稿者が他のバーガーもレビュー済みなら、対象のバーガーと合わせて重複なく id の昇順に再計算の依頼を登録する", func(t *testing.T) {
+		stats := &uowtest.Stats{
+			ReviewedBy: func(context.Context, string) ([]string, error) {
+				return []string{uid.N(9), uid.N(5), uid.N(3)}, nil
+			},
+		}
+		shopStats := &uowtest.ShopStats{
+			BurgerShops: func(_ context.Context, burgerID string) ([]string, error) {
+				return []string{"shop-for-" + burgerID}, nil
+			},
+		}
+		uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) (*string, error) {
+			stats.Note("discard")
+			return nil, nil
+		}}
+		if err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID); err != nil {
+			t.Fatalf("Delete returned error: %v", err)
+		}
+		wantStats := []string{
+			"discard",
+			"reviewed-by:" + alice.ID,
+			"request:" + uid.N(3), "request:" + uid.N(5), "request:" + uid.N(9),
+		}
+		if !reflect.DeepEqual(stats.Ops, wantStats) {
+			t.Errorf("バーガーの操作 = %v, want %v", stats.Ops, wantStats)
+		}
+		wantShops := []string{
+			"burger-shops:" + uid.N(3), "burger-shops:" + uid.N(5), "burger-shops:" + uid.N(9),
+			"request:shop-for-" + uid.N(3), "request:shop-for-" + uid.N(5), "request:shop-for-" + uid.N(9),
+		}
+		if !reflect.DeepEqual(shopStats.Ops, wantShops) {
+			t.Errorf("ショップの操作 = %v, want %v", shopStats.Ops, wantShops)
 		}
 	})
 }
@@ -315,7 +351,7 @@ func TestReviewsAndUsersRegisterShopRecalcRequestInSameTransaction(t *testing.T)
 		if _, err := uowReviews(createQuery, repo, uow).Create(ctx, alice, activeShop.ID, cheese.ID, "", 4, "ok", nil, nil); err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
-		if want := []string{"request:" + uid.N(5)}; !reflect.DeepEqual(stats.Ops, want) {
+		if want := []string{"reviewed-by:" + alice.ID, "request:" + uid.N(5)}; !reflect.DeepEqual(stats.Ops, want) {
 			t.Errorf("バーガーの操作 = %v, want %v", stats.Ops, want)
 		}
 		if want := []string{"burger-shops:" + uid.N(5), "request:" + uid.N(1)}; !reflect.DeepEqual(shopStats.Ops, want) {
@@ -341,7 +377,7 @@ func TestReviewsAndUsersRegisterShopRecalcRequestInSameTransaction(t *testing.T)
 
 		shopStats = &uowtest.ShopStats{BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(2)}, nil }}
 		uow = &uowtest.UoW{Stats: &uowtest.Stats{}, ShopStats: shopStats}
-		repo = &fakeReviewRepo{discardReview: func(context.Context, string) error { return nil }}
+		repo = &fakeReviewRepo{discardReview: func(context.Context, string) (*string, error) { return nil, nil }}
 		if err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID); err != nil {
 			t.Fatalf("Delete returned error: %v", err)
 		}
@@ -355,7 +391,7 @@ func TestReviewsAndUsersRegisterShopRecalcRequestInSameTransaction(t *testing.T)
 		stats := &uowtest.Stats{}
 		shopStats := &uowtest.ShopStats{BurgerShops: func(context.Context, string) ([]string, error) { return []string{uid.N(1)}, nil }, RequestErr: boom}
 		uow := &uowtest.UoW{Stats: stats, ShopStats: shopStats}
-		repo := &fakeReviewRepo{discardReview: func(context.Context, string) error { return nil }}
+		repo := &fakeReviewRepo{discardReview: func(context.Context, string) (*string, error) { return nil, nil }}
 		err := uowReviews(&fakeReviewQuery{getReview: getReview}, repo, uow).Delete(ctx, alice, stored.ID)
 		if !errors.Is(err, boom) {
 			t.Fatalf("Delete error = %v, want wrapped %v", err, boom)

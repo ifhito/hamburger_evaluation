@@ -11,6 +11,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearUserReviewPhotoKeys = `-- name: ClearUserReviewPhotoKeys :many
+WITH old_photos AS (
+    SELECT r0.id, r0.photo_key
+    FROM reviews r0
+    WHERE r0.user_id = $1
+      AND r0.discarded_at IS NULL
+      AND r0.photo_key IS NOT NULL
+    ORDER BY r0.id
+    FOR NO KEY UPDATE
+),
+cleared AS (
+    UPDATE reviews r
+    SET photo_key = NULL,
+        updated_at = now()
+    FROM old_photos o
+    WHERE r.id = o.id
+)
+SELECT o.photo_key::text AS photo_key FROM old_photos o
+`
+
+// 退会する利用者の有効なレビューから photo_key を外し、削除すべき直前のキー一覧を返す（レビュー行自体は残す）。
+func (q *Queries) ClearUserReviewPhotoKeys(ctx context.Context, userID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, clearUserReviewPhotoKeys, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var photo_key string
+		if err := rows.Scan(&photo_key); err != nil {
+			return nil, err
+		}
+		items = append(items, photo_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createReview = `-- name: CreateReview :one
 INSERT INTO reviews (rating, comment, user_id, burger_id, photo_key, visited_at)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -56,18 +97,23 @@ UPDATE reviews
 SET discarded_at = now(),
     updated_at = now()
 WHERE id = $1 AND discarded_at IS NULL
-RETURNING burger_id
+RETURNING burger_id, photo_key
 `
+
+type DiscardReviewRow struct {
+	BurgerID string
+	PhotoKey pgtype.Text
+}
 
 // 列を限定した soft delete：discarded_at にタイムスタンプを設定するだけで、
 // しかも 1 回だけ行う。すでに discard 済みの review はどの行にもマッチせず、
-// not found として現れる。burger_id を返すので、呼び出し元は同じ
-// トランザクション内でその burger の統計を再計算できる。
-func (q *Queries) DiscardReview(ctx context.Context, id string) (string, error) {
+// not found として現れる。削除前の photo_key も同時に返すことで、並行する写真差し替えがあっても
+// 正確に直前の写真ファイルを掃除できる。
+func (q *Queries) DiscardReview(ctx context.Context, id string) (DiscardReviewRow, error) {
 	row := q.db.QueryRow(ctx, discardReview, id)
-	var burger_id string
-	err := row.Scan(&burger_id)
-	return burger_id, err
+	var i DiscardReviewRow
+	err := row.Scan(&i.BurgerID, &i.PhotoKey)
+	return i, err
 }
 
 const getReviewDetail = `-- name: GetReviewDetail :one

@@ -111,7 +111,7 @@ func allowedFailureArg(arg ast.Expr) bool {
 	case *ast.BasicLit:
 		return a.Kind == token.STRING && a.Value == `"internal server error"`
 	case *ast.Ident:
-		return a.Name == "toolResultTooLargeMessage"
+		return a.Name == "toolResultTooLargeMessage" || a.Name == "toolSingleResultTooLargeMessage"
 	}
 	return false
 }

@@ -124,6 +124,27 @@ func (r *BurgerStatsRecalculator) RequestRecalculationReviewedBy(ctx context.Con
 	return nil
 }
 
+// RequestRecalculationForUserAndBurger は、レビューの投稿・編集・削除によって投稿者(userID)の評価履歴と
+// 信頼度(ReviewerTrustScore)が変化したとき、今回の対象バーガー(targetBurgerID)と、その投稿者が有効なレビューを
+// 付けている他のすべてのバーガーを重複なく昇順でまとめ、再計算の依頼を登録してそのバーガー ID 一覧を返す。
+func (r *BurgerStatsRecalculator) RequestRecalculationForUserAndBurger(ctx context.Context, tx Tx, userID, targetBurgerID string) ([]string, error) {
+	burgerIDs, err := tx.Stats.ListReviewedBurgerIDsByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list review burgers: %w", err)
+	}
+	if targetBurgerID != "" {
+		burgerIDs = append(burgerIDs, targetBurgerID)
+	}
+	slices.Sort(burgerIDs)
+	burgerIDs = slices.Compact(burgerIDs)
+	for _, burgerID := range burgerIDs {
+		if err := r.RequestRecalculation(ctx, tx, burgerID); err != nil {
+			return nil, err
+		}
+	}
+	return burgerIDs, nil
+}
+
 // Recalculate はバーガーの統計を計算し直して保存する(ワーカーが使う)。tx は UnitOfWork.Do が
 // 渡したものでなければならない。手順は「バーガーの行をロックする → 統計の元データを読む → domain の
 // 計算(CalculateBurgerStat)で統計を求める → 保存する」である。

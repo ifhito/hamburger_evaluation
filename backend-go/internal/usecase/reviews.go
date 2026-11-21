@@ -147,6 +147,35 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (doma
 	return detail, nil
 }
 
+// ValidateCreate は、重い写真の変換・保存に進む前に、投稿対象のショップ・バーガーの存在確認、
+// 投稿権限、および入力内容の検証を Create と同じ順序で行う。
+func (s *Reviews) ValidateCreate(ctx context.Context, viewer domain.User, shopID, burgerID, burgerName string, rating int, comment string, visitedAt *time.Time) error {
+	_, err := s.prepareCreate(ctx, viewer, shopID, burgerID, burgerName, rating, comment, visitedAt)
+	return err
+}
+
+func (s *Reviews) prepareCreate(ctx context.Context, viewer domain.User, shopID, burgerID, burgerName string, rating int, comment string, visitedAt *time.Time) (domain.ShopReviewBurger, error) {
+	shop, err := s.query.GetShop(ctx, shopID)
+	if err != nil {
+		return domain.ShopReviewBurger{}, fmt.Errorf("create review: %w", err)
+	}
+	if !shop.CanBeReviewedBy(viewer) {
+		return domain.ShopReviewBurger{}, domain.ErrForbidden
+	}
+	var burger domain.ShopReviewBurger
+	if burgerID != "" {
+		if burger, err = s.query.GetShopBurger(ctx, shopID, burgerID); err != nil {
+			return domain.ShopReviewBurger{}, fmt.Errorf("create review: %w", err)
+		}
+	} else if err := domain.ValidateBurgerName(burgerName); err != nil {
+		return domain.ShopReviewBurger{}, err
+	}
+	if _, err := domain.NewReview(rating, comment, viewer.ID, burgerID, visitedAt, s.clock.Now()); err != nil {
+		return domain.ShopReviewBurger{}, err
+	}
+	return burger, nil
+}
+
 // Create は、viewer による、shop の burger に対する review を投稿する。
 // チェックの順序は契約どおりで、未知の shop（404）、次に domain の
 // reviewable ルール（403）、次に burger の解決、次に content の validation
@@ -164,19 +193,8 @@ func (s *Reviews) Get(ctx context.Context, viewer *domain.User, id string) (doma
 // したばかりの blob を best-effort で削除するので、リクエストより長く残る
 // 孤立ファイルはない。
 func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burgerID string, burgerName string, rating int, comment string, visitedAt *time.Time, upload *photo.Processed) (domain.ReviewDetail, error) {
-	shop, err := s.query.GetShop(ctx, shopID)
+	burger, err := s.prepareCreate(ctx, viewer, shopID, burgerID, burgerName, rating, comment, visitedAt)
 	if err != nil {
-		return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
-	}
-	if !shop.CanBeReviewedBy(viewer) {
-		return domain.ReviewDetail{}, domain.ErrForbidden
-	}
-	var burger domain.ShopReviewBurger
-	if burgerID != "" {
-		if burger, err = s.query.GetShopBurger(ctx, shopID, burgerID); err != nil {
-			return domain.ReviewDetail{}, fmt.Errorf("create review: %w", err)
-		}
-	} else if err := domain.ValidateBurgerName(burgerName); err != nil {
 		return domain.ReviewDetail{}, err
 	}
 	// burgerID が空のとき（burger_name の経路）は、この BurgerID は
@@ -203,12 +221,13 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 		if created, err = tx.Reviews.Create(ctx, review); err != nil {
 			return err
 		}
-		// 統計は、ここでは計算せず、再計算の依頼(バーガーの統計とショップの集計の両方)を同じトランザクションで
-		// 登録する。burger の行をロックしないので、同じ burger への他の書き込みを待たない。
-		if err := s.recalc.RequestRecalculation(ctx, tx, created.BurgerID); err != nil {
+		// 投稿者の信頼度履歴が変わるため、今回のバーガーに加えて投稿者が過去にレビューした全バーガーと
+		// それらに紐づくショップの再計算依頼を昇順で登録する。
+		burgerIDs, err := s.recalc.RequestRecalculationForUserAndBurger(ctx, tx, viewer.ID, created.BurgerID)
+		if err != nil {
 			return err
 		}
-		return s.shopStats.RequestRecalculationForBurger(ctx, tx, created.BurgerID)
+		return s.shopStats.RequestRecalculationForBurgers(ctx, tx, burgerIDs)
 	})
 	if err != nil {
 		s.deletePhotoBestEffort(ctx, review.PhotoKey)
@@ -222,6 +241,27 @@ func (s *Reviews) Create(ctx context.Context, viewer domain.User, shopID, burger
 	}
 	detail.CanEdit = detail.CanBeModifiedByViewer(&viewer)
 	return detail, nil
+}
+
+// CheckModifiable は、multipart 本文の写真を読む前に、編集対象のレビューが存在し viewer が所有者で
+// あること（404 → 403）を確かめる。
+func (s *Reviews) CheckModifiable(ctx context.Context, viewer domain.User, id string) error {
+	detail, err := s.query.GetReview(ctx, id)
+	if err != nil {
+		return fmt.Errorf("update review: %w", err)
+	}
+	if !detail.CanBeModifiedBy(viewer) {
+		return domain.ErrForbidden
+	}
+	return nil
+}
+
+// ValidateUpdate は、重い写真の変換に進む前に、編集対象の存在確認・所有権・入力内容の検証を Update と同じ順序で行う。
+func (s *Reviews) ValidateUpdate(ctx context.Context, viewer domain.User, id string, rating int, comment string, visitedAt *time.Time) error {
+	if err := s.CheckModifiable(ctx, viewer, id); err != nil {
+		return err
+	}
+	return domain.ValidateReviewContent(rating, comment, visitedAt, s.clock.Now())
 }
 
 // Update は review の rating と comment を編集する。load（存在しない review、
@@ -252,20 +292,22 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rat
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
 	var updated domain.Review
+	var replacedPhotoKey *string
 	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
 		var err error
 		if newKey != nil {
-			updated, err = tx.Reviews.UpdateContentAndPhotoKey(ctx, id, rating, comment, visitedAt, newKey)
+			updated, replacedPhotoKey, err = tx.Reviews.UpdateContentAndPhotoKey(ctx, id, rating, comment, visitedAt, newKey)
 		} else {
 			updated, err = tx.Reviews.UpdateContent(ctx, id, rating, comment, visitedAt)
 		}
 		if err != nil {
 			return err
 		}
-		if err := s.recalc.RequestRecalculation(ctx, tx, updated.BurgerID); err != nil {
+		burgerIDs, err := s.recalc.RequestRecalculationForUserAndBurger(ctx, tx, viewer.ID, updated.BurgerID)
+		if err != nil {
 			return err
 		}
-		return s.shopStats.RequestRecalculationForBurger(ctx, tx, updated.BurgerID)
+		return s.shopStats.RequestRecalculationForBurgers(ctx, tx, burgerIDs)
 	})
 	if err != nil {
 		if newKey != nil {
@@ -273,11 +315,9 @@ func (s *Reviews) Update(ctx context.Context, viewer domain.User, id string, rat
 		}
 		return domain.ReviewDetail{}, fmt.Errorf("update review: %w", err)
 	}
-	if newKey != nil {
-		// 古い blob が参照されなくなるのは、DB が新しい key を指すように
-		// なった今になってからである。それを失っても、漏れたファイルに
-		// なるだけで、review が壊れることはない。
-		s.deletePhotoBestEffort(ctx, detail.PhotoKey)
+	if newKey != nil && replacedPhotoKey != nil && *replacedPhotoKey != *newKey {
+		// トランザクション内でロックして得た直前の photo_key を削除する（並行更新があっても漏れや誤削除が起きない）。
+		s.deletePhotoBestEffort(ctx, replacedPhotoKey)
 	}
 	detail.Review = updated
 	detail.PhotoURL = s.photoURL(updated.PhotoKey)
@@ -297,19 +337,22 @@ func (s *Reviews) Delete(ctx context.Context, viewer domain.User, id string) err
 	if !detail.CanBeModifiedBy(viewer) {
 		return domain.ErrForbidden
 	}
+	var discardedPhotoKey *string
 	err = s.uow.Do(ctx, func(ctx context.Context, tx Tx) error {
-		if err := tx.Reviews.Discard(ctx, id); err != nil {
+		var err error
+		if discardedPhotoKey, err = tx.Reviews.Discard(ctx, id); err != nil {
 			return err
 		}
-		if err := s.recalc.RequestRecalculation(ctx, tx, detail.BurgerID); err != nil {
+		burgerIDs, err := s.recalc.RequestRecalculationForUserAndBurger(ctx, tx, viewer.ID, detail.BurgerID)
+		if err != nil {
 			return err
 		}
-		return s.shopStats.RequestRecalculationForBurger(ctx, tx, detail.BurgerID)
+		return s.shopStats.RequestRecalculationForBurgers(ctx, tx, burgerIDs)
 	})
 	if err != nil {
 		return fmt.Errorf("delete review: %w", err)
 	}
-	s.deletePhotoBestEffort(ctx, detail.PhotoKey)
+	s.deletePhotoBestEffort(ctx, discardedPhotoKey)
 	return nil
 }
 

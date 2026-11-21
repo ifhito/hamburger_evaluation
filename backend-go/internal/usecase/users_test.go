@@ -615,3 +615,60 @@ func TestUsersDeleteDiscardsSessions(t *testing.T) {
 		}
 	})
 }
+
+// TestUsersDeleteCleansUpReviewPhotos は、退会時に本人のレビュー写真の参照を同じトランザクションで外し、
+// トランザクションの確定後にだけストレージ上の写真を削除することを固定する。
+func TestUsersDeleteCleansUpReviewPhotos(t *testing.T) {
+	newUsersWith := func(repo domain.UserRepository, unit *uowtest.UoW, photos usecase.PhotoStorage) *usecase.Users {
+		query := &fakeUserQuery{getByID: activeUsersByID(usersViewer, usersOther)}
+		return usecase.NewUsers(
+			query,
+			domain.NewUsers(repo),
+			unit,
+			usecase.NewBurgerStatsRecalculator(uowtest.Clock{}),
+			usecase.NewShopStatsRecalculator(uowtest.Clock{}),
+			fakeHasher{},
+			usecase.WithUserPhotoCleanup(photos),
+		)
+	}
+	discardOK := &fakeUserRepo{discard: func(context.Context, string) error { return nil }}
+
+	t.Run("本人が退会して commit すると、解除された写真のキーをストレージから削除する", func(t *testing.T) {
+		photos := &fakePhotoStorage{}
+		discards := &uowtest.ReviewPhotoDiscards{Keys: []string{"reviews/p1.jpg", "reviews/p2.png"}}
+		unit := &uowtest.UoW{Users: discardOK, ReviewPhotos: discards}
+		if err := newUsersWith(discardOK, unit, photos).Delete(context.Background(), usersViewer, usersViewer.ID); err != nil {
+			t.Fatalf("Delete returned error: %v", err)
+		}
+		if !reflect.DeepEqual(discards.UserIDs, []string{usersViewer.ID}) || unit.Commits != 1 {
+			t.Errorf("写真を解除した利用者 = %v, commits = %d, want [%s] と 1", discards.UserIDs, unit.Commits, usersViewer.ID)
+		}
+		if want := []string{"reviews/p1.jpg", "reviews/p2.png"}; !reflect.DeepEqual(photos.deletes, want) {
+			t.Errorf("削除された写真 = %v, want %v", photos.deletes, want)
+		}
+	})
+
+	t.Run("写真の参照解除や commit が失敗して rollback したときは、ストレージの写真を削除しない", func(t *testing.T) {
+		for name, unit := range map[string]*uowtest.UoW{
+			"参照解除の失敗": {
+				Users:        discardOK,
+				ReviewPhotos: &uowtest.ReviewPhotoDiscards{Err: errors.New("db down")},
+			},
+			"commit の失敗": {
+				Users:        discardOK,
+				ReviewPhotos: &uowtest.ReviewPhotoDiscards{Keys: []string{"reviews/keep.jpg"}},
+				CommitErr:    errors.New("commit failed"),
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				photos := &fakePhotoStorage{}
+				if err := newUsersWith(discardOK, unit, photos).Delete(context.Background(), usersViewer, usersViewer.ID); err == nil {
+					t.Fatal("エラーにならなかった")
+				}
+				if len(photos.deletes) != 0 {
+					t.Errorf("rollback したのに写真を削除した: %v", photos.deletes)
+				}
+			})
+		}
+	})
+}

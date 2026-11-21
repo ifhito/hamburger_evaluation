@@ -194,13 +194,16 @@ type ReviewRepository interface {
 	// 更新する列を絞っているので、削除の目印(discarded_at)を書き換えることはない。
 	UpdateReviewContent(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time) (Review, error)
 	// UpdateReviewContentAndPhotoKey は、削除されていないレビューの評価・コメント・実食日・写真のキーを
-	// まとめて更新し、更新後のレビューを返す。評価・コメント・実食日の更新と、写真のキーの更新は 1 つの
-	// トランザクションで行うので、写真のキーが付かないままコメントだけが確定することはない。
+	// まとめて更新し、更新後のレビューと更新前の写真のキー(なければ nil)を返す。評価・コメント・実食日の更新と、
+	// 写真のキーの更新は 1 つのトランザクションで行うので、写真のキーが付かないままコメントだけが確定することはない。
 	// レビューが存在しない、または論理削除済みなら、包んだ ErrReviewNotFound を返す(何も確定しない)。
-	UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (Review, error)
-	// DiscardReview はレビューを論理削除する(削除日時を記録するだけで、行は消さない)。レビューが
-	// 存在しない、またはすでに論理削除済みなら、包んだ ErrReviewNotFound を返す。
-	DiscardReview(ctx context.Context, id string) error
+	UpdateReviewContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (Review, *string, error)
+	// DiscardReview はレビューを論理削除し(削除日時を記録するだけで、行は消さない)、削除時点で付いていた
+	// 写真のキー(なければ nil)を返す。レビューが存在しない、またはすでに論理削除済みなら、包んだ ErrReviewNotFound を返す。
+	DiscardReview(ctx context.Context, id string) (*string, error)
+	// DiscardReviewPhotosByUser は、退会する利用者の有効なレビューから写真のキーを外し、削除すべきキーの一覧を返す。
+	// レビューの行自体は論理削除しない。
+	DiscardReviewPhotosByUser(ctx context.Context, userID string) ([]string, error)
 }
 
 // ---- 書き込みオブジェクト(repository を呼ぶのは domain のコードだけ) ----
@@ -242,12 +245,17 @@ func (s *Reviews) UpdateContent(ctx context.Context, id string, rating int, comm
 }
 
 // UpdateContentAndPhotoKey は、id の、まだ kept な review の rating、comment、visitedAt、
-// および photo_key を atomic に永続化し、保存された行を返す。
-func (s *Reviews) UpdateContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (Review, error) {
+// および photo_key を atomic に永続化し、保存された行と差し替え前の photo_key を返す。
+func (s *Reviews) UpdateContentAndPhotoKey(ctx context.Context, id string, rating int, comment string, visitedAt *time.Time, photoKey *string) (Review, *string, error) {
 	return s.repo.UpdateReviewContentAndPhotoKey(ctx, id, rating, comment, visitedAt, photoKey)
 }
 
-// Discard は review を soft delete する。
-func (s *Reviews) Discard(ctx context.Context, id string) error {
+// Discard は review を soft delete し、削除前に付いていた写真のキー(なければ nil)を返す。
+func (s *Reviews) Discard(ctx context.Context, id string) (*string, error) {
 	return s.repo.DiscardReview(ctx, id)
+}
+
+// DiscardAllPhotosByUser は、利用者の有効なレビューから写真のキーを外し、削除すべきキー一覧を返す。
+func (s *Reviews) DiscardAllPhotosByUser(ctx context.Context, userID string) ([]string, error) {
+	return s.repo.DiscardReviewPhotosByUser(ctx, userID)
 }

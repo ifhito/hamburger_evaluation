@@ -15,7 +15,7 @@ import (
 // 誰にでも呼べてしまう。逆に表にだけあって登録がなければ、範囲の確認が空振りする。
 // 登録されたツールの一覧と表が、名前も範囲も一致することを確かめる。
 func TestMCPToolScopesMatchRegisteredTools(t *testing.T) {
-	server := (&MCPServer{}).newToolServer(domain.User{ID: "00000000-0000-4000-8000-000000000001"}, nil, domain.LangEN)
+	server := (&MCPServer{}).newToolServer()
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	ctx := context.Background()
 	if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
@@ -102,10 +102,15 @@ func TestMCPToolsCheckTheScopeRightBeforeRunning(t *testing.T) {
 		if len(lang) > 0 {
 			language = lang[0]
 		}
-		server := (&MCPServer{}).newToolServer(domain.User{ID: "00000000-0000-4000-8000-000000000001"}, scopes, language)
+		server := (&MCPServer{}).newToolServer()
 		clientTransport, serverTransport := mcp.NewInMemoryTransports()
 		ctx := context.Background()
-		if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
+		serverCtx := context.WithValue(ctx, mcpPrincipalKey, mcpPrincipal{
+			user:   domain.User{ID: "00000000-0000-4000-8000-000000000001"},
+			scopes: scopes,
+			lang:   language,
+		})
+		if _, err := server.Connect(serverCtx, serverTransport, nil); err != nil {
 			t.Fatalf("connect server: %v", err)
 		}
 		session, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil).Connect(ctx, clientTransport, nil)

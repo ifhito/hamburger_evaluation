@@ -362,17 +362,31 @@ func TestAsyncMailerClose(t *testing.T) {
 		}
 	})
 
-	t.Run("送信が終わらなくても、Close は ctx の期限で返る", func(t *testing.T) {
+	t.Run("送信が終わらなくても、Close は ctx の期限で進行中の送信を中断し、ワーカーをすべて止めてから返る", func(t *testing.T) {
 		repo := &fakeMailRepo{}
 		d := newGateDeliverer(repo)
 		m := newAsyncMailer(d, domain.NewMailDeliveries(repo), 1, 10, 5*time.Second)
 		m.SendSignupConfirmation(confirmation("a@example.com", "k1"))
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		m.SendSignupConfirmation(confirmation("b@example.com", "k2"))
+		waitFor(t, "1 通目が送信中(pending)になる", func() bool { return len(repo.snapshot()) == 1 })
+
+		ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
 		defer cancel()
 		if err := m.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("Close error = %v, want %v", err, context.DeadlineExceeded)
 		}
+		// Close が返った時点でワーカーは終了しており、未処理の 2 通目や中断後の failed 更新で閉じた DB に触れない。
+		afterClose := repo.snapshot()
+		if len(afterClose) != 1 || afterClose[0].status != "pending" {
+			t.Errorf("Close 直後の記録 = %+v, want 1 通目が pending のまま・2 通目は未着手", afterClose)
+		}
 		close(d.release)
-		_ = m.Close(context.Background())
+		time.Sleep(30 * time.Millisecond)
+		if later := repo.snapshot(); len(later) != 1 || later[0].status != "pending" {
+			t.Errorf("Close 後の記録が書き換わった: %+v", later)
+		}
+		if err := m.Close(context.Background()); err != nil {
+			t.Errorf("2 回目の Close error = %v, want nil", err)
+		}
 	})
 }
