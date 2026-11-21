@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Badge } from "../../../components/ui/Badge";
+import { Photo } from "../../../components/ui/Photo";
 import { RatingBurger, RatingBurgerIcon } from "../../../components/ui/RatingBurger";
 import type { Shop } from "../api/types";
 import styles from "./shopPosterCard.module.css";
@@ -31,11 +32,13 @@ export function ShopPosterCard({
             {shop.closedAt && <Badge>{t("shops.closedBadge")}</Badge>}
           </div>
         )}
-        {shop.photoUrl ? (
-          <img src={shop.photoUrl} alt="" loading="lazy" className={styles.photo} />
-        ) : (
-          <div className={styles.noPhoto}>{t("shops.list.noPhoto")}</div>
-        )}
+        <Photo
+          src={shop.photoUrl}
+          alt=""
+          className={styles.photo}
+          fallbackClassName={styles.noPhoto}
+          fallback={t("shops.list.noPhoto")}
+        />
       </div>
       <div className={styles.info}>
         <Heading className={styles.name}>

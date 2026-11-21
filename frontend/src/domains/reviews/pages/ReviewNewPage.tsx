@@ -15,6 +15,7 @@ import { LinkButton } from "../../../components/ui/LinkButton";
 import { TextLink } from "../../../components/ui/TextLink";
 import { TextField, TextArea } from "../../../components/ui/TextField";
 import { RatingInput } from "../../../components/ui/RatingInput";
+import { Loading, NotFound } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
 import { PhotoField } from "../components/PhotoField";
 import { useRatingRange } from "../hooks/useRatingRange";
@@ -30,7 +31,7 @@ export default function ReviewNewPage() {
 
   // ショップ名は、その shop 1 件を id で取得して表示する(一覧のページ送りに依存しない)
   const { user, isLoading: authLoading } = useAuth();
-  const { data: shop } = useShopDetail(shopId, user?.id ?? null, { enabled: !authLoading });
+  const { data: shop, isLoading: shopLoading, error: shopError } = useShopDetail(shopId, user?.id ?? null, { enabled: !authLoading });
 
   const { create } = useCreateReview();
   const ratingRange = useRatingRange();
@@ -46,6 +47,43 @@ export default function ReviewNewPage() {
   const markSaved = useUnsavedChanges(isDirty || photo !== null || photoShrinking);
 
   if (!shopId) return <Navigate to="/record" replace />;
+  if (authLoading || shopLoading) {
+    return (
+      <Layout>
+        <Loading />
+      </Layout>
+    );
+  }
+  if ((shopError instanceof ApiError && shopError.status === 404) || (!shopError && !shop)) {
+    return (
+      <Layout>
+        <NotFound action={<LinkButton to="/shops">{t("shops.detail.backToShopsAction")}</LinkButton>} />
+      </Layout>
+    );
+  }
+  if (shopError || !shop) {
+    return (
+      <Layout>
+        <div className={styles.container}>
+          <TextLink to="/shops">{t("shops.detail.backToShops")}</TextLink>
+          <Alert message={t("shops.list.loadError")} />
+        </div>
+      </Layout>
+    );
+  }
+  if (shop.canReview === false) {
+    return (
+      <Layout>
+        <div className={styles.container}>
+          <TextLink to={`/shops/${shopId}`}>{t("reviews.new.backToShop")}</TextLink>
+          <h1 className={styles.title}>{t("reviews.new.title")}</h1>
+          <div className={styles.narrow}>
+            <Alert title={t("reviews.new.cannotReviewTitle")} message={t("reviews.new.cannotReviewBody")} />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   const onSubmit = handleSubmit(async (data) => {
     if (data.rating === null) {

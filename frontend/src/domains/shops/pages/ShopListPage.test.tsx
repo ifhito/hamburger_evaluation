@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { act } from "react";
 import "../../../lib/i18n";
-import { cleanup, mount } from "../../../test/dom";
+import { cleanup, mount, need, type as typeInto } from "../../../test/dom";
 import ShopListPage from "./ShopListPage";
 import RecordPage from "../../../app/navigation/RecordPage";
 
@@ -18,7 +19,8 @@ vi.mock("../hooks/useShops", () => ({
 }));
 vi.mock("../../reviews/hooks/useRatingRange", () => ({ useRatingRange: () => ({ min: 1, max: 5 }) }));
 
-const show = (initialEntries: string[] = ["/shops"]) => mount(<MemoryRouter initialEntries={initialEntries}><ShopListPage /></MemoryRouter>);
+const show = (initialEntries: string[] = ["/shops"]) =>
+  mount(<RouterProvider router={createMemoryRouter([{ path: "/shops", element: <ShopListPage /> }], { initialEntries })} />);
 
 beforeEach(() => {
   state.authUser = null;
@@ -62,12 +64,36 @@ describe("ShopListPage の初期の keyword", () => {
     const input = page.querySelector<HTMLInputElement>("input[type='text']");
     expect(input?.value).toBe("Shake");
   });
+
+  it("検索欄を書き換えたあと別の URL を経て同じ keyword 付き URL へ戻ったときも、URL の keyword を正しく復元する", async () => {
+    const testRouter = createMemoryRouter([{ path: "/shops", element: <ShopListPage /> }], {
+      initialEntries: ["/shops?keyword=Shake"],
+    });
+    const page = await mount(<RouterProvider router={testRouter} />);
+    const input = need(page.querySelector<HTMLInputElement>("input[type='text']"), "search input");
+    expect(input.value).toBe("Shake");
+
+    await typeInto(input, "");
+    expect(input.value).toBe("");
+
+    await act(async () => {
+      await testRouter.navigate("/shops");
+    });
+    expect(input.value).toBe("");
+
+    await act(async () => {
+      await testRouter.navigate("/shops?keyword=Shake");
+    });
+    expect(input.value).toBe("Shake");
+  });
 });
 
 it("記録入口で審査待ちの店舗を選ぶと投稿フォームではなく店舗詳細へ進む", async () => {
   state.authUser = { id: "1", canModerate: false };
   state.shops = [{ id: "7", name: "Shake Shack", status: "pending", photoUrl: null, averageRating: null, reviewCount: 0 }];
-  const page = await mount(<MemoryRouter initialEntries={["/record"]}><RecordPage /></MemoryRouter>);
+  const page = await mount(
+    <RouterProvider router={createMemoryRouter([{ path: "/record", element: <RecordPage /> }], { initialEntries: ["/record"] })} />,
+  );
   expect(page.querySelector('a[href="/shops/7?from=record"]')).not.toBeNull();
   expect(page.querySelector('a[href^="/reviews/new"]')).toBeNull();
 });

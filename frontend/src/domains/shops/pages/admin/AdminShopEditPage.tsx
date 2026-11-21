@@ -60,10 +60,10 @@ export default function AdminShopEditPage() {
         <h1 className={styles.title}>{t("shops.admin.editTitle")}</h1>
         {isLoading || authLoading ? (
           <Loading />
-        ) : error ? (
+        ) : error || !shop ? (
           <Alert message={t("shops.list.loadError")} />
         ) : (
-          <form onSubmit={(e) => void onSubmit(e)} className={styles.form}>
+          <form onSubmit={(e) => void onSubmit(e)} className={styles.form} noValidate>
             {serverError && <Alert title={t("shops.admin.editErrorTitle")} message={serverError} />}
             <TextField
               id="name"

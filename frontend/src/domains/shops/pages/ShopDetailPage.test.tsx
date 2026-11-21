@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import "../../../lib/i18n";
+import { ApiError } from "../../../api/client/buildApiClient";
 import { returnPathFrom } from "../../../app/router/returnTo";
 import { byText, cleanup, click, mount, need } from "../../../test/dom";
 import type { ShopDetail } from "../api/types";
@@ -53,10 +54,18 @@ afterEach(cleanup);
 describe("ShopDetailPage の状態の表示", () => {
   it("見つからない(404)ときは、売り切れの画面を出す", async () => {
     state.shop = undefined;
-    state.error = new Error("not found");
+    state.error = new ApiError(["Shop not found"], 404);
     const page = await show();
     expect(page.textContent).toContain("404");
     expect(page.textContent).toContain("Sold out");
+  });
+
+  it("通信失敗(ApiError 以外の例外)のときは、404 売り切れ画面ではなく取得失敗のエラーを出す", async () => {
+    state.shop = undefined;
+    state.error = new Error("Network Error");
+    const page = await show();
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("Failed to load shops.");
+    expect(page.textContent).not.toContain("Sold out");
   });
 
   it("審査待ちのときは、札と案内を出す", async () => {
@@ -106,6 +115,20 @@ describe("ShopDetailPage の地図リンク(map_url)", () => {
     state.shop = { ...baseShop, mapUrl: null };
     const page = await show();
     expect(page.textContent).not.toContain("View on map");
+  });
+
+  it("map_url が http(s) 以外のスキーム(javascript: など)のときは、リンクを出さない", async () => {
+    state.shop = { ...baseShop, mapUrl: "javascript:alert(1)" };
+    const page = await show();
+    expect(page.textContent).not.toContain("View on map");
+  });
+
+  it("取得が 503 で失敗したときは、404 売り切れ画面ではなく取得失敗のエラーを出す", async () => {
+    state.shop = undefined;
+    state.error = new ApiError(["Service unavailable"], 503);
+    const page = await show();
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("Failed to load shops.");
+    expect(page.textContent).not.toContain("Sold out");
   });
 });
 

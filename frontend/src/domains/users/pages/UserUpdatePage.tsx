@@ -37,11 +37,13 @@ function UserUpdateForm({
   initialUsername,
   initialBio,
   initialEmail,
+  onDeletingChange,
 }: {
   id: string;
   initialUsername: string;
   initialBio: string;
   initialEmail: string;
+  onDeletingChange: (deleting: boolean) => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -100,6 +102,7 @@ function UserUpdateForm({
   const handleDelete = async () => {
     if (!confirm(t("users.update.deleteConfirm"))) return;
     setIsDeleting(true);
+    onDeletingChange(true);
     try {
       await destroy(id);
       // 削除後はサーバー側のアカウントが既に無効なため POST /logout は呼ばず、移動と状態消去を同じ描画でまとめる
@@ -107,6 +110,7 @@ function UserUpdateForm({
       clearSession();
       void navigate("/reviews", { replace: true });
     } catch (e) {
+      onDeletingChange(false);
       setServerError({
         title: t("users.update.deleteErrorTitle"),
         messages: e instanceof ApiError ? e.messages : [t("users.update.deleteError")],
@@ -186,11 +190,12 @@ export default function UserUpdatePage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { user: authUser, isLoading: authLoading } = useAuth();
+  const [accountDeleting, setAccountDeleting] = useState(false);
   const { data: profile, error, isLoading } = useUser(id, authUser?.id ?? null, {
     enabled: !authLoading,
   });
 
-  if (authLoading || isLoading) {
+  if (authLoading || isLoading || (accountDeleting && !profile)) {
     return (
       <EditColumn id={id}>
         <Loading />
@@ -220,6 +225,7 @@ export default function UserUpdatePage() {
       initialUsername={profile.username}
       initialBio={profile.bio}
       initialEmail={profile.email ?? ""}
+      onDeletingChange={setAccountDeleting}
     />
   );
 }

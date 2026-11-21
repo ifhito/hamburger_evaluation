@@ -6,6 +6,8 @@ import { useReview } from "../hooks/useReview";
 import { useDeleteReview } from "../hooks/useReviewMutations";
 import { useRatingRange } from "../hooks/useRatingRange";
 import { formatDate, formatVisitedAt } from "../../../lib/date";
+import { ApiError } from "../../../api/client/buildApiClient";
+import { Alert } from "../../../components/ui/Alert";
 import { Photo } from "../../../components/ui/Photo";
 import { Button } from "../../../components/ui/Button";
 import { LinkButton } from "../../../components/ui/LinkButton";
@@ -30,28 +32,42 @@ export default function ReviewDetailPage() {
   const { data: review, isLoading, error } = useReview(id, user?.id ?? null, { enabled: !authLoading });
   const { destroy } = useDeleteReview();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | string[] | null>(null);
 
-  if (isLoading || authLoading) {
+  if (isLoading || authLoading || (isDeleting && !review)) {
     return (
       <Layout>
         <Loading />
       </Layout>
     );
   }
-  if (error || !review) {
+  if ((error instanceof ApiError && error.status === 404) || (!error && !review)) {
     return (
       <Layout>
         <NotFound action={<LinkButton to="/reviews">{t("reviews.detail.backToReviewsAction")}</LinkButton>} />
       </Layout>
     );
   }
+  if (error || !review) {
+    return (
+      <Layout>
+        <div className={styles.container}>
+          <TextLink to="/reviews">{t("reviews.detail.backToReviews")}</TextLink>
+          <Alert message={t("reviews.list.loadError")} />
+        </div>
+      </Layout>
+    );
+  }
 
   const handleDelete = async () => {
     if (!confirm(t("reviews.detail.deleteConfirm"))) return;
+    setDeleteError(null);
     setIsDeleting(true);
     try {
       await destroy(review.id);
       void navigate("/reviews");
+    } catch (e) {
+      setDeleteError(e instanceof ApiError ? e.messages : [t("reviews.detail.deleteError")]);
     } finally {
       setIsDeleting(false);
     }
@@ -95,6 +111,7 @@ export default function ReviewDetailPage() {
             </div>
             {ratingRange === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingRange.max} size="md" variant="stepped" />}
             {review.comment && <p className={styles.comment}>{review.comment}</p>}
+            {deleteError && <Alert title={t("reviews.detail.deleteErrorTitle")} message={deleteError} />}
             {review.canEdit && (
               <div className={styles.actions}>
                 <LinkButton to={`/reviews/${review.id}/edit`}>{t("reviews.detail.edit")}</LinkButton>

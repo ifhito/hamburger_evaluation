@@ -1,16 +1,30 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, useSyncExternalStore } from "react";
 import { createMemoryRouter, createRoutesFromElements, RouterProvider, Route } from "react-router-dom";
 import "../../../lib/i18n";
+import { ApiError } from "../../../api/client/buildApiClient";
 import { byText, click, cleanup, mount, need, type as typeInto } from "../../../test/dom";
 import type { ReviewDetailView } from "../api/types";
 import ReviewEditPage from "./ReviewEditPage";
 
 // can_edit による、フォームと「編集できません」の出し分けと、見つからない・取得に失敗したときの画面を確かめる。
+const listeners = vi.hoisted(() => new Set<() => void>());
 const state = vi.hoisted(() => ({ review: undefined as ReviewDetailView | undefined, error: undefined as unknown }));
 const update = vi.fn();
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: { id: "1" }, isLoading: false }) }));
-vi.mock("../hooks/useReview", () => ({ useReview: () => ({ data: state.review, isLoading: false, error: state.error }) }));
+vi.mock("../hooks/useReview", () => ({
+  useReview: () => {
+    const data = useSyncExternalStore(
+      (l) => {
+        listeners.add(l);
+        return () => listeners.delete(l);
+      },
+      () => state.review,
+    );
+    return { data, isLoading: false, error: state.error };
+  },
+}));
 vi.mock("../hooks/useReviewMutations", () => ({ useUpdateReview: () => ({ update }) }));
 vi.mock("../hooks/useRatingRange", () => ({ useRatingRange: () => ({ min: 1, max: 5 }) }));
 vi.mock("../../../api/meta", () => ({ useMeta: () => ({ data: { text: { reviewCommentMaxChars: 2000 }, photo: { maxEdge: 1600, maxBytes: 5242880 } } }) }));
@@ -46,11 +60,43 @@ afterEach(async () => { vi.restoreAllMocks(); await cleanup(); });
 describe("ReviewEditPage の、見つからない・取得に失敗したとき", () => {
   it("売り切れの画面を出す(フォームも「編集できません」も出さない)", async () => {
     state.review = undefined;
-    state.error = new Error("not found");
+    state.error = new ApiError(["Not found"], 404);
     const page = await show();
     expect(page.textContent).toContain("404");
     expect(page.textContent).toContain("Sold out");
     expect(page.querySelector("form")).toBeNull();
+  });
+
+  it("サーバー障害(503)や通信失敗のときは、404 売り切れ画面ではなく取得失敗のエラーを出す", async () => {
+    for (const err of [new ApiError(["Service unavailable"], 503), new Error("Network Error")]) {
+      state.review = undefined;
+      state.error = err;
+      const page = await show();
+      expect(page.querySelector('[role="alert"]')?.textContent).toContain("Failed to load reviews.");
+      expect(page.textContent).not.toContain("Sold out");
+      await cleanup();
+    }
+  });
+});
+
+describe("ReviewEditPage のバックグラウンド再検証", () => {
+  it("SWR の再取得で同じ id の review オブジェクト参照だけが変わっても、打ちかけのコメントを消さない", async () => {
+    const page = await show();
+    const textarea = need(page.querySelector<HTMLTextAreaElement>("#comment"), "#comment");
+    const setVal = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    await act(async () => {
+      setVal?.call(textarea, "編集中でまだ保存していない感想");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(textarea.value).toBe("編集中でまだ保存していない感想");
+
+    // 同じ id の新しい参照に差し替えて再描画を起こす
+    await act(async () => {
+      state.review = { ...baseReview };
+      for (const l of listeners) l();
+    });
+
+    expect(textarea.value).toBe("編集中でまだ保存していない感想");
   });
 });
 

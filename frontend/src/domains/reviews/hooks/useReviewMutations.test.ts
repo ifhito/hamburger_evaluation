@@ -1,5 +1,13 @@
-import { describe, it, expect } from "vitest";
-import { isReviewKey, toCreateFormData, toUpdateFormData } from "./useReviewMutations";
+// @vitest-environment jsdom
+import { createElement } from "react";
+import { act } from "react";
+import useSWR, { SWRConfig } from "swr";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { cleanup, mount } from "../../../test/dom";
+import { reviewApiClient } from "../api/reviewApiClient";
+import { isReviewKey, toCreateFormData, toUpdateFormData, useCreateReview, useDeleteReview } from "./useReviewMutations";
+
+afterEach(cleanup);
 
 const photo = new File(["x"], "burger.jpg", { type: "image/jpeg" });
 
@@ -57,5 +65,61 @@ describe("isReviewKey", () => {
     expect(isReviewKey(["/users", 1, 3])).toBe(false);
     expect(isReviewKey(null)).toBe(false);
     expect(isReviewKey(123)).toBe(false);
+  });
+});
+
+describe("レビュー書き込み時の関連キャッシュ再検証", () => {
+  it("レビューを作成すると、店舗詳細やバーガーランキングの購読者も再取得され、削除時は削除対象の詳細を再取得しない", async () => {
+    const postSpy = vi.spyOn(reviewApiClient, "post").mockResolvedValue({ data: { id: "r-new" } } as never);
+    const deleteSpy = vi.spyOn(reviewApiClient, "delete").mockResolvedValue({ data: {} } as never);
+    try {
+      let shopFetches = 0;
+      let rankingFetches = 0;
+      let deletedDetailFetches = 0;
+      let otherDetailFetches = 0;
+      let createFn!: ReturnType<typeof useCreateReview>["create"];
+      let destroyFn!: ReturnType<typeof useDeleteReview>["destroy"];
+
+      function Harness() {
+        useSWR(["/shops", "s1", "u1"], async () => `shop-${++shopFetches}`);
+        useSWR("/burgers?page=1", async () => `rank-${++rankingFetches}`);
+        useSWR(["/reviews", "r-target", "u1"], async () => `target-${++deletedDetailFetches}`);
+        useSWR(["/reviews", "r-other", "u1"], async () => `other-${++otherDetailFetches}`);
+        createFn = useCreateReview().create;
+        destroyFn = useDeleteReview().destroy;
+        return null;
+      }
+
+      await mount(
+        createElement(
+          SWRConfig,
+          { value: { provider: () => new Map(), dedupingInterval: 0 } },
+          createElement(Harness),
+        ),
+      );
+      expect(shopFetches).toBe(1);
+      expect(rankingFetches).toBe(1);
+      expect(deletedDetailFetches).toBe(1);
+      expect(otherDetailFetches).toBe(1);
+
+      await act(async () => {
+        await createFn({ rating: 5, comment: "最高", shopId: "s1", burgerName: "クラシック", visitedAt: "" });
+      });
+      expect(shopFetches).toBe(2);
+      expect(rankingFetches).toBe(2);
+      expect(deletedDetailFetches).toBe(2);
+
+      await act(async () => {
+        await destroyFn("r-target");
+      });
+      // 削除した r-target 自身の GET は増えず(2 のまま)、他レビュー・店舗・ランキングは 3 回目へ再検証される
+      expect(deletedDetailFetches).toBe(2);
+      expect(otherDetailFetches).toBe(3);
+      expect(shopFetches).toBe(3);
+      expect(rankingFetches).toBe(3);
+    } finally {
+      postSpy.mockRestore();
+      deleteSpy.mockRestore();
+    }
   });
 });

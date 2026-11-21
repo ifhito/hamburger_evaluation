@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { copyToClipboard } from "../../../lib/clipboard";
 import { Button } from "../../../components/ui/Button";
 import styles from "./shareLinkButton.module.css";
+
+const COPY_FEEDBACK_RESET_MS = 1800;
 
 // プロフィールの共有用リンク(このサイトのオリジンに /users/<ユーザーの ID> を付けたもの)をコピーするボタン。
 // プロフィールはログインしていない人にも公開されているので、共有の入口(このボタン)も、ログイン状態や本人かどうかに関係なく出す。
@@ -10,11 +12,22 @@ import styles from "./shareLinkButton.module.css";
 // 手動でコピーしてもらう。
 export function ShareLinkButton({ userId }: { userId: string }) {
   const { t } = useTranslation();
-  const [state, setState] = useState<"idle" | "copied" | "manual">("idle");
+  // 別のプロフィール(userId)へ遷移したときは、前のユーザーのコピー状態を持ち越さない。
+  const [copyState, setCopyState] = useState<{ forUserId: string; status: "idle" | "copied" | "manual" }>({
+    forUserId: userId,
+    status: "idle",
+  });
+  const state = copyState.forUserId === userId ? copyState.status : "idle";
   const url = `${window.location.origin}/users/${userId}`;
 
+  useEffect(() => {
+    if (state !== "copied") return;
+    const timer = window.setTimeout(() => setCopyState({ forUserId: userId, status: "idle" }), COPY_FEEDBACK_RESET_MS);
+    return () => window.clearTimeout(timer);
+  }, [state, userId]);
+
   const handleClick = async () => {
-    setState((await copyToClipboard(url)) ? "copied" : "manual");
+    setCopyState({ forUserId: userId, status: (await copyToClipboard(url)) ? "copied" : "manual" });
   };
 
   // 親(プロフィールの操作の並び。折り返す横並び)の中に、そのまま並べる。コピーできなかったときの入力欄は、次の行いっぱいに広げる。

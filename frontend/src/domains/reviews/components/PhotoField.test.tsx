@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../../../lib/i18n";
-import { byText, cleanup, click, mount, need } from "../../../test/dom";
+import { byText, cleanup, click, mount, need, unmount } from "../../../test/dom";
 import { PhotoField } from "./PhotoField";
 
 // 実際のブラウザの画像デコード(createImageBitmap・canvas)は jsdom にないので、shrinkPhoto を差し替える。
@@ -102,5 +102,44 @@ describe("PhotoField", () => {
     expect(page.textContent).toContain("Posted on Sep 21, 2026");
     expect(byText(page, "button", "Change photo")).toBeDefined();
     expect(byText(page, "button", "Remove")).toBeUndefined();
+  });
+
+  it("StrictMode の再マウントでも、表示中のプレビュー URL が誤って破棄(revoke)されず有効なまま残る", async () => {
+    const created: string[] = [];
+    const revoked = new Set<string>();
+    const createSpy = vi.spyOn(URL, "createObjectURL").mockImplementation(() => {
+      const u = `blob:test-${created.length + 1}`;
+      created.push(u);
+      return u;
+    });
+    const revokeSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation((u) => {
+      revoked.add(u);
+    });
+
+    try {
+      const attached = file("shrunk.jpg", 50);
+      const page = await mount(
+        <StrictMode>
+          <PhotoField photo={attached} onChange={() => {}} limits={limits} />
+        </StrictMode>,
+      );
+
+      const img = need(page.querySelector<HTMLImageElement>("img"), "preview img");
+      const activeSrc = img.getAttribute("src") ?? "";
+      expect(created.length).toBeGreaterThanOrEqual(1);
+      expect(activeSrc).toBe(created[created.length - 1]);
+      // StrictMode で一時作成された古い URL は破棄され、現在表示中の URL だけが有効なまま残る
+      for (const stale of created.slice(0, -1)) {
+        expect(revoked.has(stale)).toBe(true);
+      }
+      expect(revoked.has(activeSrc)).toBe(false);
+
+      // アンマウント時には表示中だった URL も確実に破棄される
+      await unmount(page);
+      expect(revoked.has(activeSrc)).toBe(true);
+    } finally {
+      createSpy.mockRestore();
+      revokeSpy.mockRestore();
+    }
   });
 });

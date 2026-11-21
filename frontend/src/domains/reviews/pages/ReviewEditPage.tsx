@@ -43,9 +43,11 @@ export default function ReviewEditPage() {
 
   const markSaved = useUnsavedChanges(!!review?.canEdit && (isDirty || photo !== null || photoShrinking));
 
+  // SWR のフォーカス再検証などで review オブジェクトの参照だけが変わっても、打ちかけの内容を消さないよう識別子(review?.id)に連動させる。
   useEffect(() => {
     if (review) reset({ rating: review.rating, comment: review.comment ?? "", visitedAt: review.visitedAt ?? "" });
-  }, [review, reset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [review?.id, reset]);
 
   if (isLoading) {
     return (
@@ -54,10 +56,20 @@ export default function ReviewEditPage() {
       </Layout>
     );
   }
-  if (error || !review) {
+  if ((error instanceof ApiError && error.status === 404) || (!error && !review)) {
     return (
       <Layout>
         <NotFound action={<LinkButton to="/reviews">{t("reviews.detail.backToReviewsAction")}</LinkButton>} />
+      </Layout>
+    );
+  }
+  if (error || !review) {
+    return (
+      <Layout>
+        <div className={styles.container}>
+          <TextLink to={`/reviews/${id}`}>{t("reviews.edit.backToReview")}</TextLink>
+          <Alert message={t("reviews.list.loadError")} />
+        </div>
       </Layout>
     );
   }

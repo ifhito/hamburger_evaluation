@@ -1,8 +1,18 @@
-import { describe, it, expect, vi } from "vitest";
-import { adminShopsKey, isShopKey, useAdminShops } from "./useShopMutations";
+// @vitest-environment jsdom
+import { createElement, act } from "react";
+import useSWR, { SWRConfig } from "swr";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { cleanup, mount } from "../../../test/dom";
+import { shopApiClient } from "../api/shopApiClient";
+import { adminShopsKey, isShopKey, useAdminShops, useUpdateShop } from "./useShopMutations";
 import { useInfinitePages } from "../../../api/useInfinitePages";
 
-vi.mock("../../../api/useInfinitePages", () => ({ useInfinitePages: vi.fn() }));
+vi.mock("../../../api/useInfinitePages", () => ({
+  useInfinitePages: vi.fn(),
+  revalidateInfiniteLists: vi.fn().mockResolvedValue([]),
+}));
+
+afterEach(cleanup);
 
 describe("管理者向け店舗一覧のページング", () => {
   it("状態とページ番号を送り、ページサイズはbackendに任せる", () => {
@@ -29,27 +39,67 @@ describe("管理者向け店舗一覧のページング", () => {
 });
 
 describe("isShopKey", () => {
-  it("matches public shop keys", () => {
+  it("公開ショップの一覧キーに一致する", () => {
     expect(isShopKey("/shops")).toBe(true);
     expect(isShopKey("/shops?keyword=x")).toBe(true);
     expect(isShopKey("/shops/1")).toBe(true);
   });
 
-  it("matches admin shop keys", () => {
+  it("管理用ショップの一覧キーに一致する", () => {
     expect(isShopKey("/admin/shops")).toBe(true);
     expect(isShopKey("/admin/shops?status=pending")).toBe(true);
   });
 
-  it("matches the viewer-keyed detail key", () => {
+  it("閲覧者ごとの詳細キーに一致する", () => {
     expect(isShopKey(["/shops", 1, 3])).toBe(true);
     expect(isShopKey(["/shops", 1, null])).toBe(true);
   });
 
-  it("does not match unrelated keys", () => {
+  it("他ドメインのキーには一致しない", () => {
     expect(isShopKey("/reviews")).toBe(false);
     expect(isShopKey("/users")).toBe(false);
     expect(isShopKey(123)).toBe(false);
     expect(isShopKey(null)).toBe(false);
     expect(isShopKey(["/users", 1, 3])).toBe(false);
+  });
+});
+
+describe("店舗更新時の関連キャッシュ再検証", () => {
+  it("店舗を更新すると、店舗詳細だけでなくレビュー詳細やバーガーランキングも再検証される", async () => {
+    const putSpy = vi.spyOn(shopApiClient, "put").mockResolvedValue({ data: { id: "s1" } } as never);
+    try {
+      let shopFetches = 0;
+      let reviewFetches = 0;
+      let rankingFetches = 0;
+      let updateFn!: ReturnType<typeof useUpdateShop>["update"];
+
+      function Harness() {
+        useSWR(["/shops", "s1", "u1"], async () => `shop-${++shopFetches}`);
+        useSWR(["/reviews", "r1", "u1"], async () => `rev-${++reviewFetches}`);
+        useSWR("/burgers?page=1", async () => `rank-${++rankingFetches}`);
+        updateFn = useUpdateShop("s1").update;
+        return null;
+      }
+
+      await mount(
+        createElement(
+          SWRConfig,
+          { value: { provider: () => new Map(), dedupingInterval: 0 } },
+          createElement(Harness),
+        ),
+      );
+      expect(shopFetches).toBe(1);
+      expect(reviewFetches).toBe(1);
+      expect(rankingFetches).toBe(1);
+
+      await act(async () => {
+        await updateFn({ name: "新しい店名", mapUrl: "" });
+      });
+      expect(shopFetches).toBe(2);
+      expect(reviewFetches).toBe(2);
+      expect(rankingFetches).toBe(2);
+    } finally {
+      putSpy.mockRestore();
+    }
   });
 });

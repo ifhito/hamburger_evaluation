@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "../../../lib/i18n";
+import { ApiError } from "../../../api/client/buildApiClient";
 import { cleanup, mount } from "../../../test/dom";
 import type { BurgerDetail } from "../api/types";
 import type { ReviewView } from "../../reviews/api/types";
@@ -99,11 +100,22 @@ describe("BurgerDetailPage の状態の表示", () => {
 
   it("見つからない(404)ときは、売り切れの画面を出す", async () => {
     state.burger = undefined;
-    state.error = new Error("not found");
+    state.error = new ApiError(["Burger not found"], 404);
     const page = await show();
 
     expect(page.textContent).toContain("404");
     expect(page.textContent).toContain("Sold out");
+  });
+
+  it("サーバー障害や通信失敗では、404 売り切れ画面ではなく取得失敗のエラーを出す", async () => {
+    for (const err of [new ApiError(["Service unavailable"], 503), new Error("Network Error")]) {
+      state.burger = undefined;
+      state.error = err;
+      const page = await show();
+      expect(page.querySelector('[role="alert"]')?.textContent).toContain("Failed to load burgers.");
+      expect(page.textContent).not.toContain("Sold out");
+      await cleanup();
+    }
   });
 
   it("レビューが 1 件もないとき(reviewCount が null)は、空の画面を出し、平均は出さない", async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/ui/Button";
 import { shrinkPhoto, type PhotoLimits } from "../../../lib/photoResize";
@@ -6,6 +6,34 @@ import styles from "./photoField.module.css";
 
 function formatMB(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// 選んだ File の一時プレビュー URL を外部リソースとして購読する。StrictMode の再購読でも破棄済みの URL を掴まず、
+// photo の差し替え・アンマウント時には確実に revoke する。
+function createObjectUrlStore(photo: File | null) {
+  let currentUrl: string | null = null;
+  return {
+    subscribe(notify: () => void) {
+      if (photo) {
+        currentUrl = URL.createObjectURL(photo);
+        notify();
+      }
+      return () => {
+        if (currentUrl) {
+          URL.revokeObjectURL(currentUrl);
+          currentUrl = null;
+        }
+      };
+    },
+    getSnapshot() {
+      return photo ? currentUrl : null;
+    },
+  };
+}
+
+function useObjectUrl(photo: File | null): string | null {
+  const store = useMemo(() => createObjectUrlStore(photo), [photo]);
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, () => null);
 }
 
 interface Props {
@@ -36,14 +64,7 @@ export function PhotoField({ photo, onChange, limits, onShrinkingChange, existin
   // 選び直しを見分ける通し番号。速く終わった、あとの選択の結果を、遅れて終わった前の選択の結果が
   // 上書きしないようにする(2 つの写真を続けて選んだときの、非同期処理の追い越しへの対策)。
   const selection = useRef(0);
-  // 選んだ写真の、表示用の一時 URL。photo が変わるたびに作り直す(useMemo)。作った URL は、差し替え・
-  // アンマウント時に必ず revoke する(メモリを持ち続けないため。副作用だけの useEffect で、state は更新しない)。
-  const objectUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
-  useEffect(() => {
-    return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [objectUrl]);
+  const objectUrl = useObjectUrl(photo);
 
   const handleSelect = async (file: File) => {
     const mySelection = ++selection.current;
@@ -86,6 +107,8 @@ export function PhotoField({ photo, onChange, limits, onShrinkingChange, existin
         className={styles.hiddenInput}
         onChange={(e) => {
           const file = e.target.files?.[0];
+          // 同じファイルを続けて選び直したときも change イベントが発火するよう、読み取り後に input の値を空に戻す。
+          e.currentTarget.value = "";
           if (file) void handleSelect(file);
         }}
       />

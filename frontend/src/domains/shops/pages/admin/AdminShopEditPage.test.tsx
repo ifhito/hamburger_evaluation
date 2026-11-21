@@ -100,4 +100,10 @@ describe("AdminShopEditPage(ショップの名前の編集)", () => {
     expect(page.querySelector('[role="status"]')).not.toBeNull();
     expect(page.querySelector("form")).toBeNull();
   });
+
+  it("フォームに noValidate が付いており、mapUrl の形式検証をブラウザに横取りさせず backend の 422 に委ねる", async () => {
+    const page = await show();
+    const form = need(page.querySelector<HTMLFormElement>("form"), "form");
+    expect(form.noValidate).toBe(true);
+  });
 });

@@ -4,10 +4,11 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useUser } from "../hooks/useUser";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
+import { ApiError } from "../../../api/client/buildApiClient";
 import { Alert } from "../../../components/ui/Alert";
 import { Button } from "../../../components/ui/Button";
 import { LinkButton } from "../../../components/ui/LinkButton";
-import { EmptyState, Loading } from "../../../components/ui/states";
+import { EmptyState, Loading, NotFound } from "../../../components/ui/states";
 import { Layout } from "../../../components/Layout";
 import { ShareLinkButton } from "../components/ShareLinkButton";
 import { ProfileReviewCard } from "../components/ProfileReviewCard";
@@ -38,11 +39,17 @@ export default function UserDetailPage() {
     isFetchingNextPage,
   } = useReviews({ userId: id }, authUser?.id ?? null, { enabled: id !== undefined && user !== undefined });
 
+  const isNotFound = userError instanceof ApiError && userError.status === 404;
+
   return (
     // 名前は、プロフィールの見出し(h1)として、下の本体に出す。取得できるまでの間だけ、画面の見出しを出す
-    <Layout title={user ? undefined : t("users.detail.profileTitle")}>
-      {userLoading && <Loading />}
-      {userError && <Alert message={t("users.detail.loadError")} />}
+    <Layout title={user || isNotFound ? undefined : t("users.detail.profileTitle")}>
+      {(userLoading || authLoading) && <Loading />}
+      {isNotFound ? (
+        <NotFound action={<LinkButton to="/">{t("navigation.home")}</LinkButton>} />
+      ) : (
+        Boolean(userError) && <Alert message={t("users.detail.loadError")} />
+      )}
 
       {user && (
         <section className={styles.profile}>

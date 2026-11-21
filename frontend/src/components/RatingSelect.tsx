@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import styles from './field.module.css'
 
@@ -11,11 +12,13 @@ interface RatingSelectProps {
 
 export function RatingSelect({ value, onChange, min, max }: RatingSelectProps) {
   const { t } = useTranslation()
+  const selectId = useId()
 
   return (
     <div className={styles.wrapper}>
-      <label className={styles.label}>{t('common.rating')}</label>
+      <label htmlFor={selectId} className={styles.label}>{t('common.rating')}</label>
       <select
+        id={selectId}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className={styles.select}

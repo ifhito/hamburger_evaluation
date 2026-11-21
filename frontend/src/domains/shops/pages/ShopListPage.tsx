@@ -25,7 +25,13 @@ export function ShopListContent({ hideHeading = false, record = false }: { hideH
   const ratingRange = useRatingRange();
   const [sort, setSort] = useState("name");
   const [searchParams] = useSearchParams();
-  const [keyword, setKeyword] = useState(() => searchParams.get("keyword") ?? "");
+  const urlKeyword = searchParams.get("keyword") ?? "";
+  // URL の keyword クエリが履歴移動などで変わったときは draft も更新し、A -> B -> A の往復でも古い入力が復活しないようにする。
+  const [draft, setDraft] = useState({ urlKeyword, value: urlKeyword });
+  if (draft.urlKeyword !== urlKeyword) {
+    setDraft({ urlKeyword, value: urlKeyword });
+  }
+  const keyword = draft.urlKeyword === urlKeyword ? draft.value : urlKeyword;
   const {
     data: shops,
     isLoading,
@@ -51,7 +57,7 @@ export function ShopListContent({ hideHeading = false, record = false }: { hideH
           className={styles.search}
           type="text"
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onChange={(e) => setDraft({ urlKeyword, value: e.target.value })}
           placeholder={t("shops.list.searchPlaceholder")}
         />
         {user?.canModerate && <LinkButton to="/admin/shops">{t("shops.list.moderate")}</LinkButton>}

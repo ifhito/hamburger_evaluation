@@ -14,8 +14,8 @@ interface Common {
   counter?: { value: string; max: number | undefined }
 }
 
-function describedBy(id: string, hint: string | undefined, counter: Common['counter']) {
-  return [hint && `${id}-hint`, counter?.max !== undefined && `${id}-counter`].filter(Boolean).join(' ') || undefined
+function describedBy(id: string, hint: string | undefined, counter: Common['counter'], extra?: string) {
+  return [extra, hint && `${id}-hint`, counter?.max !== undefined && `${id}-counter`].filter(Boolean).join(' ') || undefined
 }
 
 // 文字数「いまの文字数 / 上限」。上限を超えても入力も送信も止めない(判定は backend の 422)。超えている間は、色だけでなく
@@ -56,23 +56,28 @@ function Frame({ id, label, optional, hint, counter, children }: Common & { chil
 }
 
 // 1 行の入力欄(ラベル・説明・文字数のカウンターつき)。エラーは、画面の上に Alert で出す(API の文言をそのまま)。
-export function TextField({ id, label, optional, hint, counter, ...props }: Common & InputHTMLAttributes<HTMLInputElement>) {
+export function TextField({ id, label, optional, hint, counter, className, 'aria-describedby': ariaDescribedBy, ...props }: Common & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <Frame id={id} label={label} optional={optional} hint={hint} counter={counter}>
-      <input id={id} aria-describedby={describedBy(id, hint, counter)} {...props} className={styles.input} />
+      <input
+        {...props}
+        id={id}
+        aria-describedby={describedBy(id, hint, counter, ariaDescribedBy)}
+        className={[styles.input, className].filter(Boolean).join(' ')}
+      />
     </Frame>
   )
 }
 
 // 複数行の入力欄。short は、高さを低くする(却下の理由など、短い文を書く欄)。
-export function TextArea({ id, label, optional, hint, counter, short, ...props }: Common & TextareaHTMLAttributes<HTMLTextAreaElement> & { short?: boolean }) {
+export function TextArea({ id, label, optional, hint, counter, short, className, 'aria-describedby': ariaDescribedBy, ...props }: Common & TextareaHTMLAttributes<HTMLTextAreaElement> & { short?: boolean }) {
   return (
     <Frame id={id} label={label} optional={optional} hint={hint} counter={counter}>
       <textarea
-        id={id}
-        aria-describedby={describedBy(id, hint, counter)}
         {...props}
-        className={[styles.input, styles.area, short ? styles.short : ''].filter(Boolean).join(' ')}
+        id={id}
+        aria-describedby={describedBy(id, hint, counter, ariaDescribedBy)}
+        className={[styles.input, styles.area, short ? styles.short : '', className].filter(Boolean).join(' ')}
       />
     </Frame>
   )

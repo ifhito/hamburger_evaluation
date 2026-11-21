@@ -55,7 +55,7 @@ export default function HomePage() {
           <div className={styles.heroContent}>
             <h1>{t("home.hero.title")}</h1>
             <p className={styles.heroLead}>{t("home.hero.lead")}</p>
-            <form className={styles.heroSearch} onSubmit={handleSearch}>
+            <form className={styles.heroSearch} onSubmit={handleSearch} noValidate>
               <input
                 aria-label={t("shops.list.searchLabel")}
                 className={styles.heroInput}

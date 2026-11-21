@@ -87,10 +87,21 @@ export function buildApiClient(getToken?: () => string | null) {
             for (const listener of unauthorizedListeners) listener(sentToken);
           }
         }
-        // 本文が空・null・文字列(プロキシの HTML など)のこともある(そのときは、項目なしとして扱う)。
-        const data = (error.response.data ?? {}) as { error?: string; errors?: string[] };
+        // 本文が空・null・文字列(プロキシの HTML など)・配列のこともある(通常のオブジェクト以外は項目なしとして扱う)。
+        const raw = error.response.data;
+        const data = (
+          raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : {}
+        ) as { error?: unknown; errors?: unknown };
+        const errorList =
+          Array.isArray(data.errors) && data.errors.length > 0
+            ? data.errors.filter((item): item is string => typeof item === "string" && item.length > 0)
+            : [];
         const messages =
-          data.errors ?? (data.error ? [data.error] : ["An error occurred"]);
+          errorList.length > 0
+            ? errorList
+            : typeof data.error === "string" && data.error.length > 0
+              ? [data.error]
+              : ["An error occurred"];
         // 本文の項目(errors・error 以外)も、成功の応答と同じく、camelCase にして持つ(読む側が、snake_case を知らなくて済む)。
         const body = camelcaseKeys(data as Record<string, unknown>, { deep: true });
         return Promise.reject(new ApiError(messages, error.response.status, body));

@@ -11,20 +11,20 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   id: string
 }
 
-export function Input({ label, hint, counter, id, ...props }: InputProps) {
+export function Input({ label, hint, counter, id, className, 'aria-describedby': ariaDescribedBy, ...props }: InputProps) {
   const hintId = `${id}-hint`
   const counterId = `${id}-counter`
-  const describedBy = [hint && hintId, counter?.max !== undefined && counterId].filter(Boolean).join(' ')
+  const describedBy = [ariaDescribedBy, hint && hintId, counter?.max !== undefined && counterId].filter(Boolean).join(' ')
   return (
     <div className={styles.wrapper}>
       <label htmlFor={id} className={styles.label}>
         {label}
       </label>
       <input
+        {...props}
         id={id}
         aria-describedby={describedBy || undefined}
-        {...props}
-        className={styles.input}
+        className={[styles.input, className].filter(Boolean).join(' ')}
       />
       {hint && <span id={hintId} className={styles.hintText}>{hint}</span>}
       {counter && <CharCounter id={counterId} value={counter.value} max={counter.max} />}

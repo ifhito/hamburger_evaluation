@@ -1,5 +1,6 @@
 import { useSWRConfig } from "swr";
 import { shopApiClient } from "../api/shopApiClient";
+import { isBurgerKey, isReviewKey, isShopKey } from "../../../api/cacheKeys";
 import { revalidateInfiniteLists, useInfinitePages } from "../../../api/useInfinitePages";
 import { toPage, type Page } from "../../../api/page";
 import type {
@@ -10,12 +11,19 @@ import type {
   ShopUpdateInput,
 } from "../api/types";
 
-// 一覧のキー(文字列 "/shops…"・"/admin/shops…")と、詳細のキー(["/shops", id, viewerId])の両方に一致する
-export function isShopKey(key: unknown): boolean {
-  return (
-    (typeof key === "string" && (key.startsWith("/shops") || key.startsWith("/admin/shops"))) ||
-    (Array.isArray(key) && key[0] === "/shops")
-  );
+export { isShopKey };
+
+// 店舗名や公開・閉業状態が変わると、レビュー詳細やバーガー詳細・ランキングに含まれる店舗情報も変わるため併せて再検証する。
+async function revalidateShopRelated(
+  cache: { keys(): IterableIterator<string> },
+  mutate: ReturnType<typeof useSWRConfig>["mutate"],
+): Promise<void> {
+  await Promise.all([
+    mutate(isShopKey),
+    mutate(isReviewKey),
+    mutate(isBurgerKey),
+    revalidateInfiniteLists(cache, mutate),
+  ]);
 }
 
 export function useCreateShop() {
@@ -23,7 +31,7 @@ export function useCreateShop() {
   return {
     create: async (data: ShopCreateInput): Promise<Shop> => {
       const res = await shopApiClient.post<Shop>("/shops", { shop: data });
-      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
+      await revalidateShopRelated(cache, mutate);
       return res.data;
     },
   };
@@ -53,24 +61,24 @@ export function useShopModeration() {
   return {
     approve: async (id: string): Promise<AdminShop> => {
       const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/approve`, {});
-      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
+      await revalidateShopRelated(cache, mutate);
       return res.data;
     },
     reject: async (id: string, moderationNote: string): Promise<AdminShop> => {
       const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/reject`, {
         moderationNote,
       });
-      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
+      await revalidateShopRelated(cache, mutate);
       return res.data;
     },
     close: async (id: string): Promise<AdminShop> => {
       const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/close`, {});
-      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
+      await revalidateShopRelated(cache, mutate);
       return res.data;
     },
     reopen: async (id: string): Promise<AdminShop> => {
       const res = await shopApiClient.post<AdminShop>(`/admin/shops/${id}/reopen`, {});
-      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
+      await revalidateShopRelated(cache, mutate);
       return res.data;
     },
   };
@@ -81,7 +89,7 @@ export function useUpdateShop(id: string) {
   return {
     update: async (data: ShopUpdateInput): Promise<AdminShop> => {
       const res = await shopApiClient.put<AdminShop>(`/admin/shops/${id}`, { shop: data });
-      await Promise.all([mutate(isShopKey), revalidateInfiniteLists(cache, mutate)]);
+      await revalidateShopRelated(cache, mutate);
       return res.data;
     },
   };

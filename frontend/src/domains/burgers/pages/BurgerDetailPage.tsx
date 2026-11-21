@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useBurger } from "../hooks/useBurger";
 import { useReviews } from "../../reviews/hooks/useReviews";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
+import { ApiError } from "../../../api/client/buildApiClient";
 import { ReviewListCard } from "../../reviews/components/ReviewListCard";
 import { Photo } from "../../../components/ui/Photo";
 import { Alert } from "../../../components/ui/Alert";
@@ -44,10 +45,20 @@ export default function BurgerDetailPage() {
       </Layout>
     );
   }
-  if (error || !burger) {
+  if ((error instanceof ApiError && error.status === 404) || (!error && !burger)) {
     return (
       <Layout>
         <NotFound action={<LinkButton to="/reviews">{t("reviews.detail.backToReviewsAction")}</LinkButton>} />
+      </Layout>
+    );
+  }
+  if (error || !burger) {
+    return (
+      <Layout>
+        <div className={styles.narrow}>
+          <TextLink to="/reviews">{t("reviews.detail.backToReviews")}</TextLink>
+          <Alert message={t("burgers.list.loadError")} />
+        </div>
       </Layout>
     );
   }

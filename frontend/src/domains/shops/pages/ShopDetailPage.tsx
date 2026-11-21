@@ -4,8 +4,12 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useShopDetail } from "../hooks/useShops";
 import { useRatingRange } from "../../reviews/hooks/useRatingRange";
+import { ApiError } from "../../../api/client/buildApiClient";
+import { isHttpUrl } from "../../../lib/url";
+import { Alert } from "../../../components/ui/Alert";
 import { Badge } from "../../../components/ui/Badge";
 import { LinkButton } from "../../../components/ui/LinkButton";
+import { Photo } from "../../../components/ui/Photo";
 import { TextLink } from "../../../components/ui/TextLink";
 import { RatingSummary } from "../../../components/ui/RatingBurger";
 import { EmptyState, Loading, NotFound } from "../../../components/ui/states";
@@ -34,10 +38,20 @@ export default function ShopDetailPage() {
       </Layout>
     );
   }
-  if (error || !shop) {
+  if ((error instanceof ApiError && error.status === 404) || (!error && !shop)) {
     return (
       <Layout>
         <NotFound action={<LinkButton to={backTo}>{t("shops.detail.backToShopsAction")}</LinkButton>} />
+      </Layout>
+    );
+  }
+  if (error || !shop) {
+    return (
+      <Layout>
+        <div className={styles.container}>
+          <TextLink to={backTo}>{t("shops.detail.backToShops")}</TextLink>
+          <Alert message={t("shops.list.loadError")} />
+        </div>
       </Layout>
     );
   }
@@ -60,18 +74,21 @@ export default function ShopDetailPage() {
         <TextLink to={backTo}>{t("shops.detail.backToShops")}</TextLink>
 
         <div className={styles.hero}>
-          {shop.photoUrl ? (
-            <img src={shop.photoUrl} alt="" className={styles.heroPhoto} />
-          ) : (
-            <div className={styles.heroNoPhoto}>{t("shops.detail.noPhotoYet")}</div>
-          )}
+          <Photo
+            src={shop.photoUrl}
+            alt=""
+            className={styles.heroPhoto}
+            fallbackClassName={styles.heroNoPhoto}
+            fallback={t("shops.detail.noPhotoYet")}
+            lazy={false}
+          />
         </div>
 
         <section className={styles.titleSection}>
           {shop.status !== "active" && <Badge>{t(`shops.statusBadge.${shop.status}`)}</Badge>}
           {shop.closedAt && <Badge>{t("shops.closedBadge")}</Badge>}
           <h1 className={styles.name}>{shop.name}</h1>
-          {shop.mapUrl && (
+          {shop.mapUrl && isHttpUrl(shop.mapUrl) && (
             <a href={shop.mapUrl} target="_blank" rel="noopener noreferrer" className={textLinkStyles.textLink}>
               {t("shops.detail.viewOnMap")}
             </a>

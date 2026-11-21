@@ -2,11 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "../../../lib/i18n";
-import { cleanup, mount } from "../../../test/dom";
+import { ApiError } from "../../../api/client/buildApiClient";
+import { byText, cleanup, click, mount, need } from "../../../test/dom";
 import type { ReviewDetailView } from "../api/types";
 import ReviewDetailPage from "./ReviewDetailPage";
 
 // can_edit による「編集」「削除」の出し分けと、見つからないときの画面だけを確かめる。
+const destroy = vi.hoisted(() => vi.fn());
 const state = vi.hoisted(() => ({
   authUser: null as { id: string } | null,
   review: undefined as ReviewDetailView | undefined,
@@ -14,7 +16,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ user: state.authUser, isLoading: false }) }));
 vi.mock("../hooks/useReview", () => ({ useReview: () => ({ data: state.review, isLoading: false, error: state.error }) }));
-vi.mock("../hooks/useReviewMutations", () => ({ useDeleteReview: () => ({ destroy: vi.fn() }) }));
+vi.mock("../hooks/useReviewMutations", () => ({ useDeleteReview: () => ({ destroy }) }));
 vi.mock("../hooks/useRatingRange", () => ({ useRatingRange: () => ({ min: 1, max: 5 }) }));
 
 const baseReview: ReviewDetailView = {
@@ -44,16 +46,25 @@ beforeEach(() => {
   state.authUser = null;
   state.review = baseReview;
   state.error = undefined;
+  destroy.mockReset();
 });
 afterEach(cleanup);
 
 describe("ReviewDetailPage の状態の表示", () => {
   it("見つからない(404)ときは、売り切れの画面を出す", async () => {
     state.review = undefined;
-    state.error = new Error("not found");
+    state.error = new ApiError(["Not found"], 404);
     const page = await show();
     expect(page.textContent).toContain("404");
     expect(page.textContent).toContain("Sold out");
+  });
+
+  it("通信失敗(ApiError 以外の例外)では、404 売り切れ画面ではなく取得失敗のエラーを出す", async () => {
+    state.review = undefined;
+    state.error = new Error("Network Error");
+    const page = await show();
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("Failed to load reviews.");
+    expect(page.textContent).not.toContain("Sold out");
   });
 
   it("バーガー名・ショップ名を出す", async () => {
@@ -104,5 +115,27 @@ describe("ReviewDetailPage の「編集」「削除」(can_edit)", () => {
     const page = await show();
     expect(page.textContent).not.toContain("Edit");
     expect(page.textContent).not.toContain("Delete");
+  });
+
+  it("削除が API エラーで失敗したときは、未処理例外にせず画面にエラーを表示する", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    destroy.mockRejectedValueOnce(new ApiError(["Forbidden"], 403));
+    state.review = { ...baseReview, canEdit: true };
+    try {
+      const page = await show();
+      await click(need(byText(page, "button", "Delete"), "Delete"));
+      expect(page.querySelector('[role="alert"]')?.textContent).toContain("Could not delete the review");
+      expect(page.querySelector('[role="alert"]')?.textContent).toContain("Forbidden");
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("取得が 503 で失敗したときは、404 売り切れ画面ではなく取得失敗のエラーを出す", async () => {
+    state.review = undefined;
+    state.error = new ApiError(["Service unavailable"], 503);
+    const page = await show();
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("Failed to load reviews.");
+    expect(page.textContent).not.toContain("Sold out");
   });
 });

@@ -1,24 +1,25 @@
 import { useSWRConfig } from "swr";
 import { userApiClient } from "../api/userApiClient";
+import { isReviewKey, isShopKey, isUserKey } from "../../../api/cacheKeys";
+import { revalidateInfiniteLists } from "../../../api/useInfinitePages";
 import type { AuthUser } from "../../auth/types";
 import type { UserUpdateInput } from "../api/types";
 
-// useUser が使うキャッシュのキー(["/users", id, viewerId])だけに一致する。レビュー一覧のキーには一致しない。
-// 更新・削除の後は、一致したキャッシュを mutate(isUserKey, undefined) で空にする。
-//   なぜ空にするか: 編集ページにはプロフィールを取得する useUser がないので、再取得だけでは足りない。
-//   空にしないと、プロフィールへ戻ったときに、古い名前やメールが一瞬表示されてしまう。
-//   なぜ { revalidate: false } を付けないか: 付けると、戻ったときの取得が省略されて、何も表示されないまま止まることがある。
-export function isUserKey(key: unknown): boolean {
-  return Array.isArray(key) && key[0] === "/users";
-}
+export { isUserKey };
 
+// ユーザー名変更ではプロフィール本体と関連ドメインを再検証し、退会では削除済みユーザーの再取得(404)が走らないよう再検証なしで消去する。
 export function useUpdateUser(id: string) {
-  const { mutate } = useSWRConfig();
+  const { cache, mutate } = useSWRConfig();
   return {
-    // PUT のレスポンスは常に本人ビュー(email / admin あり)なので AuthUser を返す。
+    // PUT のレスポンスは常に本人ビューなので AuthUser を返す。
     update: async (data: UserUpdateInput): Promise<AuthUser> => {
       const res = await userApiClient.put<AuthUser>(`/users/${id}`, { user: data });
-      await mutate(isUserKey, undefined);
+      await Promise.all([
+        mutate(isUserKey),
+        mutate(isReviewKey),
+        mutate(isShopKey),
+        revalidateInfiniteLists(cache, mutate),
+      ]);
       return res.data;
     },
   };
@@ -29,7 +30,7 @@ export function useDeleteUser() {
   return {
     destroy: async (id: string): Promise<void> => {
       await userApiClient.delete(`/users/${id}`);
-      await mutate(isUserKey, undefined);
+      await mutate(isUserKey, undefined, { revalidate: false });
     },
   };
 }

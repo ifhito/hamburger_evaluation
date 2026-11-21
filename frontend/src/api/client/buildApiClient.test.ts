@@ -70,7 +70,7 @@ describe("buildApiClient", () => {
   });
 
   it("失敗の応答の本文が、空・null・文字列(プロキシの HTML など)でも、落ちずに、ふつうの ApiError にする", async () => {
-    for (const body of [null, "", "<html>bad gateway</html>", undefined]) {
+    for (const body of [null, "", "<html>bad gateway</html>", undefined, [1, 2], { errors: [] }]) {
       const client = buildApiClient();
       client.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
         const response = { data: body, status: 502, statusText: "", headers: {}, config };
@@ -79,9 +79,10 @@ describe("buildApiClient", () => {
 
       const failed = await client.get("/x").catch((e: unknown) => e);
 
-      expect(failed, String(body)).toBeInstanceOf(ApiError);
+      expect(failed, JSON.stringify(body)).toBeInstanceOf(ApiError);
       expect((failed as ApiError).status).toBe(502);
       expect((failed as ApiError).messages).toEqual(["An error occurred"]);
+      expect(typeof (failed as ApiError).body).toBe("object");
     }
   });
 
