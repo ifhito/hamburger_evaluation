@@ -17,10 +17,11 @@ fi
 
 check() {
   local ct
-  ct=$(curl "${curl_args[@]}" -o /tmp/up.json -w '%{content_type}' "${origin}/up") || { echo "/up に届かない"; return 1; }
+  ct=$(curl "${curl_args[@]}" -o /tmp/up.json -w '%{content_type}' "${origin}/up") || { echo "/up に届かない(DB 未接続またはマイグレーション未適用の可能性)"; return 1; }
   case "${ct}" in application/json*) ;; *) echo "/up が JSON ではない: ${ct}"; return 1 ;; esac
-  grep -q '"status":"ok"' /tmp/up.json || { echo "/up が ok ではない(DB に届いていない)"; return 1; }
+  grep -q '"status":"ok"' /tmp/up.json || { echo "/up が ok ではない(DB に届いていないかスキーマが古い)"; return 1; }
   curl "${curl_args[@]}" -o /dev/null -w '%{http_code}\n' "${origin}/shops" | grep -q '^200$' || { echo "/shops が 200 ではない"; return 1; }
+  curl "${curl_args[@]}" -o /dev/null -w '%{http_code}\n' "${origin}/meta" | grep -q '^200$' || { echo "/meta が 200 ではない"; return 1; }
 }
 
 for attempt in 1 2 3 4 5; do

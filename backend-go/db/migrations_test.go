@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/ifhito/hamburger_evaluation/backend-go/internal/adapter/infra"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/domain"
 	"github.com/ifhito/hamburger_evaluation/backend-go/internal/testutil/dbtest"
 )
@@ -872,4 +876,76 @@ func checkLimits(ctx context.Context, t *testing.T, conn *pgx.Conn) map[string]i
 		t.Fatalf("iterate constraints: %v", err)
 	}
 	return limits
+}
+
+var createTablePattern = regexp.MustCompile(`(?im)^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z0-9_]+)\b`)
+
+// TestRequiredTablesMatchesMigrations は、マイグレーションで CREATE TABLE されるすべてのテーブルが
+// infra.RequiredTables に漏れなく登録されていることを DB なしで検証する。新しいテーブルを足したのに
+// 死活監視のスキーマ検査に登録し忘れると、マイグレーション未適用の DB を本番に切り替えてしまうため。
+func TestRequiredTablesMatchesMigrations(t *testing.T) {
+	ups, _ := dbtest.LoadMigrations(t)
+	seen := map[string]bool{}
+	for _, path := range ups {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, m := range createTablePattern.FindAllStringSubmatch(string(raw), -1) {
+			seen[m[1]] = true
+		}
+	}
+	fromMigrations := make([]string, 0, len(seen))
+	for tbl := range seen {
+		fromMigrations = append(fromMigrations, tbl)
+	}
+	slices.Sort(fromMigrations)
+
+	got := infra.RequiredTables()
+	slices.Sort(got)
+	if !slices.Equal(got, fromMigrations) {
+		t.Fatalf("infra.RequiredTables() = %v, want all tables from migrations %v", got, fromMigrations)
+	}
+}
+
+// TestHealthCheckerRequiresLatestSchema は、実際の PostgreSQL に対して、search_path が空のときや
+// セッション管理マイグレーションが未適用の状態では HealthChecker.Ping が失敗し、すべて適用されたあとに成功することを確かめる。
+func TestHealthCheckerRequiresLatestSchema(t *testing.T) {
+	ctx := context.Background()
+	conn, _ := dbtest.NewEmpty(t)
+	ups, _ := dbtest.LoadMigrations(t)
+
+	hc := infra.NewHealthChecker(conn)
+	if err := hc.Ping(ctx); err == nil {
+		t.Fatal("空の DB で HealthChecker.Ping が成功した")
+	}
+
+	if _, err := conn.Exec(ctx, "SET search_path = ''"); err != nil {
+		t.Fatalf("clear search_path: %v", err)
+	}
+	if err := hc.Ping(ctx); err == nil || !strings.Contains(err.Error(), "no accessible schema in search_path") {
+		t.Fatalf("空の search_path での Ping = %v, want no accessible schema error", err)
+	}
+	if _, err := conn.Exec(ctx, "SET search_path = public"); err != nil {
+		t.Fatalf("restore search_path: %v", err)
+	}
+
+	var beforeSessions, fromSessions []string
+	for _, path := range ups {
+		if filepath.Base(path) < "000020_" {
+			beforeSessions = append(beforeSessions, path)
+		} else {
+			fromSessions = append(fromSessions, path)
+		}
+	}
+	dbtest.Apply(ctx, t, conn, beforeSessions)
+	err := hc.Ping(ctx)
+	if err == nil || !strings.Contains(err.Error(), "user_sessions") || !strings.Contains(err.Error(), "users_email_lower_key") {
+		t.Fatalf("セッション管理マイグレーション未適用時の Ping = %v, want missing user_sessions and users_email_lower_key error", err)
+	}
+
+	dbtest.Apply(ctx, t, conn, fromSessions)
+	if err := hc.Ping(ctx); err != nil {
+		t.Fatalf("全マイグレーション適用後の Ping = %v, want nil", err)
+	}
 }

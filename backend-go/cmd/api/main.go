@@ -237,7 +237,7 @@ func run(ctx context.Context, cfg infra.Config, ready func(addr string)) error {
 		routerOpts = append(routerOpts, handler.WithGoogleLogin(googleLogin))
 	}
 
-	return serve(ctx, cfg.Port, handler.NewRouter(pool, auth, signups, shops, burgers, reviews, users, photoFiles, oauth, mcp, routerOpts...), ready)
+	return serve(ctx, cfg.Port, handler.NewRouter(infra.NewHealthChecker(pool), auth, signups, shops, burgers, reviews, users, photoFiles, oauth, mcp, routerOpts...), ready)
 }
 
 // serve は、明示的な timeout を設定した http.Server（素の ListenAndServe は

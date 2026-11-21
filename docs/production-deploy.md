@@ -68,9 +68,12 @@ API のワークフローは、マイグレーションを当ててから、新�
 | 名前 | 中身 |
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。範囲は `hamburger-frontend` だけ、役割は Editor |
-| `PROD_DATABASE_URL` | Neon の接続 URL。**pooler ではなく直結のほう** |
+| `PROD_DATABASE_URL` | 本番 DB のマイグレーション用 URL。Cloud Run の `DATABASE_URL` と**必ず同じ DB** を指すこと |
 
-**Neon の URL は、pooler ではなく直結のものにします。** pooler 経由だと、マイグレーションが `unnamed prepared statement does not exist` で落ちることがあります(検証中に 2 回発生。再実行で通るが、当たり外れがある)。
+**`PROD_DATABASE_URL` の選び方**:
+- **Neon の場合**: pooler ではなく直結の URL（ホスト名に `-pooler` が付かないもの）にします。Transaction pooler 経由だと、マイグレーションが `unnamed prepared statement does not exist` で落ちることがあります(検証中に 2 回発生)。
+- **Supabase の場合**: **Session pooler（ポート `5432`、`...pooler.supabase.com:5432`）** を使います（Direct connection は IPv6 専用で GitHub Actions の Docker から繋がらず、Transaction pooler `:6543` は prepared statement が通りません）。
+- Cloud Run 側の `DATABASE_URL` の接続先 DB を切り替えたときは、この `PROD_DATABASE_URL` も必ず同じ DB に揃えます。食い違ったまま配ろうとすると、候補リビジョンの `GET /up` がスキーマ未適用を検出して 503 を返し、本番トラフィックを切り替える前にデプロイが止まります。
 
 ### Variables(秘密ではない)
 
