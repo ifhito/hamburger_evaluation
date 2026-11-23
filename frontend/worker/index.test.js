@@ -138,3 +138,275 @@ describe('worker の /api 転送', () => {
    expect(upstream).not.toHaveBeenCalled()
   })
  })
+
+const SAMPLE_HTML = `<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>BurgerStack</title>
+    <meta name="description" content="既定の説明" />
+    <meta property="og:title" content="BurgerStack" />
+    <meta property="og:image" content="https://burger-stack.com/ogp/default.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body><div id="root"></div></body>
+</html>`
+
+const REVIEW_UUID = '11111111-2222-3333-4444-555555555555'
+const BURGER_UUID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+const SHOP_UUID = '99999999-8888-7777-6666-555555555555'
+
+describe('公開詳細ページの動的 OGP タグ注入', () => {
+  it('写真つきレビュー詳細にアクセスすると、投稿写真の og:image とレビュー情報のカードタグを埋め込む', async () => {
+    const { env } = setup()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response(SAMPLE_HTML, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
+    )
+    const upstream = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          id: REVIEW_UUID,
+          rating: 5,
+          comment: '肉汁たっぷりで最高でした！',
+          photo_url: 'https://r2.burger-stack.test/reviews/photo-1.webp',
+          user: { id: 'u1', username: 'alice' },
+          burger: { id: BURGER_UUID, name: 'ダブルチーズバーガー' },
+          shop: { id: SHOP_UUID, name: 'Burger Mania 恵比寿' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    vi.stubGlobal('fetch', upstream)
+
+    const res = await worker.fetch(new Request(`https://front.test/reviews/${REVIEW_UUID}?utm_source=x`), env)
+    const html = await res.text()
+
+    expect(upstream).toHaveBeenCalledTimes(1)
+    expect(upstream.mock.calls[0][0].url).toBe(`${API_ORIGIN}/reviews/${REVIEW_UUID}`)
+    expect(html).toContain('<title>🍔 ダブルチーズバーガー（Burger Mania 恵比寿） ★5 | BurgerStack</title>')
+    expect(html).toContain('<meta property="og:image" content="https://r2.burger-stack.test/reviews/photo-1.webp" />')
+    expect(html).toContain('<meta name="twitter:image" content="https://r2.burger-stack.test/reviews/photo-1.webp" />')
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image" />')
+    expect(html).toContain(`<meta property="og:url" content="https://front.test/reviews/${REVIEW_UUID}" />`)
+    expect(html).toContain('肉汁たっぷりで最高でした！（alice）')
+    // 既定の og:image が残って二重にならないことを確かめる
+    expect(html.match(/property="og:image"/g)).toHaveLength(1)
+  })
+
+  it('写真なしレビューや不正スキームの photo_url では、既定の OGP 画像へフォールバックする', async () => {
+    const { env } = setup()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response(SAMPLE_HTML, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: REVIEW_UUID,
+            rating: 4,
+            comment: null,
+            photo_url: 'javascript:alert(1)',
+            user: { id: 'u1', username: 'bob' },
+            burger: { id: BURGER_UUID, name: 'クラシックバーガー' },
+            shop: null,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const res = await worker.fetch(new Request(`https://front.test/reviews/${REVIEW_UUID}`), env)
+    const html = await res.text()
+
+    expect(html).toContain('<meta property="og:image" content="https://front.test/ogp/default.png" />')
+    expect(html).toContain('bobさんのハンバーガーレビュー | BurgerStack')
+  })
+
+  it('バーガー名やコメントに HTML 特殊文字が含まれていてもエスケープして XSS を防ぐ', async () => {
+    const { env } = setup()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response(SAMPLE_HTML, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: REVIEW_UUID,
+            rating: 3,
+            comment: '"><script>alert("xss")</script>',
+            photo_url: null,
+            user: { id: 'u1', username: 'eve' },
+            burger: { id: BURGER_UUID, name: '</title><img src=x onerror=alert(1)>' },
+            shop: null,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const res = await worker.fetch(new Request(`https://front.test/reviews/${REVIEW_UUID}`), env)
+    const html = await res.text()
+
+    expect(html).not.toContain('<script>alert("xss")</script>')
+    expect(html).not.toContain('<img src=x onerror=alert(1)>')
+    expect(html).toContain('&lt;/title&gt;&lt;img src=x onerror=alert(1)&gt;')
+    expect(html).toContain('&quot;&gt;&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;')
+  })
+
+  it('OGP 取得時は閲覧者の Authorization や Cookie を API に転送せず公開情報のみを取得する', async () => {
+    const { upstream, env } = setup()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response(SAMPLE_HTML, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    )
+    upstream.mockResolvedValue(
+      new Response(JSON.stringify({ id: SHOP_UUID, name: 'Public Shop', review_count: 2, average_rating: 4.5, photo_url: null }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const res = await worker.fetch(
+      new Request(`https://front.test/shops/${SHOP_UUID}`, {
+        headers: { Authorization: 'Bearer secret-jwt', Cookie: 'session=secret' },
+      }),
+      env,
+    )
+    const [apiReq] = upstream.mock.calls[0]
+    expect(apiReq.headers.get('Authorization')).toBeNull()
+    expect(apiReq.headers.get('Cookie')).toBeNull()
+    expect(apiReq.headers.get('X-Serverless-Authorization')).toBe('Bearer google-id-token')
+    expect(await res.text()).toContain('🍔 Public Shop | BurgerStack')
+  })
+
+  it('バーガー詳細ページでも平均評価・件数・写真の OGP タグを埋め込む', async () => {
+    const { env } = setup()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response(SAMPLE_HTML, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: BURGER_UUID,
+            name: 'アボカドバーガー',
+            shops: [{ id: SHOP_UUID, name: 'Burger Mania 恵比寿' }],
+            photo_url: 'https://r2.burger-stack.test/reviews/avocado.webp',
+            average_rating: 4.3,
+            review_count: 8,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const res = await worker.fetch(new Request(`https://front.test/burgers/${BURGER_UUID}`), env)
+    const html = await res.text()
+
+    expect(html).toContain('<title>🍔 アボカドバーガー（Burger Mania 恵比寿） | BurgerStack</title>')
+    expect(html).toContain('平均評価 ★4.3（8件のレビュー）')
+    expect(html).toContain('<meta property="og:image" content="https://r2.burger-stack.test/reviews/avocado.webp" />')
+  })
+
+  it('審査待ち店舗など API が 404 を返すときや API 障害時は、エラー画面にせず元の SPA HTML をそのまま返す', async () => {
+    const { env } = setup()
+    env.ASSETS.fetch.mockImplementation(
+      async () =>
+        new Response(SAMPLE_HTML, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html', ETag: '"static-etag"' },
+        }),
+    )
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not found"}', { status: 404 })))
+
+    const res404 = await worker.fetch(new Request(`https://front.test/shops/${SHOP_UUID}`), env)
+    expect(res404.status).toBe(200)
+    expect(res404.headers.get('ETag')).toBeNull()
+    expect(res404.headers.get('Cache-Control')).toBe('public, max-age=0, must-revalidate')
+    expect(await res404.text()).toBe(SAMPLE_HTML)
+
+    // 通信例外や IAM 失敗時でも 503/500 にせず SPA HTML を返す
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network timeout') }))
+    const resErr = await worker.fetch(new Request(`https://front.test/reviews/${REVIEW_UUID}`), env)
+    expect(resErr.status).toBe(200)
+    expect(await resErr.text()).toBe(SAMPLE_HTML)
+  })
+
+  it('If-None-Match 付きの詳細ページ要求でも 304 クラッシュを起こさず最新の動的 OGP HTML を返す', async () => {
+    const { env } = setup()
+    env.ASSETS.fetch.mockImplementation(async (req) => {
+      // ASSETS 側へ条件ヘッダーが渡っていないことと、ルート '/' を取得していることを確かめる
+      expect(new URL(req.url).pathname).toBe('/')
+      expect(req.headers.get('If-None-Match')).toBeNull()
+      return new Response(SAMPLE_HTML, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html', ETag: '"static-etag"' },
+      })
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: SHOP_UUID,
+            name: 'Approved Shop',
+            review_count: 1,
+            average_rating: 5.0,
+            photo_url: '/photos/reviews/local.jpg',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const res = await worker.fetch(
+      new Request(`https://front.test/shops/${SHOP_UUID}`, {
+        headers: { 'If-None-Match': '"static-etag"' },
+      }),
+      env,
+    )
+    expect(res.status).toBe(200)
+    expect(res.headers.get('ETag')).toBeNull()
+    const html = await res.text()
+    expect(html).toContain('🍔 Approved Shop | BurgerStack')
+    expect(html).toContain('<meta property="og:image" content="https://front.test/photos/reviews/local.jpg" />')
+  })
+
+  it('バックスラッシュを含む不正な相対 photo_url(/\\evil.test/...)は別オリジンへ解決せず既定画像へフォールバックする', async () => {
+    const { env } = setup()
+    env.ASSETS.fetch.mockResolvedValue(
+      new Response(SAMPLE_HTML, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            id: SHOP_UUID,
+            name: 'Test Shop',
+            review_count: 0,
+            average_rating: null,
+            photo_url: '/\\evil.test/steal.png',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const res = await worker.fetch(new Request(`https://front.test/shops/${SHOP_UUID}`), env)
+    const html = await res.text()
+    expect(html).toContain('<meta property="og:image" content="https://front.test/ogp/default.png" />')
+    expect(html).not.toContain('evil.test')
+  })
+
+  it('/reviews/new や /reviews/:id/edit のような非詳細パスでは API を呼ばず静的配信に任せる', async () => {
+    const { upstream, assets, env } = setup()
+    await worker.fetch(new Request('https://front.test/reviews/new?shop_id=' + SHOP_UUID), env)
+    await worker.fetch(new Request(`https://front.test/reviews/${REVIEW_UUID}/edit`), env)
+
+    expect(upstream).not.toHaveBeenCalled()
+    expect(assets.fetch).toHaveBeenCalledTimes(2)
+  })
+})

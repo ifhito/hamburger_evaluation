@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../auth/AuthProvider";
 import { useReview } from "../hooks/useReview";
 import { useDeleteReview } from "../hooks/useReviewMutations";
 import { useRatingRange } from "../hooks/useRatingRange";
+import { ReviewShareSection } from "../components/ReviewShareSection";
 import { formatDate, formatVisitedAt } from "../../../lib/date";
 import { ApiError } from "../../../api/client/buildApiClient";
 import { Alert } from "../../../components/ui/Alert";
@@ -25,6 +26,7 @@ import styles from "./reviewDetail.module.css";
 export default function ReviewDetailPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
   const ratingRange = useRatingRange();
@@ -33,6 +35,7 @@ export default function ReviewDetailPage() {
   const { destroy } = useDeleteReview();
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | string[] | null>(null);
+  const [dismissedPostBannerForId, setDismissedPostBannerForId] = useState<string | null>(null);
 
   if (isLoading || authLoading || (isDeleting && !review)) {
     return (
@@ -73,10 +76,29 @@ export default function ReviewDetailPage() {
     }
   };
 
+  const showPostedBanner =
+    Boolean((location.state as { justPosted?: boolean } | null)?.justPosted) &&
+    dismissedPostBannerForId !== review.id;
+
   return (
     <Layout>
       <div className={styles.container}>
         <TextLink to="/reviews">{t("reviews.detail.backToReviews")}</TextLink>
+
+        {showPostedBanner && (
+          <div className={styles.narrow}>
+            <ReviewShareSection
+              reviewId={review.id}
+              burgerName={review.burger?.name ?? null}
+              shopName={review.shop?.name ?? null}
+              rating={review.rating}
+              ratingMax={ratingRange?.max}
+              comment={review.comment}
+              highlighted
+              onDismissHighlight={() => setDismissedPostBannerForId(review.id)}
+            />
+          </div>
+        )}
 
         <div className={styles.hero}>
           <Photo src={review.photoUrl} alt={t("reviews.photo.alt")} className={styles.heroPhoto} fallbackClassName={styles.heroNoPhoto} fallback={t("shops.detail.noPhoto")} lazy={false} />
@@ -111,6 +133,16 @@ export default function ReviewDetailPage() {
             </div>
             {ratingRange === undefined ? <b className={styles.ratingOnly}>{review.rating}</b> : <RatingBurger value={review.rating} max={ratingRange.max} size="md" variant="stepped" />}
             {review.comment && <p className={styles.comment}>{review.comment}</p>}
+            {!showPostedBanner && (
+              <ReviewShareSection
+                reviewId={review.id}
+                burgerName={review.burger?.name ?? null}
+                shopName={review.shop?.name ?? null}
+                rating={review.rating}
+                ratingMax={ratingRange?.max}
+                comment={review.comment}
+              />
+            )}
             {deleteError && <Alert title={t("reviews.detail.deleteErrorTitle")} message={deleteError} />}
             {review.canEdit && (
               <div className={styles.actions}>

@@ -281,6 +281,17 @@ const en = {
       postedOn: "Posted on {{date}}",
       visitedAt: "Visited on",
     },
+    share: {
+      postedTitle: "Your review is live!",
+      postedBody: "Share it on X or with friends to show a preview card with your burger photo.",
+      dismissNotice: "Dismiss",
+      postOnX: "Post on X",
+      nativeShare: "Share\u2026",
+      copyLink: "Copy link",
+      linkCopied: "Link copied",
+      copyLinkManually: "Copying failed. Select the link below and copy it.",
+      fallbackSubject: "Burger review",
+    },
   },
   users: {
     detail: {

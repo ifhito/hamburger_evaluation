@@ -269,6 +269,17 @@ const ja = {
       postedOn: "{{date}} に投稿",
       visitedAt: "実食日",
     },
+    share: {
+      postedTitle: "レビューを投稿しました！",
+      postedBody: "食べた一皿を X などにシェアすると、写真のカード付きで紹介できます。",
+      dismissNotice: "閉じる",
+      postOnX: "X でポスト",
+      nativeShare: "ほかのアプリで共有",
+      copyLink: "リンクをコピー",
+      linkCopied: "リンクをコピーしました",
+      copyLinkManually: "コピーできませんでした。下のリンクを選んでコピーしてください。",
+      fallbackSubject: "ハンバーガーレビュー",
+    },
   },
   users: {
     detail: {

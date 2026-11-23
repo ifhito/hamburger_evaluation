@@ -139,3 +139,31 @@ describe("ReviewDetailPage の「編集」「削除」(can_edit)", () => {
     expect(page.textContent).not.toContain("Sold out");
   });
 });
+
+describe("ReviewDetailPage の共有導線", () => {
+  it("通常のレビュー詳細画面では、本文下に X 投稿リンクとリンクコピーボタンを出す", async () => {
+    const page = await show();
+    expect(page.textContent).not.toContain("Your review is live!");
+    const xLinks = page.querySelectorAll<HTMLAnchorElement>('a[href^="https://x.com/intent/post?"]');
+    expect(xLinks.length).toBe(1);
+    expect(byText(page, "button", "Copy link")).toBeTruthy();
+  });
+
+  it("投稿直後(state.justPosted)に遷移してきたときは投稿完了バナーを出し、閉じると通常の共有欄へ切り替わる", async () => {
+    const page = await mount(
+      <MemoryRouter initialEntries={[{ pathname: "/reviews/7", state: { justPosted: true } }]}>
+        <Routes>
+          <Route path="/reviews/:id" element={<ReviewDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(page.textContent).toContain("Your review is live!");
+    // バナー表示中は共有ボタンが二重に出ないこと
+    expect(page.querySelectorAll('a[href^="https://x.com/intent/post?"]').length).toBe(1);
+
+    await click(need(byText<HTMLButtonElement>(page, "button", "Dismiss"), "Dismiss"));
+    expect(page.textContent).not.toContain("Your review is live!");
+    expect(page.querySelectorAll('a[href^="https://x.com/intent/post?"]').length).toBe(1);
+  });
+});

@@ -1,0 +1,101 @@
+.banner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 18px 20px 18px 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface-2);
+  font-family: var(--ui-font);
+  color: var(--ui-text);
+  overflow: hidden;
+}
+
+.band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  background: var(--ui-accent);
+}
+
+.bannerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bannerText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bannerTitle {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.bannerBody {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ui-text-muted);
+}
+
+.dismissBtn {
+  composes: btn secondary from '../../../components/ui/button.module.css';
+  padding: 0 14px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.inlineBar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--ui-font);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.xButton {
+  composes: btn dark from '../../../components/ui/button.module.css';
+  gap: 8px;
+  text-decoration: none;
+}
+
+.xButton:hover {
+  text-decoration: none;
+}
+
+.xMark {
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.manual {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.manualLabel {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ui-text-muted);
+}
+
+.linkInput {
+  composes: input from '../../../components/ui/field.module.css';
+}
