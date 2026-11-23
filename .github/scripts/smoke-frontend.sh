@@ -11,8 +11,15 @@ origin="${1:?オリジンを渡す}"
 origin="${origin%/}"
 
 check() {
-  # / が HTML を返すこと
-  curl -fsS -o /dev/null -w '%{http_code} %{content_type}\n' "${origin}/" | grep -q '^200 text/html' || { echo "/ が HTML ではない"; return 1; }
+  # / が HTML を返し、OGP カード用の既定メタタグを含むこと
+  curl -fsS -o /tmp/index.html -w '%{http_code} %{content_type}\n' "${origin}/" | grep -q '^200 text/html' || { echo "/ が HTML ではない"; return 1; }
+  grep -q 'twitter:card' /tmp/index.html || { echo "/ に OGP タグがない"; return 1; }
+
+  # 既定の OGP 画像が PNG として配信されること
+  curl -fsS -o /dev/null -w '%{http_code} %{content_type}\n' "${origin}/ogp/default.png" | grep -q '^200 image/png' || { echo "/ogp/default.png が PNG ではない"; return 1; }
+
+  # クローラー(Sec-Fetch-Mode なし)からの詳細ページ要求でも Worker 経由で 200 HTML が返ること
+  curl -fsS -o /dev/null -w '%{http_code} %{content_type}\n' "${origin}/reviews/00000000-0000-0000-0000-000000000000" | grep -q '^200 text/html' || { echo "/reviews/<uuid> が 200 HTML ではない"; return 1; }
 
   # /api/meta が API の JSON を返すこと(転送が生きている)
   local ct

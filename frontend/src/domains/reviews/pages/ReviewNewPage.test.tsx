@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMemoryRouter, createRoutesFromElements, RouterProvider, Route } from "react-router-dom";
+import { createMemoryRouter, createRoutesFromElements, RouterProvider, Route, useLocation } from "react-router-dom";
 import "../../../lib/i18n";
 import { byText, cleanup, click, mount, need, type as typeInto } from "../../../test/dom";
 import { ApiError } from "../../../api/client/buildApiClient";
@@ -25,10 +25,16 @@ vi.mock("../../../api/meta", () => ({
   useMeta: () => ({ data: { text: { burgerNameMaxChars: 100, reviewCommentMaxChars: 2000 }, photo: { maxEdge: 1600, maxBytes: 5242880 } } }),
 }));
 
+const SavedDestination = () => {
+  const location = useLocation();
+  const justPosted = Boolean((location.state as { justPosted?: boolean } | null)?.justPosted);
+  return <h1>{justPosted ? "Saved review (justPosted)" : "Saved review"}</h1>;
+};
+
 const show = () => mount(<RouterProvider router={createMemoryRouter(createRoutesFromElements(<>
   <Route path="/reviews/new" element={<ReviewNewPage />} />
   <Route path="/discover" element={<h1>Destination</h1>} />
-  <Route path="/reviews/:id" element={<h1>Saved review</h1>} />
+  <Route path="/reviews/:id" element={<SavedDestination />} />
 </>), { initialEntries: ["/reviews/new?shop_id=9"] })} />);
 
 beforeEach(() => {
@@ -69,6 +75,7 @@ describe("ReviewNewPage の評価(R6)", () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0]).toMatchObject({ rating: 3, burgerName: "Cheeseburger", shopId: "9" });
+    expect(page.querySelector("h1")?.textContent).toBe("Saved review (justPosted)");
   });
 
   it("実食日(visitedAt)に触れずに送信しても、従来どおり投稿できる(既定は空文字)", async () => {

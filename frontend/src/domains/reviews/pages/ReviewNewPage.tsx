@@ -98,7 +98,7 @@ export default function ReviewNewPage() {
     try {
       const review = await create({ ...data, rating: data.rating }, photo);
       markSaved();
-      void navigate(`/reviews/${review.id}`);
+      void navigate(`/reviews/${review.id}`, { state: { justPosted: true } });
     } catch (e) {
       setServerError(e instanceof ApiError ? e.messages : [t("reviews.new.error")]);
     } finally {
